@@ -10,9 +10,15 @@ import { readItcSession } from "./session";
  */
 export async function requireItcParticipant(): Promise<ItcParticipant> {
   const session = await readItcSession();
-  if (!session) redirect("/itc/login");
+  if (!session) {
+    console.warn("[itc] requireItcParticipant: no valid session cookie");
+    redirect("/itc/login?error=session_missing");
+  }
 
   const participant = await getParticipantById(session.pid);
-  if (!participant) redirect("/itc/login");
+  if (!participant) {
+    console.warn("[itc] requireItcParticipant: participant not found pid=%s", session.pid);
+    redirect("/itc/login?error=participant_missing");
+  }
   return participant;
 }

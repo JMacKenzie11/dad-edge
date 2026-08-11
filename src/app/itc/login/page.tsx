@@ -5,6 +5,8 @@ const ERROR_COPY: Record<string, string> = {
   bad_password: "That password isn't right.",
   invalid: "Enter a valid email and password.",
   disabled: "ITC access is currently disabled.",
+  session_missing: "Your session expired or the cookie didn't come through. Sign in again.",
+  participant_missing: "We couldn't find your participant record. Sign in to recreate it.",
 };
 
 export default async function ItcLoginPage({
