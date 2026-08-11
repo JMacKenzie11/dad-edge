@@ -30,6 +30,18 @@ export type ItcWorry = {
   map_id: string;
   behavior_id: string;
   text: string;
+  depth_score: number | null;
+  created_at: string;
+};
+
+export type ItcWorryAttempt = {
+  id: string;
+  map_id: string;
+  behavior_id: string;
+  text: string;
+  depth_score: number | null;
+  accepted: boolean;
+  reject_reason: string | null;
   created_at: string;
 };
 
@@ -219,6 +231,67 @@ export async function listWorries(mapId: string): Promise<ItcWorry[]> {
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listWorries: ${error.message}`);
   return (data ?? []) as ItcWorry[];
+}
+
+export async function upsertWorry(
+  mapId: string,
+  behaviorId: string,
+  text: string,
+  depthScore: number,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const existing = await supabase
+    .from("itc_worries")
+    .select("id")
+    .eq("map_id", mapId)
+    .eq("behavior_id", behaviorId)
+    .maybeSingle();
+  if (existing.error) throw new Error(`upsertWorry lookup: ${existing.error.message}`);
+
+  const trimmed = text.trim();
+  if (existing.data) {
+    const { error } = await supabase
+      .from("itc_worries")
+      .update({ text: trimmed, depth_score: depthScore })
+      .eq("id", existing.data.id);
+    if (error) throw new Error(`upsertWorry update: ${error.message}`);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("itc_worries")
+    .insert({ map_id: mapId, behavior_id: behaviorId, text: trimmed, depth_score: depthScore });
+  if (error) throw new Error(`upsertWorry insert: ${error.message}`);
+}
+
+export async function logWorryAttempt(input: {
+  mapId: string;
+  behaviorId: string;
+  text: string;
+  depthScore: number | null;
+  accepted: boolean;
+  rejectReason: string | null;
+}): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from("itc_worry_attempts").insert({
+    map_id: input.mapId,
+    behavior_id: input.behaviorId,
+    text: input.text,
+    depth_score: input.depthScore,
+    accepted: input.accepted,
+    reject_reason: input.rejectReason,
+  });
+  if (error) throw new Error(`logWorryAttempt: ${error.message}`);
+}
+
+export async function countWorryAttempts(behaviorId: string): Promise<number> {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("itc_worry_attempts")
+    .select("*", { count: "exact", head: true })
+    .eq("behavior_id", behaviorId);
+  if (error) throw new Error(`countWorryAttempts: ${error.message}`);
+  return count ?? 0;
 }
 
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {

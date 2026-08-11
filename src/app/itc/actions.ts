@@ -9,6 +9,7 @@ import {
   addBehavior,
   advanceStage,
   appendMessage,
+  countWorryAttempts,
   createMap,
   deleteBehavior,
   deleteMap,
@@ -17,10 +18,14 @@ import {
   getMapForParticipant,
   listBehaviors,
   listMessages,
+  listWorries,
+  logWorryAttempt,
   pruneBehaviors,
   saveImprovementGoal,
   setBehaviorSelected,
+  upsertWorry,
 } from "@/lib/itc/maps";
+import { scoreWorryDepth } from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { GOAL_STEM, hasGoalStem, type ItcStage } from "@/lib/itc/stage";
 
@@ -87,15 +92,27 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   await appendMessage(map.id, "user", parsed.data.text);
 
-  const [history, behaviors] = await Promise.all([
+  const [history, behaviors, worries] = await Promise.all([
     listMessages(map.id),
     listBehaviors(map.id),
+    listWorries(map.id),
   ]);
 
   const priorHistory = history
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(0, -1)
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+  // Pull the last 3 [action rejected] system messages so the coach's next
+  // turn sees the server's feedback (the depth rubric, mostly) and can
+  // adjust instead of re-proposing the same rejected content.
+  const recentActionFeedback = history
+    .filter(
+      (m) =>
+        m.role === "system" && m.content.startsWith("[action rejected]"),
+    )
+    .slice(-3)
+    .map((m) => m.content);
 
   const priorAssistantContent = [...priorHistory]
     .reverse()
@@ -108,6 +125,8 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       stage: map.current_stage,
       improvementGoal: map.improvement_goal,
       behaviors,
+      worries,
+      recentActionFeedback,
       history: priorHistory,
       userMessage: parsed.data.text,
       priorAssistantContent,
@@ -283,6 +302,49 @@ async function applyCoachAction(
         throw new Error(`Prune must keep at least one behavior.`);
       }
       await pruneBehaviors(mapId, keepIds);
+      return;
+    }
+    case "propose_worry": {
+      if (currentStage !== "worries") return;
+      // behavior_index is 1-based into the SELECTED-only list the coach
+      // sees, matching the prompt's context block.
+      const all = await listBehaviors(mapId);
+      const selected = all.filter((b) => b.selected);
+      const behavior = selected[action.behavior_index - 1];
+      if (!behavior) {
+        throw new Error(
+          `propose_worry: behavior_index ${action.behavior_index} out of range (${selected.length} selected).`,
+        );
+      }
+      const map = await getMapById(mapId);
+      const rubric = await scoreWorryDepth({
+        goalText: map?.improvement_goal ?? "",
+        behaviorText: behavior.text,
+        worryText: action.text,
+      });
+      const priorAttempts = await countWorryAttempts(behavior.id);
+      const passed =
+        rubric.score === 3 || (rubric.score === 2 && priorAttempts >= 1);
+
+      await logWorryAttempt({
+        mapId,
+        behaviorId: behavior.id,
+        text: action.text,
+        depthScore: rubric.score,
+        accepted: passed,
+        rejectReason: passed ? null : rubric.reason,
+      });
+
+      if (!passed) {
+        // Rejection lands as an [action rejected] system message via the
+        // catch in sendCoachMessage. Include the rubric's reason so the
+        // coach's next turn can excavate rather than repeat the same worry.
+        throw new Error(
+          `worry not deep enough (score ${rubric.score}/3): ${rubric.reason}. Keep excavating with the coachee — do NOT re-propose the same text.`,
+        );
+      }
+
+      await upsertWorry(mapId, behavior.id, action.text, rubric.score);
       return;
     }
     case "advance_stage": {

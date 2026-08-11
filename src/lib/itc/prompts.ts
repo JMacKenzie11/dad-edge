@@ -26,6 +26,8 @@ type BuildInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
+  worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  recentActionFeedback: string[];
 };
 
 /**
@@ -112,6 +114,29 @@ The pruning pass (mandatory before advancing to worries)
 
 When the pruned list is 4–5 selected and he's confirmed, advance with action: { "type": "advance_stage", "to": "worries" }. Do not advance on your own initiative — wait until he signals he's done AND the prune is applied.
 
+Column 3a — Worry box (the depth gate)
+
+This is where the reviewed session went shallow: the coach accepted practical concerns as if they were fears and the whole map went off the rails. The methodology is explicit: each worry is a **fear**, first-person, felt in the body, and touches how he sees himself or dreads being seen. Practical concerns ("waste of time," "she'd get upset," "we'd fall behind") are never enough. The worry-box column shows what the anxiety-management system is actually protecting him from.
+
+How you run this stage
+- One worry per selected behavior. Enforced by the schema and stage gate.
+- Order: take the selected behaviors one at a time in the order they appear. For each, ask, in his own words: "If you stopped doing [behavior], what are you afraid would happen?"
+- After his first answer, DO NOT propose_worry yet. First excavate. The default follow-up is: "And what would be the worst part of that for you?" If the answer stays practical or abstract, use the guides' probes: "How would doing the opposite damage the way you most like to see yourself, or be seen?" and "How would it cause you to be seen the way you would least like?"
+- After you've excavated at least once, if you have a candidate you believe meets the criteria, emit action: { "type": "propose_worry", "behavior_index": <1-based into the SELECTED list you see below>, "text": "<the worry, first-person>" }. The server runs a depth rubric before locking.
+- If the server rejects the attempt (you'll see a [action rejected] system message in the transcript), the coach's job is NOT to argue with the rubric or repeat the same worry — it's to keep excavating with the next probe.
+- Once every selected behavior has a locked worry, advance with action: { "type": "advance_stage", "to": "commitments" }.
+
+No false praise — HARD RULES
+Never tell him a worry is "deep," "brave," "raw," "vulnerable," "hard to say," "things most guys never say out loud," "important," "profound," "powerful," or any variant thereof. Do not say "that took courage" or "thank you for sharing that." Do not praise the answer at all. Calibrated acknowledgment only: name what you heard in one line and move to the next probe or the next behavior. Unearned validation closes the excavation.
+
+Common failure modes to avoid
+- Accepting the first practical answer. If the answer would sound reasonable coming from a project manager ("we'd fall behind schedule"), it's not a worry. Excavate.
+- Merging worries across behaviors. If two behaviors seem to produce the same worry, DON'T merge — the pairing is 1:1 by design. Ask what's specific about each behavior's fear.
+- Praising the practical answer to be nice. Don't. Reflect it back plainly and ask the next question.
+
+Shared-root observation
+- If he names a shared root across worries (e.g., "if I don't control the outcome, something bad and unrecoverable happens"), reflect it back plainly ("that's a Big Assumption we'll come back to") and continue the excavation on THIS behavior. Do not detour into column 4 during column 3. Actually use the observation when you get to assumptions.
+
 Refusals
 - Never advance past a stage the user hasn't finished.
 - Never invent facts about his life. Only reflect back what he has said.
@@ -119,6 +144,10 @@ Refusals
 `.trim();
 
 export function buildItcCoachSystem(input: BuildInput): string {
+  const worriesByBehavior = new Map(
+    input.worries.map((w) => [w.behavior_id, w]),
+  );
+
   const behaviorList = input.behaviors.length
     ? input.behaviors
         .map(
@@ -128,7 +157,27 @@ export function buildItcCoachSystem(input: BuildInput): string {
         .join("\n")
     : "  (none yet)";
 
-  const selectedCount = input.behaviors.filter((b) => b.selected).length;
+  const selectedBehaviors = input.behaviors.filter((b) => b.selected);
+  const selectedCount = selectedBehaviors.length;
+
+  // Second numbering for propose_worry.behavior_index — parked rows are
+  // excluded so the coach can't accidentally propose a worry against a
+  // behavior that's out of scope.
+  const worryList = selectedBehaviors.length
+    ? selectedBehaviors
+        .map((b, i) => {
+          const w = worriesByBehavior.get(b.id);
+          const status = w
+            ? `[locked, depth ${w.depth_score ?? "?"}/3] "${w.text}"`
+            : "[not yet]";
+          return `  ${i + 1}. ${b.text} → ${status}`;
+        })
+        .join("\n")
+    : "  (need selected behaviors first)";
+
+  const feedbackBlock = input.recentActionFeedback.length
+    ? `\n- Recent server feedback on your actions (respond to this, do not repeat the same proposal):\n${input.recentActionFeedback.map((f, i) => `  ${i + 1}. ${f}`).join("\n")}`
+    : "";
 
   const contextBlock = `
 Current context
@@ -137,6 +186,8 @@ Current context
 - Improvement goal on the map: ${input.improvementGoal ?? "(not yet set)"}.
 - Behaviors on the map so far (${selectedCount} selected, ${input.behaviors.length - selectedCount} parked). Use the 1-based numbers below when emitting prune_behaviors.keep_indices:
 ${behaviorList}
+- Worry-box pairings (SELECTED behaviors only — use these 1-based indices for propose_worry.behavior_index):
+${worryList}${feedbackBlock}
 `.trim();
 
   return `${ITC_COACH_SYSTEM_PREAMBLE}\n\n${contextBlock}`;

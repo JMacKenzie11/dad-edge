@@ -28,6 +28,16 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     type: z.literal("prune_behaviors"),
     keep_indices: z.array(z.number().int().min(1)).min(1).max(5),
   }),
+  // Propose a worry paired to a specific selected behavior. behavior_index
+  // is 1-based into the SELECTED behaviors list the coach sees (parked
+  // rows are excluded from this numbering). Server runs the depth rubric
+  // before locking; a score <2 always rejects, a score of 2 requires at
+  // least two attempts on this behavior.
+  z.object({
+    type: z.literal("propose_worry"),
+    behavior_index: z.number().int().min(1),
+    text: z.string().min(1).max(500),
+  }),
   z.object({
     type: z.literal("advance_stage"),
     to: z.enum([
@@ -65,8 +75,15 @@ type RunCoachInput = {
   // 1-based position in this array is what prune_behaviors.keep_indices
   // refers to.
   behaviors: { id: string; text: string; selected: boolean }[];
+  // Worries keyed by behavior_id. Populated during the worries stage so
+  // the coach knows what's already locked and doesn't re-propose.
+  worries: { behavior_id: string; text: string; depth_score: number | null }[];
   history: ChatTurn[];
   userMessage: string;
+  // Most recent rejected coach actions (e.g., worry_not_deep_enough). Fed
+  // into the context block so the coach can respond to the rubric instead
+  // of re-proposing the same rejected text.
+  recentActionFeedback: string[];
 };
 
 /**
@@ -82,6 +99,8 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     stage: input.stage,
     improvementGoal: input.improvementGoal,
     behaviors: input.behaviors,
+    worries: input.worries,
+    recentActionFeedback: input.recentActionFeedback,
   });
 
   const messages: ChatTurn[] = [
