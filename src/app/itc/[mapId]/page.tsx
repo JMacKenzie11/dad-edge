@@ -7,7 +7,7 @@ import {
   listAssumptions,
   listBehaviors,
   listCommitments,
-  listMessages,
+  listMessagesForStage,
   listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
@@ -28,7 +28,7 @@ export default async function ItcMapPage({
 
   const [messages, behaviors, worries, commitments, assumptions, assumptionLinks] =
     await Promise.all([
-      listMessages(map.id),
+      listMessagesForStage(map.id, map.current_stage),
       listBehaviors(map.id),
       listWorries(map.id),
       listCommitments(map.id),

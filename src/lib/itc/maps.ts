@@ -76,6 +76,7 @@ export type ItcMessage = {
   map_id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  stage_at_creation: ItcStage;
   created_at: string;
 };
 
@@ -484,15 +485,46 @@ export async function appendMessage(
   mapId: string,
   role: "user" | "assistant" | "system",
   content: string,
+  stage: ItcStage,
 ): Promise<ItcMessage> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from("itc_messages")
-    .insert({ map_id: mapId, role, content })
+    .insert({ map_id: mapId, role, content, stage_at_creation: stage })
     .select("*")
     .single();
   if (error || !data) throw new Error(`appendMessage: ${error?.message ?? "no row"}`);
   return data as ItcMessage;
+}
+
+/** Retag an already-appended message with a new stage. Used after
+ * sendCoachMessage advances stage — the transition reply ("Locked. Now
+ * column 2…") should live in the destination stage's view. */
+export async function retagMessageStage(
+  messageId: string,
+  stage: ItcStage,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_messages")
+    .update({ stage_at_creation: stage })
+    .eq("id", messageId);
+  if (error) throw new Error(`retagMessageStage: ${error.message}`);
+}
+
+export async function listMessagesForStage(
+  mapId: string,
+  stage: ItcStage,
+): Promise<ItcMessage[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_messages")
+    .select("*")
+    .eq("map_id", mapId)
+    .eq("stage_at_creation", stage)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listMessagesForStage: ${error.message}`);
+  return (data ?? []) as ItcMessage[];
 }
 
 export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage): Promise<void> {

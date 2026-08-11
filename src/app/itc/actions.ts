@@ -28,6 +28,7 @@ import {
   markRevealDelivered,
   markWalkthroughDelivered,
   pruneBehaviors,
+  retagMessageStage,
   saveImprovementGoal,
   setAssumptionRecommended,
   setAssumptionSelected,
@@ -68,6 +69,7 @@ export async function startMap(formData: FormData): Promise<void> {
     map.id,
     "assistant",
     `Alright. You've picked ${pillar.label} as the pillar. Before we go anywhere else — the map begins with one goal that starts "${GOAL_STEM}...". Do you already have that goal, or want help getting to it?`,
+    "goal",
   );
   redirect(`/itc/${map.id}`);
 }
@@ -109,7 +111,7 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
   const map = await getMapForParticipant(parsed.data.map_id, participant.id);
   if (!map) return { ok: false, reason: "Map not found." };
 
-  await appendMessage(map.id, "user", parsed.data.text);
+  await appendMessage(map.id, "user", parsed.data.text, map.current_stage);
 
   const [history, behaviors, worries, commitments, assumptions, links] =
     await Promise.all([
@@ -182,6 +184,7 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       map.id,
       "system",
       `[coach error] ${message} (model=${process.env.ITC_COACH_MODEL || "claude-sonnet-5"})`,
+      map.current_stage,
     );
     return { ok: false, reason: `Coach: ${message}` };
   }
@@ -204,14 +207,24 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  await appendMessage(map.id, "assistant", reply.reply);
+  const assistantMessage = await appendMessage(
+    map.id,
+    "assistant",
+    reply.reply,
+    map.current_stage,
+  );
 
   if (reply.action) {
     try {
       await applyCoachAction(map.id, map.current_stage, reply.action);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await appendMessage(map.id, "system", `[action rejected] ${message}`);
+      await appendMessage(
+        map.id,
+        "system",
+        `[action rejected] ${message}`,
+        map.current_stage,
+      );
     }
   }
 
@@ -261,6 +274,19 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       await advanceStage(map.id, "goal", "behaviors");
     } catch {
       // ignore — already advanced or race
+    }
+  }
+
+  // If the stage changed during this turn (via coach action or one of the
+  // safety nets), retag the assistant message with the new stage so the
+  // transition reply ("Locked. Now column 2…") lives in the new stage's
+  // chat pane rather than the one we just left.
+  const finalMap = await getMapById(map.id);
+  if (finalMap && finalMap.current_stage !== map.current_stage) {
+    try {
+      await retagMessageStage(assistantMessage.id, finalMap.current_stage);
+    } catch {
+      // non-fatal
     }
   }
 
