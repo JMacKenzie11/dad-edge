@@ -64,19 +64,12 @@ export function Conversation({
             {m.content}
           </li>
         ))}
+        {pending ? (
+          <li className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm">
+            <TypingDots />
+          </li>
+        ) : null}
       </ol>
-
-      {stage === "goal" ? (
-        <GoalLockPanel mapId={mapId} hasGoal={hasGoal} onError={setError} />
-      ) : null}
-
-      {stage === "behaviors" ? (
-        <BehaviorPanel
-          mapId={mapId}
-          behaviors={behaviors}
-          onError={setError}
-        />
-      ) : null}
 
       <form
         action={handleSend}
@@ -102,10 +95,35 @@ export function Conversation({
         </button>
       </form>
 
+      {stage === "goal" ? (
+        <GoalLockPanel mapId={mapId} hasGoal={hasGoal} onError={setError} />
+      ) : null}
+
+      {stage === "behaviors" ? (
+        <BehaviorPanel
+          mapId={mapId}
+          behaviors={behaviors}
+          onError={setError}
+        />
+      ) : null}
+
       {error ? (
         <p className="mt-2 text-xs text-[color:var(--color-danger)]">{error}</p>
       ) : null}
     </div>
+  );
+}
+
+function TypingDots() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[color:var(--color-muted)]"
+      aria-label="Coach is thinking"
+    >
+      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce" />
+    </span>
   );
 }
 
