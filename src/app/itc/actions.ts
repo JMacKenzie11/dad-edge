@@ -199,24 +199,22 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  // Backstop for a coach that proposes a goal in text but forgets to emit
-  // propose_goal. Observed in a real session: coach honed a goal, user
-  // said "yes", coach advanced — but improvement_goal stayed null so
-  // column 1 showed "Not yet set." Scan this turn's reply and the prior
-  // assistant message for a GOAL_STEM sentence; if we find one and the DB
-  // is empty, save it. Idempotent: propose_goal already firing above
-  // means improvement_goal is set and this no-ops.
+  // Backstop that saves the goal only when the coachee affirms the coach's
+  // proposal. Fires on the "yes" turn — extracts the last coach-proposed
+  // goal from the prior assistant message and writes it. If we ran this
+  // unconditionally, the coach's proposal turn (which contains the stem)
+  // would save the goal before the coachee confirmed anything.
   const currentGoal = await refreshImprovementGoal(map.id);
-  if (map.current_stage === "goal" && !currentGoal) {
-    const fromReply = extractGoalSentence(reply.reply);
-    const fromPrior = priorAssistantContent
-      ? extractGoalSentence(priorAssistantContent)
-      : null;
-    const extracted = fromReply ?? fromPrior;
+  const affirmative = looksAffirmative(parsed.data.text);
+  if (map.current_stage === "goal" && !currentGoal && affirmative) {
+    // Prefer the prior assistant message (the coach's proposal) — this
+    // turn's reply is typically "Locked. Now column 2…" after the "yes".
+    const extracted =
+      (priorAssistantContent
+        ? extractGoalSentence(priorAssistantContent)
+        : null) ?? extractGoalSentence(reply.reply);
     console.warn(
-      "[itc] goal backstop: reply-match=%s prior-match=%s extracted-len=%d action=%s",
-      fromReply ? "yes" : "no",
-      fromPrior ? "yes" : "no",
+      "[itc] goal backstop: affirmative=yes extracted-len=%d action=%s",
       extracted?.length ?? 0,
       reply.action?.type ?? "null",
     );
@@ -230,12 +228,6 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           err instanceof Error ? err.message : String(err),
         );
       }
-    } else if (reply.action?.type === "propose_goal") {
-      // Coach emitted the right action but something else failed — log why.
-      console.warn(
-        "[itc] goal backstop: propose_goal fired but goal still null. text=%o",
-        reply.action.text,
-      );
     }
   }
 
@@ -247,7 +239,7 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     map.current_stage === "goal" &&
     goalNow &&
     reply.action?.type !== "advance_stage" &&
-    looksAffirmative(parsed.data.text)
+    affirmative
   ) {
     try {
       await advanceStage(map.id, "goal", "behaviors");
