@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapForParticipant,
   listBehaviors,
@@ -44,6 +45,14 @@ export default async function ItcMapPage({
           <StageProgress current={map.current_stage} />
         </div>
         <div className="flex items-center gap-3">
+          {isItcAdmin(participant.email) ? (
+            <Link
+              href="/itc/admin"
+              className="text-xs text-[color:var(--color-muted)] hover:text-white"
+            >
+              Admin
+            </Link>
+          ) : null}
           <ResetMapButton mapId={map.id} />
           <form action="/itc/logout" method="POST">
             <button

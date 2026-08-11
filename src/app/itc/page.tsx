@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CHOOSABLE_PILLARS } from "@/lib/pillars";
+import { isItcAdmin } from "@/lib/itc/admin";
 import { findInProgressMap } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { startMap } from "./actions";
@@ -19,6 +21,7 @@ export default async function ItcLandingPage({
 
   const params = await searchParams;
   const errorMessage = params.error ? ERROR_COPY[params.error] : null;
+  const isAdmin = isItcAdmin(participant.email);
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-6">
@@ -75,18 +78,26 @@ export default async function ItcLandingPage({
           </form>
         </div>
 
-        <form
-          action="/itc/logout"
-          method="POST"
-          className="border-t border-[color:var(--color-border)] pt-3 w-full"
-        >
-          <button
-            type="submit"
-            className="text-sm underline text-[color:var(--color-muted)]"
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="border-t border-[color:var(--color-border)] pt-3 w-full flex items-center justify-between gap-3">
+          {isAdmin ? (
+            <Link
+              href="/itc/admin"
+              className="text-sm underline text-[color:var(--color-muted)]"
+            >
+              Admin — view all maps
+            </Link>
+          ) : (
+            <span />
+          )}
+          <form action="/itc/logout" method="POST">
+            <button
+              type="submit"
+              className="text-sm underline text-[color:var(--color-muted)]"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </main>
   );

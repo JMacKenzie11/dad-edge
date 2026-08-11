@@ -34,6 +34,16 @@ export async function upsertParticipantByEmail(
   return data as ItcParticipant;
 }
 
+export async function listAllParticipants(): Promise<ItcParticipant[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_participants")
+    .select("id, email, name, created_at, last_seen_at")
+    .order("last_seen_at", { ascending: false, nullsFirst: false });
+  if (error) throw new Error(`listAllParticipants: ${error.message}`);
+  return (data ?? []) as ItcParticipant[];
+}
+
 export async function getParticipantById(id: string): Promise<ItcParticipant | null> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase

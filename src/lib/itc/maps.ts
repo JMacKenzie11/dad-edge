@@ -44,6 +44,27 @@ export async function findInProgressMap(participantId: string): Promise<ItcMap |
   return (data as ItcMap | null) ?? null;
 }
 
+export async function listAllMaps(): Promise<ItcMap[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_maps")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`listAllMaps: ${error.message}`);
+  return (data ?? []) as ItcMap[];
+}
+
+export async function getMapById(mapId: string): Promise<ItcMap | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_maps")
+    .select("*")
+    .eq("id", mapId)
+    .maybeSingle();
+  if (error) throw new Error(`getMapById: ${error.message}`);
+  return (data as ItcMap | null) ?? null;
+}
+
 export async function getMapForParticipant(
   mapId: string,
   participantId: string,
