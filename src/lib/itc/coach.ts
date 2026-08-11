@@ -78,7 +78,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     schema: CoachReplySchema,
     system,
     messages,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 4096,
   });
 
   return object;
