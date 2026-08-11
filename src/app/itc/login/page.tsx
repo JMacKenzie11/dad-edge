@@ -70,10 +70,6 @@ export default async function ItcLoginPage({
             Enter
           </button>
         </form>
-
-        <p className="text-xs text-[color:var(--color-muted)] leading-relaxed">
-          Your coach and your facilitator (Jason) can see your map. The other men cannot.
-        </p>
       </div>
     </main>
   );
