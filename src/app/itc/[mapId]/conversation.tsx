@@ -82,9 +82,16 @@ export function Conversation({
           required
           rows={2}
           maxLength={4000}
-          placeholder="Type…"
+          placeholder="Type… (Enter to send, Shift+Enter for newline)"
           className="flex-1 resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
           disabled={pending}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (pending) return;
+              e.currentTarget.form?.requestSubmit();
+            }
+          }}
         />
         <button
           type="submit"
