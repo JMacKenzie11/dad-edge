@@ -13,6 +13,7 @@ import {
   deleteBehavior,
   deleteMap,
   findInProgressMap,
+  getMapById,
   getMapForParticipant,
   listBehaviors,
   listMessages,
@@ -130,13 +131,34 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Backstop for a coach that proposes a goal in text but forgets to emit
+  // propose_goal. Observed in a real session: coach honed a goal, user
+  // said "yes", coach advanced — but improvement_goal stayed null so
+  // column 1 showed "Not yet set." Scan this turn's reply and the prior
+  // assistant message for a GOAL_STEM sentence; if we find one and the DB
+  // is empty, save it. Idempotent: propose_goal already firing above
+  // means improvement_goal is set and this no-ops.
+  const currentGoal = await refreshImprovementGoal(map.id);
+  if (map.current_stage === "goal" && !currentGoal) {
+    const extracted =
+      extractGoalSentence(reply.reply) ??
+      (priorAssistantContent ? extractGoalSentence(priorAssistantContent) : null);
+    if (extracted) {
+      try {
+        await saveImprovementGoal(map.id, extracted);
+      } catch {
+        // ignore — malformed extraction; coach will re-propose
+      }
+    }
+  }
+
   // Safety net: if the coachee affirmed a proposed goal and the coach
-  // forgot to emit advance_stage, advance for them. The improvement_goal
-  // being non-null means the coach already proposed it in some prior turn
-  // (or in this turn via propose_goal above).
+  // forgot to emit advance_stage, advance for them. Re-read the goal in
+  // case the extractor above just saved it in this same turn.
+  const goalNow = await refreshImprovementGoal(map.id);
   if (
     map.current_stage === "goal" &&
-    map.improvement_goal &&
+    goalNow &&
     reply.action?.type !== "advance_stage" &&
     looksAffirmative(parsed.data.text)
   ) {
@@ -149,6 +171,26 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
+}
+
+async function refreshImprovementGoal(mapId: string): Promise<string | null> {
+  const m = await getMapById(mapId);
+  return m?.improvement_goal ?? null;
+}
+
+// Pull the first "I'm committed to getting better at ..." sentence out of a
+// coach reply so we can save the goal even when the model skips propose_goal.
+// Captures from the stem to the first period that's followed by a quote,
+// whitespace, or end-of-string — this avoids getting tripped by the
+// apostrophe inside "I'm" itself.
+function extractGoalSentence(text: string): string | null {
+  const stemIdx = text.toLowerCase().indexOf(GOAL_STEM.toLowerCase());
+  if (stemIdx === -1) return null;
+  const tail = text.slice(stemIdx);
+  const match = tail.match(/^([^\n]*?\.)(?=["'”’\s]|$)/);
+  if (!match) return null;
+  const cleaned = match[1].trim();
+  return cleaned.length > GOAL_STEM.length + 2 ? cleaned : null;
 }
 
 // Guard around the coach call: filters out empty replies and consecutive
