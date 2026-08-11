@@ -125,8 +125,44 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Safety net: if the coachee affirmed a proposed goal and the coach
+  // forgot to emit advance_stage, advance for them. The improvement_goal
+  // being non-null means the coach already proposed it in some prior turn
+  // (or in this turn via propose_goal above).
+  if (
+    map.current_stage === "goal" &&
+    map.improvement_goal &&
+    reply.action?.type !== "advance_stage" &&
+    looksAffirmative(parsed.data.text)
+  ) {
+    try {
+      await advanceStage(map.id, "goal", "behaviors");
+    } catch {
+      // ignore — already advanced or race
+    }
+  }
+
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
+}
+
+// Very permissive affirmation detector — the only cost of a false positive
+// is auto-advancing to behaviors, which the coachee can still walk back.
+function looksAffirmative(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
+  if (t.length === 0 || t.length > 60) return false;
+  const affirmations = [
+    "y", "ya", "ye", "yes", "yeah", "yep", "yup", "yessir",
+    "ok", "okay", "kk", "k",
+    "sure", "sounds good", "sounds great", "good", "great", "perfect",
+    "lock it in", "lock it", "locked", "lock",
+    "do it", "let's do it", "lets do it", "let's go", "lets go",
+    "agreed", "agree", "confirm", "confirmed",
+    "yes please", "yes lock it", "yes lock it in",
+    "that works", "works for me", "fine", "sounds right",
+    "👍", "✅", "yes 👍",
+  ];
+  return affirmations.includes(t);
 }
 
 async function applyCoachAction(
