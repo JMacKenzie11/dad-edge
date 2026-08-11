@@ -63,12 +63,9 @@ export default async function ItcAdminMapPage({
             Viewing {owner?.email ?? "(unknown)"} · admin read-only
           </div>
         </div>
-        <div className="hidden md:block flex-1 max-w-3xl">
-          <StageProgress current={map.current_stage} />
-        </div>
       </header>
 
-      <div className="md:hidden px-4 py-2 border-b border-[color:var(--color-border)]">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
         <StageProgress current={map.current_stage} />
       </div>
 

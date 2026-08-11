@@ -47,9 +47,6 @@ export default async function ItcMapPage({
             ← Maps
           </Link>
         </div>
-        <div className="hidden md:block flex-1 min-w-0 max-w-3xl">
-          <StageProgress current={map.current_stage} />
-        </div>
         <div className="flex items-center gap-3">
           {isItcAdmin(participant.email) ? (
             <Link
@@ -71,7 +68,7 @@ export default async function ItcMapPage({
         </div>
       </header>
 
-      <div className="md:hidden px-4 py-2 border-b border-[color:var(--color-border)]">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
         <StageProgress current={map.current_stage} />
       </div>
 
