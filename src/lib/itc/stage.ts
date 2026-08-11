@@ -60,8 +60,15 @@ export const GOAL_STEM = "I'm committed to getting better at";
 
 /**
  * Server-side goal-stem enforcement. Trims and lower-cases the leading
- * fragment for comparison but leaves the stored text as the user wrote it.
+ * fragment for comparison and normalizes smart apostrophes/quotes so a
+ * coach reply that used U+2019 for "I'm" still passes. Stored text stays
+ * as the caller wrote it (up to them to pass a normalized string).
  */
 export function hasGoalStem(text: string): boolean {
-  return text.trim().toLowerCase().startsWith(GOAL_STEM.toLowerCase());
+  const normalized = text
+    .trim()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .toLowerCase();
+  return normalized.startsWith(GOAL_STEM.toLowerCase());
 }

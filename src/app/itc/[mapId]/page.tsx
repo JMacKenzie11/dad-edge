@@ -46,11 +46,8 @@ export default async function ItcMapPage({
           >
             ← Maps
           </Link>
-          <div className="text-xs text-[color:var(--color-muted)]">
-            Signed in as {participant.email}
-          </div>
         </div>
-        <div className="hidden md:block flex-1 max-w-3xl">
+        <div className="hidden md:block flex-1 max-w-3xl overflow-x-auto">
           <StageProgress current={map.current_stage} />
         </div>
         <div className="flex items-center gap-3">

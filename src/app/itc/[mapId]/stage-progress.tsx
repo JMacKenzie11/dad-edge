@@ -18,7 +18,7 @@ const HEADER_STAGES: ItcStage[] = [
 export function StageProgress({ current }: { current: ItcStage }) {
   const currentIdx = stageIndex(current);
   return (
-    <ol className="flex items-center gap-1 overflow-x-auto text-[11px] uppercase tracking-wide">
+    <ol className="flex items-center gap-1 overflow-x-auto overflow-y-visible py-1 text-[11px] uppercase tracking-wide">
       {HEADER_STAGES.map((stage, i) => {
         const idx = ITC_STAGES.indexOf(stage);
         const state = idx < currentIdx ? "done" : idx === currentIdx ? "active" : "todo";

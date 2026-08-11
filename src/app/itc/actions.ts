@@ -241,16 +241,42 @@ async function refreshImprovementGoal(mapId: string): Promise<string | null> {
 
 // Pull the first "I'm committed to getting better at ..." sentence out of a
 // coach reply so we can save the goal even when the model skips propose_goal.
-// Captures from the stem to the first period that's followed by a quote,
-// whitespace, or end-of-string — this avoids getting tripped by the
-// apostrophe inside "I'm" itself.
+// Two subtleties observed in the wild:
+// 1. Models often output smart quotes/apostrophes even when the prompt uses
+//    straight ASCII. Normalizing both sides before indexOf so U+2019 in the
+//    coach's "I'm" doesn't miss the stem match.
+// 2. The captured sentence ends at the first period followed by a quote,
+//    whitespace, or end-of-string — this dodges the apostrophe inside "I'm".
+function normalizeQuotes(s: string): string {
+  return s.replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"');
+}
+
 function extractGoalSentence(text: string): string | null {
-  const stemIdx = text.toLowerCase().indexOf(GOAL_STEM.toLowerCase());
+  const normalized = normalizeQuotes(text).toLowerCase();
+  const stem = GOAL_STEM.toLowerCase();
+  const stemIdx = normalized.indexOf(stem);
   if (stemIdx === -1) return null;
-  const tail = text.slice(stemIdx);
-  const match = tail.match(/^([^\n]*?\.)(?=["'”’\s]|$)/);
-  if (!match) return null;
-  const cleaned = match[1].trim();
+  // Character positions are preserved by normalizeQuotes (each replacement
+  // is 1:1 BMP code unit), so this index works on the original text.
+  const tail = normalizeQuotes(text.slice(stemIdx));
+
+  // Preferred: match up to first period followed by quote/space/end.
+  const periodMatch = tail.match(/^([^\n]*?\.)(?=["'\u201D\u2019\s]|$)/);
+  if (periodMatch) {
+    const cleaned = periodMatch[1].trim();
+    if (cleaned.length > GOAL_STEM.length + 2) return cleaned;
+  }
+
+  // Fallback: no period-terminated sentence. Take everything up to the
+  // first double-quote, newline, or end-of-string. Strip trailing
+  // punctuation that isn't part of the goal.
+  const bareMatch = tail.match(/^([^"\n\u201D]+)/);
+  if (!bareMatch) return null;
+  const cleaned = bareMatch[1]
+    .trim()
+    .replace(/[,;:—–]\s+.*$/, "") // drop trailing clauses like ", right?"
+    .replace(/[!?]+$/, "")
+    .trim();
   return cleaned.length > GOAL_STEM.length + 2 ? cleaned : null;
 }
 
