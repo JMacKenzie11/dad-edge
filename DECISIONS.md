@@ -51,3 +51,16 @@ Ad-hoc ITC Map Builder for the Boardroom group. Intentionally isolated from the 
 - **Feature flag `ITC_DEMO_AUTH`.** When unset or not `"1"`, the entire `/itc/*` tree 404s via the ITC layout gate. This is how the feature is disabled in production without removing code.
 - **`itc_worries.behavior_id UNIQUE NOT NULL`.** Schema enforces exactly one worry per behavior. API stage-machine also refuses to transition to `commitments` until every behavior has a worry.
 - **`pillar_code` enum reuse.** ITC maps carry a BRAVEMAN pillar so the ad-hoc feature stays aligned with the main framework vocabulary. No new pillar taxonomy.
+
+## ITC v2 Elevation
+
+Multi-checkpoint upgrade. Judgment calls per checkpoint.
+
+### Checkpoint A — infrastructure
+
+- **Retry cadence.** `runItcCoachTurn` now attempts `generateObject` three times total (initial + 2 retries) before falling back to `generateText`. Chose 3 not 2 because the observed "no object generated" errors were transient in the reviewed session; two retries got us into cost/latency territory (each attempt is a full turn). If cost/latency hurts, drop to 2.
+- **Text fallback returns action:null.** A prose-only reply cannot advance stages or save entries — the stage machine and rubric checks (Checkpoint C onward) rely on structured actions. Losing an action for one turn is preferable to a bogus one. The affirmation safety net in `sendCoachMessage` still fires, so goal-lock isn't blocked by a fallback.
+- **Empty-turn / dedupe policy.** Guard runs after every coach turn (including the fallback path). Empty replies get one nudge-and-regen. Consecutive verbatim duplicates get one nudge-and-regen with an inline system-message hint. A second failure is accepted — the fallback path guarantees a non-empty string, so nothing empty ever hits the DB.
+- **Formatting default is at the prompt.** Numbered-list-for-more-than-two-items and re-display-relevant-list-when-asking are now mandatory in the system prompt, not a UI post-process. Post-processing prose into lists would be brittle; instructing the model is cheaper and cleaner.
+- **Live map panel scope for A.** Verified goal, behaviors, worries render live as they lock (columns 1–3). Hidden commitments (col 4) and Big Assumptions (col 5) still render as placeholders because no capture flow exists yet — those wire up in Checkpoint D. Review-stage rendering piggybacks on the always-on right-side panel; no chat recap needed on desktop, and the numbered-list default (1.2) covers mobile and any admin-only chat surface.
+- **`/admin/itc` vs `/itc/admin` naming.** Instruction referenced `/admin/itc`; shipped route is `/itc/admin`. Kept the current route since it's already in production and admin nav links point at it. Rename can happen later without functional change.

@@ -94,15 +94,20 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     .slice(0, -1)
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
+  const priorAssistantContent = [...priorHistory]
+    .reverse()
+    .find((m) => m.role === "assistant")?.content ?? null;
+
   let reply;
   try {
-    reply = await runItcCoachTurn({
+    reply = await runItcCoachTurnWithGuards({
       pillar: map.pillar_code,
       stage: map.current_stage,
       improvementGoal: map.improvement_goal,
       behaviors,
       history: priorHistory,
       userMessage: parsed.data.text,
+      priorAssistantContent,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Coach unavailable.";
@@ -144,6 +149,36 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
+}
+
+// Guard around the coach call: filters out empty replies and consecutive
+// duplicates (both were seen in a real session). On dedupe collision we
+// give the coach ONE regen with a nudge to say something different.
+async function runItcCoachTurnWithGuards(
+  input: Parameters<typeof runItcCoachTurn>[0] & { priorAssistantContent: string | null },
+) {
+  const { priorAssistantContent, ...coachInput } = input;
+  const first = await runItcCoachTurn(coachInput);
+  const isEmpty = first.reply.trim().length === 0;
+  const isDupe =
+    priorAssistantContent !== null &&
+    first.reply.trim() === priorAssistantContent.trim();
+  if (!isEmpty && !isDupe) return first;
+
+  const nudge = isEmpty
+    ? "Your previous attempt returned empty. Produce a real reply this time."
+    : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
+  const regenerated = await runItcCoachTurn({
+    ...coachInput,
+    history: [
+      ...coachInput.history,
+      { role: "assistant", content: first.reply || "(empty)" },
+      { role: "user", content: `[system nudge] ${nudge}` },
+    ],
+  });
+  // If the regen still fails, take it anyway — the plain-text fallback
+  // inside runItcCoachTurn guarantees a non-empty reply.
+  return regenerated;
 }
 
 // Very permissive affirmation detector — the only cost of a false positive

@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject, generateText, type LanguageModel } from "ai";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { buildItcCoachSystem } from "./prompts";
@@ -59,6 +59,12 @@ type RunCoachInput = {
   userMessage: string;
 };
 
+/**
+ * One coach turn. Wraps the structured-output call with two retries and a
+ * plain-text fallback so a schema-parse failure never bubbles a "No object
+ * generated" error to the coachee. The fallback returns action:null so the
+ * server-side stage machine stays untouched — a text-only reply is safe.
+ */
 export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply> {
   const pillar = PILLAR_BY_CODE[input.pillar];
   const system = buildItcCoachSystem({
@@ -73,13 +79,43 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     { role: "user", content: input.userMessage },
   ];
 
-  const { object } = await generateObject({
-    model: itcCoachModel(),
-    schema: CoachReplySchema,
-    system,
-    messages,
-    maxOutputTokens: 4096,
-  });
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { object } = await generateObject({
+        model: itcCoachModel(),
+        schema: CoachReplySchema,
+        system,
+        messages,
+        maxOutputTokens: 4096,
+      });
+      if (object.reply.trim().length === 0) {
+        // Treat empty output the same as a schema miss: retry.
+        lastError = new Error("empty reply");
+        continue;
+      }
+      return object;
+    } catch (err) {
+      lastError = err;
+    }
+  }
 
-  return object;
+  // Plain-text fallback so the coachee always receives a real message.
+  // Tell the model that structured output failed and to answer in prose;
+  // no action is emitted, so nothing state-machine touches the DB.
+  console.warn(
+    "[itc] coach structured-output failed after retries, falling back to text:",
+    lastError instanceof Error ? lastError.message : String(lastError),
+  );
+  const { text } = await generateText({
+    model: itcCoachModel(),
+    system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
+    messages,
+    maxOutputTokens: 2048,
+  });
+  const fallback = text.trim();
+  return {
+    reply: fallback.length > 0 ? fallback : "Give me one more sec — mind repeating that?",
+    action: null,
+  };
 }
