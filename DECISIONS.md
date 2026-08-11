@@ -38,3 +38,16 @@ Live log. When the spec is silent, choices land here.
 - **Community scorecard shows within-win-back inactive members.** Per §5: canceled members still visible to their group for the 30-day window. Row gets an "INACTIVE" badge; no leaderboard placement (`.eq("status", "active")` on leaderboard queries).
 - **Survey notes are required-in-UI.** The DB allows null `note` for flexibility, but the take-survey form refuses to submit unless every question has a note. Her words are the point; scores without notes are worthless.
 - **Family-layer joins use array-safe casting.** Supabase-JS types Foreign Key joins as arrays regardless of `.maybeSingle()` semantics on the parent, so accessors do `Array.isArray(x) ? x[0] : x` to handle both shapes. Documented once here; pattern is consistent across `/community`, `/me`, `/community/leaderboard`.
+
+## ITC Addendum
+
+Ad-hoc ITC Map Builder for the Boardroom group. Intentionally isolated from the main app; deeper integration comes later. Isolation guarantees are documented in `docs/itc-isolation.md`.
+
+- **Ad-hoc auth is a hard boundary.** ITC uses its own email+password (fixed `1111`) login, a separate `itc_participants` table, and a distinct HMAC-signed cookie (`itc_session`, path=`/itc`). The main `users` table and Supabase auth are never touched by the ITC flow. Matching emails do not link the two identities.
+- **Cookie scoping.** `itc_session` is set with `path=/itc`, so browsers do not send it to any other route. Main middleware also short-circuits on `/itc/*` and never runs Supabase session refresh for those requests.
+- **RLS deny-all on `itc_*` tables.** All ITC tables have RLS enabled with zero policies. The anon key cannot see them at all. Only the service role (via `/api/itc/*` server code) reads or writes. Participant scoping happens at the API layer, keyed off the `itc_session` cookie's `pid`.
+- **Model selection.** `ITC_COACH_MODEL` defaults to `claude-sonnet-5`. Configurable via env so the model can be swapped without a deploy. User confirmed the model ID on 2026-08-11; if the API rejects it at runtime, override the env var.
+- **Vercel Hobby-tier cron.** Removed the hourly cron entry from `vercel.json` (the endpoint stays for manual/future use). Hobby accounts only allow daily schedules.
+- **Feature flag `ITC_DEMO_AUTH`.** When unset or not `"1"`, the entire `/itc/*` tree 404s via the ITC layout gate. This is how the feature is disabled in production without removing code.
+- **`itc_worries.behavior_id UNIQUE NOT NULL`.** Schema enforces exactly one worry per behavior. API stage-machine also refuses to transition to `commitments` until every behavior has a worry.
+- **`pillar_code` enum reuse.** ITC maps carry a BRAVEMAN pillar so the ad-hoc feature stays aligned with the main framework vocabulary. No new pillar taxonomy.
