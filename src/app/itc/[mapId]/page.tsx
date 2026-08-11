@@ -37,7 +37,7 @@ export default async function ItcMapPage({
     ]);
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-screen md:h-screen flex flex-col md:overflow-hidden">
       <header className="border-b border-[color:var(--color-border)] px-4 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
@@ -72,8 +72,8 @@ export default async function ItcMapPage({
         <StageProgress current={map.current_stage} />
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] min-h-0">
-        <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:min-h-0">
+        <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0 md:overflow-hidden flex flex-col">
           <Conversation
             mapId={map.id}
             stage={map.current_stage}
@@ -86,7 +86,7 @@ export default async function ItcMapPage({
             }))}
           />
         </section>
-        <section className="p-4 overflow-y-auto">
+        <section className="p-4 md:min-h-0 md:overflow-y-auto">
           <MapPanel
             map={map}
             behaviors={behaviors}

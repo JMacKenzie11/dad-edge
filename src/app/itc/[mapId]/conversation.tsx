@@ -3,12 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
-import {
-  advanceMapStage,
-  removeBehavior,
-  sendCoachMessage,
-  toggleBehaviorSelected,
-} from "../actions";
+import { advanceMapStage, sendCoachMessage } from "../actions";
 
 type Behavior = {
   id: string;
@@ -145,20 +140,7 @@ function BehaviorPanel({
   const [pending, startTransition] = useTransition();
 
   return (
-    <div className="mt-3 space-y-3 border-t border-[color:var(--color-border)] pt-3">
-      {behaviors.length > 0 ? (
-        <BehaviorList
-          mapId={mapId}
-          behaviors={behaviors}
-          onError={onError}
-          startTransition={startTransition}
-        />
-      ) : (
-        <p className="text-xs italic text-[color:var(--color-muted)]/70">
-          The coach captures behaviors as you name them. Chat below.
-        </p>
-      )}
-
+    <div className="mt-3 border-t border-[color:var(--color-border)] pt-3">
       <ContinueBar
         mapId={mapId}
         selectedCount={behaviors.filter((b) => b.selected).length}
@@ -167,148 +149,6 @@ function BehaviorPanel({
         startTransition={startTransition}
       />
     </div>
-  );
-}
-
-function BehaviorList({
-  mapId,
-  behaviors,
-  onError,
-  startTransition,
-}: {
-  mapId: string;
-  behaviors: Behavior[];
-  onError: (msg: string | null) => void;
-  startTransition: React.TransitionStartFunction;
-}) {
-  const selected = behaviors.filter((b) => b.selected);
-  const parked = behaviors.filter((b) => !b.selected);
-  const overCap = selected.length > MAX_SELECTED;
-
-  return (
-    <div className="space-y-3">
-      <section className="space-y-1.5">
-        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
-          <span>
-            Selected ({selected.length}/{MAX_SELECTED})
-          </span>
-          {overCap ? (
-            <span className="text-[color:var(--color-danger)] normal-case">
-              Prune to {MAX_SELECTED} to continue.
-            </span>
-          ) : null}
-        </div>
-        {selected.length === 0 ? (
-          <p className="text-xs italic text-[color:var(--color-muted)]/70">
-            None yet.
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {selected.map((b) => (
-              <BehaviorRow
-                key={b.id}
-                mapId={mapId}
-                behavior={b}
-                onError={onError}
-                startTransition={startTransition}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {parked.length > 0 ? (
-        <section className="space-y-1.5">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
-            Parked ({parked.length})
-          </div>
-          <ul className="space-y-1.5">
-            {parked.map((b) => (
-              <BehaviorRow
-                key={b.id}
-                mapId={mapId}
-                behavior={b}
-                onError={onError}
-                startTransition={startTransition}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function BehaviorRow({
-  mapId,
-  behavior,
-  onError,
-  startTransition,
-}: {
-  mapId: string;
-  behavior: Behavior;
-  onError: (msg: string | null) => void;
-  startTransition: React.TransitionStartFunction;
-}) {
-  const parked = !behavior.selected;
-  return (
-    <li
-      className={
-        "flex items-center gap-2 text-xs " +
-        (parked
-          ? "text-[color:var(--color-muted)]/60"
-          : "text-[color:var(--color-muted)]")
-      }
-    >
-      <span
-        className={
-          "w-1.5 h-1.5 rounded-full " +
-          (parked ? "bg-[color:var(--color-muted)]/40" : "bg-[color:var(--color-primary)]")
-        }
-      />
-      <span className={"flex-1 truncate " + (parked ? "line-through" : "")}>
-        {behavior.text}
-      </span>
-      <form
-        action={(fd) => {
-          onError(null);
-          startTransition(async () => {
-            const res = await toggleBehaviorSelected(fd);
-            if (!res.ok) onError(res.reason ?? "Could not update.");
-          });
-        }}
-      >
-        <input type="hidden" name="map_id" value={mapId} />
-        <input type="hidden" name="behavior_id" value={behavior.id} />
-        <input type="hidden" name="selected" value={parked ? "true" : "false"} />
-        <button
-          type="submit"
-          className="text-[color:var(--color-muted)] hover:text-white"
-          title={parked ? "Bring back" : "Park (keep for context)"}
-        >
-          {parked ? "Restore" : "Park"}
-        </button>
-      </form>
-      <form
-        action={(fd) => {
-          onError(null);
-          startTransition(async () => {
-            const res = await removeBehavior(fd);
-            if (!res.ok) onError(res.reason ?? "Could not remove.");
-          });
-        }}
-      >
-        <input type="hidden" name="map_id" value={mapId} />
-        <input type="hidden" name="behavior_id" value={behavior.id} />
-        <button
-          type="submit"
-          className="text-[color:var(--color-muted)] hover:text-[color:var(--color-danger)]"
-          title="Delete"
-        >
-          ×
-        </button>
-      </form>
-    </li>
   );
 }
 

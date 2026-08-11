@@ -50,7 +50,7 @@ export default async function ItcAdminMapPage({
   );
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-screen md:h-screen flex flex-col md:overflow-hidden">
       <header className="border-b border-[color:var(--color-border)] px-4 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link
@@ -69,7 +69,7 @@ export default async function ItcAdminMapPage({
         <StageProgress current={map.current_stage} />
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:min-h-0">
         <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0 overflow-y-auto">
           <ol className="space-y-3 pr-1">
             {displayMessages.length === 0 ? (
@@ -91,7 +91,7 @@ export default async function ItcAdminMapPage({
             ))}
           </ol>
         </section>
-        <section className="p-4 overflow-y-auto">
+        <section className="p-4 md:min-h-0 md:overflow-y-auto">
           <MapPanel
             map={map}
             behaviors={behaviors}

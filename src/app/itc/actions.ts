@@ -13,7 +13,6 @@ import {
   appendMessage,
   countWorryAttempts,
   createMap,
-  deleteBehavior,
   deleteMap,
   findInProgressMap,
   getMapById,
@@ -32,7 +31,6 @@ import {
   saveImprovementGoal,
   setAssumptionRecommended,
   setAssumptionSelected,
-  setBehaviorSelected,
   upsertWorry,
 } from "@/lib/itc/maps";
 import {
@@ -541,49 +539,6 @@ async function applyCoachAction(
       return;
     }
   }
-}
-
-const deleteBehaviorSchema = z.object({
-  map_id: z.string().uuid(),
-  behavior_id: z.string().uuid(),
-});
-
-export async function removeBehavior(formData: FormData): Promise<SendMessageResult> {
-  const participant = await requireItcParticipant();
-  const parsed = deleteBehaviorSchema.safeParse({
-    map_id: formData.get("map_id"),
-    behavior_id: formData.get("behavior_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid delete." };
-  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
-  if (!map) return { ok: false, reason: "Map not found." };
-
-  await deleteBehavior(parsed.data.behavior_id, map.id);
-  revalidatePath(`/itc/${map.id}`);
-  return { ok: true };
-}
-
-const toggleSelectedSchema = z.object({
-  map_id: z.string().uuid(),
-  behavior_id: z.string().uuid(),
-  selected: z.boolean(),
-});
-
-export async function toggleBehaviorSelected(
-  formData: FormData,
-): Promise<SendMessageResult> {
-  const participant = await requireItcParticipant();
-  const parsed = toggleSelectedSchema.safeParse({
-    map_id: formData.get("map_id"),
-    behavior_id: formData.get("behavior_id"),
-    selected: formData.get("selected") === "true",
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid toggle." };
-  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
-  if (!map) return { ok: false, reason: "Map not found." };
-  await setBehaviorSelected(parsed.data.behavior_id, map.id, parsed.data.selected);
-  revalidatePath(`/itc/${map.id}`);
-  return { ok: true };
 }
 
 const advanceSchema = z.object({
