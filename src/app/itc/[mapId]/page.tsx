@@ -82,7 +82,7 @@ export default async function ItcMapPage({
               text: b.text,
               source: b.source,
             }))}
-            hasGoal={Boolean(map.improvement_goal)}
+            improvementGoal={map.improvement_goal}
           />
         </section>
         <section className="p-4 overflow-y-auto">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
 import { GOAL_STEM } from "@/lib/itc/stage";
@@ -19,13 +19,13 @@ export function Conversation({
   stage,
   messages,
   behaviors,
-  hasGoal,
+  improvementGoal,
 }: {
   mapId: string;
   stage: ItcStage;
   messages: ItcMessage[];
   behaviors: Behavior[];
-  hasGoal: boolean;
+  improvementGoal: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +103,11 @@ export function Conversation({
       </form>
 
       {stage === "goal" ? (
-        <GoalLockPanel mapId={mapId} hasGoal={hasGoal} onError={setError} />
+        <GoalLockPanel
+          mapId={mapId}
+          improvementGoal={improvementGoal}
+          onError={setError}
+        />
       ) : null}
 
       {stage === "behaviors" ? (
@@ -136,15 +140,21 @@ function TypingDots() {
 
 function GoalLockPanel({
   mapId,
-  hasGoal,
+  improvementGoal,
   onError,
 }: {
   mapId: string;
-  hasGoal: boolean;
+  improvementGoal: string | null;
   onError: (msg: string | null) => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [text, setText] = useState(GOAL_STEM + " ");
+  const [text, setText] = useState(improvementGoal ?? GOAL_STEM + " ");
+  const hasGoal = Boolean(improvementGoal);
+  // When the coach saves/updates the goal, sync the textarea so the user
+  // doesn't have to retype what the coach just proposed.
+  useEffect(() => {
+    if (improvementGoal) setText(improvementGoal);
+  }, [improvementGoal]);
   return (
     <form
       action={(fd) => {
