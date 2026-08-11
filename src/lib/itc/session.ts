@@ -99,18 +99,34 @@ export function decodeItcSession(raw: string | undefined): ItcSessionPayload | n
 
 export async function readItcSession(): Promise<ItcSessionPayload | null> {
   const store = await cookies();
-  return decodeItcSession(store.get(ITC_COOKIE_NAME)?.value);
+  const raw = store.get(ITC_COOKIE_NAME)?.value;
+  const allNames = store.getAll().map((c) => c.name);
+  console.warn(
+    "[itc] readItcSession: %s cookie present=%s, all-cookies=%o",
+    ITC_COOKIE_NAME,
+    Boolean(raw),
+    allNames,
+  );
+  return decodeItcSession(raw);
 }
 
 export async function setItcSessionCookie(participantId: string): Promise<void> {
   const store = await cookies();
-  store.set(ITC_COOKIE_NAME, encodeItcSession(participantId), {
+  const value = encodeItcSession(participantId);
+  store.set(ITC_COOKIE_NAME, value, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: ITC_COOKIE_PATH,
     maxAge: SESSION_TTL_SECONDS,
   });
+  console.warn(
+    "[itc] setItcSessionCookie: pid=%s path=%s secure=%s value-len=%d",
+    participantId,
+    ITC_COOKIE_PATH,
+    process.env.NODE_ENV === "production",
+    value.length,
+  );
 }
 
 export async function clearItcSessionCookie(): Promise<void> {
