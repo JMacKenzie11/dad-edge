@@ -47,7 +47,7 @@ export default async function ItcMapPage({
             ← Maps
           </Link>
         </div>
-        <div className="hidden md:block flex-1 max-w-3xl overflow-x-auto">
+        <div className="hidden md:block flex-1 min-w-0 max-w-3xl">
           <StageProgress current={map.current_stage} />
         </div>
         <div className="flex items-center gap-3">

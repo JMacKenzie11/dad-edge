@@ -201,15 +201,34 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
   // means improvement_goal is set and this no-ops.
   const currentGoal = await refreshImprovementGoal(map.id);
   if (map.current_stage === "goal" && !currentGoal) {
-    const extracted =
-      extractGoalSentence(reply.reply) ??
-      (priorAssistantContent ? extractGoalSentence(priorAssistantContent) : null);
+    const fromReply = extractGoalSentence(reply.reply);
+    const fromPrior = priorAssistantContent
+      ? extractGoalSentence(priorAssistantContent)
+      : null;
+    const extracted = fromReply ?? fromPrior;
+    console.warn(
+      "[itc] goal backstop: reply-match=%s prior-match=%s extracted-len=%d action=%s",
+      fromReply ? "yes" : "no",
+      fromPrior ? "yes" : "no",
+      extracted?.length ?? 0,
+      reply.action?.type ?? "null",
+    );
     if (extracted) {
       try {
         await saveImprovementGoal(map.id, extracted);
-      } catch {
-        // ignore — malformed extraction; coach will re-propose
+        console.warn("[itc] goal backstop: saved goal via extractor");
+      } catch (err) {
+        console.warn(
+          "[itc] goal backstop: saveImprovementGoal threw: %s",
+          err instanceof Error ? err.message : String(err),
+        );
       }
+    } else if (reply.action?.type === "propose_goal") {
+      // Coach emitted the right action but something else failed — log why.
+      console.warn(
+        "[itc] goal backstop: propose_goal fired but goal still null. text=%o",
+        reply.action.text,
+      );
     }
   }
 
@@ -247,37 +266,30 @@ async function refreshImprovementGoal(mapId: string): Promise<string | null> {
 //    coach's "I'm" doesn't miss the stem match.
 // 2. The captured sentence ends at the first period followed by a quote,
 //    whitespace, or end-of-string — this dodges the apostrophe inside "I'm".
-function normalizeQuotes(s: string): string {
-  return s.replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"');
-}
-
 function extractGoalSentence(text: string): string | null {
-  const normalized = normalizeQuotes(text).toLowerCase();
-  const stem = GOAL_STEM.toLowerCase();
-  const stemIdx = normalized.indexOf(stem);
-  if (stemIdx === -1) return null;
-  // Character positions are preserved by normalizeQuotes (each replacement
-  // is 1:1 BMP code unit), so this index works on the original text.
-  const tail = normalizeQuotes(text.slice(stemIdx));
-
-  // Preferred: match up to first period followed by quote/space/end.
-  const periodMatch = tail.match(/^([^\n]*?\.)(?=["'\u201D\u2019\s]|$)/);
-  if (periodMatch) {
-    const cleaned = periodMatch[1].trim();
-    if (cleaned.length > GOAL_STEM.length + 2) return cleaned;
+  // Match the whole stem+tail directly with a case-insensitive regex that
+  // tolerates a smart-apostrophe or missing apostrophe in "I'm". Reconstruct
+  // the sentence with canonical ASCII punctuation regardless of what the
+  // coach emitted. This is more resilient than an indexOf + slice pipeline
+  // which broke silently in the field.
+  const re = /I[\u2019'\u02BC]?m committed to getting better at ([^\n.]+)\./i;
+  const match = text.match(re);
+  if (match) {
+    const tail = match[1].trim();
+    if (tail.length > 0) return `I'm committed to getting better at ${tail}.`;
   }
 
-  // Fallback: no period-terminated sentence. Take everything up to the
-  // first double-quote, newline, or end-of-string. Strip trailing
-  // punctuation that isn't part of the goal.
-  const bareMatch = tail.match(/^([^"\n\u201D]+)/);
-  if (!bareMatch) return null;
-  const cleaned = bareMatch[1]
+  // No period-terminated sentence — take everything up to first newline or
+  // closing quote as a fallback.
+  const looseRe = /I[\u2019'\u02BC]?m committed to getting better at ([^\n"\u201D]+)/i;
+  const loose = text.match(looseRe);
+  if (!loose) return null;
+  const tail = loose[1]
     .trim()
     .replace(/[,;:—–]\s+.*$/, "") // drop trailing clauses like ", right?"
-    .replace(/[!?]+$/, "")
+    .replace(/[!?.]+$/, "")
     .trim();
-  return cleaned.length > GOAL_STEM.length + 2 ? cleaned : null;
+  return tail.length > 0 ? `I'm committed to getting better at ${tail}.` : null;
 }
 
 // Guard around the coach call: filters out empty replies and consecutive
@@ -336,11 +348,18 @@ async function applyCoachAction(
 ): Promise<void> {
   switch (action.type) {
     case "propose_goal": {
+      console.warn(
+        "[itc] propose_goal action fired. stage=%s text=%o hasStem=%s",
+        currentStage,
+        action.text,
+        hasGoalStem(action.text),
+      );
       if (currentStage !== "goal") return; // silent no-op if out of order
       if (!hasGoalStem(action.text)) {
         throw new Error(`Coach proposed a goal without the required stem.`);
       }
       await saveImprovementGoal(mapId, action.text);
+      console.warn("[itc] propose_goal: saved successfully");
       return;
     }
     case "propose_behavior": {
