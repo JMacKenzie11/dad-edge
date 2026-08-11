@@ -5,6 +5,7 @@ import { isItcAdmin } from "@/lib/itc/admin";
 import { findInProgressMap } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { startMap } from "./actions";
+import { StartMapButton } from "./start-map-button";
 
 const ERROR_COPY: Record<string, string> = {
   pillar: "Pick a pillar to start.",
@@ -69,12 +70,7 @@ export default async function ItcLandingPage({
             {errorMessage ? (
               <p className="text-xs text-[color:var(--color-danger)]">{errorMessage}</p>
             ) : null}
-            <button
-              type="submit"
-              className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold"
-            >
-              Start map
-            </button>
+            <StartMapButton />
           </form>
         </div>
 
