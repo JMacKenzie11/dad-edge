@@ -196,39 +196,6 @@ async function applyCoachAction(
   }
 }
 
-const acceptGoalSchema = z.object({
-  map_id: z.string().uuid(),
-  text: z.string().min(1).max(1000),
-});
-
-export async function acceptGoal(formData: FormData): Promise<SendMessageResult> {
-  const participant = await requireItcParticipant();
-  const parsed = acceptGoalSchema.safeParse({
-    map_id: formData.get("map_id"),
-    text: formData.get("text"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid goal." };
-  if (!hasGoalStem(parsed.data.text)) {
-    return { ok: false, reason: `Goal must begin with "${GOAL_STEM}".` };
-  }
-
-  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
-  if (!map) return { ok: false, reason: "Map not found." };
-  if (map.current_stage !== "goal") {
-    return { ok: false, reason: "Goal is already locked." };
-  }
-
-  await saveImprovementGoal(map.id, parsed.data.text);
-  await advanceStage(map.id, "goal", "behaviors");
-  await appendMessage(
-    map.id,
-    "assistant",
-    `Locked. Now — column 2 is about what you actually do (or fail to do) that works against that goal. Concrete behaviors, not feelings. What's the first one that comes to mind?`,
-  );
-  revalidatePath(`/itc/${map.id}`);
-  return { ok: true };
-}
-
 const acceptBehaviorSchema = z.object({
   map_id: z.string().uuid(),
   text: z.string().min(1).max(500),

@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
-import { GOAL_STEM } from "@/lib/itc/stage";
 import {
   acceptBehavior,
-  acceptGoal,
   advanceMapStage,
   removeBehavior,
   sendCoachMessage,
@@ -19,13 +17,11 @@ export function Conversation({
   stage,
   messages,
   behaviors,
-  improvementGoal,
 }: {
   mapId: string;
   stage: ItcStage;
   messages: ItcMessage[];
   behaviors: Behavior[];
-  improvementGoal: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -102,14 +98,6 @@ export function Conversation({
         </button>
       </form>
 
-      {stage === "goal" ? (
-        <GoalLockPanel
-          mapId={mapId}
-          improvementGoal={improvementGoal}
-          onError={setError}
-        />
-      ) : null}
-
       {stage === "behaviors" ? (
         <BehaviorPanel
           mapId={mapId}
@@ -135,58 +123,6 @@ function TypingDots() {
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce" />
     </span>
-  );
-}
-
-function GoalLockPanel({
-  mapId,
-  improvementGoal,
-  onError,
-}: {
-  mapId: string;
-  improvementGoal: string | null;
-  onError: (msg: string | null) => void;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [text, setText] = useState(improvementGoal ?? GOAL_STEM + " ");
-  const hasGoal = Boolean(improvementGoal);
-  // When the coach saves/updates the goal, sync the textarea so the user
-  // doesn't have to retype what the coach just proposed.
-  useEffect(() => {
-    if (improvementGoal) setText(improvementGoal);
-  }, [improvementGoal]);
-  return (
-    <form
-      action={(fd) => {
-        onError(null);
-        startTransition(async () => {
-          const res = await acceptGoal(fd);
-          if (!res.ok) onError(res.reason ?? "Could not lock goal.");
-        });
-      }}
-      className="mt-3 space-y-2 border-t border-[color:var(--color-border)] pt-3"
-    >
-      <input type="hidden" name="map_id" value={mapId} />
-      <label className="block space-y-1">
-        <span className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
-          {hasGoal ? "Update improvement goal" : "Lock improvement goal"}
-        </span>
-        <textarea
-          name="text"
-          rows={2}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
-        />
-      </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-[color:var(--color-primary)]/80 px-3 py-1.5 text-xs font-semibold"
-      >
-        {pending ? "Locking…" : "Lock goal & continue"}
-      </button>
-    </form>
   );
 }
 
