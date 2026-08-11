@@ -59,6 +59,16 @@ export async function getMapForParticipant(
   return (data as ItcMap | null) ?? null;
 }
 
+export async function deleteMap(mapId: string, participantId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_maps")
+    .delete()
+    .eq("id", mapId)
+    .eq("participant_id", participantId);
+  if (error) throw new Error(`deleteMap: ${error.message}`);
+}
+
 export async function createMap(
   participantId: string,
   pillarCode: PillarCode,

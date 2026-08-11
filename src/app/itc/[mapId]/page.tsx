@@ -8,6 +8,7 @@ import {
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { Conversation } from "./conversation";
 import { MapPanel } from "./map-panel";
+import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
 
 export default async function ItcMapPage({
@@ -42,14 +43,17 @@ export default async function ItcMapPage({
         <div className="hidden md:block flex-1 max-w-3xl">
           <StageProgress current={map.current_stage} />
         </div>
-        <form action="/itc/logout" method="POST">
-          <button
-            type="submit"
-            className="text-xs text-[color:var(--color-muted)] hover:text-white"
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-3">
+          <ResetMapButton mapId={map.id} />
+          <form action="/itc/logout" method="POST">
+            <button
+              type="submit"
+              className="text-xs text-[color:var(--color-muted)] hover:text-white"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="md:hidden px-4 py-2 border-b border-[color:var(--color-border)]">

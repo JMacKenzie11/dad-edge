@@ -11,6 +11,7 @@ import {
   appendMessage,
   createMap,
   deleteBehavior,
+  deleteMap,
   findInProgressMap,
   getMapForParticipant,
   listBehaviors,
@@ -42,6 +43,22 @@ export async function startMap(formData: FormData): Promise<void> {
     `Alright. You've picked ${pillar.label} as the pillar. Before we go anywhere else — the map begins with one goal that starts "${GOAL_STEM}...". Do you already have that goal, or want help getting to it?`,
   );
   redirect(`/itc/${map.id}`);
+}
+
+const resetMapSchema = z.object({
+  map_id: z.string().uuid(),
+});
+
+export async function resetMap(formData: FormData): Promise<void> {
+  const participant = await requireItcParticipant();
+  const parsed = resetMapSchema.safeParse({ map_id: formData.get("map_id") });
+  if (!parsed.success) redirect("/itc");
+
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) redirect("/itc");
+
+  await deleteMap(map.id, participant.id);
+  redirect("/itc");
 }
 
 const messageSchema = z.object({
