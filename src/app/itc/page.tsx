@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CHOOSABLE_PILLARS } from "@/lib/pillars";
 import { findInProgressMap } from "@/lib/itc/maps";
@@ -76,12 +75,18 @@ export default async function ItcLandingPage({
           </form>
         </div>
 
-        <Link
-          href="/itc/logout"
-          className="inline-block text-sm underline text-[color:var(--color-muted)] border-t border-[color:var(--color-border)] pt-3 w-full"
+        <form
+          action="/itc/logout"
+          method="POST"
+          className="border-t border-[color:var(--color-border)] pt-3 w-full"
         >
-          Sign out
-        </Link>
+          <button
+            type="submit"
+            className="text-sm underline text-[color:var(--color-muted)]"
+          >
+            Sign out
+          </button>
+        </form>
       </div>
     </main>
   );

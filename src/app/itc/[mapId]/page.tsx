@@ -42,12 +42,14 @@ export default async function ItcMapPage({
         <div className="hidden md:block flex-1 max-w-3xl">
           <StageProgress current={map.current_stage} />
         </div>
-        <Link
-          href="/itc/logout"
-          className="text-xs text-[color:var(--color-muted)] hover:text-white"
-        >
-          Sign out
-        </Link>
+        <form action="/itc/logout" method="POST">
+          <button
+            type="submit"
+            className="text-xs text-[color:var(--color-muted)] hover:text-white"
+          >
+            Sign out
+          </button>
+        </form>
       </header>
 
       <div className="md:hidden px-4 py-2 border-b border-[color:var(--color-border)]">
