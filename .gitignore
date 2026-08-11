@@ -7,5 +7,3 @@ node_modules
 .DS_Store
 .vercel
 next-env.d.ts
-/public/brand
-!/public/brand/.gitkeep
