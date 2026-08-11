@@ -5,6 +5,7 @@ import {
   getMapForParticipant,
   listBehaviors,
   listMessages,
+  listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { Conversation } from "./conversation";
@@ -22,9 +23,10 @@ export default async function ItcMapPage({
   const map = await getMapForParticipant(mapId, participant.id);
   if (!map) notFound();
 
-  const [messages, behaviors] = await Promise.all([
+  const [messages, behaviors, worries] = await Promise.all([
     listMessages(map.id),
     listBehaviors(map.id),
+    listWorries(map.id),
   ]);
 
   return (
@@ -84,7 +86,7 @@ export default async function ItcMapPage({
           />
         </section>
         <section className="p-4 overflow-y-auto">
-          <MapPanel map={map} behaviors={behaviors} />
+          <MapPanel map={map} behaviors={behaviors} worries={worries} />
         </section>
       </div>
     </main>

@@ -22,6 +22,14 @@ export type ItcBehavior = {
   created_at: string;
 };
 
+export type ItcWorry = {
+  id: string;
+  map_id: string;
+  behavior_id: string;
+  text: string;
+  created_at: string;
+};
+
 export type ItcMessage = {
   id: string;
   map_id: string;
@@ -160,6 +168,17 @@ export async function deleteBehavior(id: string, mapId: string): Promise<void> {
     .eq("id", id)
     .eq("map_id", mapId);
   if (error) throw new Error(`deleteBehavior: ${error.message}`);
+}
+
+export async function listWorries(mapId: string): Promise<ItcWorry[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_worries")
+    .select("*")
+    .eq("map_id", mapId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listWorries: ${error.message}`);
+  return (data ?? []) as ItcWorry[];
 }
 
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {

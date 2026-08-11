@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isItcAdmin } from "@/lib/itc/admin";
-import { getMapById, listBehaviors, listMessages } from "@/lib/itc/maps";
+import {
+  getMapById,
+  listBehaviors,
+  listMessages,
+  listWorries,
+} from "@/lib/itc/maps";
 import { getParticipantById } from "@/lib/itc/participant";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { MapPanel } from "../../[mapId]/map-panel";
@@ -19,10 +24,11 @@ export default async function ItcAdminMapPage({
   const map = await getMapById(mapId);
   if (!map) notFound();
 
-  const [owner, messages, behaviors] = await Promise.all([
+  const [owner, messages, behaviors, worries] = await Promise.all([
     getParticipantById(map.participant_id),
     listMessages(map.id),
     listBehaviors(map.id),
+    listWorries(map.id),
   ]);
 
   const displayMessages = messages.filter(
@@ -75,7 +81,7 @@ export default async function ItcAdminMapPage({
           </ol>
         </section>
         <section className="p-4 overflow-y-auto">
-          <MapPanel map={map} behaviors={behaviors} />
+          <MapPanel map={map} behaviors={behaviors} worries={worries} />
         </section>
       </div>
     </main>
