@@ -76,13 +76,9 @@ export default async function ItcLandingPage({
           </form>
         </div>
 
-        <p className="text-[11px] text-[color:var(--color-muted)] leading-relaxed border-t border-[color:var(--color-border)] pt-3">
-          Your coach and your facilitator (Jason) can see your map. The other men cannot.
-        </p>
-
         <Link
           href="/itc/logout"
-          className="inline-block text-sm underline text-[color:var(--color-muted)]"
+          className="inline-block text-sm underline text-[color:var(--color-muted)] border-t border-[color:var(--color-border)] pt-3 w-full"
         >
           Sign out
         </Link>
