@@ -6,7 +6,9 @@ import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { runItcCoachTurn, type CoachAction } from "@/lib/itc/coach";
 import {
+  addAssumption,
   addBehavior,
+  addCommitment,
   advanceStage,
   appendMessage,
   countWorryAttempts,
@@ -16,16 +18,27 @@ import {
   findInProgressMap,
   getMapById,
   getMapForParticipant,
+  linkAssumptionToCommitments,
+  listAssumptionLinks,
+  listAssumptions,
   listBehaviors,
+  listCommitments,
   listMessages,
   listWorries,
   logWorryAttempt,
+  markRevealDelivered,
   pruneBehaviors,
   saveImprovementGoal,
+  setAssumptionRecommended,
+  setAssumptionSelected,
   setBehaviorSelected,
   upsertWorry,
 } from "@/lib/itc/maps";
-import { scoreWorryDepth } from "@/lib/itc/rubric";
+import {
+  scoreAssumptionDepth,
+  scoreCommitmentDepth,
+  scoreWorryDepth,
+} from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { GOAL_STEM, hasGoalStem, type ItcStage } from "@/lib/itc/stage";
 
@@ -92,11 +105,29 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   await appendMessage(map.id, "user", parsed.data.text);
 
-  const [history, behaviors, worries] = await Promise.all([
-    listMessages(map.id),
-    listBehaviors(map.id),
-    listWorries(map.id),
-  ]);
+  const [history, behaviors, worries, commitments, assumptions, links] =
+    await Promise.all([
+      listMessages(map.id),
+      listBehaviors(map.id),
+      listWorries(map.id),
+      listCommitments(map.id),
+      listAssumptions(map.id),
+      listAssumptionLinks(map.id),
+    ]);
+  const linksByAssumption = new Map<string, string[]>();
+  for (const l of links) {
+    const arr = linksByAssumption.get(l.assumption_id) ?? [];
+    arr.push(l.commitment_id);
+    linksByAssumption.set(l.assumption_id, arr);
+  }
+  const assumptionsForCoach = assumptions.map((a) => ({
+    id: a.id,
+    text: a.text,
+    depth_score: a.depth_score,
+    selected_for_testing: a.selected_for_testing,
+    coach_recommended: a.coach_recommended,
+    linked_commitment_ids: linksByAssumption.get(a.id) ?? [],
+  }));
 
   const priorHistory = history
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -126,6 +157,13 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       improvementGoal: map.improvement_goal,
       behaviors,
       worries,
+      commitments: commitments.map((c) => ({
+        id: c.id,
+        worry_id: c.worry_id,
+        text: c.text,
+      })),
+      assumptions: assumptionsForCoach,
+      revealDelivered: map.reveal_delivered,
       recentActionFeedback,
       history: priorHistory,
       userMessage: parsed.data.text,
@@ -345,6 +383,88 @@ async function applyCoachAction(
       }
 
       await upsertWorry(mapId, behavior.id, action.text, rubric.score);
+      return;
+    }
+    case "propose_commitment": {
+      if (currentStage !== "commitments") return;
+      const worries = await listWorries(mapId);
+      const locked = worries.filter((w) => w.depth_score !== null);
+      const worry = locked[action.worry_index - 1];
+      if (!worry) {
+        throw new Error(
+          `propose_commitment: worry_index ${action.worry_index} out of range (${locked.length} locked).`,
+        );
+      }
+      const map = await getMapById(mapId);
+      const rubric = await scoreCommitmentDepth({
+        goalText: map?.improvement_goal ?? "",
+        worryText: worry.text,
+        commitmentText: action.text,
+      });
+      if (!rubric.passes) {
+        throw new Error(
+          `commitment reads as productivity advice, not self-protection: ${rubric.reason}. Rework it — the protective flinch has to be visible.`,
+        );
+      }
+      await addCommitment(mapId, worry.id, action.text);
+      return;
+    }
+    case "mark_reveal_delivered": {
+      if (currentStage !== "commitments" && currentStage !== "assumptions") {
+        return;
+      }
+      await markRevealDelivered(mapId);
+      return;
+    }
+    case "propose_assumption": {
+      if (currentStage !== "assumptions") return;
+      const map = await getMapById(mapId);
+      const rubric = await scoreAssumptionDepth({
+        goalText: map?.improvement_goal ?? "",
+        assumptionText: action.text,
+      });
+      if (rubric.score < 2) {
+        throw new Error(
+          `Big Assumption not landed yet (score ${rubric.score}/3): ${rubric.reason}. Extend the "then" until it hits identity or Big Time Bad — do not re-propose the same text.`,
+        );
+      }
+      const commitments = await listCommitments(mapId);
+      const linkedIds: string[] = [];
+      for (const idx of action.commitment_indices) {
+        const c = commitments[idx - 1];
+        if (c) linkedIds.push(c.id);
+      }
+      if (linkedIds.length === 0) {
+        throw new Error(
+          `propose_assumption: commitment_indices resolved to no valid commitments.`,
+        );
+      }
+      const assumption = await addAssumption(mapId, action.text, rubric.score);
+      await linkAssumptionToCommitments(assumption.id, linkedIds);
+      return;
+    }
+    case "recommend_assumption_for_testing": {
+      if (currentStage !== "prioritize") return;
+      const assumptions = await listAssumptions(mapId);
+      const target = assumptions[action.assumption_index - 1];
+      if (!target) {
+        throw new Error(
+          `recommend_assumption_for_testing: assumption_index ${action.assumption_index} out of range (${assumptions.length}).`,
+        );
+      }
+      await setAssumptionRecommended(target.id, mapId);
+      return;
+    }
+    case "select_assumption_for_testing": {
+      if (currentStage !== "prioritize") return;
+      const assumptions = await listAssumptions(mapId);
+      const target = assumptions[action.assumption_index - 1];
+      if (!target) {
+        throw new Error(
+          `select_assumption_for_testing: assumption_index ${action.assumption_index} out of range (${assumptions.length}).`,
+        );
+      }
+      await setAssumptionSelected(target.id, mapId);
       return;
     }
     case "advance_stage": {

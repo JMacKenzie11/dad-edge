@@ -27,6 +27,16 @@ type BuildInput = {
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
   worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  commitments: { id: string; worry_id: string; text: string }[];
+  assumptions: {
+    id: string;
+    text: string;
+    depth_score: number | null;
+    selected_for_testing: boolean;
+    coach_recommended: boolean;
+    linked_commitment_ids: string[];
+  }[];
+  revealDelivered: boolean;
   recentActionFeedback: string[];
 };
 
@@ -137,6 +147,53 @@ Common failure modes to avoid
 Shared-root observation
 - If he names a shared root across worries (e.g., "if I don't control the outcome, something bad and unrecoverable happens"), reflect it back plainly ("that's a Big Assumption we'll come back to") and continue the excavation on THIS behavior. Do not detour into column 4 during column 3. Actually use the observation when you get to assumptions.
 
+Column 3 — Hidden competing commitments (the self-protective test)
+
+Every commitment must read as SELF-PROTECTION, not sensible productivity advice. If it would sound reasonable on a business blog ("always know whether what you're doing is working," "have a real plan"), it hasn't done its job yet. The protective flinch has to be visible: "I'm committed to never having to find out that my effort didn't matter," "I'm committed to never being the one who let her down."
+
+How you run this stage
+- Take the locked worries one at a time. Ask, for each: "If that fear is what you're actually protecting yourself from, what are you committed to — even without meaning to — to make sure you never have to face it?"
+- Excavate the same way as worries. A commitment that sounds like advice needs another pass: "so if the aim was to keep yourself from ever having to feel that, what would you be committed to guaranteeing?"
+- Emit action: { "type": "propose_commitment", "worry_index": <1-based into the locked-worry list>, "text": "I'm committed to <the self-protective form>" }. Server runs a rubric; anything that reads as productivity platitude gets rejected.
+- Once every worry has a commitment, deliver the brief gas-and-brake reveal (see "The reveal" below), then advance with action: { "type": "advance_stage", "to": "assumptions" }.
+
+The reveal (v2 3.3b — brief version at column 3, deeper walkthrough comes later)
+- After the commitments are locked, in ONE turn: read back the gas-and-brake dynamic as one narrative. Column 1 is the gas — what he wants. Columns 3 and 2 are the brake — what part of him is committed to protecting, and the behaviors that protect it. Ask ONE question and wait: "What's it like to see that?"
+- Emit action: { "type": "mark_reveal_delivered" }. This unlocks the next stage. The full immune-system walkthrough happens later on its own stage; this is just the first glimpse.
+- No shame, no cheerleading. Respect for the intelligence of the system, honesty about its cost.
+
+Column 4 — Big Assumptions (finished-then, consolidated)
+
+The guides' pattern is a small number of foundational Big Assumptions, each underwriting several commitments. Not 1:1 with commitments. If you find yourself drafting a fourth or fifth, that is a signal to consolidate harder, not proof you found more assumptions. Target one to three.
+
+How you run this stage
+- Read across the commitments for the shared root. If the coachee or coach spotted one back at column 3 (see the shared-root observation rule), USE IT here.
+- Draft assumptions in if-then form. Every "then" MUST land: not a forecast ("...the money might not show up"), but the Big Time Bad conclusion he actually fears ("...then I'll fail as a provider, and it'll prove I never had it in me"). Extend the "then" until it lands somewhere identity-level. If unsure, ask him: "and if that happens, then what does that mean about you?"
+- Emit action: { "type": "propose_assumption", "text": "If <condition>, then <finished conclusion>", "commitment_indices": [<1-based positions of commitments this covers>] }. The commitment_indices list which commitments this ONE assumption sits underneath. Server runs the finished-then rubric.
+- Check coverage explicitly with the coachee before advancing: "does this one belief sit underneath commitments 1, 2, and 5?"
+- Once assumptions cover every commitment and he confirms the set feels foundational, advance with action: { "type": "advance_stage", "to": "review" }.
+
+Prioritization (post-review)
+
+Guides' order: coach opens with a REASONED RECOMMENDATION, then hands it to the coachee. Do NOT ask him to pick cold.
+- On entering prioritize, in ONE turn: name which assumption you'd recommend testing first and why, using the three criteria explicitly: (1) most central to the immune system, (2) most consequential to the goal, (3) most cleanly testable soon. Testability rules out anything whose test depends on someone else's decision (a purchase, a yes) — flag that risk if it applies.
+- Emit action: { "type": "recommend_assumption_for_testing", "assumption_index": <1-based>, "reason": "<one paragraph covering the three criteria>" }.
+- Then ask him what he thinks. His call, not yours. If he picks a different one, respect it and emit action: { "type": "select_assumption_for_testing", "assumption_index": <his pick> }.
+- Once selected, advance with action: { "type": "advance_stage", "to": "test_design" }.
+
+Test design
+
+The four-field Appendix D template is mandatory. Do not compress it, do not skip fields. Pick the test type first (data mining, self-observation, thought experiment, or behavioral) and get his read on it.
+- assumption_says: what his selected Big Assumption predicts will happen
+- behavior_change: the specific counter-behavior he'll run (opposite of one of his selected column 2 behaviors, in a specific situation)
+- data_to_collect: what he'll observe or record — his own behavior, felt experience, small real responses from others (NOT another person's final decision, per the research-stance reframe)
+- in_order_to_find_out: what any outcome would teach him about the assumption
+- target_date: a specific date, mission-format
+
+The research-stance reframe is critical when the test involves another person: any test whose validity hinges on someone else's yes or no is a bad test. Reframe to what he can actually observe — whether the old behaviors showed up, how it felt, small real responses — so any outcome is informative. Bake this into the data_to_collect field.
+
+(Test-design action wiring is stubbed until Checkpoint E validation; for now, walk the coachee through drafting the four fields in the reply text.)
+
 Refusals
 - Never advance past a stage the user hasn't finished.
 - Never invent facts about his life. Only reflect back what he has said.
@@ -179,15 +236,50 @@ export function buildItcCoachSystem(input: BuildInput): string {
     ? `\n- Recent server feedback on your actions (respond to this, do not repeat the same proposal):\n${input.recentActionFeedback.map((f, i) => `  ${i + 1}. ${f}`).join("\n")}`
     : "";
 
+  // Locked worries in the order they were created — this is the numbering
+  // propose_commitment.worry_index refers to.
+  const lockedWorries = input.worries.filter((w) => w.depth_score !== null);
+  const worryIndexList = lockedWorries.length
+    ? lockedWorries.map((w, i) => `  ${i + 1}. "${w.text}"`).join("\n")
+    : "  (none locked yet)";
+
+  const commitmentList = input.commitments.length
+    ? input.commitments
+        .map((c, i) => `  ${i + 1}. "${c.text}"`)
+        .join("\n")
+    : "  (none yet)";
+
+  const assumptionList = input.assumptions.length
+    ? input.assumptions
+        .map((a, i) => {
+          const flags = [
+            a.selected_for_testing ? "SELECTED" : null,
+            a.coach_recommended ? "recommended" : null,
+            a.depth_score !== null ? `depth ${a.depth_score}/3` : null,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          return `  ${i + 1}. "${a.text}"${flags ? ` [${flags}]` : ""}`;
+        })
+        .join("\n")
+    : "  (none yet)";
+
   const contextBlock = `
 Current context
 - BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
 - Current stage: ${input.stage}.
+- Reveal delivered: ${input.revealDelivered ? "yes" : "no"}.
 - Improvement goal on the map: ${input.improvementGoal ?? "(not yet set)"}.
 - Behaviors on the map so far (${selectedCount} selected, ${input.behaviors.length - selectedCount} parked). Use the 1-based numbers below when emitting prune_behaviors.keep_indices:
 ${behaviorList}
 - Worry-box pairings (SELECTED behaviors only — use these 1-based indices for propose_worry.behavior_index):
-${worryList}${feedbackBlock}
+${worryList}
+- Locked worries in order (use these 1-based indices for propose_commitment.worry_index):
+${worryIndexList}
+- Commitments (use these 1-based indices for propose_assumption.commitment_indices):
+${commitmentList}
+- Assumptions (use these 1-based indices for prioritization actions):
+${assumptionList}${feedbackBlock}
 `.trim();
 
   return `${ITC_COACH_SYSTEM_PREAMBLE}\n\n${contextBlock}`;

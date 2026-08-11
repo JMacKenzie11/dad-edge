@@ -38,6 +38,41 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     behavior_index: z.number().int().min(1),
     text: z.string().min(1).max(500),
   }),
+  // Propose a hidden competing commitment paired to a specific worry.
+  // worry_index is 1-based into the locked-worry list the coach sees.
+  // Server runs a self-protection rubric; commitments that sound like
+  // productivity advice are rejected.
+  z.object({
+    type: z.literal("propose_commitment"),
+    worry_index: z.number().int().min(1),
+    text: z.string().min(1).max(500),
+  }),
+  // The v2 3.3b brief gas-and-brake reveal. Coach emits this after the
+  // commitments column is complete; UI records that the beat happened so
+  // the deeper immune-system walkthrough later doesn't repeat it.
+  z.object({ type: z.literal("mark_reveal_delivered") }),
+  // Propose a Big Assumption and the commitments it underwrites.
+  // commitment_indices are 1-based into the ordered commitments list the
+  // coach sees. Server runs the finished-then rubric before locking.
+  z.object({
+    type: z.literal("propose_assumption"),
+    text: z.string().min(1).max(500),
+    commitment_indices: z.array(z.number().int().min(1)).min(1),
+  }),
+  // Coach's prioritization recommendation. assumption_index 1-based into
+  // the locked assumptions. Coach must still ask the coachee to pick;
+  // this action only surfaces the recommendation to the UI.
+  z.object({
+    type: z.literal("recommend_assumption_for_testing"),
+    assumption_index: z.number().int().min(1),
+    reason: z.string().min(1).max(500),
+  }),
+  // Coachee's final choice for testing. Sets selected_for_testing on the
+  // chosen assumption.
+  z.object({
+    type: z.literal("select_assumption_for_testing"),
+    assumption_index: z.number().int().min(1),
+  }),
   z.object({
     type: z.literal("advance_stage"),
     to: z.enum([
@@ -78,6 +113,16 @@ type RunCoachInput = {
   // Worries keyed by behavior_id. Populated during the worries stage so
   // the coach knows what's already locked and doesn't re-propose.
   worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  commitments: { id: string; worry_id: string; text: string }[];
+  assumptions: {
+    id: string;
+    text: string;
+    depth_score: number | null;
+    selected_for_testing: boolean;
+    coach_recommended: boolean;
+    linked_commitment_ids: string[];
+  }[];
+  revealDelivered: boolean;
   history: ChatTurn[];
   userMessage: string;
   // Most recent rejected coach actions (e.g., worry_not_deep_enough). Fed
@@ -100,6 +145,9 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     improvementGoal: input.improvementGoal,
     behaviors: input.behaviors,
     worries: input.worries,
+    commitments: input.commitments,
+    assumptions: input.assumptions,
+    revealDelivered: input.revealDelivered,
     recentActionFeedback: input.recentActionFeedback,
   });
 

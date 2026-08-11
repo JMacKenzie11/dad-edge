@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapForParticipant,
+  listAssumptionLinks,
+  listAssumptions,
   listBehaviors,
+  listCommitments,
   listMessages,
   listWorries,
 } from "@/lib/itc/maps";
@@ -23,11 +26,15 @@ export default async function ItcMapPage({
   const map = await getMapForParticipant(mapId, participant.id);
   if (!map) notFound();
 
-  const [messages, behaviors, worries] = await Promise.all([
-    listMessages(map.id),
-    listBehaviors(map.id),
-    listWorries(map.id),
-  ]);
+  const [messages, behaviors, worries, commitments, assumptions, assumptionLinks] =
+    await Promise.all([
+      listMessages(map.id),
+      listBehaviors(map.id),
+      listWorries(map.id),
+      listCommitments(map.id),
+      listAssumptions(map.id),
+      listAssumptionLinks(map.id),
+    ]);
 
   return (
     <main className="min-h-screen flex flex-col">
@@ -86,7 +93,14 @@ export default async function ItcMapPage({
           />
         </section>
         <section className="p-4 overflow-y-auto">
-          <MapPanel map={map} behaviors={behaviors} worries={worries} />
+          <MapPanel
+            map={map}
+            behaviors={behaviors}
+            worries={worries}
+            commitments={commitments}
+            assumptions={assumptions}
+            assumptionLinks={assumptionLinks}
+          />
         </section>
       </div>
     </main>

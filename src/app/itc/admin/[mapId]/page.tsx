@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapById,
+  listAssumptionLinks,
+  listAssumptions,
   listBehaviors,
+  listCommitments,
   listMessages,
   listWorries,
 } from "@/lib/itc/maps";
@@ -24,11 +27,22 @@ export default async function ItcAdminMapPage({
   const map = await getMapById(mapId);
   if (!map) notFound();
 
-  const [owner, messages, behaviors, worries] = await Promise.all([
+  const [
+    owner,
+    messages,
+    behaviors,
+    worries,
+    commitments,
+    assumptions,
+    assumptionLinks,
+  ] = await Promise.all([
     getParticipantById(map.participant_id),
     listMessages(map.id),
     listBehaviors(map.id),
     listWorries(map.id),
+    listCommitments(map.id),
+    listAssumptions(map.id),
+    listAssumptionLinks(map.id),
   ]);
 
   const displayMessages = messages.filter(
@@ -81,7 +95,14 @@ export default async function ItcAdminMapPage({
           </ol>
         </section>
         <section className="p-4 overflow-y-auto">
-          <MapPanel map={map} behaviors={behaviors} worries={worries} />
+          <MapPanel
+            map={map}
+            behaviors={behaviors}
+            worries={worries}
+            commitments={commitments}
+            assumptions={assumptions}
+            assumptionLinks={assumptionLinks}
+          />
         </section>
       </div>
     </main>

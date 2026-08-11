@@ -9,8 +9,33 @@ export type ItcMap = {
   status: "in_progress" | "complete";
   current_stage: ItcStage;
   improvement_goal: string | null;
+  reveal_delivered: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type ItcCommitment = {
+  id: string;
+  map_id: string;
+  worry_id: string;
+  text: string;
+  created_at: string;
+};
+
+export type ItcAssumption = {
+  id: string;
+  map_id: string;
+  sort_order: number;
+  text: string;
+  depth_score: number | null;
+  selected_for_testing: boolean;
+  coach_recommended: boolean;
+  created_at: string;
+};
+
+export type ItcAssumptionCommitment = {
+  assumption_id: string;
+  commitment_id: string;
 };
 
 export type ItcBehavior = {
@@ -294,6 +319,146 @@ export async function countWorryAttempts(behaviorId: string): Promise<number> {
   return count ?? 0;
 }
 
+export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_commitments")
+    .select("*")
+    .eq("map_id", mapId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listCommitments: ${error.message}`);
+  return (data ?? []) as ItcCommitment[];
+}
+
+export async function addCommitment(
+  mapId: string,
+  worryId: string,
+  text: string,
+): Promise<ItcCommitment> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_commitments")
+    .insert({ map_id: mapId, worry_id: worryId, text: text.trim() })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`addCommitment: ${error?.message ?? "no row"}`);
+  return data as ItcCommitment;
+}
+
+export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_assumptions")
+    .select("*")
+    .eq("map_id", mapId)
+    .order("sort_order", { ascending: true });
+  if (error) throw new Error(`listAssumptions: ${error.message}`);
+  return (data ?? []) as ItcAssumption[];
+}
+
+export async function addAssumption(
+  mapId: string,
+  text: string,
+  depthScore: number,
+): Promise<ItcAssumption> {
+  const supabase = createSupabaseServiceClient();
+  const existing = await listAssumptions(mapId);
+  const { data, error } = await supabase
+    .from("itc_assumptions")
+    .insert({
+      map_id: mapId,
+      text: text.trim(),
+      depth_score: depthScore,
+      sort_order: existing.length,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`addAssumption: ${error?.message ?? "no row"}`);
+  return data as ItcAssumption;
+}
+
+export async function linkAssumptionToCommitments(
+  assumptionId: string,
+  commitmentIds: string[],
+): Promise<void> {
+  if (commitmentIds.length === 0) return;
+  const supabase = createSupabaseServiceClient();
+  const rows = commitmentIds.map((cid) => ({
+    assumption_id: assumptionId,
+    commitment_id: cid,
+  }));
+  const { error } = await supabase
+    .from("itc_assumption_commitments")
+    .upsert(rows, { onConflict: "assumption_id,commitment_id" });
+  if (error) throw new Error(`linkAssumptionToCommitments: ${error.message}`);
+}
+
+export async function listAssumptionLinks(
+  mapId: string,
+): Promise<ItcAssumptionCommitment[]> {
+  const supabase = createSupabaseServiceClient();
+  // Two-step: fetch commitments for scoping, then join links.
+  const { data: assumptions, error: aErr } = await supabase
+    .from("itc_assumptions")
+    .select("id")
+    .eq("map_id", mapId);
+  if (aErr) throw new Error(`listAssumptionLinks: ${aErr.message}`);
+  const ids = (assumptions ?? []).map((a) => a.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("itc_assumption_commitments")
+    .select("assumption_id, commitment_id")
+    .in("assumption_id", ids);
+  if (error) throw new Error(`listAssumptionLinks: ${error.message}`);
+  return (data ?? []) as ItcAssumptionCommitment[];
+}
+
+export async function setAssumptionSelected(
+  assumptionId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  // Clear all selections, then set the target. One-at-a-time enforcement.
+  const clear = await supabase
+    .from("itc_assumptions")
+    .update({ selected_for_testing: false, coach_recommended: false })
+    .eq("map_id", mapId);
+  if (clear.error) throw new Error(`setAssumptionSelected clear: ${clear.error.message}`);
+  const { error } = await supabase
+    .from("itc_assumptions")
+    .update({ selected_for_testing: true })
+    .eq("id", assumptionId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`setAssumptionSelected: ${error.message}`);
+}
+
+export async function setAssumptionRecommended(
+  assumptionId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const clear = await supabase
+    .from("itc_assumptions")
+    .update({ coach_recommended: false })
+    .eq("map_id", mapId);
+  if (clear.error) throw new Error(`setAssumptionRecommended clear: ${clear.error.message}`);
+  const { error } = await supabase
+    .from("itc_assumptions")
+    .update({ coach_recommended: true })
+    .eq("id", assumptionId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`setAssumptionRecommended: ${error.message}`);
+}
+
+export async function markRevealDelivered(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_maps")
+    .update({ reveal_delivered: true })
+    .eq("id", mapId);
+  if (error) throw new Error(`markRevealDelivered: ${error.message}`);
+}
+
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -352,6 +517,53 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
       if (missing.length > 0) {
         throw new Error(
           `Every selected behavior needs a worry before moving to commitments. Missing ${missing.length}: ${missing.map((b) => `"${b.text}"`).join(", ")}`,
+        );
+      }
+    }
+    if (to === "assumptions") {
+      const [worries, commitments] = await Promise.all([
+        listWorries(mapId),
+        listCommitments(mapId),
+      ]);
+      const commitmentWorryIds = new Set(commitments.map((c) => c.worry_id));
+      const missing = worries.filter((w) => !commitmentWorryIds.has(w.id));
+      if (missing.length > 0) {
+        throw new Error(
+          `Every worry needs a commitment before moving to assumptions. Missing ${missing.length}.`,
+        );
+      }
+    }
+    if (to === "review") {
+      const [assumptions, commitments, links] = await Promise.all([
+        listAssumptions(mapId),
+        listCommitments(mapId),
+        listAssumptionLinks(mapId),
+      ]);
+      if (assumptions.length === 0) {
+        throw new Error(`Add at least one Big Assumption before review.`);
+      }
+      const coveredCommitments = new Set(links.map((l) => l.commitment_id));
+      const uncovered = commitments.filter((c) => !coveredCommitments.has(c.id));
+      if (uncovered.length > 0) {
+        throw new Error(
+          `Every commitment must be covered by an assumption before review. Uncovered: ${uncovered.length}.`,
+        );
+      }
+    }
+    if (to === "prioritize") {
+      const map = await getMapById(mapId);
+      if (!map?.reveal_delivered) {
+        throw new Error(
+          `Deliver the reveal (gas/brake beat) before moving to prioritize.`,
+        );
+      }
+    }
+    if (to === "test_design") {
+      const assumptions = await listAssumptions(mapId);
+      const selected = assumptions.find((a) => a.selected_for_testing);
+      if (!selected) {
+        throw new Error(
+          `Select a Big Assumption for testing before moving to test_design.`,
         );
       }
     }

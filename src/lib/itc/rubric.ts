@@ -38,6 +38,106 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
 Return your judgment as three booleans plus one short reason (under 40 words) explaining what would need to change to score better if any is false.
 `.trim();
 
+const CommitmentSchema = z.object({
+  is_self_protective: z.boolean(),
+  is_first_person: z.boolean(),
+  passes: z.boolean(),
+  reason: z.string().min(1).max(400),
+});
+
+export type CommitmentRubricResult = z.infer<typeof CommitmentSchema>;
+
+const COMMITMENT_SYSTEM = `
+You are a strict rubric for column-3 hidden competing commitments in an Immunity to Change map. A commitment must read as SELF-PROTECTION, not as sensible productivity advice. It should sound like the man keeping himself safe from the worry, not like a business-book platitude.
+
+Score three binary criteria. When in doubt, false.
+
+1. is_self_protective: The commitment names what he's keeping himself safe from — a protective flinch is visible. "I'm committed to never having to find out that my effort didn't matter" is self-protective. "I'm committed to always having a real plan" is a productivity platitude.
+
+2. is_first_person: Starts with "I'm committed to" (or equivalent) and names something the man himself commits to, not a general principle or a rule for other people.
+
+3. passes: Both of the above are true AND the commitment would sound strange on a productivity blog. If it would fit right in there, it hasn't done its job yet.
+
+Also return a one-line reason (<40 words) explaining what would need to change.
+`.trim();
+
+export async function scoreCommitmentDepth(input: {
+  goalText: string;
+  worryText: string;
+  commitmentText: string;
+}): Promise<CommitmentRubricResult> {
+  const modelId = process.env.ITC_RUBRIC_MODEL || "claude-haiku-4-5-20251001";
+  const { object } = await generateObject({
+    model: anthropic(modelId),
+    schema: CommitmentSchema,
+    system: COMMITMENT_SYSTEM,
+    prompt: [
+      `Improvement goal: ${input.goalText || "(not set)"}`,
+      `Paired worry: ${input.worryText}`,
+      `Proposed commitment: ${input.commitmentText}`,
+    ].join("\n"),
+    maxOutputTokens: 512,
+  });
+  return object;
+}
+
+const AssumptionSchema = z.object({
+  has_finished_then: z.boolean(),
+  is_first_person_felt: z.boolean(),
+  lands_in_identity_or_big_time_bad: z.boolean(),
+  reason: z.string().min(1).max(400),
+});
+
+export type AssumptionRubricResult = {
+  score: 0 | 1 | 2 | 3;
+  has_finished_then: boolean;
+  is_first_person_felt: boolean;
+  lands_in_identity_or_big_time_bad: boolean;
+  reason: string;
+};
+
+const ASSUMPTION_SYSTEM = `
+You are a strict rubric for column-4 Big Assumptions in an Immunity to Change map. A real Big Assumption is a first-person belief in if-then form whose "then" lands somewhere genuinely bad — the Big Time Bad conclusion, a contracted world. Not a forecast, not a strategy note.
+
+Score three binary criteria. When in doubt, false.
+
+1. has_finished_then: The assumption states "If X, then Y" and the Y half is followed through to its actual identity-level or existential end. "If I only rely on service energy, the money might not show up" is a forecast — the "then" hasn't finished. "If I only rely on service energy, then I'll fail as a provider and prove I never had it in me" has finished.
+
+2. is_first_person_felt: First-person, present-tense, feels true when he says it. Not third-person, not abstract, not about anyone else.
+
+3. lands_in_identity_or_big_time_bad: The "then" touches identity ("I'm the kind of man who...") or a Big Time Bad conclusion (irrecoverable failure, being seen as the thing he most dreads being). "It'd take longer" or "we'd lose the deal" doesn't land here.
+
+Also return a one-line reason (<40 words) explaining what to extend or reframe if any is false.
+`.trim();
+
+export async function scoreAssumptionDepth(input: {
+  goalText: string;
+  assumptionText: string;
+}): Promise<AssumptionRubricResult> {
+  const modelId = process.env.ITC_RUBRIC_MODEL || "claude-haiku-4-5-20251001";
+  const { object } = await generateObject({
+    model: anthropic(modelId),
+    schema: AssumptionSchema,
+    system: ASSUMPTION_SYSTEM,
+    prompt: [
+      `Improvement goal: ${input.goalText || "(not set)"}`,
+      `Proposed Big Assumption: ${input.assumptionText}`,
+    ].join("\n"),
+    maxOutputTokens: 512,
+  });
+  const score =
+    (object.has_finished_then ? 1 : 0) +
+    (object.is_first_person_felt ? 1 : 0) +
+    (object.lands_in_identity_or_big_time_bad ? 1 : 0);
+  return {
+    score: score as 0 | 1 | 2 | 3,
+    has_finished_then: object.has_finished_then,
+    is_first_person_felt: object.is_first_person_felt,
+    lands_in_identity_or_big_time_bad: object.lands_in_identity_or_big_time_bad,
+    reason: object.reason,
+  };
+}
+
 export async function scoreWorryDepth(input: {
   goalText: string;
   behaviorText: string;

@@ -1,4 +1,11 @@
-import type { ItcBehavior, ItcMap, ItcWorry } from "@/lib/itc/maps";
+import type {
+  ItcAssumption,
+  ItcAssumptionCommitment,
+  ItcBehavior,
+  ItcCommitment,
+  ItcMap,
+  ItcWorry,
+} from "@/lib/itc/maps";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 
 /**
@@ -11,15 +18,31 @@ export function MapPanel({
   map,
   behaviors,
   worries,
+  commitments = [],
+  assumptions = [],
+  assumptionLinks = [],
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
   worries: ItcWorry[];
+  commitments?: ItcCommitment[];
+  assumptions?: ItcAssumption[];
+  assumptionLinks?: ItcAssumptionCommitment[];
 }) {
   const pillar = PILLAR_BY_CODE[map.pillar_code];
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
   const parkedBehaviors = behaviors.filter((b) => !b.selected);
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const commitmentIndexById = new Map(
+    commitments.map((c, i) => [c.id, i + 1]),
+  );
+  const linksByAssumption = new Map<string, string[]>();
+  for (const l of assumptionLinks) {
+    const arr = linksByAssumption.get(l.assumption_id) ?? [];
+    arr.push(l.commitment_id);
+    linksByAssumption.set(l.assumption_id, arr);
+  }
 
   return (
     <div className="space-y-3">
@@ -115,11 +138,75 @@ export function MapPanel({
         </Column>
 
         <Column title="4. Hidden commitments">
-          <Placeholder>Follows from each worry.</Placeholder>
+          {commitments.length === 0 ? (
+            <Placeholder>Follows from each worry.</Placeholder>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {commitments.map((c, i) => {
+                const w = worryById.get(c.worry_id);
+                return (
+                  <li
+                    key={c.id}
+                    className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
+                  >
+                    <span className="text-[color:var(--color-muted)] text-[11px]">
+                      {i + 1}.
+                    </span>{" "}
+                    {c.text}
+                    {w ? (
+                      <div className="text-[10px] text-[color:var(--color-muted)]/70 mt-1">
+                        ↑ worry: {w.text}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Column>
 
         <Column title="5. Big Assumptions">
-          <Placeholder>If-then form. Reveal at the end.</Placeholder>
+          {assumptions.length === 0 ? (
+            <Placeholder>If-then form. Reveal at the end.</Placeholder>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {assumptions.map((a) => {
+                const linkedIndices = (linksByAssumption.get(a.id) ?? [])
+                  .map((cid) => commitmentIndexById.get(cid))
+                  .filter((n): n is number => typeof n === "number")
+                  .sort((x, y) => x - y);
+                return (
+                  <li
+                    key={a.id}
+                    className={
+                      "rounded-md border px-2 py-1.5 " +
+                      (a.selected_for_testing
+                        ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10"
+                        : a.coach_recommended
+                          ? "border-[color:var(--color-primary)]/40 bg-black/20"
+                          : "border-[color:var(--color-border)] bg-black/20")
+                    }
+                  >
+                    {a.text}
+                    {linkedIndices.length > 0 ? (
+                      <div className="text-[10px] text-[color:var(--color-muted)]/70 mt-1">
+                        underwrites commitments {linkedIndices.join(", ")}
+                      </div>
+                    ) : null}
+                    {a.selected_for_testing ? (
+                      <div className="text-[10px] text-[color:var(--color-primary)] mt-1">
+                        Selected for testing
+                      </div>
+                    ) : a.coach_recommended ? (
+                      <div className="text-[10px] text-[color:var(--color-muted)] mt-1">
+                        Coach recommends
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Column>
       </div>
     </div>
