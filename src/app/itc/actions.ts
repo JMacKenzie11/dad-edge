@@ -188,6 +188,24 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     return { ok: false, reason: `Coach: ${message}` };
   }
 
+  // If the coach emitted suggest_behaviors but didn't write the options
+  // into the reply text, append them as a numbered list. Observed in a
+  // real turn: the coach wrote "Here's a few more — see if any fit:" and
+  // stopped, leaving the coachee staring at a colon.
+  if (reply.action?.type === "suggest_behaviors") {
+    const options = reply.action.options;
+    const firstSnippet = options[0]?.slice(0, 20).toLowerCase() ?? "";
+    const alreadyIncluded =
+      firstSnippet.length > 0 &&
+      reply.reply.toLowerCase().includes(firstSnippet);
+    if (!alreadyIncluded) {
+      const list = options
+        .map((o, i) => `${i + 1}. ${o}`)
+        .join("\n");
+      reply = { ...reply, reply: `${reply.reply.trim()}\n\n${list}` };
+    }
+  }
+
   await appendMessage(map.id, "assistant", reply.reply);
 
   if (reply.action) {
