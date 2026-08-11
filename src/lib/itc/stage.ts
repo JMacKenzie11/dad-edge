@@ -57,6 +57,29 @@ export function canTransitionTo(from: ItcStage, to: ItcStage): boolean {
 }
 
 export const GOAL_STEM = "I'm committed to getting better at";
+export const WORRY_STEM = "I worry that";
+export const COMMITMENT_STEM = "I'm also committed to";
+
+/**
+ * Prepend a stem if the text doesn't already start with it. Tolerates
+ * smart apostrophes so a coach reply using U+2019 still normalizes cleanly.
+ */
+function normalizedStartsWith(text: string, stem: string): boolean {
+  const norm = (s: string) =>
+    s
+      .trim()
+      .replace(/[\u2018\u2019\u02BC]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .toLowerCase();
+  return norm(text).startsWith(norm(stem));
+}
+
+export function ensureStem(text: string, stem: string): string {
+  if (normalizedStartsWith(text, stem)) return text.trim();
+  // Lowercase the first char of the incoming text so it flows into the stem.
+  const rest = text.trim().replace(/^./, (c) => c.toLowerCase());
+  return `${stem} ${rest}`;
+}
 
 /**
  * Server-side goal-stem enforcement. Trims and lower-cases the leading

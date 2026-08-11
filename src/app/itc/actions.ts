@@ -41,7 +41,14 @@ import {
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
-import { GOAL_STEM, hasGoalStem, type ItcStage } from "@/lib/itc/stage";
+import {
+  COMMITMENT_STEM,
+  GOAL_STEM,
+  WORRY_STEM,
+  ensureStem,
+  hasGoalStem,
+  type ItcStage,
+} from "@/lib/itc/stage";
 
 const startMapSchema = z.object({
   pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "N"]),
@@ -399,11 +406,12 @@ async function applyCoachAction(
           `propose_worry: behavior_index ${action.behavior_index} out of range (${selected.length} selected).`,
         );
       }
+      const stemmedText = ensureStem(action.text, WORRY_STEM);
       const map = await getMapById(mapId);
       const rubric = await scoreWorryDepth({
         goalText: map?.improvement_goal ?? "",
         behaviorText: behavior.text,
-        worryText: action.text,
+        worryText: stemmedText,
       });
       const priorAttempts = await countWorryAttempts(behavior.id);
       const passed =
@@ -412,7 +420,7 @@ async function applyCoachAction(
       await logWorryAttempt({
         mapId,
         behaviorId: behavior.id,
-        text: action.text,
+        text: stemmedText,
         depthScore: rubric.score,
         accepted: passed,
         rejectReason: passed ? null : rubric.reason,
@@ -427,7 +435,7 @@ async function applyCoachAction(
         );
       }
 
-      await upsertWorry(mapId, behavior.id, action.text, rubric.score);
+      await upsertWorry(mapId, behavior.id, stemmedText, rubric.score);
       return;
     }
     case "propose_commitment": {
@@ -440,18 +448,19 @@ async function applyCoachAction(
           `propose_commitment: worry_index ${action.worry_index} out of range (${locked.length} locked).`,
         );
       }
+      const stemmedText = ensureStem(action.text, COMMITMENT_STEM);
       const map = await getMapById(mapId);
       const rubric = await scoreCommitmentDepth({
         goalText: map?.improvement_goal ?? "",
         worryText: worry.text,
-        commitmentText: action.text,
+        commitmentText: stemmedText,
       });
       if (!rubric.passes) {
         throw new Error(
           `commitment reads as productivity advice, not self-protection: ${rubric.reason}. Rework it — the protective flinch has to be visible.`,
         );
       }
-      await addCommitment(mapId, worry.id, action.text);
+      await addCommitment(mapId, worry.id, stemmedText);
       return;
     }
     case "mark_reveal_delivered": {
