@@ -1,0 +1,201 @@
+/**
+ * Email delivery via Resend. Falls back to console logging when RESEND_API_KEY
+ * is not set, so the app runs cleanly in dev without accidentally sending mail.
+ *
+ * §8 covers the notification set: reminders, nudges, digests, week-close.
+ * Magic links themselves are still delivered by Supabase Auth, not this module.
+ */
+
+const FROM = process.env.RESEND_FROM ?? "BRAVE MAN OS <noreply@dadedge.local>";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
+
+type SendResult = { ok: true; id?: string } | { ok: false; error: string };
+
+async function send(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<SendResult> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.info("[email:dev]", { to: opts.to, subject: opts.subject, text: opts.text });
+    return { ok: true };
+  }
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: FROM,
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
+      }),
+    });
+    if (!res.ok) return { ok: false, error: `Resend ${res.status}` };
+    const body = (await res.json()) as { id?: string };
+    return { ok: true, id: body.id };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "unknown" };
+  }
+}
+
+function shell(headline: string, body: string): string {
+  return `
+<!doctype html><html><body style="background:#000;color:#fff;font-family:Inter,Arial,sans-serif;margin:0;padding:24px;">
+  <table role="presentation" style="max-width:520px;margin:0 auto;background:#0b0f14;border:1px solid #1e2630;border-radius:14px;padding:24px;">
+    <tr><td>
+      <p style="font-family:Archivo,Arial,sans-serif;text-transform:uppercase;letter-spacing:0.12em;font-size:11px;color:#9aa7b4;margin:0 0 8px;">BRAVE MAN OS</p>
+      <h1 style="font-family:Archivo,Arial,sans-serif;text-transform:uppercase;letter-spacing:0.04em;font-size:22px;margin:0 0 12px;color:#fff;">${headline}</h1>
+      <div style="font-size:14px;line-height:1.5;color:#fff;">${body}</div>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+export async function sendInviteEmail(opts: {
+  to: string;
+  firstName: string | null;
+  communityName: string;
+}) {
+  const greeting = opts.firstName ? `${opts.firstName},` : "Man,";
+  const url = `${APP_URL}/login`;
+  return send({
+    to: opts.to,
+    subject: `You're in — ${opts.communityName}`,
+    text: `${greeting}\n\nYou've been added to ${opts.communityName} on the BRAVE MAN Operating System.\n\nSign in with your email at ${url}. No password.\n\n— BRAVE MAN OS`,
+    html: shell(
+      "You're in.",
+      `<p>${greeting}</p><p>You've been added to <strong>${opts.communityName}</strong>.</p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Sign in</a></p>
+       <p style="color:#9aa7b4;font-size:12px;">No password. Magic link only.</p>`,
+    ),
+  });
+}
+
+export async function sendDailyReminderEmail(opts: {
+  to: string;
+  firstName: string | null;
+  weekTotal: number;
+  streak: number;
+}) {
+  const greeting = opts.firstName ?? "Brother";
+  const url = `${APP_URL}/today`;
+  return send({
+    to: opts.to,
+    subject: "Log today.",
+    text: `${greeting},\n\nWeek total: ${opts.weekTotal}/56. Engagement streak: ${opts.streak}.\n\nLog today: ${url}\n\n— BRAVE MAN OS`,
+    html: shell(
+      "Log today.",
+      `<p>${greeting},</p><p>Week total: <strong>${opts.weekTotal}/56</strong>. Engagement streak: <strong>${opts.streak}</strong>.</p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Log today</a></p>`,
+    ),
+  });
+}
+
+export async function sendMissionDayNudgeEmail(opts: {
+  to: string;
+  firstName: string | null;
+  missionDescription: string;
+}) {
+  const greeting = opts.firstName ?? "Brother";
+  const url = `${APP_URL}/missions`;
+  return send({
+    to: opts.to,
+    subject: "Mission day. Report back.",
+    text: `${greeting},\n\nToday's mission: ${opts.missionDescription}\n\nReport back: ${url}\n\n— BRAVE MAN OS`,
+    html: shell(
+      "Mission day.",
+      `<p>${greeting},</p><p><strong>${opts.missionDescription}</strong></p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Report back</a></p>`,
+    ),
+  });
+}
+
+export async function sendDisengagementEmail(opts: {
+  to: string;
+  firstName: string | null;
+  daysSince: number;
+  tone: "gentle" | "direct";
+}) {
+  const greeting = opts.firstName ?? "Brother";
+  const url = `${APP_URL}/today`;
+  const line =
+    opts.tone === "direct"
+      ? `${opts.daysSince} days. Your brothers noticed. Get back in.`
+      : `Been ${opts.daysSince} days since your last check-in.`;
+  return send({
+    to: opts.to,
+    subject: opts.tone === "direct" ? "You've gone quiet." : "Log today.",
+    text: `${greeting},\n\n${line}\n\n${url}\n\n— BRAVE MAN OS`,
+    html: shell(
+      opts.tone === "direct" ? "You've gone quiet." : "Log today.",
+      `<p>${greeting},</p><p>${line}</p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Log today</a></p>`,
+    ),
+  });
+}
+
+export async function sendLeaderDisengagementAlert(opts: {
+  to: string;
+  memberName: string;
+  daysSince: number;
+  communityName: string;
+}) {
+  const url = `${APP_URL}/leader/disengagement`;
+  return send({
+    to: opts.to,
+    subject: `${opts.memberName} — ${opts.daysSince} days silent`,
+    text: `${opts.memberName} (${opts.communityName}) hasn't logged in ${opts.daysSince} days. Time to reach out.\n\n${url}`,
+    html: shell(
+      "Reach out.",
+      `<p><strong>${opts.memberName}</strong> (${opts.communityName}) hasn't logged in ${opts.daysSince} days.</p>
+       <p>Personal check-in from you now saves the man.</p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Open leader panel</a></p>`,
+    ),
+  });
+}
+
+export async function sendWeekCloseEmail(opts: {
+  to: string;
+  firstName: string | null;
+  weekTotal: number;
+  daysUnlogged: number;
+  locksAt: string;
+}) {
+  const greeting = opts.firstName ?? "Brother";
+  const url = `${APP_URL}/today`;
+  const line = opts.daysUnlogged > 0
+    ? `${opts.daysUnlogged} day${opts.daysUnlogged === 1 ? "" : "s"} unlogged.`
+    : `Week's in the books at ${opts.weekTotal}/56.`;
+  return send({
+    to: opts.to,
+    subject: `Week locks ${opts.locksAt}.`,
+    text: `${greeting},\n\n${line} Week locks ${opts.locksAt}.\n\n${url}\n\n— BRAVE MAN OS`,
+    html: shell(
+      "Week close.",
+      `<p>${greeting},</p><p>${line} Week locks <strong>${opts.locksAt}</strong>.</p>
+       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Close it out</a></p>`,
+    ),
+  });
+}
+
+export async function sendDigestEmail(opts: {
+  to: string;
+  communityName: string;
+  weekStart: string;
+  htmlBody: string;
+  textBody: string;
+}) {
+  return send({
+    to: opts.to,
+    subject: `${opts.communityName} — week of ${opts.weekStart}`,
+    text: opts.textBody,
+    html: shell(`${opts.communityName} — week of ${opts.weekStart}`, opts.htmlBody),
+  });
+}

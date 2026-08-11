@@ -1,0 +1,239 @@
+# BRAVEMAN Operating System App: Build Configuration
+
+**Version 1.0 | July 2026**
+
+A multi-community accountability platform for men running the BRAVE MAN Operating System: daily living check-ins, day-anchored missions, community leaderboards, and an AI coach grounded in each man's actual data. Positioned as a lower ticket offer beneath the full Dad Edge memberships.
+
+---
+
+## 1. Guiding Decisions (locked from requirements discussions)
+
+1. **Two systems, never blurred.** Daily Living measures consistency of behavior across the eight pillars. Mission Planning is pre-planned, time-bound, day-anchored commitments. They are scored and displayed separately. The spreadsheet's habit of folding mission points into the Action row is not carried forward.
+2. **Multi-tenant from day one.** Communities are the core organizing unit. Men see the missions and daily scorecards of everyone in their community.
+3. **Two admin tiers.** Platform Admin (Jason) and Community Leader (facilitators). Built into the role model now even if one person holds both hats initially.
+4. **Entitlements before billing.** Every user has a subscription status field and one gate function. Phase 1 sets status manually; Stripe later becomes just another writer to that field.
+5. **One coach, two modes.** The general life coach (marriage, fatherhood, business, health, money) and the mission coach are the same brain. Every coaching conversation is grounded in the man's pillar scores, streaks, missions, and quarterly goals, and closes the loop toward a concrete behavior tied to a specific day.
+6. **Disable access, never delete data.** Canceled men become inactive but remain visible to their group for a win-back window, and their history is intact if they return.
+
+---
+
+## 2. Tech Stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Framework | **Next.js 15 (App Router) + TypeScript** | One codebase for member app, leader tools, and admin panel. Server components keep data access on the server. |
+| UI | **Tailwind CSS + shadcn/ui** | Fast to build, easy to skin to Dad Edge brand tokens. |
+| Database | **PostgreSQL via Supabase** | Relational model fits the data cleanly. Row Level Security enforces community boundaries at the database layer, not just in app code. |
+| Auth | **Supabase Auth, magic links** | No password friction for this audience. Email is the identity anchor Stripe will later match on. |
+| AI | **Anthropic API (Claude)** | Sonnet for coaching conversations, Haiku for routine turns, classification, and nudge copy. Model tiering is the cost lever. |
+| Payments (Phase 3) | **Stripe Billing + webhooks** | Subscriptions, dunning/retry logic, customer portal for self-serve card updates and cancellation. |
+| Email | **Resend** | Magic links, nudges, weekly digests. React Email templates. |
+| Jobs/Scheduling | **Inngest** (or Supabase cron to start) | Nightly streak calculation, week close/lock, disengagement scans, digest generation. |
+| Hosting | **Vercel** | Zero-ops deploys, preview environments, cron support. |
+| Analytics | **PostHog** | Feature usage, retention curves, funnel from invite to first check-in. |
+| Errors | **Sentry** | Because a broken check-in flow is silent churn. |
+
+**Repository layout:** single Next.js app with route groups: `(app)` for members, `(leader)` for community leaders, `(admin)` for platform admin, `api/` for webhooks and coach endpoints. One deploy target. Split later only if needed.
+
+---
+
+## 3. Data Model (core tables)
+
+```
+users
+  id, email, first_name, last_name, phone, timezone
+  is_platform_admin (bool)
+  subscription_status  ENUM: trialing | active | past_due | canceled | comped
+  subscription_source  ENUM: manual | stripe
+  stripe_customer_id (nullable until Phase 3)
+  created_at, last_seen_at
+
+communities
+  id, name, slug, accent_color, timezone
+  leaderboard_enabled (bool), missions_visible (bool)
+  status ENUM: active | archived
+  created_at
+
+memberships
+  id, user_id, community_id
+  role ENUM: member | leader
+  status ENUM: active | inactive | removed
+  joined_at, deactivated_at
+  -- a man can belong to more than one community (Basecamp to Ascent moves)
+
+pillar_framework_versions
+  id, version, effective_date, definition JSONB
+  -- pillars: B, R, A, V, E, M, A2 (Action), N with labels and point rules.
+  -- Versioned so the framework can evolve without corrupting history.
+
+weeks
+  id, community_id, start_date (Monday), is_intensive (bool)
+  locked_at (nullable)
+  -- generated per community calendar; lock rules configurable
+
+daily_checkins
+  id, user_id, date, pillar_code, value (0/1)
+  logged_at, edited_at
+  UNIQUE (user_id, date, pillar_code)
+  -- explicit zero vs. absent row distinguishes "didn't do it" from "didn't log"
+
+quarterly_goals
+  id, user_id, quarter_start, focus_area (pillar_code), description
+  status ENUM: active | completed | abandoned
+
+missions
+  id, user_id, quarterly_goal_id (nullable), community_id
+  description, pillar_code
+  target_date (DATE, required: the specific day)
+  status ENUM: planned | completed | missed | rolled_over
+  rolled_over_from_mission_id (nullable)  -- rollover chain is coach fuel
+  created_by ENUM: user | coach_suggested
+  completed_at
+
+coach_conversations
+  id, user_id, mode ENUM: general | mission
+  started_at, last_message_at
+
+coach_messages
+  id, conversation_id, role, content, model_used, tokens_in, tokens_out
+  flagged (bool), flag_reason
+
+coach_flags_queue
+  id, message_id, severity, status ENUM: open | reviewed, reviewed_by, notes
+
+score_corrections
+  id, admin_user_id, target_user_id, date, pillar_code, old_value, new_value, reason
+
+audit_log
+  id, actor_user_id, action, target_type, target_id, metadata JSONB, created_at
+  -- includes admin "view as member" events
+
+nudge_settings (per community)   |   digests (generated weekly per community)
+```
+
+**Row Level Security posture:** members read their own data plus check-ins, missions, and leaderboard rows for active members of their communities. Leaders get management reads/writes scoped to their community. Platform admin bypasses via service role, always audit-logged.
+
+---
+
+## 4. Scoring Model
+
+**Daily Living score (per week):** sum of 0/1 check-ins across the eight pillars for seven days. Max 56. Displayed per pillar and as a weekly total, mirroring the tracker men already know.
+
+**Mission score (per week):** missions completed on or before their target date. Completed after target date counts as completed-late (visible, worth less or flagged, decision below). Missions are capped per week (suggest 3 to 5) to force prioritization; fifteen slots in the spreadsheet produced padding, not focus.
+
+**Streaks:** consecutive days with at least one check-in logged (engagement streak) and per-pillar streaks (behavior streaks). Calculated nightly per user timezone.
+
+**Leaderboard (per community, weekly):** ranks on a composite of Daily Living total and mission completion rate, with tabs for weekly, monthly, and streak views. Weekly reset keeps a bad week from burying anyone; the man who fell off can be back on top in seven days, which is the whole retention psychology.
+
+**Week lock:** weeks lock N days after they end (default 3, configurable per community). Post-lock edits go through admin correction with an audit trail.
+
+---
+
+## 5. Access and Entitlement Gate
+
+One function, called everywhere:
+
+```
+canAccess(user) =>
+  status in (active, trialing, comped)      -> full access
+  status == past_due                        -> full access during Stripe retry window
+  status == canceled                        -> read-only own history; hidden from
+                                               leaderboard; shown as "inactive" to
+                                               community for win-back window (30 days),
+                                               then hidden
+```
+
+Phase 1: admin panel writes `subscription_status` manually. Phase 3: Stripe webhooks (`customer.subscription.updated`, `deleted`, `invoice.payment_failed`) write the same field. Nothing else in the app changes when billing arrives.
+
+---
+
+## 6. AI Coach Architecture
+
+**One brain, two modes,** deployed from the existing five-dimension agent IP (marriage, kids, business/career, finances, health).
+
+**Context injection on every conversation:** a compact, server-built context block containing current pillar scores and 4-week trend, active streaks and recent breaks, this week's missions with status and rollover chains, quarterly goals, and community membership. This is the differentiator: the coach opens from the man's actual data, not from zero.
+
+**Mission mode contract:** the coach must land on the format *behavior + specific day* ("I will take my wife on a date night on Thursday"). A server-side concreteness check rejects vague output ("be more present") before a mission can be saved. Coach-suggested missions are marked as such and require the man's acceptance.
+
+**General mode contract:** appreciative inquiry underneath, plain and direct on the surface, Dad Edge voice. Every substantive conversation closes toward a mission: "So what's the mission? Give me the behavior and the day." Prompts are versioned per community tier so a Basecamp man and a Summit man get different levels of challenge.
+
+**Safety and escalation:** clear coach-not-therapist positioning at onboarding and in-product. A lightweight classifier (Haiku) screens messages for crisis signals; flagged conversations enter the admin review queue and the coach responds with appropriate care and resource direction. Non-negotiable before general mode ships.
+
+**Cost controls:**
+- Haiku for routine turns, intent classification, nudge copy, digest drafts; Sonnet reserved for substantive coaching turns (router decides).
+- Monthly message allowance per member (e.g., 150 coach messages), soft-capped with a friendly ceiling rather than a hard wall, tracked via `tokens_in/out` on `coach_messages`.
+- Rough math at a $29 to $49/month price point: a heavy user at 150 Sonnet-class exchanges costs low single digit dollars per month in inference; the allowance plus routing keeps worst-case margin safe. Recheck against current API pricing before setting the final price.
+
+---
+
+## 7. Admin Functions (summary of agreed scope)
+
+**Platform Admin:** create/archive communities, assign leaders, move men between communities, manage entitlements manually (Phase 1), cross-community analytics, framework/content management, coach prompt versioning, data export, full audit log.
+
+**Community Leader:** invite/deactivate members, per-member status view (last check-in, streak, missions set), disengagement dashboard (3/7/14-day inactive), configure nudges, receive/send weekly digest, review coach flags for their community, week lock overrides via correction flow.
+
+**Deliberately excluded early:** in-app member-to-member messaging (existing channels do this; moderation is a job to avoid) and custom pillar frameworks per community (BRAVEMAN is the product).
+
+---
+
+## 8. Notifications and Retention Machinery
+
+1. **Daily check-in reminder** (push later, email first), per-user time preference, per-user timezone.
+2. **Mission day-of nudge:** "Date night is tonight. Report back."
+3. **Disengagement ladder:** day 3 gentle, day 7 direct, day 14 leader is notified to reach out personally. The leaderboard is the retention mechanic; the disengagement report is the save mechanic.
+4. **Weekly community digest** (the braveman-report skill, productized): rankings, streaks, mission analysis per man, delivered to leaders and optionally to the group.
+5. **Week close notice:** "Your week locks Wednesday. Two days unlogged."
+
+---
+
+## 9. Design and Brand
+
+From the brand guidelines (W22 Graphics, v1.0):
+
+- **Colors:** black `#000000` primary, white `#ffffff`, with approved accents: blue `#0075c9`, cyan `#6fcfeb`, orange `#ff5f00`, red `#fe3b1f`, green `#00afaa`, purple `#8347ad`. Dark UI base with the blue as the primary action color matches the existing Boardroom slide aesthetic.
+- **Type:** Trade Gothic Bold for headings (or closest licensed web equivalent), Proxima Nova for body. Confirm web font licensing; fallbacks: Oswald/Archivo Narrow for headings, Inter for body.
+- **Logos/marks:** black or white only, never stretched, clear space respected. Centurion mark available for sub-brand treatment; community accent colors can follow the sub-brand circle convention.
+- **Tone in-product:** plain, direct, blue-collar. Buttons say "Log today" and "Set the mission," not "Update your wellness journey."
+
+---
+
+## 10. Build Phases
+
+**Phase 1: Core Tracker (the product)**
+- Auth (magic links), users, communities, memberships, roles
+- Daily check-in flow (mobile-first, under 15 seconds to log a day)
+- Quarterly goals and missions with target dates and rollover
+- Community visibility: see your brothers' scorecards and missions
+- Leaderboard (weekly/monthly/streaks)
+- Admin panel v1: communities, invites, manual entitlements, disengagement dashboard
+- Week close and lock, nightly streak jobs, email reminders
+- Seed migration: importer for the 2026 spreadsheet so the Brotherhood starts with history intact (the importer must handle the drifted sheets: Steve W, Tim C, John Y, Parker B)
+
+**Phase 2: The Coach (the differentiator)**
+- Context injection pipeline
+- Mission mode with concreteness gate
+- General mode across the five dimensions, Dad Edge voice, per-tier prompt versions
+- Safety classifier + flag queue
+- Model routing + message allowance metering
+- Weekly digest generation
+
+**Phase 3: Stripe (the business)**
+- Checkout, customer portal, webhook handlers writing `subscription_status`
+- Dunning/grace period behavior, win-back window mechanics
+- Comp/trial management moves from fully manual to Stripe-aware
+
+**Phase 4: Polish and expand**
+- Push notifications (PWA first, native later only if demanded)
+- Deeper analytics, cohort retention views
+- Basecamp/Ascent funnel integrations (upgrade paths into full membership)
+
+---
+
+## 11. Open Decisions (need your call, none block Phase 1 start)
+
+1. Composite leaderboard formula: weighting between Daily Living total and mission completion rate.
+2. Completed-late missions: partial credit or full credit with a "late" marker.
+3. Missions-per-week cap: 3 or 5.
+4. Win-back window length for canceled members (proposed 30 days).
+5. Price point, which sets the coach message allowance math.
+6. Whether community leaders can read coach conversation flags or only platform admin (privacy question worth deciding deliberately).

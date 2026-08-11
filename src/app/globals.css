@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/*
+ * BRAVE MAN OS — brand tokens
+ * Source of truth: braveman-app-build-config.md §9.3
+ * No hex values in component code — reference these tokens only.
+ */
+@theme {
+  --color-bg: #000000;
+  --color-surface: #0b0f14;
+  --color-surface-2: #12181f;
+  --color-border: #1e2630;
+  --color-text: #ffffff;
+  --color-text-muted: #9aa7b4;
+
+  --color-primary: #0075c9;
+  --color-accent: #0075c9;
+  --color-success: #0075c9;
+  --color-warning: #ff5f00;
+  --color-danger: #fe3b1f;
+  --color-coach: #0075c9;
+
+  /* Pillar accents — B, R, A, V, E, M, A(ction), N */
+  --color-pillar-b: #0075c9;
+  --color-pillar-r: #6fcfeb;
+  --color-pillar-a: #e6a63b;
+  --color-pillar-v: #ff5f00;
+  --color-pillar-e: #8347ad;
+  --color-pillar-m: #fe3b1f;
+  --color-pillar-a2: #4aa3e0;
+  --color-pillar-n: #4dc7c3;
+
+  --radius-card: 14px;
+  --radius-chip: 999px;
+
+  --font-heading: "Archivo", "Trade Gothic Bold", "Oswald", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", "Proxima Nova", ui-sans-serif, system-ui, sans-serif;
+
+  --letter-spacing-heading: 0.04em;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-heading);
+}
+
+.brand-texture {
+  background-image: url("/brand/texture-dark.png");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  opacity: 0.06;
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Focus ring uses brand primary */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

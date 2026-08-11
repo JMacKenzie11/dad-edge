@@ -1,0 +1,292 @@
+import { z } from "zod";
+import { generateObject, type ModelMessage } from "ai";
+import { coachModel, MODELS } from "@/lib/coach/client";
+import { buildUserContext } from "@/lib/coach/context";
+import { systemBase, PROMPT_VERSION, type Mode } from "@/lib/coach/prompts";
+import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
+import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
+import { validateMissionConcreteness } from "@/lib/validation/mission";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import type { SessionUser } from "@/lib/session";
+
+const PillarEnum = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
+
+const CoachReplySchema = z.object({
+  reply: z.string().min(1).max(4000),
+  mission_suggestion: z
+    .object({
+      description: z.string().min(1).max(280),
+      pillar_code: PillarEnum,
+      target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })
+    .nullable(),
+});
+
+export type CoachReply = z.infer<typeof CoachReplySchema>;
+
+export type SendResult = {
+  conversationId: string;
+  userMessageId: string;
+  assistantMessageId: string;
+  reply: string;
+  missionSuggestion: CoachReply["mission_suggestion"];
+  allowance: AllowanceState;
+  crisis: boolean;
+};
+
+/**
+ * Assert the conversation exists, belongs to this user, and isn't archived.
+ * Returns id + mode so the caller uses the conversation's stored mode rather
+ * than trusting a client-supplied one.
+ */
+async function loadConversation(
+  conversationId: string,
+  userId: string,
+): Promise<{ id: string; mode: Mode; hasTitle: boolean }> {
+  const svc = createSupabaseServiceClient();
+  const { data } = await svc
+    .from("coach_conversations")
+    .select("id, mode, user_id, title, archived_at")
+    .eq("id", conversationId)
+    .maybeSingle();
+  const row = data as
+    | { id: string; mode: Mode; user_id: string; title: string | null; archived_at: string | null }
+    | null;
+  if (!row) throw new Error("Conversation not found.");
+  if (row.user_id !== userId) throw new Error("Not your conversation.");
+  if (row.archived_at) throw new Error("Conversation is archived.");
+  return { id: row.id, mode: row.mode, hasTitle: Boolean(row.title && row.title.trim()) };
+}
+
+async function recentTurns(conversationId: string, limit = 20) {
+  const svc = createSupabaseServiceClient();
+  const { data } = await svc
+    .from("coach_messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversationId)
+    .in("role", ["user", "assistant"])
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data ?? []) as { role: "user" | "assistant"; content: string; created_at: string }[])
+    .reverse();
+}
+
+/**
+ * Build the single system prompt string. AI SDK v7 requires system to come
+ * through the `system` parameter — role: "system" is not allowed in messages.
+ * The persona/mode + context + optional crisis note are concatenated with
+ * clear section markers; Anthropic's automatic prompt caching still catches
+ * the stable prefix when the same string repeats.
+ */
+function buildSystemPrompt(mode: Mode, context: string, crisis: boolean): string {
+  const parts: string[] = [
+    `${systemBase(mode)}\n\n(prompt version: ${PROMPT_VERSION})`,
+    `# Live user context (rebuilt each turn)\n${context}`,
+  ];
+  if (crisis) {
+    parts.push(
+      `# Crisis signal detected on this turn
+The safety classifier flagged this message. A resource block will be automatically appended to your reply — do NOT include phone numbers or hotline text yourself. Acknowledge what he said, tell him someone from his community will reach out, and keep it short. Do not propose a mission this turn — set mission_suggestion to null.`,
+    );
+  }
+  return parts.join("\n\n");
+}
+
+/**
+ * Main coach entry point. Runs safety classification, builds context, calls
+ * the model with prompt caching, validates any mission suggestion, persists
+ * both turns, and returns the reply.
+ */
+export async function sendCoachMessage(opts: {
+  user: SessionUser;
+  conversationId: string;
+  userText: string;
+}): Promise<SendResult> {
+  const svc = createSupabaseServiceClient();
+  const text = opts.userText.trim();
+  if (text.length === 0) throw new Error("empty message");
+
+  const allowanceBefore = await readAllowance(opts.user.id);
+  if (allowanceBefore.bucket === "block") {
+    throw new Error(
+      `Monthly coach limit reached (${allowanceBefore.hardCap}). Resets on the 1st.`,
+    );
+  }
+
+  const convo = await loadConversation(opts.conversationId, opts.user.id);
+  const conversationId = convo.id;
+  const mode: Mode = convo.mode;
+
+  // 1. Safety classification (Haiku via AI SDK).
+  const classification = await classifyMessage(text);
+  const crisis =
+    classification.severity === "high" || classification.severity === "critical";
+
+  // 2. Persist the user turn immediately so it exists even if the model errors.
+  const { data: userMsg } = await svc
+    .from("coach_messages")
+    .insert({
+      conversation_id: conversationId,
+      role: "user",
+      content: text,
+      flagged: classification.severity !== "none",
+      flag_reason:
+        classification.severity === "none"
+          ? null
+          : `${classification.severity}:${classification.categories.join(",")} — ${classification.reason}`,
+    })
+    .select("id")
+    .single();
+  const userMessageId = (userMsg as { id: string } | null)?.id ?? "";
+
+  if (crisis && userMessageId) {
+    await svc.from("coach_flags_queue").insert({
+      message_id: userMessageId,
+      severity: classification.severity,
+    });
+  }
+
+  // 3. Build context + history.
+  const context = await buildUserContext(opts.user);
+  const history = await recentTurns(conversationId, 20);
+  const historyMessages: ModelMessage[] = history.map((t) => ({
+    role: t.role,
+    content: t.content,
+  }));
+
+  const systemPrompt = buildSystemPrompt(mode, context, crisis);
+
+  // 4. Coach call (Sonnet via AI SDK).
+  let reply: CoachReply = {
+    reply: "Coach is offline right now. Give it another try in a minute.",
+    mission_suggestion: null,
+  };
+  let usageInput = 0;
+  let usageCacheRead = 0;
+  let usageCacheWrite = 0;
+  let usageOutput = 0;
+
+  try {
+    const result = await generateObject({
+      model: coachModel(),
+      schema: CoachReplySchema,
+      system: systemPrompt,
+      messages: historyMessages,
+      maxOutputTokens: 1600,
+    });
+    reply = result.object;
+    usageInput = result.usage?.inputTokens ?? 0;
+    usageOutput = result.usage?.outputTokens ?? 0;
+    // Anthropic-specific token metadata on providerMetadata.
+    const meta = result.providerMetadata?.anthropic as
+      | { cacheReadInputTokens?: number; cacheCreationInputTokens?: number }
+      | undefined;
+    usageCacheRead = meta?.cacheReadInputTokens ?? 0;
+    usageCacheWrite = meta?.cacheCreationInputTokens ?? 0;
+  } catch (err) {
+    console.error("coach model call failed", err);
+  }
+
+  // 5. Validate mission_suggestion; one-shot retry if concreteness fails.
+  if (reply.mission_suggestion) {
+    const gate = validateMissionConcreteness({
+      description: reply.mission_suggestion.description,
+      target_date: reply.mission_suggestion.target_date,
+    });
+    if (!gate.ok) {
+      try {
+        const retry = await generateObject({
+          model: coachModel(),
+          schema: CoachReplySchema,
+          system: systemPrompt,
+          messages: [
+            ...historyMessages,
+            { role: "assistant", content: JSON.stringify(reply) },
+            {
+              role: "user",
+              content: `That mission suggestion failed the concreteness gate: "${gate.reason}". Rewrite the mission_suggestion so the description starts with a concrete verb (call/text/take/write/book/plan/etc.) and names an observable behavior. Keep the target_date. Return the full JSON again.`,
+            },
+          ],
+          maxOutputTokens: 1200,
+        });
+        const retryGate = retry.object.mission_suggestion
+          ? validateMissionConcreteness({
+              description: retry.object.mission_suggestion.description,
+              target_date: retry.object.mission_suggestion.target_date,
+            })
+          : { ok: true as const };
+        if (retryGate.ok) {
+          reply = retry.object;
+          usageInput += retry.usage?.inputTokens ?? 0;
+          usageOutput += retry.usage?.outputTokens ?? 0;
+          const retryMeta = retry.providerMetadata?.anthropic as
+            | { cacheReadInputTokens?: number; cacheCreationInputTokens?: number }
+            | undefined;
+          usageCacheRead += retryMeta?.cacheReadInputTokens ?? 0;
+          usageCacheWrite += retryMeta?.cacheCreationInputTokens ?? 0;
+        } else {
+          reply = { ...reply, mission_suggestion: null };
+        }
+      } catch (err) {
+        console.error("concreteness retry failed", err);
+        reply = { ...reply, mission_suggestion: null };
+      }
+    }
+  }
+
+  const finalReplyText = crisis ? `${reply.reply}\n\n${CRISIS_RESOURCES}` : reply.reply;
+
+  // 6. Persist the assistant turn with token usage.
+  const inTokens = usageInput + usageCacheRead + usageCacheWrite;
+  const { data: asstMsg } = await svc
+    .from("coach_messages")
+    .insert({
+      conversation_id: conversationId,
+      role: "assistant",
+      content: JSON.stringify({
+        text: finalReplyText,
+        mission_suggestion: reply.mission_suggestion,
+        prompt_version: PROMPT_VERSION,
+      }),
+      model_used: MODELS.coach,
+      tokens_in: inTokens,
+      tokens_out: usageOutput,
+    })
+    .select("id")
+    .single();
+
+  await svc
+    .from("coach_conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
+  // Fire-and-forget: if this was the first turn, generate a title. Failure
+  // leaves title null and doesn't affect the reply.
+  if (!convo.hasTitle) {
+    void (async () => {
+      try {
+        const { suggestConversationTitle } = await import("@/lib/coach/title");
+        const title = await suggestConversationTitle({ mode, firstUserMessage: text });
+        await svc
+          .from("coach_conversations")
+          .update({ title })
+          .eq("id", conversationId)
+          .is("title", null);
+      } catch (err) {
+        console.error("title backfill failed", err);
+      }
+    })();
+  }
+
+  const allowanceAfter = await readAllowance(opts.user.id);
+
+  return {
+    conversationId,
+    userMessageId,
+    assistantMessageId: (asstMsg as { id: string } | null)?.id ?? "",
+    reply: finalReplyText,
+    missionSuggestion: reply.mission_suggestion,
+    allowance: allowanceAfter,
+    crisis,
+  };
+}

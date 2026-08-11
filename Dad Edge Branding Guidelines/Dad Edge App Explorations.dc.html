@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #161616; font-family: 'Montserrat', sans-serif; }
+    a { color: #6fcfeb; text-decoration: none; }
+    a:hover { color: #a5e0f4; }
+    ::selection { background: #6fcfeb; color: #000; }
+  </style>
+</helmet>
+
+<section style="padding: 56px 64px; display: flex; flex-direction: column; gap: 40px;">
+  <div style="display: flex; align-items: center; gap: 20px; background: #0b0b0c; border: 1px solid #262626; padding: 20px 28px; align-self: flex-start;">
+    <img src="assets/mark-white.png" alt="Dad Edge helmet" style="height: 44px; width: auto;">
+    <div>
+      <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 2px; color: #fff; text-transform: uppercase;">Dad Edge App &mdash; Branding Explorations</div>
+      <div style="font-size: 13px; color: #6f6f6f; margin-top: 2px;">Turn 1 &middot; Foundations (<a href="#1a">1a</a>) + three dashboard directions exploring grit &amp; density (<a href="#1b">1b</a>, <a href="#1c">1c</a>, <a href="#1d">1d</a>)</div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: flex-start; gap: 56px; flex-wrap: wrap;">
+
+    <!-- ============ 1a FOUNDATIONS ============ -->
+    <div id="1a" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; background: #6fcfeb; color: #000; padding: 3px 10px;">1A</span>
+        <span style="font-size: 13px; color: #f0eee6; font-weight: 600; background: #1c1c1e; padding: 4px 12px;">Foundations &mdash; shared system</span>
+      </div>
+      <div style="width: 1060px; background: #0b0b0c; border: 1px solid #262626; padding: 48px; display: flex; flex-direction: column; gap: 44px;">
+
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <img src="assets/logo-tagline-white.png" alt="The Dad Edge — Live Legendary" style="height: 64px; width: auto;">
+          <div style="text-align: right; font-size: 12px; color: #8a8a8a; line-height: 1.7;">Dark-first UI system<br>Oswald (&asymp; Trade Gothic) &middot; Montserrat (&asymp; Proxima Nova)</div>
+        </div>
+
+        <!-- Color -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 3px; color: #6fcfeb; text-transform: uppercase;">Color</div>
+          <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #000000; border: 1px solid #2e2e2e;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Black<br><span style="color: #757575; font-weight: 400;">#000000 &middot; primary</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #ffffff;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">White<br><span style="color: #757575; font-weight: 400;">#ffffff</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #6fcfeb;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Cyan<br><span style="color: #757575; font-weight: 400;">#6fcfeb &middot; interactive</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #ff5f00;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Orange<br><span style="color: #757575; font-weight: 400;">#ff5f00 &middot; streaks/XP</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #00afaa;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Green<br><span style="color: #757575; font-weight: 400;">#00afaa &middot; success</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #0075c9;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Blue<br><span style="color: #757575; font-weight: 400;">#0075c9</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #8347ad;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Purple<br><span style="color: #757575; font-weight: 400;">#8347ad</span></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 72px; background: #fe3b1f;"></div><div style="font-size: 11px; color: #bdbdbd; font-weight: 600;">Red<br><span style="color: #757575; font-weight: 400;">#fe3b1f &middot; danger</span></div></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 44px; background: #0b0b0c; border: 1px solid #2e2e2e;"></div><div style="font-size: 11px; color: #757575;">bg &middot; #0b0b0c</div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 44px; background: #141416;"></div><div style="font-size: 11px; color: #757575;">surface &middot; #141416</div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 44px; background: #1d1d20;"></div><div style="font-size: 11px; color: #757575;">elevated &middot; #1d1d20</div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 44px; background: #2c2c30;"></div><div style="font-size: 11px; color: #757575;">border &middot; #2c2c30</div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 44px; background: #a3a3a3;"></div><div style="font-size: 11px; color: #757575;">text-dim &middot; #a3a3a3</div></div>
+          </div>
+        </div>
+
+        <!-- Type -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 3px; color: #6fcfeb; text-transform: uppercase;">Type</div>
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: 1px; color: #fff; text-transform: uppercase;">Live Legendary</div>
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 30px; line-height: 1.1; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;">Section heading &mdash; Oswald 600</div>
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 19px; color: #e5e5e5; text-transform: uppercase; letter-spacing: 1.5px;">Card title &mdash; Oswald 500 caps</div>
+          <div style="font-size: 15px; color: #c9c9c9; line-height: 1.65; max-width: 640px;">Body &mdash; Montserrat 400. The tools, community, and accountability you need to level up as a husband and father. Track your daily battles and win the week.</div>
+          <div style="font-size: 12px; color: #8a8a8a; letter-spacing: 0.5px; font-weight: 600; text-transform: uppercase;">Caption / label &mdash; Montserrat 600 caps 12px</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 44px;">
+          <!-- Buttons + inputs -->
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 3px; color: #6fcfeb; text-transform: uppercase;">Buttons</div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+              <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 13px 26px; cursor: pointer;" style-hover="background: #8fdaf0;">Start Battle</button>
+              <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: transparent; color: #fff; border: 1.5px solid #fff; padding: 12px 26px; cursor: pointer;" style-hover="background: #fff; color: #000;">Secondary</button>
+              <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: transparent; color: #6fcfeb; border: none; padding: 13px 10px; cursor: pointer;" style-hover="color: #a5e0f4;">Ghost &rarr;</button>
+              <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: #fe3b1f; color: #fff; border: none; padding: 13px 26px; cursor: pointer;">Delete</button>
+            </div>
+            <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 3px; color: #6fcfeb; text-transform: uppercase; margin-top: 12px;">Forms</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; max-width: 380px;">
+              <label style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #a3a3a3;">Email</label>
+              <input type="email" placeholder="you@dadedge.com" style="background: #141416; border: 1px solid #2c2c30; color: #fff; padding: 14px 16px; font-family: 'Montserrat', sans-serif; font-size: 15px; outline: none;" style-focus="border-color: #6fcfeb;">
+              <div style="font-size: 12px; color: #757575;">Focus state: 1px cyan border. Error: red border + caption.</div>
+            </div>
+          </div>
+          <!-- Gamification -->
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 3px; color: #6fcfeb; text-transform: uppercase;">Gamification</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #ff5f00; border: 1.5px solid #ff5f00; padding: 6px 14px;">&#9650; 17-day streak</span>
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #00afaa; border: 1.5px solid #00afaa; padding: 6px 14px;">+25 XP</span>
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #000; background: #6fcfeb; padding: 7.5px 14px;">Level 8 &middot; Spartan</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px; max-width: 380px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;"><span style="color: #a3a3a3;">Level 9 &mdash; Legendary</span><span style="color: #6fcfeb;">68%</span></div>
+              <div style="height: 10px; background: #1d1d20; overflow: hidden;"><div style="height: 100%; width: 68%; background: #6fcfeb;"></div></div>
+            </div>
+            <div style="display: flex; gap: 18px; margin-top: 6px;">
+              <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #6fcfeb; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">RELENTLESS</span></div>
+              <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #ff5f00; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">CONSISTENT</span></div>
+              <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #00afaa; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">WARRIOR</span></div>
+              <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px dashed #3a3a3e; display: flex; align-items: center; justify-content: center;"><span style="font-family: 'Oswald', sans-serif; font-size: 20px; color: #3a3a3e;">?</span></div>
+            </div>
+            <div style="font-size: 12px; color: #757575; max-width: 380px;">Badges follow the sub-brand circle system: black core, double ring, one brand accent per achievement.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1b FULL GRIT ============ -->
+    <div id="1b" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; background: #ff5f00; color: #000; padding: 3px 10px;">1B</span>
+        <span style="font-size: 13px; color: #f0eee6; font-weight: 600; background: #1c1c1e; padding: 4px 12px;">Full Grit &mdash; texture throughout, dense, war-room energy</span>
+      </div>
+      <div style="width: 1440px; background: #0b0b0c; border: 1px solid #262626; overflow: hidden;">
+        <!-- topbar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 40px; height: 76px; background: #000; border-bottom: 1px solid #262626; position: relative;">
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 900px; filter: invert(1); opacity: 0.18; pointer-events: none;"></div>
+          <div style="display: flex; align-items: center; gap: 44px; position: relative;">
+            <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 30px;">
+            <nav style="display: flex; gap: 32px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 2px; text-transform: uppercase;">
+              <a href="#1b" style="color: #6fcfeb; border-bottom: 3px solid #6fcfeb; padding: 26px 0;">War Room</a>
+              <a href="#1b" style="color: #9a9a9a; padding: 26px 0;">Battle Plan</a>
+              <a href="#1b" style="color: #9a9a9a; padding: 26px 0;">Brotherhood</a>
+              <a href="#1b" style="color: #9a9a9a; padding: 26px 0;">Academy</a>
+            </nav>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; position: relative;">
+            <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; color: #ff5f00; border: 1.5px solid #ff5f00; padding: 5px 12px;">&#9650; 17</span>
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #1d1d20; border: 2px solid #6fcfeb; display: flex; align-items: center; justify-content: center; font-family: 'Oswald', sans-serif; font-weight: 600; color: #fff; font-size: 14px;">M</div>
+          </div>
+        </div>
+        <!-- hero -->
+        <div style="padding: 44px 40px 36px; background: #000; position: relative; border-bottom: 1px solid #262626;">
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 1200px; filter: invert(1); opacity: 0.14; pointer-events: none;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; position: relative;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb; margin-bottom: 8px;">Tuesday, July 12 &middot; Day 17 of your streak</div>
+              <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 58px; line-height: 0.95; text-transform: uppercase; color: #fff;">Win Today,<br>Marcus.</div>
+            </div>
+            <div style="display: flex; gap: 44px; text-align: right;">
+              <div><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 44px; color: #6fcfeb; line-height: 1;">2,840</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 6px;">Edge Score</div></div>
+              <div><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 44px; color: #ff5f00; line-height: 1;">17</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 6px;">Day Streak</div></div>
+              <div><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 44px; color: #00afaa; line-height: 1;">12/15</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 6px;">Weekly Wins</div></div>
+              <div><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 44px; color: #fff; line-height: 1;">#3</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 6px;">Squad Rank</div></div>
+            </div>
+          </div>
+        </div>
+        <!-- body grid -->
+        <div style="display: grid; grid-template-columns: 1fr 400px; gap: 20px; padding: 24px 40px 40px;">
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="background: #141416; border: 1px solid #2c2c30; position: relative;">
+              <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 800px; opacity: 0.35; pointer-events: none;"></div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #2c2c30; position: relative;">
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Today's Battle Plan</div>
+                <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #00afaa;">3 of 5 complete</span>
+              </div>
+              <div style="position: relative;">
+                <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px; border-bottom: 1px solid #232326;"><div style="width: 26px; height: 26px; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 15px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #757575; text-decoration: line-through;">Morning workout &mdash; 30 min</span><span style="font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; color: #00afaa;">+25 XP</span></div>
+                <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px; border-bottom: 1px solid #232326;"><div style="width: 26px; height: 26px; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 15px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #757575; text-decoration: line-through;">Text Jess one thing you appreciate about her</span><span style="font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; color: #00afaa;">+20 XP</span></div>
+                <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px; border-bottom: 1px solid #232326;"><div style="width: 26px; height: 26px; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 15px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #757575; text-decoration: line-through;">Read 20 pages</span><span style="font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; color: #00afaa;">+15 XP</span></div>
+                <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px; border-bottom: 1px solid #232326;"><div style="width: 26px; height: 26px; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">10 min one-on-one with each kid</span><span style="font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; color: #8a8a8a;">+25 XP</span></div>
+                <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px;"><div style="width: 26px; height: 26px; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">No phone at the dinner table</span><span style="font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; color: #8a8a8a;">+15 XP</span></div>
+              </div>
+            </div>
+            <div style="background: #000; border: 1px solid #2c2c30; padding: 24px; position: relative;">
+              <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 900px; filter: invert(1); opacity: 0.12; pointer-events: none;"></div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; position: relative;">
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Level 8 &middot; Spartan</div>
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 1px; color: #6fcfeb;">2,840 / 4,200 XP &rarr; Legendary</div>
+              </div>
+              <div style="height: 14px; background: #1d1d20; position: relative;"><div style="height: 100%; width: 68%; background: linear-gradient(90deg, #0075c9, #6fcfeb);"></div></div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="background: #141416; border: 1px solid #2c2c30;">
+              <div style="padding: 20px 24px; border-bottom: 1px solid #2c2c30; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Squad Standings</div>
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid #232326;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #ff5f00; width: 24px; font-size: 16px;">1</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Dave R.</span><span style="font-family: 'Oswald', sans-serif; font-size: 14px; color: #8a8a8a;">3,120</span></div>
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid #232326;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #a3a3a3; width: 24px; font-size: 16px;">2</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Tony M.</span><span style="font-family: 'Oswald', sans-serif; font-size: 14px; color: #8a8a8a;">2,995</span></div>
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 24px; background: rgba(111, 207, 235, 0.08); border-left: 3px solid #6fcfeb; border-bottom: 1px solid #232326;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #6fcfeb; width: 24px; font-size: 16px;">3</span><span style="flex: 1; font-size: 14px; color: #fff; font-weight: 700;">You</span><span style="font-family: 'Oswald', sans-serif; font-size: 14px; color: #6fcfeb;">2,840</span></div>
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 24px;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #a3a3a3; width: 24px; font-size: 16px;">4</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Chris B.</span><span style="font-family: 'Oswald', sans-serif; font-size: 14px; color: #8a8a8a;">2,610</span></div>
+            </div>
+            <div style="background: #000; border: 1px solid #2c2c30; padding: 24px; display: flex; align-items: center; gap: 18px; position: relative;">
+              <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 700px; filter: invert(1); opacity: 0.15; pointer-events: none;"></div>
+              <div style="width: 74px; height: 74px; border-radius: 50%; background: #000; border: 3px solid #ff5f00; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex-shrink: 0; position: relative;"><img src="assets/mark-white.png" alt="" style="height: 30px;"><span style="font-family: 'Oswald', sans-serif; font-size: 8px; letter-spacing: 1px; color: #fff;">RELENTLESS</span></div>
+              <div style="position: relative;">
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Badge within reach</div>
+                <div style="font-size: 13px; color: #a3a3a3; margin-top: 4px; line-height: 1.5;">3 more days for <strong style="color: #ff5f00;">Relentless</strong> &mdash; a 20-day unbroken streak.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1c TEXTURE ACCENTS ============ -->
+    <div id="1c" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; background: #6fcfeb; color: #000; padding: 3px 10px;">1C</span>
+        <span style="font-size: 13px; color: #f0eee6; font-weight: 600; background: #1c1c1e; padding: 4px 12px;">Tactical Balance &mdash; grit in the hero only, comfortable working UI</span>
+      </div>
+      <div style="width: 1440px; background: #0f0f11; border: 1px solid #262626; overflow: hidden; display: grid; grid-template-columns: 240px 1fr;">
+        <!-- sidebar -->
+        <div style="background: #000; border-right: 1px solid #262626; padding: 28px 0; display: flex; flex-direction: column; gap: 28px; min-height: 860px;">
+          <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 26px; width: auto; align-self: flex-start; margin-left: 24px;">
+          <nav style="display: flex; flex-direction: column; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">
+            <a href="#1c" style="color: #6fcfeb; background: rgba(111,207,235,0.08); border-left: 3px solid #6fcfeb; padding: 14px 24px;">Dashboard</a>
+            <a href="#1c" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 14px 24px;">Battle Plan</a>
+            <a href="#1c" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 14px 24px;">Brotherhood</a>
+            <a href="#1c" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 14px 24px;">Academy</a>
+            <a href="#1c" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 14px 24px;">Profile</a>
+          </nav>
+          <div style="margin-top: auto; margin-left: 24px; margin-right: 24px; border: 1px solid #2c2c30; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;"><span style="color: #a3a3a3;">Lvl 8 &middot; Spartan</span><span style="color: #6fcfeb;">68%</span></div>
+            <div style="height: 8px; background: #1d1d20;"><div style="height: 100%; width: 68%; background: #6fcfeb;"></div></div>
+          </div>
+        </div>
+        <!-- main -->
+        <div style="display: flex; flex-direction: column;">
+          <div style="padding: 40px 44px; background: #000; position: relative; border-bottom: 1px solid #262626;">
+            <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 1100px; filter: invert(1); opacity: 0.16; pointer-events: none;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
+              <div>
+                <div style="font-size: 13px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb; margin-bottom: 6px;">Tuesday, July 12</div>
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 42px; line-height: 1; text-transform: uppercase; color: #fff;">Morning, Marcus</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #ff5f00; border: 1.5px solid #ff5f00; padding: 6px 14px;">&#9650; 17-day streak</span>
+                <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 12px 22px; cursor: pointer;">Log a win</button>
+              </div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 44px 0;">
+            <div style="background: #17171a; border: 1px solid #2c2c30; padding: 20px;"><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 34px; color: #6fcfeb; line-height: 1;">2,840</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 8px;">Edge Score</div></div>
+            <div style="background: #17171a; border: 1px solid #2c2c30; padding: 20px;"><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 34px; color: #ff5f00; line-height: 1;">17</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 8px;">Day Streak</div></div>
+            <div style="background: #17171a; border: 1px solid #2c2c30; padding: 20px;"><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 34px; color: #00afaa; line-height: 1;">12/15</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 8px;">Weekly Wins</div></div>
+            <div style="background: #17171a; border: 1px solid #2c2c30; padding: 20px;"><div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 34px; color: #fff; line-height: 1;">#3</div><div style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8a8a8a; margin-top: 8px;">Squad Rank</div></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px 44px 40px;">
+            <div style="background: #17171a; border: 1px solid #2c2c30;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-bottom: 1px solid #2c2c30;">
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Today's Battle Plan</div>
+                <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #00afaa;">3 of 5</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #222226;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Morning workout &mdash; 30 min</span><span style="font-size: 12px; font-weight: 700; color: #00afaa;">+25</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #222226;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Text Jess one thing you appreciate about her</span><span style="font-size: 12px; font-weight: 700; color: #00afaa;">+20</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #222226;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Read 20 pages</span><span style="font-size: 12px; font-weight: 700; color: #00afaa;">+15</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #222226;"><div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">10 min one-on-one with each kid</span><span style="font-size: 12px; font-weight: 700; color: #8a8a8a;">+25</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 16px 24px;"><div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">No phone at the dinner table</span><span style="font-size: 12px; font-weight: 700; color: #8a8a8a;">+15</span></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div style="background: #17171a; border: 1px solid #2c2c30;">
+                <div style="padding: 18px 24px; border-bottom: 1px solid #2c2c30; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Squad Standings</div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 13px 24px; border-bottom: 1px solid #222226;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #ff5f00; width: 22px; font-size: 15px;">1</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Dave R.</span><span style="font-size: 13px; color: #8a8a8a;">3,120</span></div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 13px 24px; border-bottom: 1px solid #222226;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #a3a3a3; width: 22px; font-size: 15px;">2</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Tony M.</span><span style="font-size: 13px; color: #8a8a8a;">2,995</span></div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 13px 24px; background: rgba(111,207,235,0.07);"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #6fcfeb; width: 22px; font-size: 15px;">3</span><span style="flex: 1; font-size: 14px; color: #fff; font-weight: 700;">You</span><span style="font-size: 13px; color: #6fcfeb; font-weight: 700;">2,840</span></div>
+              </div>
+              <div style="background: #17171a; border: 1px solid #2c2c30; padding: 20px 24px; display: flex; align-items: center; gap: 16px;">
+                <div style="width: 64px; height: 64px; border-radius: 50%; background: #000; border: 3px solid #ff5f00; box-shadow: 0 0 0 2.5px #000, 0 0 0 4px #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/mark-white.png" alt="" style="height: 28px;"></div>
+                <div>
+                  <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Relentless &middot; 3 days out</div>
+                  <div style="font-size: 13px; color: #a3a3a3; margin-top: 2px;">Hold the streak to 20 days.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1d CLEAN ============ -->
+    <div id="1d" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; background: #00afaa; color: #000; padding: 3px 10px;">1D</span>
+        <span style="font-size: 13px; color: #f0eee6; font-weight: 600; background: #1c1c1e; padding: 4px 12px;">Clean Ops &mdash; zero texture, calm spacing, brand carried by type &amp; color</span>
+      </div>
+      <div style="width: 1440px; background: #101013; border: 1px solid #262626; overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 56px; height: 72px; border-bottom: 1px solid #232326;">
+          <div style="display: flex; align-items: center; gap: 48px;">
+            <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 26px;">
+            <nav style="display: flex; gap: 8px; font-size: 13.5px; font-weight: 600;">
+              <a href="#1d" style="color: #000; background: #6fcfeb; padding: 8px 16px; border-radius: 999px;">Dashboard</a>
+              <a href="#1d" style="color: #9a9a9a; padding: 8px 16px; border-radius: 999px;">Battle Plan</a>
+              <a href="#1d" style="color: #9a9a9a; padding: 8px 16px; border-radius: 999px;">Brotherhood</a>
+              <a href="#1d" style="color: #9a9a9a; padding: 8px 16px; border-radius: 999px;">Academy</a>
+            </nav>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 13px; font-weight: 700; color: #ff5f00;">&#9650; 17</span>
+            <div style="width: 38px; height: 38px; border-radius: 50%; background: #1d1d20; border: 2px solid #6fcfeb; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 13px;">M</div>
+          </div>
+        </div>
+        <div style="padding: 56px; display: flex; flex-direction: column; gap: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #8a8a8a; margin-bottom: 10px;">Tuesday, July 12</div>
+              <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 40px; line-height: 1; color: #fff;">Morning, Marcus</div>
+            </div>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 13px 26px; border-radius: 8px; cursor: pointer;">Log a win</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
+            <div style="background: #17171a; border-radius: 14px; padding: 26px;"><div style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8a8a8a;">Edge Score</div><div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 38px; color: #fff; margin-top: 10px; line-height: 1;">2,840</div><div style="font-size: 12px; color: #00afaa; font-weight: 600; margin-top: 10px;">&#9650; 180 this week</div></div>
+            <div style="background: #17171a; border-radius: 14px; padding: 26px;"><div style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8a8a8a;">Day Streak</div><div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 38px; color: #ff5f00; margin-top: 10px; line-height: 1;">17</div><div style="font-size: 12px; color: #8a8a8a; font-weight: 600; margin-top: 10px;">Best: 23</div></div>
+            <div style="background: #17171a; border-radius: 14px; padding: 26px;"><div style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8a8a8a;">Weekly Wins</div><div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 38px; color: #fff; margin-top: 10px; line-height: 1;">12<span style="color: #55555c; font-size: 26px;">/15</span></div><div style="font-size: 12px; color: #8a8a8a; font-weight: 600; margin-top: 10px;">On pace</div></div>
+            <div style="background: #17171a; border-radius: 14px; padding: 26px;"><div style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8a8a8a;">Squad Rank</div><div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 38px; color: #fff; margin-top: 10px; line-height: 1;">#3</div><div style="font-size: 12px; color: #6fcfeb; font-weight: 600; margin-top: 10px;">155 pts to #2</div></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 380px; gap: 20px;">
+            <div style="background: #17171a; border-radius: 14px; padding: 8px 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 28px 12px;">
+                <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 18px; letter-spacing: 0.5px; color: #fff;">Today's Battle Plan</div>
+                <span style="font-size: 12px; font-weight: 700; color: #00afaa;">3 of 5</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 14px 28px;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Morning workout &mdash; 30 min</span><span style="font-size: 12px; font-weight: 700; color: #55555c;">+25</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 14px 28px;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Text Jess one thing you appreciate about her</span><span style="font-size: 12px; font-weight: 700; color: #55555c;">+20</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 14px 28px;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 15px; color: #6f6f75; text-decoration: line-through;">Read 20 pages</span><span style="font-size: 12px; font-weight: 700; color: #55555c;">+15</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 14px 28px;"><div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">10 min one-on-one with each kid</span><span style="font-size: 12px; font-weight: 700; color: #8a8a8a;">+25</span></div>
+              <div style="display: flex; align-items: center; gap: 16px; padding: 14px 28px 22px;"><div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 15px; color: #e5e5e5;">No phone at the dinner table</span><span style="font-size: 12px; font-weight: 700; color: #8a8a8a;">+15</span></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+              <div style="background: #17171a; border-radius: 14px; padding: 26px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 16px; color: #fff;">Level 8 &middot; Spartan</div>
+                  <span style="font-size: 12px; font-weight: 700; color: #6fcfeb;">68%</span>
+                </div>
+                <div style="height: 10px; background: #232328; border-radius: 999px; overflow: hidden;"><div style="height: 100%; width: 68%; background: #6fcfeb; border-radius: 999px;"></div></div>
+                <div style="font-size: 12.5px; color: #8a8a8a;">1,360 XP to <strong style="color: #e5e5e5;">Legendary</strong></div>
+              </div>
+              <div style="background: #17171a; border-radius: 14px; padding: 26px; display: flex; align-items: center; gap: 16px;">
+                <div style="width: 60px; height: 60px; border-radius: 50%; background: #000; border: 3px solid #ff5f00; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/mark-white.png" alt="" style="height: 26px;"></div>
+                <div>
+                  <div style="font-size: 14px; font-weight: 700; color: #fff;">Relentless badge</div>
+                  <div style="font-size: 12.5px; color: #8a8a8a; margin-top: 2px;">3 days away &mdash; hold the streak.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

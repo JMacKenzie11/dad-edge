@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #0f0f11; font-family: 'Montserrat', sans-serif; color: #e5e5e5; }
+    a { color: #6fcfeb; text-decoration: none; }
+    a:hover { color: #a5e0f4; }
+    ::selection { background: #6fcfeb; color: #000; }
+  </style>
+</helmet>
+
+<div style="max-width: 1280px; margin: 0 auto; padding: 0 0 120px;">
+
+  <!-- ============ COVER ============ -->
+  <div data-screen-label="Cover" style="background: #000; position: relative; padding: 96px 72px 80px; border-bottom: 1px solid #262626; overflow: hidden;">
+    <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 1100px; filter: invert(1); opacity: 0.15; pointer-events: none;"></div>
+    <div style="position: relative; display: flex; flex-direction: column; gap: 36px;">
+      <img src="assets/logo-tagline-white.png" alt="The Dad Edge — Live Legendary" style="height: 88px; width: auto; align-self: flex-start;">
+      <div>
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 64px; line-height: 0.95; text-transform: uppercase; color: #fff;">Digital Brand<br>System <span style="color: #6fcfeb;">v1.0</span></div>
+        <div style="font-size: 16px; color: #a3a3a3; margin-top: 20px; max-width: 560px; line-height: 1.65;">The rules and components for applying the Dad Edge brand to web applications and sites. Direction: <strong style="color: #fff;">Tactical Balance</strong> &mdash; dark-first, grit reserved for hero moments, a calm working UI everywhere else.</div>
+      </div>
+      <div style="display: flex; gap: 28px; font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #6f6f75;">
+        <span>01 Logo</span><span>02 Color</span><span>03 Type</span><span>04 Texture</span><span>05 Components</span><span>06 Gamification</span><span>07 Patterns</span><span>08 Voice</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 01 LOGO ============ -->
+  <div data-screen-label="01 Logo" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">01</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Logo</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+      <div style="background: #17171a; border: 1px solid #2c2c30;">
+        <div style="height: 170px; display: flex; align-items: center; justify-content: center; padding: 0 32px;"><img src="assets/logo-white.png" alt="Master logo" style="width: 100%; max-width: 320px;"></div>
+        <div style="padding: 16px 20px; border-top: 1px solid #2c2c30; font-size: 12.5px; color: #a3a3a3; line-height: 1.6;"><strong style="color: #fff;">Master lockup.</strong> App headers, marketing, footers. White on dark, black on light &mdash; never colored.</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30;">
+        <div style="height: 170px; display: flex; align-items: center; justify-content: center;"><img src="assets/mark-white.png" alt="Helmet mark" style="height: 110px;"></div>
+        <div style="padding: 16px 20px; border-top: 1px solid #2c2c30; font-size: 12.5px; color: #a3a3a3; line-height: 1.6;"><strong style="color: #fff;">Centurion mark.</strong> Favicons, avatars, badges, loading states, tight spaces &lt; 120px wide.</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30;">
+        <div style="height: 170px; display: flex; align-items: center; justify-content: center; padding: 0 32px;"><img src="assets/logo-tagline-white.png" alt="Logo with tagline" style="width: 100%; max-width: 320px;"></div>
+        <div style="padding: 16px 20px; border-top: 1px solid #2c2c30; font-size: 12.5px; color: #a3a3a3; line-height: 1.6;"><strong style="color: #fff;">Tagline lockup.</strong> Cover moments only: login, landing hero, onboarding. Never below 220px wide.</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 40px; font-size: 13px; color: #a3a3a3; line-height: 1.7;">
+      <div style="flex: 1;"><span style="color: #00afaa; font-weight: 700;">Do</span> &mdash; keep clear space equal to the wordmark height on all sides; use black or white only; place on solid black, near-black surfaces, or photography with a dark overlay.</div>
+      <div style="flex: 1;"><span style="color: #fe3b1f; font-weight: 700;">Don't</span> &mdash; stretch, recolor, add glows or shadows, place on busy backgrounds, or pair with other marks closer than the clear space.</div>
+    </div>
+  </div>
+
+  <!-- ============ 02 COLOR ============ -->
+  <div data-screen-label="02 Color" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">02</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Color</span>
+    </div>
+    <div style="font-size: 14px; color: #a3a3a3; max-width: 720px; line-height: 1.7; margin-top: -16px;">Black carries the brand. One accent does the work on any given surface &mdash; cyan is the default interactive color; the rest are semantic or reserved for sub-brand moments. Never use two bright accents at equal weight in one component.</div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #000;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Black &middot; #000000</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Primary. Heroes, nav, cover surfaces.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #fff;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">White &middot; #ffffff</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Headlines, primary text on dark.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #6fcfeb;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Cyan &middot; #6fcfeb</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Interactive: buttons, links, active nav, focus.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #ff5f00;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Orange &middot; #ff5f00</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Gamification: streaks, urgency, celebration.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #00afaa;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Green &middot; #00afaa</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Success, completion, positive deltas.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #fe3b1f;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Red &middot; #fe3b1f</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Errors, destructive actions, broken streaks.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #0075c9;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Blue &middot; #0075c9</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Reserved: sub-brands, gradients with cyan.</div></div></div>
+      <div style="border: 1px solid #2c2c30;"><div style="height: 96px; background: #8347ad;"></div><div style="padding: 14px 16px; background: #17171a;"><div style="font-weight: 700; font-size: 13px; color: #fff;">Purple &middot; #8347ad</div><div style="font-size: 12px; color: #8a8a8a; margin-top: 4px;">Reserved: sub-brands and special programs.</div></div></div>
+    </div>
+    <div>
+      <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb; margin-bottom: 16px;">UI surface tokens</div>
+      <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;">
+        <div><div style="height: 52px; background: #0b0b0c; border: 1px solid #2c2c30;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">bg-hero<br><span style="color: #6f6f75; font-weight: 400;">#0b0b0c</span></div></div>
+        <div><div style="height: 52px; background: #0f0f11; border: 1px solid #2c2c30;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">bg-app<br><span style="color: #6f6f75; font-weight: 400;">#0f0f11</span></div></div>
+        <div><div style="height: 52px; background: #17171a; border: 1px solid #2c2c30;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">surface<br><span style="color: #6f6f75; font-weight: 400;">#17171a</span></div></div>
+        <div><div style="height: 52px; background: #1d1d20; border: 1px solid #2c2c30;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">elevated<br><span style="color: #6f6f75; font-weight: 400;">#1d1d20</span></div></div>
+        <div><div style="height: 52px; background: #2c2c30;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">border<br><span style="color: #6f6f75; font-weight: 400;">#2c2c30</span></div></div>
+        <div><div style="height: 52px; background: #a3a3a3;"></div><div style="font-size: 11.5px; color: #a3a3a3; margin-top: 8px; font-weight: 600;">text-dim<br><span style="color: #6f6f75; font-weight: 400;">#a3a3a3</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 TYPE ============ -->
+  <div data-screen-label="03 Typography" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">03</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Typography</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px;">
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 44px; color: #fff; line-height: 1;">Oswald</div>
+        <div style="font-size: 12.5px; color: #8a8a8a; margin-top: 12px; line-height: 1.6;">Display &amp; headings &mdash; free stand-in for <strong style="color: #a3a3a3;">Trade Gothic Bold</strong>. Weights 500&ndash;700. Uppercase with 1&ndash;3px letter-spacing for headers and labels; sentence case allowed at 32px+.</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px;">
+        <div style="font-weight: 700; font-size: 40px; color: #fff; line-height: 1.1;">Montserrat</div>
+        <div style="font-size: 12.5px; color: #8a8a8a; margin-top: 12px; line-height: 1.6;">Body &amp; UI &mdash; free stand-in for <strong style="color: #a3a3a3;">Proxima Nova</strong>. Weights 400&ndash;700. Everything that isn't a heading: paragraphs, controls, data, captions.</div>
+      </div>
+    </div>
+    <div style="background: #17171a; border: 1px solid #2c2c30; padding: 36px; display: flex; flex-direction: column; gap: 26px;">
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">Display &middot; Oswald 700 &middot; 56&ndash;72px</span><span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 56px; line-height: 0.95; text-transform: uppercase; color: #fff;">Live Legendary</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">H1 &middot; Oswald 700 &middot; 40px</span><span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 40px; line-height: 1; text-transform: uppercase; color: #fff;">Win the day</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">H2 &middot; Oswald 600 &middot; 28px</span><span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 28px; text-transform: uppercase; letter-spacing: 0.5px; color: #fff;">Section heading</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">Card title &middot; Oswald 500 &middot; 17px</span><span style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; text-transform: uppercase; letter-spacing: 1.5px; color: #fff;">Today's Battle Plan</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">Body &middot; Montserrat 400 &middot; 15px</span><span style="font-size: 15px; line-height: 1.65; color: #c9c9c9; max-width: 620px;">The tools, community, and accountability you need to level up as a husband and father. Small daily reps, compounded.</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">Label &middot; Montserrat 600 &middot; 12px</span><span style="font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #a3a3a3;">Edge Score &middot; Weekly Wins</span></div>
+      <div style="display: flex; align-items: baseline; gap: 24px;"><span style="font-size: 11px; color: #6f6f75; width: 150px; flex-shrink: 0; font-weight: 600;">Stat &middot; Oswald 700 &middot; 34&ndash;44px</span><span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 40px; color: #6fcfeb; line-height: 1;">2,840</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 04 TEXTURE ============ -->
+  <div data-screen-label="04 Texture" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">04</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Texture &amp; Grit</span>
+    </div>
+    <div style="font-size: 14px; color: #a3a3a3; max-width: 720px; line-height: 1.7; margin-top: -16px;">The brand's grunge texture is an accent, not wallpaper. Rule of thumb: <strong style="color: #fff;">one textured surface per screen</strong> &mdash; the hero, a cover, or a celebration moment &mdash; at 12&ndash;18% opacity on black. Working surfaces (cards, forms, tables, lists) stay clean.</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+      <div style="border: 1px solid #2c2c30;">
+        <div style="height: 150px; background: #000; position: relative; display: flex; align-items: center; padding: 0 28px;">
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 700px; filter: invert(1); opacity: 0.15;"></div>
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 30px; text-transform: uppercase; color: #fff; position: relative;">Hero surface</div>
+        </div>
+        <div style="padding: 14px 18px; background: #17171a; font-size: 12px; color: #8a8a8a; line-height: 1.6;"><span style="color: #00afaa; font-weight: 700;">Yes</span> &mdash; white texture at 12&ndash;18% on pure black, behind display type.</div>
+      </div>
+      <div style="border: 1px solid #2c2c30;">
+        <div style="height: 150px; background: #000; position: relative; display: flex; align-items: center; padding: 0 28px;">
+          <div style="position: absolute; inset: 0; background: linear-gradient(105deg, #0075c9, #6fcfeb); opacity: 0.9;"></div>
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 700px; opacity: 0.3;"></div>
+          <div style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 30px; text-transform: uppercase; color: #000; position: relative;">Celebration</div>
+        </div>
+        <div style="padding: 14px 18px; background: #17171a; font-size: 12px; color: #8a8a8a; line-height: 1.6;"><span style="color: #00afaa; font-weight: 700;">Yes</span> &mdash; dark texture over an accent fill for level-ups, badges earned, streak milestones.</div>
+      </div>
+      <div style="border: 1px solid #2c2c30;">
+        <div style="height: 150px; background: #17171a; position: relative; padding: 20px 28px;">
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 500px; filter: invert(1); opacity: 0.25;"></div>
+          <div style="position: relative; font-size: 13px; color: #a3a3a3; line-height: 1.6;">Form fields, body copy, and data tables with texture running underneath the reading surface&hellip;</div>
+        </div>
+        <div style="padding: 14px 18px; background: #17171a; border-top: 1px solid #2c2c30; font-size: 12px; color: #8a8a8a; line-height: 1.6;"><span style="color: #fe3b1f; font-weight: 700;">No</span> &mdash; never behind body text, forms, or data. Working surfaces stay clean.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 COMPONENTS ============ -->
+  <div data-screen-label="05 Components" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 44px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">05</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Core Components</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 44px;">
+      <!-- buttons -->
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb;">Buttons</div>
+        <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 18px;">
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 13px 26px; cursor: pointer;" style-hover="background: #8fdaf0;">Primary</button>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: transparent; color: #fff; border: 1.5px solid #fff; padding: 12px 26px; cursor: pointer;" style-hover="background: #fff; color: #000;">Secondary</button>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: transparent; color: #6fcfeb; border: none; padding: 13px 10px; cursor: pointer;" style-hover="color: #a5e0f4;">Ghost &rarr;</button>
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: #fe3b1f; color: #fff; border: none; padding: 13px 26px; cursor: pointer;">Destructive</button>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; background: #2c2c30; color: #6f6f75; border: none; padding: 13px 26px; cursor: not-allowed;">Disabled</button>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 9px 18px; cursor: pointer;">Small</button>
+          </div>
+          <div style="font-size: 12px; color: #6f6f75; line-height: 1.6;">Square corners. Oswald 600 caps. Hover lightens fills; secondary inverts. 44px min height for primary actions.</div>
+        </div>
+      </div>
+      <!-- forms -->
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb;">Forms</div>
+        <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 18px;">
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <label style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #a3a3a3;">Email</label>
+            <input type="email" placeholder="you@dadedge.com" style="background: #0f0f11; border: 1px solid #2c2c30; color: #fff; padding: 13px 16px; font-family: 'Montserrat', sans-serif; font-size: 14px; outline: none;" style-focus="border-color: #6fcfeb;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <label style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #fe3b1f;">Password</label>
+            <input type="password" value="abc" style="background: #0f0f11; border: 1px solid #fe3b1f; color: #fff; padding: 13px 16px; font-family: 'Montserrat', sans-serif; font-size: 14px; outline: none;">
+            <div style="font-size: 12px; color: #fe3b1f;">Minimum 8 characters.</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 24px;">
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #c9c9c9; cursor: pointer;"><span style="width: 20px; height: 20px; background: #6fcfeb; display: inline-flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 12px;">&#10003;</span> Checked</label>
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #c9c9c9; cursor: pointer;"><span style="width: 20px; height: 20px; border: 2px solid #3a3a3e; box-sizing: border-box;"></span> Unchecked</label>
+            <span style="display: inline-flex; align-items: center; width: 44px; height: 24px; background: #6fcfeb; border-radius: 999px; padding: 2px; box-sizing: border-box; justify-content: flex-end;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #000;"></span></span>
+            <span style="display: inline-flex; align-items: center; width: 44px; height: 24px; background: #2c2c30; border-radius: 999px; padding: 2px; box-sizing: border-box;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #6f6f75;"></span></span>
+          </div>
+          <div style="font-size: 12px; color: #6f6f75; line-height: 1.6;">Inputs sit one step darker than their card. Focus = cyan border, error = red border + 12px caption. Toggles are the one rounded element.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- nav -->
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb;">Navigation</div>
+      <div style="display: grid; grid-template-columns: 300px 1fr; gap: 20px;">
+        <div style="background: #000; border: 1px solid #2c2c30; padding: 24px 0 20px; display: flex; flex-direction: column; gap: 22px;">
+          <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 24px; width: auto; align-self: flex-start; margin-left: 22px;">
+          <nav style="display: flex; flex-direction: column; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">
+            <a href="#" style="color: #6fcfeb; background: rgba(111,207,235,0.08); border-left: 3px solid #6fcfeb; padding: 13px 22px;">Dashboard</a>
+            <a href="#" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 13px 22px;" style-hover="color: #fff;">Battle Plan</a>
+            <a href="#" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 13px 22px;" style-hover="color: #fff;">Brotherhood</a>
+            <a href="#" style="color: #9a9a9a; border-left: 3px solid transparent; padding: 13px 22px;" style-hover="color: #fff;">Academy</a>
+          </nav>
+          <div style="font-size: 11.5px; color: #6f6f75; margin: 0 22px; line-height: 1.6;">App sidebar: pure black, active = cyan text + left rail + 8% cyan wash.</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <div style="background: #000; border: 1px solid #2c2c30; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 68px;">
+            <div style="display: flex; align-items: center; gap: 36px;">
+              <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 24px;">
+              <nav style="display: flex; gap: 28px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 2px; text-transform: uppercase;">
+                <a href="#" style="color: #6fcfeb; border-bottom: 3px solid #6fcfeb; padding: 23px 0;">Home</a>
+                <a href="#" style="color: #9a9a9a; padding: 23px 0;" style-hover="color: #fff;">Podcast</a>
+                <a href="#" style="color: #9a9a9a; padding: 23px 0;" style-hover="color: #fff;">Alliance</a>
+              </nav>
+            </div>
+            <button style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; background: #6fcfeb; color: #000; border: none; padding: 10px 20px; cursor: pointer;">Join now</button>
+          </div>
+          <div style="background: #17171a; border: 1px solid #2c2c30; padding: 24px 28px;">
+            <div style="display: flex; gap: 28px; border-bottom: 1px solid #2c2c30;">
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff; border-bottom: 3px solid #6fcfeb; padding-bottom: 12px;">Overview</span>
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; color: #9a9a9a; padding-bottom: 12px;">History</span>
+              <span style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; color: #9a9a9a; padding-bottom: 12px;">Settings</span>
+            </div>
+            <div style="font-size: 11.5px; color: #6f6f75; margin-top: 14px;">Tabs: Oswald caps, 3px cyan underline on active. Top bar for marketing site; sidebar for the app.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- cards + feedback -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 44px;">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb;">Cards &amp; surfaces</div>
+        <div style="background: #17171a; border: 1px solid #2c2c30;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-bottom: 1px solid #2c2c30;">
+            <span style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Card title</span>
+            <a href="#" style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">View all &rarr;</a>
+          </div>
+          <div style="padding: 22px 24px; font-size: 14px; color: #a3a3a3; line-height: 1.65;">Surface #17171a, 1px #2c2c30 border, square corners, no shadows. Header row with Oswald caps title; optional ghost link on the right.</div>
+        </div>
+        <div style="background: #0f0f11; border: 1px solid #2c2c30; padding: 20px 24px; font-size: 13px; color: #8a8a8a; line-height: 1.6;">Inset panel &mdash; one step darker, for nested content, code, or quotes.</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 17px; letter-spacing: 2px; text-transform: uppercase; color: #6fcfeb;">Feedback</div>
+        <div style="display: flex; align-items: center; gap: 14px; background: rgba(0,175,170,0.08); border-left: 3px solid #00afaa; padding: 16px 20px;"><span style="color: #00afaa; font-weight: 700; font-size: 15px;">&#10003;</span><span style="font-size: 13.5px; color: #c9c9c9;"><strong style="color: #fff;">Win logged.</strong> +25 XP added to your Edge Score.</span></div>
+        <div style="display: flex; align-items: center; gap: 14px; background: rgba(255,95,0,0.08); border-left: 3px solid #ff5f00; padding: 16px 20px;"><span style="color: #ff5f00; font-weight: 700; font-size: 15px;">&#9650;</span><span style="font-size: 13.5px; color: #c9c9c9;"><strong style="color: #fff;">Streak at risk.</strong> 2 battles left &mdash; day ends in 3 hours.</span></div>
+        <div style="display: flex; align-items: center; gap: 14px; background: rgba(254,59,31,0.08); border-left: 3px solid #fe3b1f; padding: 16px 20px;"><span style="color: #fe3b1f; font-weight: 700; font-size: 15px;">&#10005;</span><span style="font-size: 13.5px; color: #c9c9c9;"><strong style="color: #fff;">Couldn't save.</strong> Check your connection and retry.</span></div>
+        <div style="font-size: 12px; color: #6f6f75; line-height: 1.6;">Alerts: 8% tint + 3px accent rail. Toasts use the same anatomy on the elevated surface.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 GAMIFICATION ============ -->
+  <div data-screen-label="06 Gamification" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">06</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Gamification</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #ff5f00; border: 1.5px solid #ff5f00; padding: 6px 14px;">&#9650; 17-day streak</span>
+          <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #00afaa; border: 1.5px solid #00afaa; padding: 6px 14px;">+25 XP</span>
+          <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #000; background: #6fcfeb; padding: 7.5px 14px;">Lvl 8 &middot; Spartan</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;"><span style="color: #a3a3a3;">Level 9 &mdash; Legendary</span><span style="color: #6fcfeb;">2,840 / 4,200</span></div>
+          <div style="height: 12px; background: #0f0f11;"><div style="height: 100%; width: 68%; background: linear-gradient(90deg, #0075c9, #6fcfeb);"></div></div>
+        </div>
+        <div style="font-size: 12px; color: #6f6f75; line-height: 1.7;">Chips: Oswald caps, 1.5px outline in the semantic accent; filled cyan for level. XP progress is the one place blue&rarr;cyan gradient is allowed. Level names: Recruit &rarr; Soldier &rarr; Spartan &rarr; Legendary.</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; gap: 18px;">
+          <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #6fcfeb; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">FOUNDER</span></div>
+          <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #ff5f00; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">RELENTLESS</span></div>
+          <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px solid #8347ad; box-shadow: 0 0 0 3px #000, 0 0 0 4.5px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><img src="assets/mark-white.png" alt="" style="height: 34px;"><span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 1px; color: #fff;">MENTOR</span></div>
+          <div style="width: 84px; height: 84px; border-radius: 50%; background: #000; border: 3px dashed #3a3a3e; display: flex; align-items: center; justify-content: center;"><span style="font-family: 'Oswald', sans-serif; font-size: 20px; color: #3a3a3e;">?</span></div>
+        </div>
+        <div style="font-size: 12px; color: #6f6f75; line-height: 1.7;">Badges use the sub-brand circle system: black core, helmet mark, double ring (accent + white), Oswald caps name. One accent per badge; locked = dashed border, no mark.</div>
+      </div>
+    </div>
+    <div style="background: #17171a; border: 1px solid #2c2c30;">
+      <div style="padding: 18px 24px; border-bottom: 1px solid #2c2c30; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff;">Battle checklist &amp; leaderboard anatomy</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">
+        <div style="border-right: 1px solid #2c2c30;">
+          <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px; border-bottom: 1px solid #222226;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #00afaa; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 700; font-size: 13px; flex-shrink: 0;">&#10003;</div><span style="flex: 1; font-size: 14.5px; color: #6f6f75; text-decoration: line-through;">Completed battle</span><span style="font-size: 12px; font-weight: 700; color: #00afaa;">+25</span></div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 15px 24px;"><div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #3a3a3e; flex-shrink: 0;"></div><span style="flex: 1; font-size: 14.5px; color: #e5e5e5;">Open battle</span><span style="font-size: 12px; font-weight: 700; color: #8a8a8a;">+25</span></div>
+        </div>
+        <div>
+          <div style="display: flex; align-items: center; gap: 14px; padding: 15px 24px; border-bottom: 1px solid #222226;"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #ff5f00; width: 22px; font-size: 15px;">1</span><span style="flex: 1; font-size: 14px; color: #e5e5e5; font-weight: 600;">Leader row</span><span style="font-size: 13px; color: #8a8a8a;">3,120</span></div>
+          <div style="display: flex; align-items: center; gap: 14px; padding: 15px 24px; background: rgba(111,207,235,0.07);"><span style="font-family: 'Oswald', sans-serif; font-weight: 700; color: #6fcfeb; width: 22px; font-size: 15px;">3</span><span style="flex: 1; font-size: 14px; color: #fff; font-weight: 700;">You &mdash; highlighted with 7% cyan wash</span><span style="font-size: 13px; color: #6fcfeb; font-weight: 700;">2,840</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 PATTERNS ============ -->
+  <div data-screen-label="07 Patterns" style="padding: 72px; border-bottom: 1px solid #232326; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">07</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Layout Patterns</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="height: 34px; background: #000; display: flex; align-items: center; padding: 0 10px;"><div style="width: 40px; height: 6px; background: #fff;"></div></div>
+          <div style="display: flex; gap: 6px; height: 110px;"><div style="width: 34px; background: #000;"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 6px;"><div style="height: 38px; background: #000; position: relative;"><div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 300px; filter: invert(1); opacity: 0.2;"></div></div><div style="flex: 1; display: flex; gap: 6px;"><div style="flex: 2; background: #232328;"></div><div style="flex: 1; background: #232328;"></div></div></div></div>
+        </div>
+        <div style="font-size: 12.5px; color: #8a8a8a; line-height: 1.6;"><strong style="color: #fff;">App shell.</strong> Black sidebar (240px) + textured black hero + clean two-column working area (2:1).</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 6px; height: 150px;">
+          <div style="height: 70px; background: #000; position: relative; display: flex; align-items: center; justify-content: center;"><div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 300px; filter: invert(1); opacity: 0.2;"></div><div style="width: 90px; height: 10px; background: #fff; position: relative;"></div></div>
+          <div style="display: flex; gap: 6px; flex: 1;"><div style="flex: 1; background: #232328;"></div><div style="flex: 1; background: #232328;"></div><div style="flex: 1; background: #232328;"></div></div>
+          <div style="height: 22px; background: #6fcfeb; width: 110px;"></div>
+        </div>
+        <div style="font-size: 12.5px; color: #8a8a8a; line-height: 1.6;"><strong style="color: #fff;">Marketing page.</strong> Full-bleed textured hero with display type, 3-up card rows, cyan CTA. Generous 96px+ section spacing.</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: center; justify-content: center; height: 150px; background: #000; position: relative;">
+          <div style="position: absolute; inset: 0; background-image: url('assets/texture-dark.png'); background-size: 300px; filter: invert(1); opacity: 0.2;"></div>
+          <div style="width: 150px; background: #17171a; border: 1px solid #2c2c30; padding: 14px; display: flex; flex-direction: column; gap: 7px; position: relative;"><div style="height: 8px; background: #fff; width: 60px;"></div><div style="height: 14px; background: #0f0f11; border: 1px solid #2c2c30;"></div><div style="height: 14px; background: #0f0f11; border: 1px solid #2c2c30;"></div><div style="height: 16px; background: #6fcfeb;"></div></div>
+        </div>
+        <div style="font-size: 12.5px; color: #8a8a8a; line-height: 1.6;"><strong style="color: #fff;">Auth / focus.</strong> Single centered card on textured black, tagline lockup above, one action.</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 40px; font-size: 13px; color: #a3a3a3; line-height: 1.8;">
+      <div style="flex: 1;"><strong style="color: #6fcfeb; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Spacing</strong><br>Base unit 4px. Card padding 24&ndash;28px. Grid gaps 16&ndash;20px in-app, 24+ marketing. Section rhythm 72&ndash;96px.</div>
+      <div style="flex: 1;"><strong style="color: #6fcfeb; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Corners &amp; depth</strong><br>Square corners everywhere; circles reserved for avatars, badges, checkmarks, toggles. No drop shadows &mdash; hierarchy comes from surface steps and borders.</div>
+      <div style="flex: 1;"><strong style="color: #6fcfeb; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Motion</strong><br>Fast and firm: 120&ndash;180ms ease-out on hover/press. Celebrations (badge, level-up) may go bigger: 400ms with texture reveal.</div>
+    </div>
+  </div>
+
+  <!-- ============ 08 VOICE ============ -->
+  <div data-screen-label="08 Voice" style="padding: 72px; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: baseline; gap: 18px;">
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 15px; color: #6fcfeb;">08</span>
+      <span style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 32px; letter-spacing: 1px; text-transform: uppercase; color: #fff;">Voice &amp; Copy</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #00afaa;">Sounds like us</div>
+        <div style="font-size: 14.5px; color: #c9c9c9; line-height: 2;">&ldquo;Win today, Marcus.&rdquo;<br>&ldquo;3 battles left. Finish strong.&rdquo;<br>&ldquo;Streak at risk &mdash; don't break the chain.&rdquo;<br>&ldquo;Hold the line. 3 days to Relentless.&rdquo;</div>
+      </div>
+      <div style="background: #17171a; border: 1px solid #2c2c30; padding: 28px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #fe3b1f;">Doesn't</div>
+        <div style="font-size: 14.5px; color: #8a8a8a; line-height: 2;">&ldquo;Oops! Something went wrong &#128517;&rdquo;<br>&ldquo;You're crushing it, superstar!!&rdquo;<br>&ldquo;Gentle reminder to check in&hellip;&rdquo;<br>Corporate jargon, hedging, emoji.</div>
+      </div>
+    </div>
+    <div style="font-size: 13.5px; color: #a3a3a3; line-height: 1.8; max-width: 760px;">Direct, brotherly, earned &mdash; a coach who respects you. Short sentences. Second person. Military/training metaphors used with restraint (battles, streaks, squads), never cosplay. Address the man, not the metric.</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #232326; padding-top: 28px;">
+      <img src="assets/logo-white.png" alt="The Dad Edge" style="height: 22px;">
+      <div style="font-size: 12px; color: #6f6f75;">Dad Edge Digital Brand System v1.0 &middot; July 2026</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
