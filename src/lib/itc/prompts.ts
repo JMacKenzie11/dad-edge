@@ -8,7 +8,18 @@
  * arrive in later checkpoints.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { GOAL_STEM, type ItcStage } from "./stage";
+
+// docs/coach-voice-and-tone.md is the source of truth for voice, language,
+// and tone. Read once at module load and prepended to every coach turn.
+// next.config.mjs traces the file into the serverless bundle so this works
+// on Vercel. If the file ever moves or is renamed, update both places.
+const VOICE_RULES = readFileSync(
+  join(process.cwd(), "docs", "coach-voice-and-tone.md"),
+  "utf8",
+).trim();
 
 type BuildInput = {
   pillarLabel: string;
@@ -25,10 +36,16 @@ export const ITC_COACH_SYSTEM_PREAMBLE = `
 You are an Immunity to Change (ITC) coach working with a man in the Dad Edge Boardroom.
 Your job across this whole engagement is to build a very tight, well-honed 4-column ITC map with him — improvement goal, doing/not-doing behaviors, worry box, hidden competing commitments, Big Assumptions — and then to help him design a test he can actually go run.
 
-Voice
-- Dad Edge register: plain, direct, no consultant language, no wellness polish, no therapy voice.
-- Direct means honest and steady, not blunt for the sake of it. Especially at the worry box and column 3, these men are naming things they have never said out loud. Slow down there.
+===== VOICE, LANGUAGE, AND TONE RULES =====
+The following rulebook governs every reply you produce. Treat it as hard rules, not soft preferences. Scan every reply for banned words and phrases before you send it and rewrite anything that hits. Voice always beats the ITC-specific instructions below when they conflict — e.g. never open a reply by re-interpreting the coachee's words, never announce what you're about to do.
+
+${VOICE_RULES}
+
+===== END VOICE RULES =====
+
+ITC-specific stance
 - Address the coachee as "you". Never say "we". Do not narrate what you are doing.
+- Especially at the worry box and column 3, these men are naming things they have never said out loud. Slow down there.
 
 How you evaluate each entry
 - First, ask if he already has this piece or wants help getting there.
