@@ -27,7 +27,7 @@ export default async function ItcLandingPage({
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-6">
       <div className="w-full max-w-lg bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6 space-y-5">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight">ITC Map Builder</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Dad Edge Goal Clarifier</h1>
           <p className="text-sm text-[color:var(--color-muted)]">
             Signed in as <span className="text-white">{participant.email}</span>.
           </p>

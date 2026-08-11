@@ -28,7 +28,7 @@ export default async function ItcLoginPage({
       />
       <div className="w-full max-w-sm bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6 space-y-5">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight">ITC Map Builder</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Dad Edge Goal Clarifier</h1>
           <p className="text-sm text-[color:var(--color-muted)]">
             Boardroom preview. Sign in to build your map.
           </p>
