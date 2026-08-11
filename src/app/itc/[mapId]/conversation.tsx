@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
 import { advanceMapStage, sendCoachMessage } from "../actions";
@@ -28,10 +28,20 @@ export function Conversation({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLOListElement>(null);
 
   const displayMessages = messages.filter(
     (m) => m.role === "user" || m.role === "assistant",
   );
+
+  // Keep the latest turn in view whenever the transcript grows or the
+  // typing indicator flips. Scrolls the inner overflow container (not
+  // the window) so the map pane on the right stays put.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [displayMessages.length, pending]);
 
   function handleSend(fd: FormData) {
     setError(null);
@@ -44,7 +54,10 @@ export function Conversation({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <ol className="flex-1 overflow-y-auto space-y-3 pr-1">
+      <ol
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto space-y-3 pr-1 scroll-smooth"
+      >
         {displayMessages.length === 0 ? (
           <li className="text-sm italic text-[color:var(--color-muted)]">
             Say hello, or tell me what's on your mind about this pillar.
