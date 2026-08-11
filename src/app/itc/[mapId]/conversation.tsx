@@ -4,7 +4,6 @@ import { useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
 import {
-  acceptBehavior,
   advanceMapStage,
   removeBehavior,
   sendCoachMessage,
@@ -147,43 +146,6 @@ function BehaviorPanel({
 
   return (
     <div className="mt-3 space-y-3 border-t border-[color:var(--color-border)] pt-3">
-      <form
-        action={(fd) => {
-          onError(null);
-          startTransition(async () => {
-            const res = await acceptBehavior(fd);
-            if (!res.ok) onError(res.reason ?? "Could not add behavior.");
-            const input = document.getElementById(
-              "behavior-input",
-            ) as HTMLInputElement | null;
-            if (input) input.value = "";
-          });
-        }}
-        className="flex items-end gap-2"
-      >
-        <input type="hidden" name="map_id" value={mapId} />
-        <label className="flex-1 space-y-1">
-          <span className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
-            Add a behavior
-          </span>
-          <input
-            id="behavior-input"
-            name="text"
-            required
-            maxLength={500}
-            placeholder="What do you do (or fail to do) that works against the goal?"
-            className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)]/80 px-3 py-2 text-xs font-semibold"
-        >
-          Add
-        </button>
-      </form>
-
       {behaviors.length > 0 ? (
         <BehaviorList
           mapId={mapId}
@@ -191,7 +153,11 @@ function BehaviorPanel({
           onError={onError}
           startTransition={startTransition}
         />
-      ) : null}
+      ) : (
+        <p className="text-xs italic text-[color:var(--color-muted)]/70">
+          The coach captures behaviors as you name them. Chat below.
+        </p>
+      )}
 
       <ContinueBar
         mapId={mapId}

@@ -348,18 +348,16 @@ async function applyCoachAction(
 ): Promise<void> {
   switch (action.type) {
     case "propose_goal": {
+      // No-op: proposing is not the same as locking. The goal lands in the
+      // map only after the coachee affirms — the backstop extractor in
+      // sendCoachMessage scans the prior assistant message on the "yes"
+      // turn and saves it there. This prevents column 1 from populating
+      // before the coachee has confirmed anything.
       console.warn(
-        "[itc] propose_goal action fired. stage=%s text=%o hasStem=%s",
+        "[itc] propose_goal noted (no DB write yet). stage=%s text=%o",
         currentStage,
         action.text,
-        hasGoalStem(action.text),
       );
-      if (currentStage !== "goal") return; // silent no-op if out of order
-      if (!hasGoalStem(action.text)) {
-        throw new Error(`Coach proposed a goal without the required stem.`);
-      }
-      await saveImprovementGoal(mapId, action.text);
-      console.warn("[itc] propose_goal: saved successfully");
       return;
     }
     case "propose_behavior": {
@@ -524,30 +522,6 @@ async function applyCoachAction(
       return;
     }
   }
-}
-
-const acceptBehaviorSchema = z.object({
-  map_id: z.string().uuid(),
-  text: z.string().min(1).max(500),
-});
-
-export async function acceptBehavior(formData: FormData): Promise<SendMessageResult> {
-  const participant = await requireItcParticipant();
-  const parsed = acceptBehaviorSchema.safeParse({
-    map_id: formData.get("map_id"),
-    text: formData.get("text"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid behavior." };
-
-  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
-  if (!map) return { ok: false, reason: "Map not found." };
-  if (map.current_stage !== "behaviors") {
-    return { ok: false, reason: "Not on the behaviors stage." };
-  }
-
-  await addBehavior(map.id, parsed.data.text, "user");
-  revalidatePath(`/itc/${map.id}`);
-  return { ok: true };
 }
 
 const deleteBehaviorSchema = z.object({
