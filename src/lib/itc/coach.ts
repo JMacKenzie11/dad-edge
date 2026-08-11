@@ -51,6 +51,10 @@ const CoachActionSchema = z.discriminatedUnion("type", [
   // commitments column is complete; UI records that the beat happened so
   // the deeper immune-system walkthrough later doesn't repeat it.
   z.object({ type: z.literal("mark_reveal_delivered") }),
+  // The deeper immune-system walkthrough (three movements) has been
+  // delivered AND the coachee has explicitly said he's ready to move to
+  // testing. Emit only when both are true — this action unlocks prioritize.
+  z.object({ type: z.literal("mark_walkthrough_delivered") }),
   // Propose a Big Assumption and the commitments it underwrites.
   // commitment_indices are 1-based into the ordered commitments list the
   // coach sees. Server runs the finished-then rubric before locking.
@@ -123,6 +127,7 @@ type RunCoachInput = {
     linked_commitment_ids: string[];
   }[];
   revealDelivered: boolean;
+  walkthroughDelivered: boolean;
   history: ChatTurn[];
   userMessage: string;
   // Most recent rejected coach actions (e.g., worry_not_deep_enough). Fed
@@ -148,6 +153,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     commitments: input.commitments,
     assumptions: input.assumptions,
     revealDelivered: input.revealDelivered,
+    walkthroughDelivered: input.walkthroughDelivered,
     recentActionFeedback: input.recentActionFeedback,
   });
 

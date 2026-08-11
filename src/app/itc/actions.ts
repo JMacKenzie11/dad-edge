@@ -27,6 +27,7 @@ import {
   listWorries,
   logWorryAttempt,
   markRevealDelivered,
+  markWalkthroughDelivered,
   pruneBehaviors,
   saveImprovementGoal,
   setAssumptionRecommended,
@@ -164,6 +165,7 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       })),
       assumptions: assumptionsForCoach,
       revealDelivered: map.reveal_delivered,
+      walkthroughDelivered: map.walkthrough_delivered,
       recentActionFeedback,
       history: priorHistory,
       userMessage: parsed.data.text,
@@ -414,6 +416,11 @@ async function applyCoachAction(
         return;
       }
       await markRevealDelivered(mapId);
+      return;
+    }
+    case "mark_walkthrough_delivered": {
+      if (currentStage !== "immune_system") return;
+      await markWalkthroughDelivered(mapId);
       return;
     }
     case "propose_assumption": {

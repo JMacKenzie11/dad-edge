@@ -10,6 +10,7 @@ export type ItcMap = {
   current_stage: ItcStage;
   improvement_goal: string | null;
   reveal_delivered: boolean;
+  walkthrough_delivered: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -459,6 +460,15 @@ export async function markRevealDelivered(mapId: string): Promise<void> {
   if (error) throw new Error(`markRevealDelivered: ${error.message}`);
 }
 
+export async function markWalkthroughDelivered(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_maps")
+    .update({ walkthrough_delivered: true })
+    .eq("id", mapId);
+  if (error) throw new Error(`markWalkthroughDelivered: ${error.message}`);
+}
+
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -550,11 +560,19 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
         );
       }
     }
-    if (to === "prioritize") {
+    if (to === "immune_system") {
       const map = await getMapById(mapId);
       if (!map?.reveal_delivered) {
         throw new Error(
-          `Deliver the reveal (gas/brake beat) before moving to prioritize.`,
+          `Deliver the brief reveal (gas/brake beat) before moving to the immune-system walkthrough.`,
+        );
+      }
+    }
+    if (to === "prioritize") {
+      const map = await getMapById(mapId);
+      if (!map?.walkthrough_delivered) {
+        throw new Error(
+          `Deliver the immune-system walkthrough and get explicit readiness before moving to prioritize.`,
         );
       }
     }

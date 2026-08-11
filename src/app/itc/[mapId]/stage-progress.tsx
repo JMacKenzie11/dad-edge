@@ -9,6 +9,7 @@ const HEADER_STAGES: ItcStage[] = [
   "commitments",
   "assumptions",
   "review",
+  "immune_system",
   "prioritize",
   "test_design",
   "results",
