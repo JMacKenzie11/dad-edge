@@ -15,7 +15,12 @@ import { cookies } from "next/headers";
  */
 
 export const ITC_COOKIE_NAME = "itc_session";
-export const ITC_COOKIE_PATH = "/itc";
+// Path was "/itc" originally for defense-in-depth (browser wouldn't send the
+// cookie to non-/itc routes). In practice that broke server-action POSTs on
+// Vercel — cookie reached the /itc GET but not the /itc POST for the action.
+// Widened to "/". Isolation still holds: (a) main middleware never consults
+// this cookie, (b) every itc_* table has RLS deny-all. See docs/itc-isolation.md.
+export const ITC_COOKIE_PATH = "/";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 type ItcSessionPayload = {

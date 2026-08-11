@@ -14,10 +14,10 @@ An ITC demo session must never grant access to any existing app route or data. T
 - No foreign key to `public.users`. Email uniqueness is scoped to `itc_participants` only.
 - `upsertParticipantByEmail()` (`src/lib/itc/participant.ts`) touches only `itc_participants`. Even when a submitted email matches a `users.email`, no link is created and no user row is read.
 
-### 2. Distinct signed cookie, path-scoped
+### 2. Distinct signed cookie
 
 - Cookie name is `itc_session` (constants in `src/lib/itc/session.ts`). Supabase uses `sb-*` cookie names — no collision.
-- The cookie is set with `path: "/itc"`. Browsers do not attach it to requests for `/today`, `/api/coach/messages`, etc. This is enforced by the browser, not by our server.
+- The cookie is set with `path: "/"`. **Originally scoped to `/itc`** for defense-in-depth, but on Vercel's runtime the narrower path caused server-action POSTs on `/itc` to not receive the cookie, breaking the flow. Widened to root; isolation still holds via boundaries 3 (middleware never consults it) and 4 (RLS deny-all).
 - The cookie value is `<base64url(payload)>.<base64url(hmac_sha256)>`, signed with `ITC_SESSION_SECRET`. Verification uses `timingSafeEqual`. Expired or tampered cookies decode to `null`.
 
 ### 3. Middleware refuses to consult the ITC cookie for main-app auth
