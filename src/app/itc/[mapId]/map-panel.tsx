@@ -132,9 +132,6 @@ export function MapPanel({
               })}
             </ul>
           )}
-          <p className="mt-2 text-[11px] text-[color:var(--color-muted)]">
-            If I stopped doing that, I'm afraid…
-          </p>
         </Column>
 
         <Column title="4. Hidden commitments">
