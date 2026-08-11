@@ -1,6 +1,6 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { PillarCode } from "@/lib/pillars";
-import { canTransitionTo, hasGoalStem, type ItcStage } from "./stage";
+import { canTransitionTo, hasGoalStem, stageIndex, type ItcStage } from "./stage";
 
 export type ItcMap = {
   id: string;
@@ -19,8 +19,11 @@ export type ItcBehavior = {
   sort_order: number;
   text: string;
   source: "user" | "suggested";
+  selected: boolean;
   created_at: string;
 };
+
+export const MAX_SELECTED_BEHAVIORS = 5;
 
 export type ItcWorry = {
   id: string;
@@ -160,6 +163,43 @@ export async function addBehavior(
   return data as ItcBehavior;
 }
 
+export async function setBehaviorSelected(
+  id: string,
+  mapId: string,
+  selected: boolean,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_behaviors")
+    .update({ selected })
+    .eq("id", id)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`setBehaviorSelected: ${error.message}`);
+}
+
+/**
+ * Bulk-set selection state to match `keepIds` — everything in the list
+ * becomes selected, everything else parked. Used by the coach's
+ * prune_behaviors action to accept a chosen keep-set atomically.
+ */
+export async function pruneBehaviors(
+  mapId: string,
+  keepIds: string[],
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const all = await listBehaviors(mapId);
+  const updates = all.map((b) =>
+    supabase
+      .from("itc_behaviors")
+      .update({ selected: keepIds.includes(b.id) })
+      .eq("id", b.id)
+      .eq("map_id", mapId),
+  );
+  const results = await Promise.all(updates);
+  const failure = results.find((r) => r.error);
+  if (failure?.error) throw new Error(`pruneBehaviors: ${failure.error.message}`);
+}
+
 export async function deleteBehavior(id: string, mapId: string): Promise<void> {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
@@ -211,6 +251,39 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
   if (!canTransitionTo(from, to)) {
     throw new Error(`Illegal stage transition ${from} → ${to}.`);
   }
+
+  // Data-integrity gates on forward transitions. Backward transitions are
+  // always allowed (revisiting to hone) and skip these checks.
+  const isForward = stageIndex(to) > stageIndex(from);
+  if (isForward) {
+    if (to === "worries") {
+      const behaviors = await listBehaviors(mapId);
+      const selectedCount = behaviors.filter((b) => b.selected).length;
+      if (selectedCount < 1) {
+        throw new Error("Add at least one behavior before moving to worries.");
+      }
+      if (selectedCount > MAX_SELECTED_BEHAVIORS) {
+        throw new Error(
+          `Prune to ${MAX_SELECTED_BEHAVIORS} behaviors before moving to worries. Currently selected: ${selectedCount}.`,
+        );
+      }
+    }
+    if (to === "commitments") {
+      const [behaviors, worries] = await Promise.all([
+        listBehaviors(mapId),
+        listWorries(mapId),
+      ]);
+      const selected = behaviors.filter((b) => b.selected);
+      const worriesByBehavior = new Set(worries.map((w) => w.behavior_id));
+      const missing = selected.filter((b) => !worriesByBehavior.has(b.id));
+      if (missing.length > 0) {
+        throw new Error(
+          `Every selected behavior needs a worry before moving to commitments. Missing ${missing.length}: ${missing.map((b) => `"${b.text}"`).join(", ")}`,
+        );
+      }
+    }
+  }
+
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("itc_maps")

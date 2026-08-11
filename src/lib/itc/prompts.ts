@@ -25,7 +25,7 @@ type BuildInput = {
   pillarLabel: string;
   stage: ItcStage;
   improvementGoal: string | null;
-  behaviors: { text: string }[];
+  behaviors: { id: string; text: string; selected: boolean }[];
 };
 
 /**
@@ -101,7 +101,16 @@ Honing moves:
 
 Accept a behavior by emitting action: { "type": "propose_behavior", "text": "<the behavior>" }.
 Offer suggestions by emitting action: { "type": "suggest_behaviors", "options": ["<b1>", "<b2>", "<b3>", "<b4>"] }.
-When the list feels complete and he has confirmed he's done adding, advance with action: { "type": "advance_stage", "to": "worries" }. Do not advance on your own initiative — wait until he signals he's done.
+
+The pruning pass (mandatory before advancing to worries)
+- The worry-box pairing is 1:1. Eight behaviors produce mushy, merged worries; four or five sharp ones produce four or five distinct worries deep enough to work with. So before you advance, prune to the 4 (max 5) MOST IMPACTFUL behaviors — the ones that most directly and most frequently work against the column 1 goal.
+- Trigger: once the coachee has captured 3+ behaviors and signaled he's done adding, lead the prune. Do not skip this and do not wait for him to ask.
+- How: re-display the current numbered behavior list (per the formatting rules), name which ones you'd keep and why in one line each, name which you'd park and why, and ASK him to react. His map, his call — you propose, he decides.
+- Emit action: { "type": "prune_behaviors", "keep_indices": [<1-based positions to KEEP>] }. Everything else becomes "parked" — kept for context but not paired with a worry. keep_indices MUST have 1–5 entries.
+- The list you see under "Behaviors on the map so far" numbers them in stable order; use those numbers.
+- If the coachee wants to keep more than 5, hold the line kindly: "the pairing is 1:1 and it goes shallow past five. Which one do you want to swap in?" Then re-propose.
+
+When the pruned list is 4–5 selected and he's confirmed, advance with action: { "type": "advance_stage", "to": "worries" }. Do not advance on your own initiative — wait until he signals he's done AND the prune is applied.
 
 Refusals
 - Never advance past a stage the user hasn't finished.
@@ -111,15 +120,22 @@ Refusals
 
 export function buildItcCoachSystem(input: BuildInput): string {
   const behaviorList = input.behaviors.length
-    ? input.behaviors.map((b, i) => `  ${i + 1}. ${b.text}`).join("\n")
+    ? input.behaviors
+        .map(
+          (b, i) =>
+            `  ${i + 1}. ${b.text}${b.selected ? "" : "  [parked]"}`,
+        )
+        .join("\n")
     : "  (none yet)";
+
+  const selectedCount = input.behaviors.filter((b) => b.selected).length;
 
   const contextBlock = `
 Current context
 - BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
 - Current stage: ${input.stage}.
 - Improvement goal on the map: ${input.improvementGoal ?? "(not yet set)"}.
-- Behaviors on the map so far:
+- Behaviors on the map so far (${selectedCount} selected, ${input.behaviors.length - selectedCount} parked). Use the 1-based numbers below when emitting prune_behaviors.keep_indices:
 ${behaviorList}
 `.trim();
 

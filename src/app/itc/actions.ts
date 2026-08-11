@@ -17,7 +17,9 @@ import {
   getMapForParticipant,
   listBehaviors,
   listMessages,
+  pruneBehaviors,
   saveImprovementGoal,
+  setBehaviorSelected,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { GOAL_STEM, hasGoalStem, type ItcStage } from "@/lib/itc/stage";
@@ -266,6 +268,23 @@ async function applyCoachAction(
       // behaviors until the user picks one via acceptSuggestedBehavior.
       return;
     }
+    case "prune_behaviors": {
+      if (currentStage !== "behaviors") return;
+      const all = await listBehaviors(mapId);
+      // keep_indices are 1-based positions into the same order the coach
+      // saw in its context block, which is the same order listBehaviors
+      // returns (sort_order asc, created_at asc).
+      const keepIds: string[] = [];
+      for (const idx of action.keep_indices) {
+        const b = all[idx - 1];
+        if (b) keepIds.push(b.id);
+      }
+      if (keepIds.length === 0) {
+        throw new Error(`Prune must keep at least one behavior.`);
+      }
+      await pruneBehaviors(mapId, keepIds);
+      return;
+    }
     case "advance_stage": {
       await advanceStage(mapId, currentStage, action.to);
       return;
@@ -313,6 +332,29 @@ export async function removeBehavior(formData: FormData): Promise<SendMessageRes
   if (!map) return { ok: false, reason: "Map not found." };
 
   await deleteBehavior(parsed.data.behavior_id, map.id);
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+const toggleSelectedSchema = z.object({
+  map_id: z.string().uuid(),
+  behavior_id: z.string().uuid(),
+  selected: z.boolean(),
+});
+
+export async function toggleBehaviorSelected(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = toggleSelectedSchema.safeParse({
+    map_id: formData.get("map_id"),
+    behavior_id: formData.get("behavior_id"),
+    selected: formData.get("selected") === "true",
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid toggle." };
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) return { ok: false, reason: "Map not found." };
+  await setBehaviorSelected(parsed.data.behavior_id, map.id, parsed.data.selected);
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
 }

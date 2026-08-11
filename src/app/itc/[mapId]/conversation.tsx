@@ -8,9 +8,17 @@ import {
   advanceMapStage,
   removeBehavior,
   sendCoachMessage,
+  toggleBehaviorSelected,
 } from "../actions";
 
-type Behavior = { id: string; text: string; source: "user" | "suggested" };
+type Behavior = {
+  id: string;
+  text: string;
+  source: "user" | "suggested";
+  selected: boolean;
+};
+
+const MAX_SELECTED = 5;
 
 export function Conversation({
   mapId,
@@ -177,57 +185,200 @@ function BehaviorPanel({
       </form>
 
       {behaviors.length > 0 ? (
-        <ul className="space-y-1.5">
-          {behaviors.map((b) => (
-            <li
-              key={b.id}
-              className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-primary)]" />
-              <span className="flex-1 truncate">{b.text}</span>
-              <form
-                action={(fd) => {
-                  onError(null);
-                  startTransition(async () => {
-                    const res = await removeBehavior(fd);
-                    if (!res.ok) onError(res.reason ?? "Could not remove.");
-                  });
-                }}
-              >
-                <input type="hidden" name="map_id" value={mapId} />
-                <input type="hidden" name="behavior_id" value={b.id} />
-                <button
-                  type="submit"
-                  className="text-[color:var(--color-muted)] hover:text-[color:var(--color-danger)]"
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
+        <BehaviorList
+          mapId={mapId}
+          behaviors={behaviors}
+          onError={onError}
+          startTransition={startTransition}
+        />
       ) : null}
 
+      <ContinueBar
+        mapId={mapId}
+        selectedCount={behaviors.filter((b) => b.selected).length}
+        pending={pending}
+        onError={onError}
+        startTransition={startTransition}
+      />
+    </div>
+  );
+}
+
+function BehaviorList({
+  mapId,
+  behaviors,
+  onError,
+  startTransition,
+}: {
+  mapId: string;
+  behaviors: Behavior[];
+  onError: (msg: string | null) => void;
+  startTransition: React.TransitionStartFunction;
+}) {
+  const selected = behaviors.filter((b) => b.selected);
+  const parked = behaviors.filter((b) => !b.selected);
+  const overCap = selected.length > MAX_SELECTED;
+
+  return (
+    <div className="space-y-3">
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+          <span>
+            Selected ({selected.length}/{MAX_SELECTED})
+          </span>
+          {overCap ? (
+            <span className="text-[color:var(--color-danger)] normal-case">
+              Prune to {MAX_SELECTED} to continue.
+            </span>
+          ) : null}
+        </div>
+        {selected.length === 0 ? (
+          <p className="text-xs italic text-[color:var(--color-muted)]/70">
+            None yet.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {selected.map((b) => (
+              <BehaviorRow
+                key={b.id}
+                mapId={mapId}
+                behavior={b}
+                onError={onError}
+                startTransition={startTransition}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {parked.length > 0 ? (
+        <section className="space-y-1.5">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+            Parked ({parked.length})
+          </div>
+          <ul className="space-y-1.5">
+            {parked.map((b) => (
+              <BehaviorRow
+                key={b.id}
+                mapId={mapId}
+                behavior={b}
+                onError={onError}
+                startTransition={startTransition}
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function BehaviorRow({
+  mapId,
+  behavior,
+  onError,
+  startTransition,
+}: {
+  mapId: string;
+  behavior: Behavior;
+  onError: (msg: string | null) => void;
+  startTransition: React.TransitionStartFunction;
+}) {
+  const parked = !behavior.selected;
+  return (
+    <li
+      className={
+        "flex items-center gap-2 text-xs " +
+        (parked
+          ? "text-[color:var(--color-muted)]/60"
+          : "text-[color:var(--color-muted)]")
+      }
+    >
+      <span
+        className={
+          "w-1.5 h-1.5 rounded-full " +
+          (parked ? "bg-[color:var(--color-muted)]/40" : "bg-[color:var(--color-primary)]")
+        }
+      />
+      <span className={"flex-1 truncate " + (parked ? "line-through" : "")}>
+        {behavior.text}
+      </span>
       <form
         action={(fd) => {
           onError(null);
-          fd.set("to", "worries");
           startTransition(async () => {
-            const res = await advanceMapStage(fd);
-            if (!res.ok) onError(res.reason ?? "Not ready to advance yet.");
+            const res = await toggleBehaviorSelected(fd);
+            if (!res.ok) onError(res.reason ?? "Could not update.");
           });
         }}
       >
         <input type="hidden" name="map_id" value={mapId} />
+        <input type="hidden" name="behavior_id" value={behavior.id} />
+        <input type="hidden" name="selected" value={parked ? "true" : "false"} />
         <button
           type="submit"
-          disabled={pending || behaviors.length === 0}
-          className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          className="text-[color:var(--color-muted)] hover:text-white"
+          title={parked ? "Bring back" : "Park (keep for context)"}
         >
-          I'm done adding behaviors — continue
+          {parked ? "Restore" : "Park"}
         </button>
       </form>
-    </div>
+      <form
+        action={(fd) => {
+          onError(null);
+          startTransition(async () => {
+            const res = await removeBehavior(fd);
+            if (!res.ok) onError(res.reason ?? "Could not remove.");
+          });
+        }}
+      >
+        <input type="hidden" name="map_id" value={mapId} />
+        <input type="hidden" name="behavior_id" value={behavior.id} />
+        <button
+          type="submit"
+          className="text-[color:var(--color-muted)] hover:text-[color:var(--color-danger)]"
+          title="Delete"
+        >
+          ×
+        </button>
+      </form>
+    </li>
+  );
+}
+
+function ContinueBar({
+  mapId,
+  selectedCount,
+  pending,
+  onError,
+  startTransition,
+}: {
+  mapId: string;
+  selectedCount: number;
+  pending: boolean;
+  onError: (msg: string | null) => void;
+  startTransition: React.TransitionStartFunction;
+}) {
+  const canContinue = selectedCount >= 1 && selectedCount <= MAX_SELECTED;
+  return (
+    <form
+      action={(fd) => {
+        onError(null);
+        fd.set("to", "worries");
+        startTransition(async () => {
+          const res = await advanceMapStage(fd);
+          if (!res.ok) onError(res.reason ?? "Not ready to advance yet.");
+        });
+      }}
+    >
+      <input type="hidden" name="map_id" value={mapId} />
+      <button
+        type="submit"
+        disabled={pending || !canContinue}
+        className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+      >
+        I'm done adding behaviors — continue
+      </button>
+    </form>
   );
 }

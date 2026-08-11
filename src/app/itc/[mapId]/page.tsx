@@ -81,6 +81,7 @@ export default async function ItcMapPage({
               id: b.id,
               text: b.text,
               source: b.source,
+              selected: b.selected,
             }))}
           />
         </section>

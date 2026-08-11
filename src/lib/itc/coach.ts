@@ -21,6 +21,13 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     type: z.literal("suggest_behaviors"),
     options: z.array(z.string().min(1)).min(2).max(6),
   }),
+  // Prune the current behavior set. keep_indices are 1-based positions into
+  // the ordered list the coach sees in its context block. Every behavior
+  // outside keep_indices becomes parked; every one inside becomes selected.
+  z.object({
+    type: z.literal("prune_behaviors"),
+    keep_indices: z.array(z.number().int().min(1)).min(1).max(5),
+  }),
   z.object({
     type: z.literal("advance_stage"),
     to: z.enum([
@@ -54,7 +61,10 @@ type RunCoachInput = {
   pillar: PillarCode;
   stage: ItcStage;
   improvementGoal: string | null;
-  behaviors: { text: string }[];
+  // Ordered exactly as the coach sees them in the context block. The
+  // 1-based position in this array is what prune_behaviors.keep_indices
+  // refers to.
+  behaviors: { id: string; text: string; selected: boolean }[];
   history: ChatTurn[];
   userMessage: string;
 };
