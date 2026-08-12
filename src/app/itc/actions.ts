@@ -15,10 +15,12 @@ import {
   addCommitment,
   advanceStage,
   appendMessage,
+  clearSelectedAssumption,
   countWorryAttempts,
   createMap,
   deleteMap,
   findInProgressMap,
+  getActiveTest,
   getMapById,
   getMapForParticipant,
   linkAssumptionToCommitments,
@@ -27,12 +29,17 @@ import {
   listBehaviors,
   listCommitments,
   listMessages,
+  listTestResults,
+  listTests,
   listWorries,
   logWorryAttempt,
+  markMapComplete,
   markRevealDelivered,
   markWalkthroughDelivered,
+  recordTestResult,
   retagMessageStage,
   saveImprovementGoal,
+  saveTestDraft,
   setAssumptionRecommended,
   setAssumptionSelected,
   updateBehaviorText,
@@ -118,15 +125,25 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   await appendMessage(map.id, "user", parsed.data.text, map.current_stage);
 
-  const [history, behaviors, worries, commitments, assumptions, links] =
-    await Promise.all([
-      listMessages(map.id),
-      listBehaviors(map.id),
-      listWorries(map.id),
-      listCommitments(map.id),
-      listAssumptions(map.id),
-      listAssumptionLinks(map.id),
-    ]);
+  const [
+    history,
+    behaviors,
+    worries,
+    commitments,
+    assumptions,
+    links,
+    tests,
+    testResults,
+  ] = await Promise.all([
+    listMessages(map.id),
+    listBehaviors(map.id),
+    listWorries(map.id),
+    listCommitments(map.id),
+    listAssumptions(map.id),
+    listAssumptionLinks(map.id),
+    listTests(map.id),
+    listTestResults(map.id),
+  ]);
   const linksByAssumption = new Map<string, string[]>();
   for (const l of links) {
     const arr = linksByAssumption.get(l.assumption_id) ?? [];
@@ -178,6 +195,27 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       assumptions: assumptionsForCoach,
       revealDelivered: map.reveal_delivered,
       walkthroughDelivered: map.walkthrough_delivered,
+      tests: tests.map((t) => ({
+        id: t.id,
+        assumption_id: t.assumption_id,
+        test_type: t.test_type,
+        assumption_says: t.assumption_says,
+        behavior_change: t.behavior_change,
+        data_to_collect: t.data_to_collect,
+        in_order_to_find_out: t.in_order_to_find_out,
+        target_date: t.target_date,
+        status: t.status,
+      })),
+      testResults: testResults.map((r) => ({
+        test_id: r.test_id,
+        ran_on: r.ran_on,
+        what_i_did: r.what_i_did,
+        data_collected: r.data_collected,
+        what_it_says_about_assumption: r.what_it_says_about_assumption,
+        assumption_verdict: r.assumption_verdict,
+        next_step: r.next_step,
+      })),
+      mapStatus: map.status,
       recentActionFeedback,
       history: priorHistory,
       userMessage: parsed.data.text,
@@ -394,6 +432,71 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Test-design backstop: if the coachee affirms "save it" style and the
+  // coach didn't fire save_test_design, extract the drafted test from a
+  // prior assistant message and persist it ourselves. Only fires when no
+  // test row exists yet on this map so multi-test iterations aren't
+  // disturbed. All-or-nothing extraction — if any field is missing, skip.
+  if (
+    reply.action?.type !== "save_test_design" &&
+    looksAffirmative(parsed.data.text)
+  ) {
+    const mapForTest = await getMapById(map.id);
+    if (
+      mapForTest?.current_stage === "test_design" ||
+      mapForTest?.current_stage === "prioritize"
+    ) {
+      const existingTests = await listTests(map.id);
+      const selectedAssumption = (
+        await listAssumptions(map.id)
+      ).find((a) => a.selected_for_testing);
+      if (existingTests.length === 0 && selectedAssumption) {
+        for (let i = priorHistory.length - 1; i >= 0; i--) {
+          const msg = priorHistory[i];
+          if (msg.role !== "assistant") continue;
+          const draft = extractTestDraft(msg.content);
+          if (!draft) continue;
+          try {
+            // Advance to test_design first if we're still in prioritize
+            // (backstop is tolerant of the coach skipping the explicit
+            // advance action).
+            if (mapForTest.current_stage === "prioritize") {
+              try {
+                await advanceStage(map.id, "prioritize", "test_design");
+              } catch {
+                // ignore
+              }
+            }
+            await saveTestDraft({
+              mapId: map.id,
+              assumptionId: selectedAssumption.id,
+              testType: draft.test_type,
+              assumptionSays: draft.assumption_says,
+              behaviorChange: draft.behavior_change,
+              dataToCollect: draft.data_to_collect,
+              inOrderToFindOut: draft.in_order_to_find_out,
+              targetDate: draft.target_date,
+            });
+            try {
+              await advanceStage(map.id, "test_design", "test_running");
+            } catch {
+              // ignore
+            }
+            console.warn(
+              "[itc] test-design backstop: saved test from history scan",
+            );
+          } catch (err) {
+            console.warn(
+              "[itc] test-design backstop: saveTestDraft failed: %s",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // Cascade auto-advance across every stage transition where the coach
   // has proven capable of forgetting the action. On any affirmation,
   // re-read the map after each advance and try the next transition if
@@ -523,6 +626,24 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           advanced = true;
         } catch {
           // ignore
+        }
+      } else if (from === "results") {
+        // Only advance to done on EXPLICIT close signals. A generic "yes"
+        // in the results stage might just be acknowledging a coach
+        // question, not asking to close the map. Requires looksLikeClose
+        // (below) which matches "close it out", "we're done", etc.
+        if (looksLikeMapClose(parsed.data.text)) {
+          try {
+            await markMapComplete(map.id);
+          } catch {
+            // ignore
+          }
+          try {
+            await advanceStage(map.id, "results", "done");
+            advanced = true;
+          } catch {
+            // ignore
+          }
         }
       }
 
@@ -689,6 +810,90 @@ function looksLikeCommitmentAffirmation(
   }
 
   return false;
+}
+
+// Pulls a drafted test out of a prior assistant message so the server
+// can fire save_test_design when the coach forgot to. Requires all four
+// field labels + a target_date + a recognizable test_type — otherwise
+// the extraction is not confident enough to persist. Same defensive
+// pattern as extractCommitmentDrafts and the goal extractor.
+type ExtractedTestDraft = {
+  test_type: "data_mining" | "observation" | "thought_experiment" | "behavioral";
+  assumption_says: string;
+  behavior_change: string;
+  data_to_collect: string;
+  in_order_to_find_out: string;
+  target_date: string;
+};
+
+function extractTestDraft(text: string): ExtractedTestDraft | null {
+  const fieldRe = (label: string) =>
+    new RegExp(
+      `${label}\\s*[:\\-–]\\s*(.+?)(?=\\n\\s*(?:assumption[_ ]says|test[_ ]move|behavior[_ ]change|data[_ ]to[_ ]collect|in[_ ]order[_ ]to[_ ]find[_ ]out|target[_ ]date)\\s*[:\\-–]|\\n\\n|$)`,
+      "is",
+    );
+  const assumptionSays = text.match(fieldRe("assumption[_ ]says"))?.[1]?.trim();
+  const testMove = text.match(fieldRe("(?:test[_ ]move|behavior[_ ]change)"))?.[1]?.trim();
+  const dataToCollect = text.match(fieldRe("data[_ ]to[_ ]collect"))?.[1]?.trim();
+  const inOrderTo = text.match(fieldRe("in[_ ]order[_ ]to[_ ]find[_ ]out"))?.[1]?.trim();
+  const dateMatch = text.match(/target[_ ]date\s*[:\-–]\s*(\d{4}-\d{2}-\d{2})/i);
+  const targetDate = dateMatch?.[1];
+
+  if (!assumptionSays || !testMove || !dataToCollect || !inOrderTo || !targetDate) {
+    return null;
+  }
+
+  // Test type from the header. Match on the labels the coach uses in prose.
+  let testType: ExtractedTestDraft["test_type"] | null = null;
+  if (/data[- ]mining|data_mining/i.test(text)) testType = "data_mining";
+  else if (/self[- ]observation|self_observation|\bobservation\b/i.test(text))
+    testType = "observation";
+  else if (/thought[- ]experiment|thought_experiment/i.test(text))
+    testType = "thought_experiment";
+  else if (/\bbehavioral\b/i.test(text)) testType = "behavioral";
+
+  if (!testType) return null;
+
+  return {
+    test_type: testType,
+    assumption_says: assumptionSays,
+    behavior_change: testMove,
+    data_to_collect: dataToCollect,
+    in_order_to_find_out: inOrderTo,
+    target_date: targetDate,
+  };
+}
+
+// Recognizes an explicit "close the map for now" from the coachee at
+// results stage. Stricter than looksAffirmative because a generic "yes"
+// at results might just be acknowledging a coach probe; we only advance
+// to `done` on unambiguous close signals.
+function looksLikeMapClose(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
+  if (t.length === 0 || t.length > 120) return false;
+  const closes = [
+    "close it out",
+    "close it",
+    "close the map",
+    "close for now",
+    "we're done",
+    "we are done",
+    "done for now",
+    "i'm done",
+    "im done",
+    "that's it for today",
+    "thats it for today",
+    "that's a wrap",
+    "thats a wrap",
+    "wrap it up",
+    "map complete",
+    "mark it complete",
+    "finished",
+    "we're good",
+    "were good",
+    "all set",
+  ];
+  return closes.some((c) => t === c || t.includes(c));
 }
 
 // Very permissive affirmation detector — the only cost of a false positive
@@ -959,8 +1164,90 @@ async function applyCoachAction(
       await setAssumptionSelected(target.id, mapId);
       return;
     }
+    case "save_test_design": {
+      if (currentStage !== "test_design") return;
+      const assumptions = await listAssumptions(mapId);
+      const selected = assumptions.find((a) => a.selected_for_testing);
+      if (!selected) {
+        throw new Error(
+          `save_test_design: no assumption is selected_for_testing. Coach must fire select_assumption_for_testing at the prioritize stage first.`,
+        );
+      }
+      await saveTestDraft({
+        mapId,
+        assumptionId: selected.id,
+        testType: action.test_type,
+        assumptionSays: action.assumption_says,
+        behaviorChange: action.behavior_change,
+        dataToCollect: action.data_to_collect,
+        inOrderToFindOut: action.in_order_to_find_out,
+        targetDate: action.target_date,
+      });
+      // Advance immediately so the "you drafted a test — go run it"
+      // reply lands on the test_running stage.
+      try {
+        await advanceStage(mapId, "test_design", "test_running");
+      } catch {
+        // ignore — race or advance guard rejected
+      }
+      return;
+    }
+    case "record_test_results": {
+      if (currentStage !== "test_running" && currentStage !== "results") {
+        return;
+      }
+      const active = await getActiveTest(mapId);
+      if (!active) {
+        throw new Error(
+          `record_test_results: no test on record for this map — cannot record results.`,
+        );
+      }
+      await recordTestResult({
+        testId: active.id,
+        ranOn: action.ran_on,
+        whatIDid: action.what_i_did,
+        dataCollected: action.data_collected,
+        whatItSaysAboutAssumption: action.what_it_says_about_assumption,
+        assumptionVerdict: action.assumption_verdict,
+        nextStep: action.next_step,
+      });
+      // Advance to results so the debrief lives in the results-stage
+      // chat pane. next_step drives what happens after results (handled
+      // by the coach's next turn via advance_stage back to test_design
+      // or prioritize, or forward to done).
+      if (currentStage === "test_running") {
+        try {
+          await advanceStage(mapId, "test_running", "results");
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
     case "advance_stage": {
-      await advanceStage(mapId, currentStage, action.to);
+      const from = currentStage;
+      const to = action.to;
+      // Side effects on late-stage backward jumps. Kept here (not in
+      // advanceStage itself) so callers that go backwards for other
+      // reasons — e.g., a coach nudging back to hone an entry — don't
+      // trigger accidental resets.
+      if (from === "results" && to === "prioritize") {
+        // Coachee wants to test a different assumption. Clear the pick
+        // so prioritize can re-run cleanly.
+        try {
+          await clearSelectedAssumption(mapId);
+        } catch {
+          // non-fatal
+        }
+      }
+      if (to === "done") {
+        try {
+          await markMapComplete(mapId);
+        } catch {
+          // non-fatal
+        }
+      }
+      await advanceStage(mapId, from, to);
       return;
     }
   }

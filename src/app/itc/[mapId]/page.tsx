@@ -8,6 +8,8 @@ import {
   listBehaviors,
   listCommitments,
   listMessagesForStage,
+  listTestResults,
+  listTests,
   listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
@@ -26,15 +28,25 @@ export default async function ItcMapPage({
   const map = await getMapForParticipant(mapId, participant.id);
   if (!map) notFound();
 
-  const [messages, behaviors, worries, commitments, assumptions, assumptionLinks] =
-    await Promise.all([
-      listMessagesForStage(map.id, map.current_stage),
-      listBehaviors(map.id),
-      listWorries(map.id),
-      listCommitments(map.id),
-      listAssumptions(map.id),
-      listAssumptionLinks(map.id),
-    ]);
+  const [
+    messages,
+    behaviors,
+    worries,
+    commitments,
+    assumptions,
+    assumptionLinks,
+    tests,
+    testResults,
+  ] = await Promise.all([
+    listMessagesForStage(map.id, map.current_stage),
+    listBehaviors(map.id),
+    listWorries(map.id),
+    listCommitments(map.id),
+    listAssumptions(map.id),
+    listAssumptionLinks(map.id),
+    listTests(map.id),
+    listTestResults(map.id),
+  ]);
 
   return (
     <main className="min-h-screen md:h-screen flex flex-col md:overflow-hidden">
@@ -94,6 +106,8 @@ export default async function ItcMapPage({
             commitments={commitments}
             assumptions={assumptions}
             assumptionLinks={assumptionLinks}
+            tests={tests}
+            testResults={testResults}
           />
         </section>
       </div>

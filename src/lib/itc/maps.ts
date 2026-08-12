@@ -80,6 +80,47 @@ export type ItcMessage = {
   created_at: string;
 };
 
+export type ItcTestType =
+  | "data_mining"
+  | "observation"
+  | "thought_experiment"
+  | "behavioral";
+
+export type ItcTestStatus = "designed" | "run" | "abandoned";
+
+export type ItcAssumptionVerdict =
+  | "held"
+  | "partially_challenged"
+  | "challenged";
+
+export type ItcNextStep = "new_test" | "new_assumption" | "map_complete";
+
+export type ItcTest = {
+  id: string;
+  map_id: string;
+  assumption_id: string;
+  test_type: ItcTestType;
+  assumption_says: string | null;
+  behavior_change: string | null;
+  data_to_collect: string | null;
+  in_order_to_find_out: string | null;
+  target_date: string | null;
+  status: ItcTestStatus;
+  created_at: string;
+};
+
+export type ItcTestResult = {
+  id: string;
+  test_id: string;
+  ran_on: string | null;
+  what_i_did: string | null;
+  data_collected: string | null;
+  what_it_says_about_assumption: string | null;
+  assumption_verdict: ItcAssumptionVerdict | null;
+  next_step: ItcNextStep | null;
+  created_at: string;
+};
+
 export async function findInProgressMap(participantId: string): Promise<ItcMap | null> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -425,6 +466,142 @@ export async function setAssumptionRecommended(
     .eq("id", assumptionId)
     .eq("map_id", mapId);
   if (error) throw new Error(`setAssumptionRecommended: ${error.message}`);
+}
+
+export async function listTests(mapId: string): Promise<ItcTest[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_tests")
+    .select("*")
+    .eq("map_id", mapId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listTests: ${error.message}`);
+  return (data ?? []) as ItcTest[];
+}
+
+/**
+ * The most recently created test on this map, regardless of status. That's
+ * the "active" test for UI + coach context — status tells whether it's
+ * been run yet, and listTestResults tells whether results are recorded.
+ */
+export async function getActiveTest(mapId: string): Promise<ItcTest | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_tests")
+    .select("*")
+    .eq("map_id", mapId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`getActiveTest: ${error.message}`);
+  return (data as ItcTest | null) ?? null;
+}
+
+export async function saveTestDraft(input: {
+  mapId: string;
+  assumptionId: string;
+  testType: ItcTestType;
+  assumptionSays: string;
+  behaviorChange: string;
+  dataToCollect: string;
+  inOrderToFindOut: string;
+  targetDate: string;
+}): Promise<ItcTest> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_tests")
+    .insert({
+      map_id: input.mapId,
+      assumption_id: input.assumptionId,
+      test_type: input.testType,
+      assumption_says: input.assumptionSays.trim(),
+      behavior_change: input.behaviorChange.trim(),
+      data_to_collect: input.dataToCollect.trim(),
+      in_order_to_find_out: input.inOrderToFindOut.trim(),
+      target_date: input.targetDate,
+      status: "designed",
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`saveTestDraft: ${error?.message ?? "no row"}`);
+  return data as ItcTest;
+}
+
+export async function markTestRun(testId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_tests")
+    .update({ status: "run" })
+    .eq("id", testId);
+  if (error) throw new Error(`markTestRun: ${error.message}`);
+}
+
+export async function listTestResults(
+  mapId: string,
+): Promise<ItcTestResult[]> {
+  const supabase = createSupabaseServiceClient();
+  const tests = await listTests(mapId);
+  if (tests.length === 0) return [];
+  const testIds = tests.map((t) => t.id);
+  const { data, error } = await supabase
+    .from("itc_test_results")
+    .select("*")
+    .in("test_id", testIds)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listTestResults: ${error.message}`);
+  return (data ?? []) as ItcTestResult[];
+}
+
+export async function recordTestResult(input: {
+  testId: string;
+  ranOn: string;
+  whatIDid: string;
+  dataCollected: string;
+  whatItSaysAboutAssumption: string;
+  assumptionVerdict: ItcAssumptionVerdict;
+  nextStep: ItcNextStep;
+}): Promise<ItcTestResult> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_test_results")
+    .insert({
+      test_id: input.testId,
+      ran_on: input.ranOn,
+      what_i_did: input.whatIDid.trim(),
+      data_collected: input.dataCollected.trim(),
+      what_it_says_about_assumption: input.whatItSaysAboutAssumption.trim(),
+      assumption_verdict: input.assumptionVerdict,
+      next_step: input.nextStep,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`recordTestResult: ${error?.message ?? "no row"}`);
+  // Flip status so the UI + coach context know results are on the record.
+  await markTestRun(input.testId);
+  return data as ItcTestResult;
+}
+
+/**
+ * Clear selected_for_testing across all assumptions on this map. Used when
+ * the coachee wants to pick a different assumption after results — the
+ * prioritize stage re-selects one.
+ */
+export async function clearSelectedAssumption(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumptions")
+    .update({ selected_for_testing: false, coach_recommended: false })
+    .eq("map_id", mapId);
+  if (error) throw new Error(`clearSelectedAssumption: ${error.message}`);
+}
+
+export async function markMapComplete(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_maps")
+    .update({ status: "complete" })
+    .eq("id", mapId);
+  if (error) throw new Error(`markMapComplete: ${error.message}`);
 }
 
 export async function markRevealDelivered(mapId: string): Promise<void> {

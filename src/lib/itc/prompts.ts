@@ -38,6 +38,27 @@ type BuildInput = {
   }[];
   revealDelivered: boolean;
   walkthroughDelivered: boolean;
+  tests: {
+    id: string;
+    assumption_id: string;
+    test_type: string;
+    assumption_says: string | null;
+    behavior_change: string | null;
+    data_to_collect: string | null;
+    in_order_to_find_out: string | null;
+    target_date: string | null;
+    status: string;
+  }[];
+  testResults: {
+    test_id: string;
+    ran_on: string | null;
+    what_i_did: string | null;
+    data_collected: string | null;
+    what_it_says_about_assumption: string | null;
+    assumption_verdict: string | null;
+    next_step: string | null;
+  }[];
+  mapStatus: string;
   recentActionFeedback: string[];
 };
 
@@ -403,7 +424,70 @@ The four-field Appendix D template (once the type is picked, ONE type at a time)
 
 The research-stance reframe is critical when the test involves another person: any test whose validity hinges on someone else's yes or no is a bad test. Reframe to what he can actually observe — whether the old behaviors showed up, how it felt, small real responses — so any outcome is informative. Bake this into the data_to_collect field.
 
-(Test-design action wiring is stubbed until Checkpoint E validation; for now, walk the coachee through drafting the four fields in the reply text.)
+Landing the test (batch action pattern — mirrors commitments)
+
+Once you've offered the type options AND the coachee has picked, draft ALL FOUR fields together in ONE reply along with a target_date. Present as a numbered/labeled block. Do NOT draft them one at a time turn-by-turn — the coachee should see the whole test at once so he can react to the shape of it.
+
+Reply structure for the draft turn (before you emit any action):
+- Title line: "Here's the test, [type]:"
+- assumption_says: what the assumption predicts will happen if he runs the counter-move
+- test_move: what he'll actually do / observe / mine / imagine (specific enough that he'd know if he ran it)
+- data_to_collect: what he'll observe or record — his behavior, felt experience, small responses from others. Research-stance: never hinges on someone else's decision.
+- in_order_to_find_out: what any outcome — belief-consistent OR belief-inconsistent — would teach him about the assumption. If only one direction is informative, the test is mis-designed.
+- target_date: a specific date (YYYY-MM-DD). Data-mining/thought-experiment: same day or within 2 days. Self-observation: 7-14 day window. Behavioral: a specific realistic upcoming situation.
+- Close: "Read it and tell me what needs to change — or say 'save it' when it's the test you actually want to run."
+
+When he affirms (any variant: "save it," "yes," "good," "lock it in," "let's do it," etc.), emit action: { "type": "save_test_design", "test_type": "<type>", "assumption_says": "...", "behavior_change": "...", "data_to_collect": "...", "in_order_to_find_out": "...", "target_date": "YYYY-MM-DD" }. NOTE the field is called behavior_change in the schema for backward compatibility even though the actual content is the test_move (whatever the type's counter-move is — could be "look back at times when X" for data mining, or "notice when Y fires" for self-observation).
+
+The server auto-advances to test_running on save. Your reply for the save turn is the handoff: "Saved. Go run it and come back when you have observations. I'll be here."
+
+Do NOT announce "saving now" or "locking in" without firing the action — same dangling-promise rule as everywhere else.
+
+Test running stage (stage: test_running) — wait state and re-engagement
+
+Between the save and the coachee's return with observations, this stage is quiet. Sessions may span days or weeks. When he returns and sends any message, treat it as either (a) reporting observations or (b) checking in mid-run.
+
+On his first return message, in ONE turn:
+- If his message contains observations already ("she reacted well," "I noticed I couldn't do it," "here's what happened…"), acknowledge briefly and start the results collection — walk into the four results fields, or ask which piece he wants to start with.
+- If his message is a check-in without observations ("what am I doing again?" or "still working on this"), remind him of his test in one line (quote it from Current context), tell him you're ready when he has observations, and stop. Do NOT invent observations.
+- If his message is unrelated, engage briefly and steer back: "hold that — is this about the test you're running, or something else?"
+
+Do not fire record_test_results until he's actually given you real observations from running the test. If he hasn't run it yet, don't record.
+
+Results stage (stage: results) — non-binary debrief
+
+ITC's stance on results: this is INQUIRY, not JUDGMENT. Do not frame it as "the assumption was right / wrong." The assumption almost never gets fully disconfirmed by a single test — it's usually more like "less absolute than I thought," "true in narrower conditions than I believed," "still felt real even though the feared outcome didn't happen," etc.
+
+Four fields to collect, one at a time or grouped depending on how he offered them:
+- what_i_did: the concrete move he actually made or observation he made (or what he attempted, if he couldn't do it)
+- data_collected: what he actually observed — his behavior, his felt experience, small real responses from others. NOT another person's final decision. Include what SURPRISED him — the surprises are where disconfirming evidence hides.
+- what_it_says_about_assumption: his interpretation. Coach's job here is to push against binary framing. If he says "the assumption was right, she got upset just like I feared," probe: "she got upset AND then what? Was it the total collapse the assumption predicted, or something smaller?" The gap between what the assumption predicted and what actually happened is the finding.
+- assumption_verdict: one of three values — pick with him, don't declare:
+  * "held" — evidence was fully belief-consistent, the assumption survived the test intact
+  * "partially_challenged" — some evidence was belief-inconsistent, or the outcome was less severe than predicted
+  * "challenged" — evidence was clearly belief-inconsistent; the assumption did not hold up
+- next_step: one of three — coachee's call:
+  * "new_test" — design another test on the SAME assumption (variation, larger stakes, different context)
+  * "new_assumption" — go back to prioritize and pick a different assumption from the map
+  * "map_complete" — close the map for now
+
+When all four fields are settled, emit action: { "type": "record_test_results", "ran_on": "YYYY-MM-DD", "what_i_did": "...", "data_collected": "...", "what_it_says_about_assumption": "...", "assumption_verdict": "held|partially_challenged|challenged", "next_step": "new_test|new_assumption|map_complete" }.
+
+After record_test_results lands, act on next_step in the SAME reply:
+- new_test: emit action: { "type": "advance_stage", "to": "test_design" }. Reply opens the type-picking conversation for the next test on this same assumption.
+- new_assumption: emit action: { "type": "advance_stage", "to": "prioritize" }. Reply re-presents the assumption list and asks which he wants to test next. (The server clears the previous selection on this transition.)
+- map_complete: emit action: { "type": "advance_stage", "to": "done" }. Reply is the closing summary. (The server marks the map complete on this transition.)
+
+One action per turn as always — since record_test_results advances to results automatically on save, the next-step advance happens on the FOLLOWING turn once the coachee acknowledges. Don't try to fire both in one turn.
+
+Done stage (stage: done) — closing beat
+
+The map is marked complete. Deliver a brief closing summary, then stop.
+
+- One paragraph: what he tested, what the verdict was, what that means about the assumption. Grounded in HIS map's specifics, not generic ITC theory.
+- No cheerleading, no praise, no "great work today." Respect the material as it stands.
+- One line inviting him to come back: "your map stays here — new pillars, new goals, new tests anytime you want. Otherwise, we're done for today."
+- Do NOT emit any further actions. The stage is terminal.
 
 Refusals
 - Never advance past a stage the user hasn't finished.
@@ -475,10 +559,38 @@ export function buildItcCoachSystem(input: BuildInput): string {
         .join("\n")
     : "  (none yet)";
 
+  const resultsByTest = new Map(input.testResults.map((r) => [r.test_id, r]));
+  const testsList = input.tests.length
+    ? input.tests
+        .map((t, i) => {
+          const r = resultsByTest.get(t.id);
+          const verdict = r?.assumption_verdict ?? null;
+          const parts = [
+            `  ${i + 1}. [${t.status}${verdict ? `, verdict: ${verdict}` : ""}] type=${t.test_type}`,
+            `     assumption_says: ${t.assumption_says ?? "(blank)"}`,
+            `     test_move: ${t.behavior_change ?? "(blank)"}`,
+            `     data_to_collect: ${t.data_to_collect ?? "(blank)"}`,
+            `     in_order_to_find_out: ${t.in_order_to_find_out ?? "(blank)"}`,
+            `     target_date: ${t.target_date ?? "(none)"}`,
+          ];
+          if (r) {
+            parts.push(
+              `     RESULTS ran_on=${r.ran_on ?? "(unknown)"} next_step=${r.next_step ?? "(unset)"}`,
+              `       what_i_did: ${r.what_i_did ?? "(blank)"}`,
+              `       data_collected: ${r.data_collected ?? "(blank)"}`,
+              `       what_it_says_about_assumption: ${r.what_it_says_about_assumption ?? "(blank)"}`,
+            );
+          }
+          return parts.join("\n");
+        })
+        .join("\n")
+    : "  (none yet)";
+
   const contextBlock = `
 Current context
 - BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
 - Current stage: ${input.stage}.
+- Map status: ${input.mapStatus}.
 - Brief reveal delivered (v2 3.3b): ${input.revealDelivered ? "yes" : "no"}.
 - Full immune-system walkthrough delivered: ${input.walkthroughDelivered ? "yes" : "no"}.
 - Improvement goal on the map: ${input.improvementGoal ?? "(not yet set)"}.
@@ -491,7 +603,9 @@ ${worryIndexList}
 - Commitments (use these 1-based indices for propose_assumption.commitment_indices):
 ${commitmentList}
 - Assumptions (use these 1-based indices for prioritization actions):
-${assumptionList}${feedbackBlock}
+${assumptionList}
+- Tests on this map (most recent last):
+${testsList}${feedbackBlock}
 `.trim();
 
   return `${ITC_COACH_SYSTEM_PREAMBLE}\n\n${contextBlock}`;

@@ -4,9 +4,18 @@ import type {
   ItcBehavior,
   ItcCommitment,
   ItcMap,
+  ItcTest,
+  ItcTestResult,
   ItcWorry,
 } from "@/lib/itc/maps";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
+
+const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
+  data_mining: "Data mining",
+  observation: "Self-observation",
+  thought_experiment: "Thought experiment",
+  behavioral: "Behavioral",
+};
 
 /**
  * The live map. Renders the four numbered columns plus the worry box that
@@ -21,6 +30,8 @@ export function MapPanel({
   commitments = [],
   assumptions = [],
   assumptionLinks = [],
+  tests = [],
+  testResults = [],
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
@@ -28,6 +39,8 @@ export function MapPanel({
   commitments?: ItcCommitment[];
   assumptions?: ItcAssumption[];
   assumptionLinks?: ItcAssumptionCommitment[];
+  tests?: ItcTest[];
+  testResults?: ItcTestResult[];
 }) {
   const pillar = PILLAR_BY_CODE[map.pillar_code];
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
@@ -186,6 +199,169 @@ export function MapPanel({
           )}
         </Column>
       </div>
+
+      {tests.length > 0 ? (
+        <TestsPanel
+          tests={tests}
+          results={testResults}
+          assumptions={assumptions}
+          stage={map.current_stage}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function TestsPanel({
+  tests,
+  results,
+  assumptions,
+  stage,
+}: {
+  tests: ItcTest[];
+  results: ItcTestResult[];
+  assumptions: ItcAssumption[];
+  stage: ItcMap["current_stage"];
+}) {
+  const resultsByTest = new Map(results.map((r) => [r.test_id, r]));
+  const assumptionById = new Map(assumptions.map((a) => [a.id, a]));
+  const active = tests[tests.length - 1];
+  const activeResult = active ? resultsByTest.get(active.id) ?? null : null;
+  const history = tests.slice(0, -1).reverse();
+  const showRunningBanner =
+    stage === "test_running" && active && !activeResult;
+
+  return (
+    <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3 space-y-3">
+      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+        Test on the map
+      </h3>
+
+      {showRunningBanner ? (
+        <div className="rounded-md border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 px-3 py-2 text-xs">
+          <div className="font-semibold text-white">
+            Test in progress
+          </div>
+          {active.target_date ? (
+            <div className="text-[color:var(--color-muted)] mt-0.5">
+              Come back after {active.target_date} with observations.
+            </div>
+          ) : (
+            <div className="text-[color:var(--color-muted)] mt-0.5">
+              Come back with observations whenever you're ready.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {active ? (
+        <TestCard
+          test={active}
+          result={activeResult}
+          assumption={assumptionById.get(active.assumption_id) ?? null}
+        />
+      ) : null}
+
+      {history.length > 0 ? (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-[color:var(--color-muted)]/80">
+            Prior tests ({history.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {history.map((t) => (
+              <TestCard
+                key={t.id}
+                test={t}
+                result={resultsByTest.get(t.id) ?? null}
+                assumption={assumptionById.get(t.assumption_id) ?? null}
+                muted
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+function TestCard({
+  test,
+  result,
+  assumption,
+  muted = false,
+}: {
+  test: ItcTest;
+  result: ItcTestResult | null;
+  assumption: ItcAssumption | null;
+  muted?: boolean;
+}) {
+  return (
+    <div
+      className={
+        "rounded-md border border-[color:var(--color-border)] px-3 py-2 text-sm " +
+        (muted ? "bg-black/10 opacity-80" : "bg-black/20")
+      }
+    >
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+          {TEST_TYPE_LABELS[test.test_type]}
+        </div>
+        <div className="text-[10px] text-[color:var(--color-muted)]/80">
+          {test.status}
+          {test.target_date ? ` · target ${test.target_date}` : ""}
+        </div>
+      </div>
+
+      {assumption ? (
+        <div className="text-[11px] text-[color:var(--color-muted)]/80 mb-2">
+          Testing: <span className="text-white/90">{assumption.text}</span>
+        </div>
+      ) : null}
+
+      <TestField label="Assumption predicts" value={test.assumption_says} />
+      <TestField label="Test move" value={test.behavior_change} />
+      <TestField label="Data to collect" value={test.data_to_collect} />
+      <TestField label="Find out" value={test.in_order_to_find_out} />
+
+      {result ? (
+        <div className="mt-2 pt-2 border-t border-[color:var(--color-border)] space-y-1">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+            Results
+            {result.assumption_verdict
+              ? ` · ${result.assumption_verdict.replace(/_/g, " ")}`
+              : ""}
+          </div>
+          <TestField label="What I did" value={result.what_i_did} />
+          <TestField label="Data collected" value={result.data_collected} />
+          <TestField
+            label="What it says"
+            value={result.what_it_says_about_assumption}
+          />
+          {result.next_step ? (
+            <div className="text-[10px] text-[color:var(--color-muted)] mt-1">
+              Next: {result.next_step.replace(/_/g, " ")}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TestField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
+  if (!value) return null;
+  return (
+    <div className="mb-1">
+      <span className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]/80">
+        {label}:
+      </span>{" "}
+      <span className="text-sm">{value}</span>
     </div>
   );
 }

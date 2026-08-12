@@ -97,6 +97,42 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     type: z.literal("select_assumption_for_testing"),
     assumption_index: z.number().int().min(1),
   }),
+  // Persist a drafted test after the coachee affirms all four fields.
+  // Server auto-advances to test_running on successful save. target_date
+  // must be an ISO date string (YYYY-MM-DD). Fires once the coachee has
+  // signed off on the full four-field draft — same "affirm the batch"
+  // pattern as commitments.
+  z.object({
+    type: z.literal("save_test_design"),
+    test_type: z.enum([
+      "data_mining",
+      "observation",
+      "thought_experiment",
+      "behavioral",
+    ]),
+    assumption_says: z.string().min(1).max(600),
+    behavior_change: z.string().min(1).max(600),
+    data_to_collect: z.string().min(1).max(600),
+    in_order_to_find_out: z.string().min(1).max(600),
+    target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  // Persist test results after the coachee returns and processes his
+  // observations. Server auto-advances test_running → results on save.
+  // Verdict is deliberately three-way (held / partially_challenged /
+  // challenged) per ITC's non-binary framing — never framed as pass/fail.
+  z.object({
+    type: z.literal("record_test_results"),
+    ran_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    what_i_did: z.string().min(1).max(1200),
+    data_collected: z.string().min(1).max(1200),
+    what_it_says_about_assumption: z.string().min(1).max(1200),
+    assumption_verdict: z.enum([
+      "held",
+      "partially_challenged",
+      "challenged",
+    ]),
+    next_step: z.enum(["new_test", "new_assumption", "map_complete"]),
+  }),
   z.object({
     type: z.literal("advance_stage"),
     to: z.enum([
@@ -204,6 +240,27 @@ type RunCoachInput = {
   }[];
   revealDelivered: boolean;
   walkthroughDelivered: boolean;
+  tests: {
+    id: string;
+    assumption_id: string;
+    test_type: string;
+    assumption_says: string | null;
+    behavior_change: string | null;
+    data_to_collect: string | null;
+    in_order_to_find_out: string | null;
+    target_date: string | null;
+    status: string;
+  }[];
+  testResults: {
+    test_id: string;
+    ran_on: string | null;
+    what_i_did: string | null;
+    data_collected: string | null;
+    what_it_says_about_assumption: string | null;
+    assumption_verdict: string | null;
+    next_step: string | null;
+  }[];
+  mapStatus: string;
   history: ChatTurn[];
   userMessage: string;
   // Most recent rejected coach actions (e.g., worry_not_deep_enough). Fed
@@ -230,6 +287,9 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     assumptions: input.assumptions,
     revealDelivered: input.revealDelivered,
     walkthroughDelivered: input.walkthroughDelivered,
+    tests: input.tests,
+    testResults: input.testResults,
+    mapStatus: input.mapStatus,
     recentActionFeedback: input.recentActionFeedback,
   });
 
