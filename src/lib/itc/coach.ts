@@ -198,6 +198,36 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   if (/\bThat['\u2019]?s worry #\d/i.test(trimmed)) {
     return true;
   }
+  // Text-level corruption. Observed on the worry-box map: "I worry
+  // that i worworry that ifbringing up her past". Doubled stem
+  // fragments ("worworry", "comcommitment") and missing-space
+  // compounds ("ifbringing", "andstill") are model-glitch signatures.
+  // Regex catches: (a) the same 3+ letter run repeated back-to-back
+  // ("worwor", "comcom"); (b) known "I worry that" appearing twice
+  // in one string (a single worry has it once).
+  const doubledStemRe = /\b(\w{3,})\1/i;
+  if (doubledStemRe.test(trimmed)) {
+    return true;
+  }
+  // Repeated stems WITHIN A SINGLE LINE. A numbered list with 4
+  // "I'm also committed to..." items across separate lines is legit;
+  // two of the same stem on the same line is corruption. Split on
+  // newlines and check per line.
+  for (const line of trimmed.split(/\n+/)) {
+    const w = (line.match(/i worry that/gi) ?? []).length;
+    const c = (line.match(/i['\u2019]m also committed to/gi) ?? []).length;
+    const a = (line.match(/i assume that/gi) ?? []).length;
+    if (w >= 2 || c >= 2 || a >= 2) return true;
+  }
+  // Global sanity — no reply should have 8+ stem occurrences of any
+  // one kind; that's corruption, not just a long draft list.
+  const worryStemCount = (trimmed.match(/i worry that/gi) ?? []).length;
+  const commitStemCount = (trimmed.match(/i['\u2019]m also committed to/gi) ?? []).length;
+  const assumptionStemCount = (trimmed.match(/i assume that/gi) ?? []).length;
+  if (worryStemCount > 8 || commitStemCount > 8 || assumptionStemCount > 8) {
+    return true;
+  }
+
   // Model reasoning-chain leak. Observed: the model wrote its INTERNAL
   // editing narrative as the reply ("Let's writing the actual reply
   // text properly now:", "Now the last worry locked, that would give

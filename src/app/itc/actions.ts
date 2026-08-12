@@ -973,6 +973,16 @@ async function applyCoachAction(
     }
     case "propose_worry": {
       if (currentStage !== "worries") return;
+      // Reject garbled action text before running the depth rubric.
+      // Observed on the map: "I worry that i worworry that ifbringing
+      // up her past" — doubled stems + missing-space compounds slipped
+      // past the reply-level leakage guard because the corruption was
+      // in the ACTION text, not the reply.
+      if (looksLikeStructuredOutputLeakage(action.text)) {
+        throw new Error(
+          `propose_worry: text is garbled (doubled stems or repeated fragments). Re-draft the worry cleanly in your next attempt.`,
+        );
+      }
       // behavior_index is 1-based into the SELECTED-only list the coach
       // sees, matching the prompt's context block.
       const all = await listBehaviors(mapId);
@@ -1017,6 +1027,11 @@ async function applyCoachAction(
     }
     case "propose_commitment": {
       if (currentStage !== "commitments") return;
+      if (looksLikeStructuredOutputLeakage(action.text)) {
+        throw new Error(
+          `propose_commitment: text is garbled (doubled stems or repeated fragments). Re-draft cleanly.`,
+        );
+      }
       const worries = await listWorries(mapId);
       const locked = worries.filter((w) => w.depth_score !== null);
       const worry = locked[action.worry_index - 1];
@@ -1057,10 +1072,15 @@ async function applyCoachAction(
       // Validate every index first so partial writes don't happen. Each
       // worry_index must resolve to a locked worry that doesn't already
       // have a commitment, and each worry must be covered exactly once
-      // in this batch.
+      // in this batch. Also reject garbled text on any item.
       const targets: { worryId: string; text: string }[] = [];
       const seenIndices = new Set<number>();
       for (const item of action.items) {
+        if (looksLikeStructuredOutputLeakage(item.text)) {
+          throw new Error(
+            `propose_commitments_batch: item at worry_index ${item.worry_index} is garbled. Re-draft the whole batch cleanly.`,
+          );
+        }
         if (seenIndices.has(item.worry_index)) {
           throw new Error(
             `propose_commitments_batch: worry_index ${item.worry_index} appears twice in the batch.`,
@@ -1134,6 +1154,11 @@ async function applyCoachAction(
     }
     case "propose_assumption": {
       if (currentStage !== "assumptions") return;
+      if (looksLikeStructuredOutputLeakage(action.text)) {
+        throw new Error(
+          `propose_assumption: text is garbled (doubled stems or repeated fragments). Re-draft cleanly.`,
+        );
+      }
       const stemmedText = ensureStem(action.text, ASSUMPTION_STEM);
       const map = await getMapById(mapId);
       const rubric = await scoreAssumptionDepth({

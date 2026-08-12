@@ -165,6 +165,40 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
       ),
     ).toBe(true);
   });
+
+  // ---- Text-level corruption in action.text (2026-08-12 case 3) ----
+
+  it("doubled stem fragment — 'worworry'", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "I worry that i worworry that ifbringing up her past, I'd have to admit some of what she says is fair.",
+      ),
+    ).toBe(true);
+  });
+
+  it("doubled stem fragment — 'comcomcommitment'", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "I'm also comcommitted to keeping the ledger stacked.",
+      ),
+    ).toBe(true);
+  });
+
+  it('multiple "I worry that" in a short window', () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "I worry that if I stay, I worry that she'll see me collapse.",
+      ),
+    ).toBe(true);
+  });
+
+  it('multiple "I\'m also committed to" in a short window', () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "I'm also committed to leaving early I'm also committed to shutting down.",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("looksLikeStructuredOutputLeakage — should NOT catch (real coach replies)", () => {
