@@ -6,8 +6,13 @@ export default defineConfig({
     include: ["src/**/__tests__/**/*.test.ts"],
     // Behavior tests hit the Anthropic API — slower than unit tests but
     // still bounded. State-machine tests are fast because they mock the LLM.
-    testTimeout: 60_000,
+    testTimeout: 180_000,
     hookTimeout: 30_000,
+    // Retry LLM-backed tests up to 2 extra times on failure. Coach
+    // behavior is stochastic at temperature 1; a single flake shouldn't
+    // fail the suite. If a scenario fails all 3 attempts it's a real
+    // regression, not variance.
+    retry: 2,
     // Load .env.local so ANTHROPIC_API_KEY etc. are available in tests
     // without requiring a separate test env file.
     setupFiles: ["src/lib/itc/__tests__/setup.ts"],

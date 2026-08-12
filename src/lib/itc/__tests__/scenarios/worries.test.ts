@@ -5,9 +5,53 @@ import {
   judgeNoIdentityProjection,
   judgeNoUnearnedPraise,
 } from "../helpers/judge";
+import { worryPracticalOutcome } from "../fixtures/worry-practical-outcome";
 import { worryRoleIdentityPushback } from "../fixtures/worry-role-identity-pushback";
 
 describe("worries stage", () => {
+  it(
+    "practical-outcome answer — coach does not propose_worry, probes deeper",
+    async () => {
+      const reply = await callCoach(worryPracticalOutcome);
+
+      // eslint-disable-next-line no-console
+      console.log("\n[coach reply]\n" + reply.reply + "\n");
+      if (reply.action) {
+        // eslint-disable-next-line no-console
+        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+      }
+
+      // Coach must NOT propose_worry on a practical outcome. Doing so
+      // was the original failure mode this whole rubric was built for.
+      expect(
+        reply.action?.type,
+        `Coach proposed a worry on a practical outcome. Fired: ${reply.action?.type}`,
+      ).not.toBe("propose_worry");
+
+      // Reply should escalate the probe — "worst part of that", "what
+      // would that mean", "what would that make", or similar.
+      const escalates =
+        /worst part|what would that mean|what would that (say|make)|underneath|deeper|for you/i.test(
+          reply.reply,
+        );
+      expect(
+        escalates,
+        `Reply should probe past the practical layer. Actual:\n${reply.reply}`,
+      ).toBe(true);
+
+      const praise = await judgeNoUnearnedPraise(reply.reply);
+      expect(praise.passes, `Judge failed no-praise: ${praise.reason}`).toBe(true);
+
+      const identity = await judgeNoIdentityProjection(reply.reply);
+      expect(
+        identity.passes,
+        `Judge failed no-identity-projection: ${identity.reason}\n\nReply:\n${reply.reply}`,
+      ).toBe(true);
+    },
+    120_000,
+  );
+
+
   it(
     "coachee pushback — coach owns leading question and asks shape-neutral (does not re-push self-labeling)",
     async () => {

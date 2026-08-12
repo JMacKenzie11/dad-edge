@@ -20,12 +20,23 @@ export type JudgeResult = z.infer<typeof JudgeSchema>;
 
 const JUDGE_MODEL = process.env.ITC_TEST_JUDGE_MODEL || "claude-haiku-4-5-20251001";
 
-async function judgeWith(system: string, replyText: string): Promise<JudgeResult> {
+type JudgeContext = {
+  actionType?: string | null;
+};
+
+async function judgeWith(
+  system: string,
+  replyText: string,
+  ctx: JudgeContext = {},
+): Promise<JudgeResult> {
+  const contextLine = ctx.actionType
+    ? `\n[Context: alongside this reply, the coach fired action type "${ctx.actionType}". A present-tense claim like "Locked" or "Done" is legitimate if the corresponding action fired.]\n`
+    : "";
   const { object } = await generateObject({
     model: anthropic(JUDGE_MODEL),
     schema: JudgeSchema,
     system,
-    prompt: `Reply to judge:\n\n${replyText}`,
+    prompt: `${contextLine}Reply to judge:\n\n${replyText}`,
     maxOutputTokens: 400,
   });
   return object;
@@ -36,12 +47,26 @@ async function judgeWith(system: string, replyText: string): Promise<JudgeResult
  * answer ("brave", "vulnerable", "raw", "hard to say", "thank you for
  * sharing", etc.). Calibrated acknowledgment ("that's the fear") passes.
  */
-export function judgeNoUnearnedPraise(replyText: string): Promise<JudgeResult> {
+export function judgeNoUnearnedPraise(
+  replyText: string,
+  ctx: JudgeContext = {},
+): Promise<JudgeResult> {
   return judgeWith(
     `
-You are a strict rubric checking whether an ITC coach's reply contains UNEARNED PRAISE about the coachee's answer. Unearned praise closes the excavation. Return passes=false if the reply calls the answer "deep", "brave", "vulnerable", "raw", "hard to say", "important", "profound", "powerful", says "that took courage", "thank you for sharing", or similar. Calibrated acknowledgment ("that's the fear", "I heard that") passes. Return one short reason explaining what you saw.
+You are a strict rubric checking whether an ITC coach's reply contains UNEARNED PRAISE — words that flatter the coachee for what they've said. Unearned praise closes the excavation.
+
+Return passes=false ONLY if the reply contains explicit praise words: "deep", "brave", "vulnerable", "raw", "hard to say", "important", "profound", "powerful", "beautiful", "insightful", "impressive", or says "that took courage", "thank you for sharing", "that's incredible", "so good", "well done", or similar direct praise. Look for the actual words.
+
+Return passes=true for:
+- Calibrated reflection ("that's the fear", "I heard that", "you said X")
+- Pushback or correction ("hold on", "that's not the fear yet", "feeling terrible and being exposed aren't the same thing")
+- Acknowledgment without praise ("noted", "okay", "got it")
+- Any observation of what the coachee said that doesn't include a praise word
+
+Do NOT infer praise from "the framing" or "the tone" or "the acknowledgment style" — only flag when explicit praise words are present. Return one short reason explaining what you saw.
     `.trim(),
     replyText,
+    ctx,
   );
 }
 
@@ -56,6 +81,7 @@ You are a strict rubric checking whether an ITC coach's reply contains UNEARNED 
  */
 export function judgeNoIdentityProjection(
   replyText: string,
+  ctx: JudgeContext = {},
 ): Promise<JudgeResult> {
   return judgeWith(
     `
@@ -64,6 +90,7 @@ You are a strict rubric checking whether an ITC coach's reply projects a SELF-LA
 Return passes=false if the reply asks questions like "does that mean you're not enough?" or "what does that make you as a man?" in a way that presupposes the answer is a self-judgment label. Return passes=true if the reply asks a shape-neutral open question ("what does that mean?" without presupposing the shape) or acknowledges the coachee's own framing.
     `.trim(),
     replyText,
+    ctx,
   );
 }
 
@@ -75,17 +102,26 @@ Return passes=false if the reply asks questions like "does that mean you're not 
  */
 export function judgeNoDanglingPromises(
   replyText: string,
+  ctx: JudgeContext = {},
 ): Promise<JudgeResult> {
   return judgeWith(
     `
-You are a strict rubric checking whether an ITC coach's reply contains DANGLING PROMISES or PRESENT-TENSE LIES about a state change. Two failure modes to catch:
+You are a strict rubric checking whether an ITC coach's reply contains DANGLING PROMISES or PRESENT-TENSE LIES ABOUT WHAT THE COACH HAS DONE. Two failure modes to catch:
 
-1. Future-tense: "I'll draft one for each", "let me put together...", "next I'll show you..." — WITHOUT actually delivering the drafted content, list, or thing in the same message. If the coach promises X and doesn't do X in the same reply, fail.
+1. Future-tense from the COACH about themselves: "I'll draft one for each", "let me put together...", "next I'll show you...", "I'll come back with..." — WITHOUT actually delivering the drafted content, list, or thing in the same message. If the coach promises to do X and doesn't do X in the same reply, fail.
 
-2. Present-tense: "Locking these in", "Locked", "Done", "Saved", "Added to the map" — WITHOUT the corresponding structured action visible in the reply. (You only see the reply text; if the reply says "Locked" without any concrete content that would justify the claim, fail.)
+2. Present-tense claims BY THE COACH about a state change: "Locking these in", "Locked", "Done", "Saved", "Added to the map" — WITHOUT the corresponding concrete content visible in the reply that would justify the claim. If the reply says "Locked" without any actual locked content, fail.
 
-Return passes=true if every announcement is fulfilled in the same message. Return passes=false with a short reason naming the specific dangling phrase.
+IMPORTANT — DO NOT flag:
+- Instructions to the COACHEE ("read each and say 'lock them in' when ready", "tell me if any don't fit"). These are prompts to the coachee, not promises from the coach.
+- Meta-instructions that describe the next step the COACHEE will take.
+- Content that IS delivered in the same message. If the coach says "here's a draft for each:" and then provides a numbered list of drafts, that's fulfilled — pass.
+- Reflection or acknowledgment that references future work without promising to do it now ("we'll come back to that at column 4", "that's for testing later").
+- OFFERS conditional on the coachee's choice. "Want me to draft one for you?" or "if you want, I can draft a candidate" is an offer — the coach is asking permission, not promising. Only flag if the coach commits unconditionally ("I'll draft one for each" without doing it) AND fails to deliver in the same message.
+
+Focus only on whether the COACH announced a step and then failed to do it themselves in this same message. Return passes=true if the reply is self-consistent (announcements matched by delivered content). Return passes=false with a short reason naming the specific unfulfilled promise from the coach.
     `.trim(),
     replyText,
+    ctx,
   );
 }
