@@ -409,14 +409,10 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         schema: CoachReplySchema,
         system,
         messages,
-        // temperature 0 cuts the variance that produces our observed
-        // glitch modes (JSON leakage, character corruption, chain-leak,
-        // truncation). AI SDK default is ~1; simple apps get away with
-        // it because they have short prompts and simple schemas, but
-        // this app pushes the model hard on both dimensions. Retries
-        // still vary meaningfully because we append a system-nudge
-        // message on each retry (empty/dupe/garbage nudge).
-        temperature: 0,
+        // NOTE: temperature is NOT supported by claude-sonnet-5 — the
+        // AI SDK warns and ignores it. Leaving it off explicitly so we
+        // don't get a confusing runtime warning. If we switch to a
+        // model that supports temperature, add it back.
         // 8192 (doubled from 4096) so the batch+reveal turn and the
         // full immune-system walkthrough have room without truncating.
         maxOutputTokens: 8192,
@@ -451,7 +447,6 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     model: itcCoachModel(),
     system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
     messages,
-    temperature: 0,
     maxOutputTokens: 4096,
   });
   const fallback = text.trim();

@@ -123,6 +123,33 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
   const map = await getMapForParticipant(parsed.data.map_id, participant.id);
   if (!map) return { ok: false, reason: "Map not found." };
 
+  return runCoachTurnForMap(map.id, parsed.data.text);
+}
+
+/**
+ * Core coach-turn processor — everything sendCoachMessage does except
+ * auth and participant-ownership checks. Exposed so E2E tests (which
+ * skip the cookie-based auth flow) can drive a real map through a full
+ * ITC flow without duplicating the applyCoachAction / backstop /
+ * cascade / retag pipeline.
+ *
+ * Loads the map fresh so callers can pass just the id. Returns the
+ * same SendMessageResult shape sendCoachMessage returns.
+ */
+export async function runCoachTurnForMap(
+  mapId: string,
+  text: string,
+): Promise<SendMessageResult> {
+  const map = await getMapById(mapId);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  const parsedText = z.string().min(1).max(4000).safeParse(text);
+  if (!parsedText.success) return { ok: false, reason: "Invalid message." };
+
+  // Shim so the pre-existing body below (which was written against
+  // `parsed.data.text`) keeps compiling with minimal churn.
+  const parsed = { data: { text: parsedText.data } };
+
   await appendMessage(map.id, "user", parsed.data.text, map.current_stage);
 
   const [
@@ -698,7 +725,16 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  revalidatePath(`/itc/${map.id}`);
+  // revalidatePath ties into Next's request-scoped static-generation
+  // store; when called outside a real request (E2E tests calling this
+  // function directly) it throws "static generation store missing".
+  // Cache invalidation is fire-and-forget from our perspective, so a
+  // failure here shouldn't fail the whole turn.
+  try {
+    revalidatePath(`/itc/${map.id}`);
+  } catch {
+    // no-op — outside a request context, no cache to invalidate
+  }
   return { ok: true };
 }
 
