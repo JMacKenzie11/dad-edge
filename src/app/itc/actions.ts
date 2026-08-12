@@ -425,6 +425,16 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           );
         }
       }
+      // Mark reveal_delivered too — the batch handler does this on the
+      // normal path (trusting the prompt that reveal is in the batch
+      // turn's reply). Backstop path skips the handler and inserts
+      // directly, so we mark here to match. Prevents the downstream
+      // review → immune_system advance gate from silently failing.
+      try {
+        await markRevealDelivered(map.id);
+      } catch {
+        // non-fatal — may already be marked
+      }
       console.warn(
         "[itc] commitments backstop: inserted %d drafts from history scan",
         draftsFromHistory.length,
@@ -590,6 +600,21 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           }
         }
       } else if (from === "review") {
+        // The review → immune_system advance gate requires
+        // reveal_delivered=true. If it's still false at this point
+        // (backstop path skipped the marking, or the coach delivered
+        // the reveal text without the batch action firing), auto-mark
+        // it here. We're already past the reveal beat conceptually —
+        // the user got to review, which means commitments landed and
+        // the map is complete. Blocking the cascade over this state
+        // flag is worse than trusting the flow forward.
+        if (!currentMap.reveal_delivered) {
+          try {
+            await markRevealDelivered(map.id);
+          } catch {
+            // ignore
+          }
+        }
         try {
           await advanceStage(map.id, "review", "immune_system");
           advanced = true;
@@ -909,7 +934,7 @@ function looksLikeMapClose(text: string): boolean {
 // is auto-advancing to behaviors, which the coachee can still walk back.
 function looksAffirmative(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
-  if (t.length === 0 || t.length > 60) return false;
+  if (t.length === 0 || t.length > 80) return false;
   const affirmations = [
     "y", "ya", "ye", "yes", "yeah", "yep", "yup", "yessir",
     "ok", "okay", "kk", "k",
@@ -921,7 +946,20 @@ function looksAffirmative(text: string): boolean {
     "that works", "works for me", "fine", "sounds right",
     "👍", "✅", "yes 👍",
   ];
-  return affirmations.includes(t);
+  if (affirmations.includes(t)) return true;
+  // Broader "move forward" patterns for late-stage messages that don't
+  // fit the exact-match list. Observed: "Let's design a test", "I'm
+  // ready for testing", "ready to test", "let's build the test".
+  // These all mean "advance me" but wouldn't match the list above.
+  const movePatterns = [
+    /^let['\u2019]?s (design|build|do|run|test|move|make|go|create|start|try)\b/,
+    /^i['\u2019]?m ready\b/,
+    /^ready (to|for)\b/,
+    /^let['\u2019]?s (move|go|do it)\b/,
+    /^(yeah|yes|ok|sure|good)[\s,]+(let['\u2019]?s|move|go)\b/,
+    /^(next|next step|move on|keep going|continue)\b/,
+  ];
+  return movePatterns.some((re) => re.test(t));
 }
 
 async function applyCoachAction(
