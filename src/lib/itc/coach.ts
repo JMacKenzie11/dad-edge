@@ -409,7 +409,17 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         schema: CoachReplySchema,
         system,
         messages,
-        maxOutputTokens: 4096,
+        // temperature 0 cuts the variance that produces our observed
+        // glitch modes (JSON leakage, character corruption, chain-leak,
+        // truncation). AI SDK default is ~1; simple apps get away with
+        // it because they have short prompts and simple schemas, but
+        // this app pushes the model hard on both dimensions. Retries
+        // still vary meaningfully because we append a system-nudge
+        // message on each retry (empty/dupe/garbage nudge).
+        temperature: 0,
+        // 8192 (doubled from 4096) so the batch+reveal turn and the
+        // full immune-system walkthrough have room without truncating.
+        maxOutputTokens: 8192,
       });
       if (object.reply.trim().length === 0) {
         // Treat empty output the same as a schema miss: retry.
@@ -441,7 +451,8 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     model: itcCoachModel(),
     system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
     messages,
-    maxOutputTokens: 2048,
+    temperature: 0,
+    maxOutputTokens: 4096,
   });
   const fallback = text.trim();
   return {
