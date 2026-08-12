@@ -533,12 +533,24 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           }
         }
       } else if (from === "commitments") {
-        // Only advance if every locked worry has a commitment on the
-        // map. Reveal_delivered is required by the review→immune_system
-        // advance gate downstream; auto-mark it here so the cascade can
-        // continue past review without stalling. Same trust model as
-        // walkthrough_delivered: coachee's affirmation implies the
-        // beat has landed or is fine to skip.
+        // Only advance if every locked worry has a commitment AND
+        // the reveal has been delivered. Reveal_delivered is set by
+        // the propose_commitments_batch handler (which trusts the
+        // prompt that the reveal narrative is in the batch turn's
+        // reply). If we're still in commitments and reveal is not
+        // delivered, don't advance — the coach hasn't finished the
+        // reveal + reflection beat and skipping it drops the whole
+        // point of Column 3's gas-and-brake moment.
+        //
+        // Additional guard: if the current turn's action IS the
+        // batch itself, do NOT advance on this turn — the coachee is
+        // still reading the reveal narrative that just landed. Wait
+        // for their next affirmation.
+        if (reply.action?.type === "propose_commitments_batch") {
+          // Batch just fired this turn; hold on advance so the
+          // coachee has a beat to reflect on the reveal.
+          break;
+        }
         const [worriesNow, commitmentsNow] = await Promise.all([
           listWorries(map.id),
           listCommitments(map.id),
@@ -546,14 +558,11 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
         const lockedWorries = worriesNow.filter((w) => w.depth_score !== null);
         const covered = new Set(commitmentsNow.map((c) => c.worry_id));
         const uncoveredWorries = lockedWorries.filter((w) => !covered.has(w.id));
-        if (lockedWorries.length > 0 && uncoveredWorries.length === 0) {
-          if (!currentMap.reveal_delivered) {
-            try {
-              await markRevealDelivered(map.id);
-            } catch {
-              // ignore
-            }
-          }
+        if (
+          lockedWorries.length > 0 &&
+          uncoveredWorries.length === 0 &&
+          currentMap.reveal_delivered
+        ) {
           try {
             await advanceStage(map.id, "commitments", "assumptions");
             advanced = true;
@@ -1077,6 +1086,17 @@ async function applyCoachAction(
 
       for (const t of targets) {
         await addCommitment(mapId, t.worryId, t.text);
+      }
+      // Auto-mark reveal_delivered — the prompt for Turn 2 of the
+      // commitments batch REQUIRES the reply to include the reveal
+      // narrative + "What's it like to see that?" question in the same
+      // turn as the batch. Marking here keeps the downstream review /
+      // immune_system gates from blocking on a missing action while
+      // trusting the prompt that reveal is in the reply text.
+      try {
+        await markRevealDelivered(mapId);
+      } catch {
+        // non-fatal — reveal may already be marked
       }
       return;
     }
