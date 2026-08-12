@@ -394,27 +394,71 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  // Cascade auto-advance for the late stages (assumptions → review →
-  // immune_system → prioritize). The coach can only emit one action per
-  // turn but this run of stages sometimes needs multiple stage advances
-  // in quick succession — and when ANY one is missed, the observed
-  // behavior is: coach improvises walkthrough content while the DB
-  // stage lags several transitions behind. Nav shows the true DB stage
-  // (correctly), so the coachee sees the nav stuck on an earlier
-  // column while the chat is deep into a later step.
+  // Cascade auto-advance across every stage transition where the coach
+  // has proven capable of forgetting the action. On any affirmation,
+  // re-read the map after each advance and try the next transition if
+  // its conditions are met. Runs until no transition applies. Bounded
+  // so a logic bug can't spin forever.
   //
-  // Cascade means: on any affirmation, re-read the map after each
-  // advance and try the next transition if its conditions are met.
-  // Runs until no transition applies. Bounded to 4 iterations so a
-  // logic bug can't spin forever.
+  // Covers, in order:
+  //   behaviors    → worries          (needs 3-5 selected)
+  //   commitments  → assumptions      (auto-marks reveal_delivered first)
+  //   assumptions  → review           (needs full commitment coverage)
+  //   review       → immune_system
+  //   immune_system→ prioritize       (auto-marks walkthrough_delivered)
+  //   prioritize   → test_design      (needs a selected_for_testing pick)
+  //
+  // Aggressive on purpose: by the time the coachee is affirming in any
+  // of these stages, the substantive work is done or done-enough. Being
+  // stuck is worse than advancing.
   if (looksAffirmative(parsed.data.text)) {
-    for (let step = 0; step < 4; step++) {
+    for (let step = 0; step < 8; step++) {
       const currentMap = await getMapById(map.id);
       if (!currentMap) break;
       const from = currentMap.current_stage;
       let advanced = false;
 
-      if (from === "assumptions") {
+      if (from === "behaviors") {
+        const behaviorsNow = await listBehaviors(map.id);
+        const selectedCount = behaviorsNow.filter((b) => b.selected).length;
+        if (selectedCount >= 1 && selectedCount <= 5) {
+          try {
+            await advanceStage(map.id, "behaviors", "worries");
+            advanced = true;
+          } catch {
+            // ignore — race or advance guard rejected
+          }
+        }
+      } else if (from === "commitments") {
+        // Only advance if every locked worry has a commitment on the
+        // map. Reveal_delivered is required by the review→immune_system
+        // advance gate downstream; auto-mark it here so the cascade can
+        // continue past review without stalling. Same trust model as
+        // walkthrough_delivered: coachee's affirmation implies the
+        // beat has landed or is fine to skip.
+        const [worriesNow, commitmentsNow] = await Promise.all([
+          listWorries(map.id),
+          listCommitments(map.id),
+        ]);
+        const lockedWorries = worriesNow.filter((w) => w.depth_score !== null);
+        const covered = new Set(commitmentsNow.map((c) => c.worry_id));
+        const uncoveredWorries = lockedWorries.filter((w) => !covered.has(w.id));
+        if (lockedWorries.length > 0 && uncoveredWorries.length === 0) {
+          if (!currentMap.reveal_delivered) {
+            try {
+              await markRevealDelivered(map.id);
+            } catch {
+              // ignore
+            }
+          }
+          try {
+            await advanceStage(map.id, "commitments", "assumptions");
+            advanced = true;
+          } catch {
+            // ignore
+          }
+        }
+      } else if (from === "assumptions") {
         // Only advance to review when every commitment is covered by
         // at least one assumption. This matches the advanceStage
         // gate; without the coverage check, advanceStage would throw
@@ -450,6 +494,32 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
         }
         try {
           await advanceStage(map.id, "immune_system", "prioritize");
+          advanced = true;
+        } catch {
+          // ignore
+        }
+      } else if (from === "prioritize") {
+        // Advance to test_design only if a pick is on record. If the
+        // coach recommended one and the coachee affirmed without an
+        // explicit select, auto-adopt the recommendation as the
+        // selection — his "yes" reasonably endorses the coach's pick.
+        const assumptionsNow = await listAssumptions(map.id);
+        const alreadySelected = assumptionsNow.find(
+          (a) => a.selected_for_testing,
+        );
+        if (!alreadySelected) {
+          const recommended = assumptionsNow.find((a) => a.coach_recommended);
+          const fallback = recommended ?? assumptionsNow[0];
+          if (fallback) {
+            try {
+              await setAssumptionSelected(fallback.id, map.id);
+            } catch {
+              // ignore
+            }
+          }
+        }
+        try {
+          await advanceStage(map.id, "prioritize", "test_design");
           advanced = true;
         } catch {
           // ignore
