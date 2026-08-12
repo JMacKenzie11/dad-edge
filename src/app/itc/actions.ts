@@ -277,18 +277,15 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  // Auto-advance worries → commitments the moment the last worry lands.
-  // The coach can only emit one action per turn, so on the last-worry
-  // turn it's forced to spend the slot on propose_worry — which means
-  // advance_stage can't fire from the coach side. Handling it here means
-  // the transition reply (which per prompt already includes the
-  // commitments intro + drafted list) becomes the first message of the
-  // commitments stage via the retag block below, and the coachee doesn't
-  // have to type "ok" to unstick the flow.
-  if (
-    map.current_stage === "worries" &&
-    reply.action?.type === "propose_worry"
-  ) {
+  // Auto-advance worries → commitments the moment every selected behavior
+  // has a locked worry. Runs regardless of what action fired this turn:
+  // the coach only has one action slot and may have spent it on a
+  // draft-related pseudo-action or nothing, so gating on
+  // reply.action?.type === "propose_worry" missed the case where the
+  // last worry landed on an earlier turn and the coach then drafted
+  // commitments without ever emitting advance_stage. Idempotent — no-ops
+  // if already advanced.
+  if (map.current_stage === "worries") {
     const [behaviorsNow, worriesNow] = await Promise.all([
       listBehaviors(map.id),
       listWorries(map.id),
@@ -309,6 +306,66 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
       } catch {
         // ignore — race or already advanced
       }
+    }
+  }
+
+  // Commitments backstop: if the coachee just affirmed the drafted list
+  // and the coach forgot to emit propose_commitments_batch (observed:
+  // "Locking these in." reply with action=null), extract the numbered
+  // "I'm also committed to ..." drafts from the prior assistant message
+  // and insert them ourselves. Only fires when no commitments are locked
+  // yet AND the draft count matches the locked-worry count, so partial
+  // states can't get scrambled. Same pattern as the goal backstop above.
+  if (
+    reply.action?.type !== "propose_commitments_batch" &&
+    looksLikeCommitmentAffirmation(parsed.data.text, reply.reply) &&
+    priorAssistantContent
+  ) {
+    const [worriesForBackstop, commitmentsNow, mapForBackstop] =
+      await Promise.all([
+        listWorries(map.id),
+        listCommitments(map.id),
+        getMapById(map.id),
+      ]);
+    const lockedWorries = worriesForBackstop.filter(
+      (w) => w.depth_score !== null,
+    );
+    const drafts = extractCommitmentDrafts(priorAssistantContent);
+    const stageOk =
+      mapForBackstop?.current_stage === "commitments" ||
+      mapForBackstop?.current_stage === "worries";
+
+    if (
+      stageOk &&
+      commitmentsNow.length === 0 &&
+      lockedWorries.length > 0 &&
+      drafts.length === lockedWorries.length
+    ) {
+      if (mapForBackstop?.current_stage === "worries") {
+        try {
+          await advanceStage(map.id, "worries", "commitments");
+        } catch {
+          // ignore — race or advance guard already fired
+        }
+      }
+      for (let i = 0; i < lockedWorries.length; i++) {
+        try {
+          await addCommitment(
+            map.id,
+            lockedWorries[i].id,
+            ensureStem(drafts[i], COMMITMENT_STEM),
+          );
+        } catch (err) {
+          console.warn(
+            "[itc] commitments backstop: addCommitment failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+      console.warn(
+        "[itc] commitments backstop: inserted %d drafts from prior assistant message",
+        drafts.length,
+      );
     }
   }
 
@@ -411,6 +468,61 @@ async function runItcCoachTurnWithGuards(
   // If the regen still fails, take it anyway — the plain-text fallback
   // inside runItcCoachTurn guarantees a non-empty reply.
   return regenerated;
+}
+
+// Pulls numbered "I'm also committed to ..." drafts out of an assistant
+// message. Tolerant of smart-apostrophes and leading whitespace. Order is
+// preserved — the caller aligns index N to the Nth locked worry.
+function extractCommitmentDrafts(text: string): string[] {
+  const drafts: string[] = [];
+  const re = /^\s*\d+[.)]\s+(I[\u2019'\u02BC]?m also committed to [^\n]+?)\s*$/i;
+  for (const rawLine of text.split("\n")) {
+    const m = rawLine.match(re);
+    if (!m) continue;
+    // Canonicalize the "I'm" apostrophe so ensureStem matches.
+    const draft = m[1]
+      .replace(/^I[\u2019\u02BC]?m/i, "I'm")
+      .replace(/[.!?]+$/, "")
+      .trim();
+    if (draft.length > 0) drafts.push(draft);
+  }
+  return drafts;
+}
+
+// Affirmation detector tuned for the commitments-batch backstop. Wider
+// than looksAffirmative (which is for the tight goal-lock path) because
+// coachees say things like "these are great" here. Also fires if the
+// coach's own reply signals a lock ("locked", "locking these in") since
+// that's the exact failure mode we're recovering from.
+function looksLikeCommitmentAffirmation(
+  userMessage: string,
+  coachReply: string,
+): boolean {
+  const t = userMessage.trim().toLowerCase().replace(/[.!?,]+$/g, "");
+  if (t.length === 0 || t.length > 200) return false;
+
+  const userAffirms = [
+    "these are great", "these are good", "these are perfect",
+    "these are it", "these work", "these fit", "these look right",
+    "these look good", "these are right", "go with these",
+    "nailed it", "spot on", "perfect", "sounds right",
+    "lock them in", "lock these in", "lock it in", "lock em in",
+    "lock in", "locked", "locking in",
+    "yes lock them in", "yes lock", "yes please",
+  ];
+  if (userAffirms.some((p) => t === p || t.startsWith(`${p} `))) return true;
+
+  // Fallback: coach's own reply announced the lock. If we're recovering
+  // from a missing batch action, the coach is likely saying "Locked" /
+  // "Locking these in" as the reply text.
+  if (/\b(locking|locked|lock in|locking these in|locking them in)\b/i.test(coachReply)) {
+    // Only count coach-signal if the user said something short and
+    // non-negative — filters out "no wait, change #2".
+    const looksNegative = /\b(no|wait|hold on|change|swap|tweak|reword|not quite|not right)\b/i.test(userMessage);
+    if (!looksNegative) return true;
+  }
+
+  return false;
 }
 
 // Very permissive affirmation detector — the only cost of a false positive
