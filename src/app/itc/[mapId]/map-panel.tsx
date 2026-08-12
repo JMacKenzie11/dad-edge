@@ -32,7 +32,6 @@ export function MapPanel({
   const pillar = PILLAR_BY_CODE[map.pillar_code];
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
-  const parkedBehaviors = behaviors.filter((b) => !b.selected);
   const worryById = new Map(worries.map((w) => [w.id, w]));
   const commitmentIndexById = new Map(
     commitments.map((c, i) => [c.id, i + 1]),
@@ -73,38 +72,19 @@ export function MapPanel({
         </Column>
 
         <Column title="2. Doing / not-doing">
-          {behaviors.length === 0 ? (
+          {selectedBehaviors.length === 0 ? (
             <Placeholder>None yet.</Placeholder>
           ) : (
-            <div className="space-y-2">
-              <ul className="space-y-1.5 text-sm">
-                {selectedBehaviors.map((b) => (
-                  <li
-                    key={b.id}
-                    className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
-                  >
-                    {b.text}
-                  </li>
-                ))}
-              </ul>
-              {parkedBehaviors.length > 0 ? (
-                <details className="text-xs">
-                  <summary className="cursor-pointer text-[color:var(--color-muted)]/80">
-                    Parked ({parkedBehaviors.length})
-                  </summary>
-                  <ul className="mt-1.5 space-y-1 pl-2">
-                    {parkedBehaviors.map((b) => (
-                      <li
-                        key={b.id}
-                        className="text-[color:var(--color-muted)]/70 line-through"
-                      >
-                        {b.text}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null}
-            </div>
+            <ul className="space-y-1.5 text-sm">
+              {selectedBehaviors.map((b) => (
+                <li
+                  key={b.id}
+                  className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
+                >
+                  {b.text}
+                </li>
+              ))}
+            </ul>
           )}
         </Column>
 

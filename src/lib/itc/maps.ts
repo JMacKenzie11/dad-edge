@@ -202,51 +202,26 @@ export async function addBehavior(
   return data as ItcBehavior;
 }
 
-export async function setBehaviorSelected(
+/**
+ * Replace the text of an existing behavior in place. Used by the coach's
+ * replace_behavior action for consolidation — when the coachee's new
+ * phrasing sharpens an existing behavior, swap the text rather than
+ * create a duplicate.
+ */
+export async function updateBehaviorText(
   id: string,
   mapId: string,
-  selected: boolean,
+  text: string,
 ): Promise<void> {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) throw new Error("Behavior is too short.");
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("itc_behaviors")
-    .update({ selected })
+    .update({ text: trimmed })
     .eq("id", id)
     .eq("map_id", mapId);
-  if (error) throw new Error(`setBehaviorSelected: ${error.message}`);
-}
-
-/**
- * Bulk-set selection state to match `keepIds` — everything in the list
- * becomes selected, everything else parked. Used by the coach's
- * prune_behaviors action to accept a chosen keep-set atomically.
- */
-export async function pruneBehaviors(
-  mapId: string,
-  keepIds: string[],
-): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const all = await listBehaviors(mapId);
-  const updates = all.map((b) =>
-    supabase
-      .from("itc_behaviors")
-      .update({ selected: keepIds.includes(b.id) })
-      .eq("id", b.id)
-      .eq("map_id", mapId),
-  );
-  const results = await Promise.all(updates);
-  const failure = results.find((r) => r.error);
-  if (failure?.error) throw new Error(`pruneBehaviors: ${failure.error.message}`);
-}
-
-export async function deleteBehavior(id: string, mapId: string): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const { error } = await supabase
-    .from("itc_behaviors")
-    .delete()
-    .eq("id", id)
-    .eq("map_id", mapId);
-  if (error) throw new Error(`deleteBehavior: ${error.message}`);
+  if (error) throw new Error(`updateBehaviorText: ${error.message}`);
 }
 
 export async function listWorries(mapId: string): Promise<ItcWorry[]> {
@@ -544,7 +519,7 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
       }
       if (selectedCount > MAX_SELECTED_BEHAVIORS) {
         throw new Error(
-          `Prune to ${MAX_SELECTED_BEHAVIORS} behaviors before moving to worries. Currently selected: ${selectedCount}.`,
+          `Consolidate to ${MAX_SELECTED_BEHAVIORS} or fewer behaviors before moving to worries. Currently on the map: ${selectedCount}.`,
         );
       }
     }

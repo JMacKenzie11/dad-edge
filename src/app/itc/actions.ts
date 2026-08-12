@@ -27,11 +27,11 @@ import {
   logWorryAttempt,
   markRevealDelivered,
   markWalkthroughDelivered,
-  pruneBehaviors,
   retagMessageStage,
   saveImprovementGoal,
   setAssumptionRecommended,
   setAssumptionSelected,
+  updateBehaviorText,
   upsertWorry,
 } from "@/lib/itc/maps";
 import {
@@ -407,25 +407,26 @@ async function applyCoachAction(
       return;
     }
     case "suggest_behaviors": {
-      // Suggestions are surfaced in the reply text; do not persist as
-      // behaviors until the user picks one via acceptSuggestedBehavior.
+      // Suggestions are surfaced in the reply text only. The coachee reads
+      // them, picks one (or writes his own), and the coach emits
+      // propose_behavior on the next turn to land it on the map.
       return;
     }
-    case "prune_behaviors": {
+    case "replace_behavior": {
       if (currentStage !== "behaviors") return;
       const all = await listBehaviors(mapId);
-      // keep_indices are 1-based positions into the same order the coach
-      // saw in its context block, which is the same order listBehaviors
-      // returns (sort_order asc, created_at asc).
-      const keepIds: string[] = [];
-      for (const idx of action.keep_indices) {
-        const b = all[idx - 1];
-        if (b) keepIds.push(b.id);
+      const target = all[action.index - 1];
+      if (!target) {
+        throw new Error(
+          `replace_behavior: index ${action.index} out of range (${all.length} behaviors).`,
+        );
       }
-      if (keepIds.length === 0) {
-        throw new Error(`Prune must keep at least one behavior.`);
+      if (!target.selected) {
+        throw new Error(
+          `replace_behavior: index ${action.index} points at a legacy-parked behavior — do not consolidate into off-map rows.`,
+        );
       }
-      await pruneBehaviors(mapId, keepIds);
+      await updateBehaviorText(target.id, mapId, action.text);
       return;
     }
     case "propose_worry": {

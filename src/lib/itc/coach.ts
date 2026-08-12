@@ -21,18 +21,19 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     type: z.literal("suggest_behaviors"),
     options: z.array(z.string().min(1)).min(2).max(6),
   }),
-  // Prune the current behavior set. keep_indices are 1-based positions into
-  // the ordered list the coach sees in its context block. Every behavior
-  // outside keep_indices becomes parked; every one inside becomes selected.
+  // Replace the text of an existing behavior in place. index is 1-based
+  // into the behavior list the coach sees. Use this for consolidation —
+  // when the coachee's new phrasing sharpens an existing behavior, swap
+  // the vaguer text for the sharper one rather than creating a duplicate.
   z.object({
-    type: z.literal("prune_behaviors"),
-    keep_indices: z.array(z.number().int().min(1)).min(1).max(5),
+    type: z.literal("replace_behavior"),
+    index: z.number().int().min(1),
+    text: z.string().min(1),
   }),
-  // Propose a worry paired to a specific selected behavior. behavior_index
-  // is 1-based into the SELECTED behaviors list the coach sees (parked
-  // rows are excluded from this numbering). Server runs the depth rubric
-  // before locking; a score <2 always rejects, a score of 2 requires at
-  // least two attempts on this behavior.
+  // Propose a worry paired to a specific behavior. behavior_index is
+  // 1-based into the behaviors list the coach sees. Server runs the depth
+  // rubric before locking; a score <2 always rejects, a score of 2
+  // requires at least two attempts on this behavior.
   z.object({
     type: z.literal("propose_worry"),
     behavior_index: z.number().int().min(1),
@@ -111,8 +112,9 @@ type RunCoachInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   // Ordered exactly as the coach sees them in the context block. The
-  // 1-based position in this array is what prune_behaviors.keep_indices
-  // refers to.
+  // 1-based position in this array is what replace_behavior.index refers
+  // to. `selected` is retained for legacy maps that still have parked
+  // rows from the pre-consolidation flow.
   behaviors: { id: string; text: string; selected: boolean }[];
   // Worries keyed by behavior_id. Populated during the worries stage so
   // the coach knows what's already locked and doesn't re-propose.
