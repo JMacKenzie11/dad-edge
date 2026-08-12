@@ -277,6 +277,41 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Auto-advance worries → commitments the moment the last worry lands.
+  // The coach can only emit one action per turn, so on the last-worry
+  // turn it's forced to spend the slot on propose_worry — which means
+  // advance_stage can't fire from the coach side. Handling it here means
+  // the transition reply (which per prompt already includes the
+  // commitments intro + drafted list) becomes the first message of the
+  // commitments stage via the retag block below, and the coachee doesn't
+  // have to type "ok" to unstick the flow.
+  if (
+    map.current_stage === "worries" &&
+    reply.action?.type === "propose_worry"
+  ) {
+    const [behaviorsNow, worriesNow] = await Promise.all([
+      listBehaviors(map.id),
+      listWorries(map.id),
+    ]);
+    const selectedIds = new Set(
+      behaviorsNow.filter((b) => b.selected).map((b) => b.id),
+    );
+    const lockedBehaviorIds = new Set(
+      worriesNow
+        .filter((w) => w.depth_score !== null && selectedIds.has(w.behavior_id))
+        .map((w) => w.behavior_id),
+    );
+    const allLocked =
+      selectedIds.size > 0 && lockedBehaviorIds.size === selectedIds.size;
+    if (allLocked) {
+      try {
+        await advanceStage(map.id, "worries", "commitments");
+      } catch {
+        // ignore — race or already advanced
+      }
+    }
+  }
+
   // If the stage changed during this turn (via coach action or one of the
   // safety nets), retag the assistant message with the new stage so the
   // transition reply ("Locked. Now column 2…") lives in the new stage's
