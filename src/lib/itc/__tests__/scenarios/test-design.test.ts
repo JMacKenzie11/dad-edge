@@ -66,6 +66,6 @@ describe("test_design stage", () => {
       const promises = await judgeNoDanglingPromises(reply.reply);
       expect(promises.passes, `Judge failed no-promises: ${promises.reason}`).toBe(true);
     },
-    120_000,
+    180_000,
   );
 });

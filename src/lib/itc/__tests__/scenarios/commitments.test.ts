@@ -43,7 +43,7 @@ describe("commitments stage", () => {
         `Judge failed no-dangling-promises: ${promises.reason}\n\nReply:\n${reply.reply}`,
       ).toBe(true);
     },
-    120_000,
+    180_000,
   );
 
   it(
@@ -80,6 +80,6 @@ describe("commitments stage", () => {
       const praise = await judgeNoUnearnedPraise(reply.reply);
       expect(praise.passes, `Judge failed no-praise: ${praise.reason}`).toBe(true);
     },
-    120_000,
+    180_000,
   );
 });

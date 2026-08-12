@@ -53,6 +53,6 @@ describe("results stage", () => {
       const praise = await judgeNoUnearnedPraise(reply.reply);
       expect(praise.passes, `Judge failed no-praise: ${praise.reason}`).toBe(true);
     },
-    120_000,
+    180_000,
   );
 });

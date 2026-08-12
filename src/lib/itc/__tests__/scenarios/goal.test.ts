@@ -57,6 +57,6 @@ describe("goal stage", () => {
         `Judge failed no-dangling-promises: ${promises.reason}\n\nReply:\n${reply.reply}`,
       ).toBe(true);
     },
-    120_000,
+    180_000,
   );
 });

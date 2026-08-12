@@ -46,7 +46,7 @@ describe("behaviors stage", () => {
       const praise = await judgeNoUnearnedPraise(reply.reply);
       expect(praise.passes, `Judge failed no-praise: ${praise.reason}`).toBe(true);
     },
-    120_000,
+    180_000,
   );
 
   it(
@@ -87,6 +87,6 @@ describe("behaviors stage", () => {
       const promises = await judgeNoDanglingPromises(reply.reply);
       expect(promises.passes, `Judge failed no-promises: ${promises.reason}`).toBe(true);
     },
-    120_000,
+    180_000,
   );
 });

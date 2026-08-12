@@ -48,7 +48,7 @@ describe("worries stage", () => {
         `Judge failed no-identity-projection: ${identity.reason}\n\nReply:\n${reply.reply}`,
       ).toBe(true);
     },
-    120_000,
+    180_000,
   );
 
 
@@ -122,6 +122,6 @@ describe("worries stage", () => {
         `Judge failed no-dangling-promises: ${promises.reason}\n\nReply:\n${reply.reply}`,
       ).toBe(true);
     },
-    120_000, // per-test timeout: real API + judge calls
+    180_000,
   );
 });
