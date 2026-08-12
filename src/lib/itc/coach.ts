@@ -179,6 +179,25 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   ) {
     return true;
   }
+  // Unquoted schema tokens leaking as prose. Observed: reply ended with
+  // "nAction: propose_worry with beh_derior_index=2, textting the worry
+  // text." The model rendered the action metadata as plain English
+  // instead of firing the action. No quotes to catch, so the first
+  // check misses. Detect by looking for unquoted schema-shaped tokens:
+  // an "Action:" label at the start of a line, an unquoted action-type
+  // name mentioned in prose, or an assignment like "X_index=N".
+  const unquotedSchemaRe =
+    /(^|\n)\s*n?Action\s*[:=]|\b(propose_(?:worry|behavior|commitment|commitments_batch|goal|assumption)|advance_stage|mark_reveal_delivered|mark_walkthrough_delivered|save_test_design|record_test_results|replace_behavior|suggest_behaviors|recommend_assumption_for_testing|select_assumption_for_testing)\b|\b(?:behavior|worry|assumption|commitment)_index\s*[=:]|\bkeep_indices\s*[=:]|\bcommitment_indices\s*[=:]|\btextting\b|setting the (worry|commitment|assumption) text/i;
+  if (unquotedSchemaRe.test(trimmed)) {
+    return true;
+  }
+  // Banned narration that the prompt explicitly forbids. Observed:
+  // "That's worry #2." even though the prompt says "Do NOT number it
+  // out loud." When the coach violates a banned phrase, treat the reply
+  // as broken and retry — cheaper than shipping the violation.
+  if (/\bThat['\u2019]?s worry #\d/i.test(trimmed)) {
+    return true;
+  }
   // Model apologizing for JSON leakage in its own reply. Observed
   // variants: "ignore that formatting", "wait, the format leaked",
   // "let me answer properly", "sorry, that was internal", etc. The
@@ -196,7 +215,7 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   // "response body goes here", "[content]", "TODO", etc. These all have
   // letters (so pass the actions.ts no-letters check) but are meaningless.
   const placeholderRe =
-    /^(the |my |your )?(reply|response|answer|content|message|text)( is| goes)?( here| below| here now)?$|^\[?(placeholder|todo|tbd|fill in|content goes here|reply goes here|insert.*here)\]?$/i;
+    /^(the |my |your )?(reply|response|answer|content|message|text)( is| goes)?( here| below| here now)?$|^\[?(placeholder|todo|tbd|fill in|content goes here|reply goes here|insert.*here)\]?$|^\[(content|reply|response|answer|message|text|placeholder|todo|tbd)\]$/i;
   if (placeholderRe.test(trimmed)) {
     return true;
   }
