@@ -119,6 +119,52 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
       looksLikeStructuredOutputLeakage("That's worry #4 — moving to #5.")
     ).toBe(true);
   });
+
+  // ---- 2026-08-12 case 2: model reasoning chain leaked as reply ----
+
+  it("meta-editing phrase — model announced it was about to write the real reply", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "That's the fear. Let's writing the actual reply text properly now:",
+      ),
+    ).toBe(true);
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "Right — let me start the actual reply.",
+      ),
+    ).toBe(true);
+    expect(
+      looksLikeStructuredOutputLeakage("Actually let me answer that.")
+    ).toBe(true);
+  });
+
+  it("trailing colon with no list continuation", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "Now the last worry locked, that would give commitments column intro:",
+      ),
+    ).toBe(true);
+    expect(looksLikeStructuredOutputLeakage("Here's what I hear:")).toBe(true);
+  });
+
+  it("third-person coach self-narrative — refers to coachee as he/him/his", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "going on to attack, that would mean losing, that would mean she'd think less of him and he'd look weak as a man",
+      ),
+    ).toBe(true);
+    expect(
+      looksLikeStructuredOutputLeakage("he'd feel exposed and unable to hold his ground.")
+    ).toBe(true);
+  });
+
+  it("full reasoning-chain leak from real 2026-08-12 session", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "going on to attack, that would 't losing, that would means she'd think less of him and he'd look weak as a man.that's the fear under #4..Now the last worry locked, that would give commitments column intro..Let's writing the actual reply text properly now:",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("looksLikeStructuredOutputLeakage — should NOT catch (real coach replies)", () => {
@@ -178,5 +224,20 @@ Read each one and tell me which don't fit.`;
         "I worry that if I stop guiding people down that forced path, I've failed them.",
       ),
     ).toBe(false);
+  });
+
+  it("intro line followed by numbered list (colon is legit here)", () => {
+    const reply = `Here's what's on the map:
+1. I go on the offense
+2. I shut down
+3. I leave the room`;
+    expect(looksLikeStructuredOutputLeakage(reply)).toBe(false);
+  });
+
+  it("intro line followed by dashed list (colon is legit here)", () => {
+    const reply = `Two things I want you to notice:
+- what happened
+- what surprised you`;
+    expect(looksLikeStructuredOutputLeakage(reply)).toBe(false);
   });
 });

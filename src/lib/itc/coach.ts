@@ -198,6 +198,44 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   if (/\bThat['\u2019]?s worry #\d/i.test(trimmed)) {
     return true;
   }
+  // Model reasoning-chain leak. Observed: the model wrote its INTERNAL
+  // editing narrative as the reply ("Let's writing the actual reply
+  // text properly now:", "Now the last worry locked, that would give
+  // commitments column intro"). Two markers:
+  //  1. Meta-editing phrases where the model announces it's about to
+  //     write the "real" reply. If those appear, the current reply
+  //     text is the internal chain, not the intended output.
+  //  2. The reply ends with a trailing colon and nothing after —
+  //     model was about to deliver content and stopped mid-transition.
+  const metaEditingRe =
+    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a )?(actual|real|proper|new|full|next)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write|actually let me/i;
+  if (metaEditingRe.test(trimmed)) {
+    return true;
+  }
+  // Trailing colon with no continuation. A legitimate reply that ends
+  // in `:` would have a newline + list items following (the caller
+  // provides no such continuation, so we see `:` as the last char).
+  // Distinct from the earlier truncation guard, which only fires on
+  // replies under 200 chars.
+  if (/:\s*$/.test(trimmed) && !/\n[-*\d]/.test(trimmed)) {
+    return true;
+  }
+  // Third-person coach self-narrative. Observed: "that would means
+  // she'd think less of him and he'd look weak as a man" — coach
+  // referred to the coachee as "he/him" in a fear description. Coach
+  // addresses the coachee as "you" per prompt. A reply that uses
+  // "he'd" or "him" or "his" in a way that reads like the coach
+  // narrating ABOUT the coachee (not quoting his wife or a third
+  // party) is a chain-leak. Detect via a conservative pattern: the
+  // reply references "he'd" or "he would" in a fear/behavior
+  // description context. False-positive risk is real, so only trip
+  // when combined with the fear/worry framing that would obviously be
+  // second-person if the coach were talking TO the coachee.
+  const thirdPersonNarrativeRe =
+    /\b(he['\u2019]?d|he would|he['\u2019]?s|his) (look|feel|be exposed|be seen|think|worry|fear|end up|become|prove) /i;
+  if (thirdPersonNarrativeRe.test(trimmed)) {
+    return true;
+  }
   // Model apologizing for JSON leakage in its own reply. Observed
   // variants: "ignore that formatting", "wait, the format leaked",
   // "let me answer properly", "sorry, that was internal", etc. The
