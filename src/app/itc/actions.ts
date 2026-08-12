@@ -333,23 +333,38 @@ function extractGoalSentence(text: string): string | null {
   return tail.length > 0 ? `I'm committed to getting better at ${tail}.` : null;
 }
 
-// Guard around the coach call: filters out empty replies and consecutive
-// duplicates (both were seen in a real session). On dedupe collision we
-// give the coach ONE regen with a nudge to say something different.
+// Guard around the coach call: filters out empty replies, consecutive
+// duplicates, and JSON-fragment garbage (all seen in real sessions —
+// `.}` was the most recent). On any hit we give the coach ONE regen
+// with a nudge that explains the specific failure mode.
 async function runItcCoachTurnWithGuards(
   input: Parameters<typeof runItcCoachTurn>[0] & { priorAssistantContent: string | null },
 ) {
   const { priorAssistantContent, ...coachInput } = input;
   const first = await runItcCoachTurn(coachInput);
-  const isEmpty = first.reply.trim().length === 0;
+  const trimmed = first.reply.trim();
+  const isEmpty = trimmed.length === 0;
   const isDupe =
     priorAssistantContent !== null &&
-    first.reply.trim() === priorAssistantContent.trim();
-  if (!isEmpty && !isDupe) return first;
+    trimmed === priorAssistantContent.trim();
+  // A well-formed coach reply always contains at least one letter. Zero
+  // letters means we got a JSON-fragment artifact (e.g. `.}`) that
+  // slipped through the schema's min(1) check.
+  const isGarbage = !isEmpty && !/[A-Za-z]/.test(trimmed);
+  if (!isEmpty && !isDupe && !isGarbage) return first;
+
+  if (isGarbage) {
+    console.warn(
+      "[itc] coach reply looked like JSON-fragment garbage, regenerating. raw=%o",
+      first.reply,
+    );
+  }
 
   const nudge = isEmpty
     ? "Your previous attempt returned empty. Produce a real reply this time."
-    : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
+    : isGarbage
+      ? "Your previous attempt returned characters that were not a real reply. Write plain prose the coachee can read."
+      : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
   const regenerated = await runItcCoachTurn({
     ...coachInput,
     history: [
@@ -496,6 +511,55 @@ async function applyCoachAction(
         );
       }
       await addCommitment(mapId, worry.id, stemmedText);
+      return;
+    }
+    case "propose_commitments_batch": {
+      if (currentStage !== "commitments") return;
+      const worries = await listWorries(mapId);
+      const locked = worries.filter((w) => w.depth_score !== null);
+      const existing = await listCommitments(mapId);
+      const alreadyCovered = new Set(existing.map((c) => c.worry_id));
+      const uncoveredCount = locked.length - alreadyCovered.size;
+
+      if (action.items.length !== uncoveredCount) {
+        throw new Error(
+          `propose_commitments_batch: expected ${uncoveredCount} items (one per uncovered worry), got ${action.items.length}.`,
+        );
+      }
+
+      // Validate every index first so partial writes don't happen. Each
+      // worry_index must resolve to a locked worry that doesn't already
+      // have a commitment, and each worry must be covered exactly once
+      // in this batch.
+      const targets: { worryId: string; text: string }[] = [];
+      const seenIndices = new Set<number>();
+      for (const item of action.items) {
+        if (seenIndices.has(item.worry_index)) {
+          throw new Error(
+            `propose_commitments_batch: worry_index ${item.worry_index} appears twice in the batch.`,
+          );
+        }
+        seenIndices.add(item.worry_index);
+        const worry = locked[item.worry_index - 1];
+        if (!worry) {
+          throw new Error(
+            `propose_commitments_batch: worry_index ${item.worry_index} out of range (${locked.length} locked).`,
+          );
+        }
+        if (alreadyCovered.has(worry.id)) {
+          throw new Error(
+            `propose_commitments_batch: worry #${item.worry_index} already has a commitment.`,
+          );
+        }
+        targets.push({
+          worryId: worry.id,
+          text: ensureStem(item.text, COMMITMENT_STEM),
+        });
+      }
+
+      for (const t of targets) {
+        await addCommitment(mapId, t.worryId, t.text);
+      }
       return;
     }
     case "mark_reveal_delivered": {

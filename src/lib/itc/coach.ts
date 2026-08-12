@@ -42,11 +42,30 @@ const CoachActionSchema = z.discriminatedUnion("type", [
   // Propose a hidden competing commitment paired to a specific worry.
   // worry_index is 1-based into the locked-worry list the coach sees.
   // Server runs a self-protection rubric; commitments that sound like
-  // productivity advice are rejected.
+  // productivity advice are rejected. Kept for edge cases; the primary
+  // flow for this stage is propose_commitments_batch below.
   z.object({
     type: z.literal("propose_commitment"),
     worry_index: z.number().int().min(1),
     text: z.string().min(1).max(500),
+  }),
+  // Primary flow for column 3: after the coachee affirms the drafted
+  // set, land every commitment in one action. One item per locked worry
+  // (server rejects the batch if item count != locked worry count).
+  // No per-item rubric — the drafts are derived from worries the
+  // coachee already vetted, so we trust the coach here. If a draft is
+  // weak, the coachee catches it in the review-and-tweak turn before
+  // affirming.
+  z.object({
+    type: z.literal("propose_commitments_batch"),
+    items: z
+      .array(
+        z.object({
+          worry_index: z.number().int().min(1),
+          text: z.string().min(1).max(500),
+        }),
+      )
+      .min(1),
   }),
   // The v2 3.3b brief gas-and-brake reveal. Coach emits this after the
   // commitments column is complete; UI records that the beat happened so
