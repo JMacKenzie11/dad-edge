@@ -394,6 +394,25 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Auto-advance review → immune_system when the coachee affirms the
+  // full-map picture and the coach forgot to emit advance_stage. Observed
+  // failure: coach replied "Good - that's the map, confirmed. Next is
+  // walking through how this actually runs as a system, so you can see
+  // the loop in motion" and stopped, leaving the coachee stuck. Any
+  // short affirmative-ish message counts here since the map is already
+  // complete by the time we're in review.
+  if (
+    map.current_stage === "review" &&
+    reply.action?.type !== "advance_stage" &&
+    looksAffirmative(parsed.data.text)
+  ) {
+    try {
+      await advanceStage(map.id, "review", "immune_system");
+    } catch {
+      // ignore — already advanced or race
+    }
+  }
+
   // If the stage changed during this turn (via coach action or one of the
   // safety nets), retag the assistant message with the new stage so the
   // transition reply ("Locked. Now column 2…") lives in the new stage's

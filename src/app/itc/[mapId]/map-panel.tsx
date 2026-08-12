@@ -114,7 +114,7 @@ export function MapPanel({
           )}
         </Column>
 
-        <Column title="4. Hidden commitments">
+        <Column title="4. Competing commitments">
           {commitments.length === 0 ? (
             <Placeholder>Follows from each worry.</Placeholder>
           ) : (
