@@ -154,6 +154,16 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   ) {
     return true;
   }
+
+  // Placeholder / stub replies where the model returned a shape without
+  // any content. Observed: "the reply is here", "reply goes here",
+  // "response body goes here", "[content]", "TODO", etc. These all have
+  // letters (so pass the actions.ts no-letters check) but are meaningless.
+  const placeholderRe =
+    /^(the |my |your )?(reply|response|answer|content|message|text)( is| goes)?( here| below| here now)?$|^\[?(placeholder|todo|tbd|fill in|content goes here|reply goes here|insert.*here)\]?$/i;
+  if (placeholderRe.test(trimmed)) {
+    return true;
+  }
   // Two or more JSON-structural fragments in the same reply strongly
   // suggest bracket-sequence bleed.
   const structuralBits = [
