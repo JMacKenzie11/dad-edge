@@ -12,7 +12,7 @@ import { z } from "zod";
 const RubricSchema = z.object({
   is_fear: z.boolean(),
   is_first_person_felt: z.boolean(),
-  touches_self_image: z.boolean(),
+  touches_identity: z.boolean(),
   reason: z.string().min(1).max(400),
 });
 
@@ -20,12 +20,12 @@ export type WorryDepthResult = {
   score: 0 | 1 | 2 | 3;
   is_fear: boolean;
   is_first_person_felt: boolean;
-  touches_self_image: boolean;
+  touches_identity: boolean;
   reason: string;
 };
 
 const SYSTEM = `
-You are a strict depth rubric for the worry-box column of an Immunity to Change map. The methodology (Kegan & Lahey) requires each worry to be a first-person felt fear that implicates how the man sees himself or dreads being seen. Practical concerns and forecasts are not enough.
+You are a strict depth rubric for the worry-box column of an Immunity to Change map. The methodology (Kegan & Lahey) requires each worry to be a first-person felt fear that lands on identity. Practical concerns and forecasts are not enough. But "identity" comes in more than one valid shape — do NOT reject a worry that lands on role/relational identity in favor of one that lands on self-labeling.
 
 You score three BINARY criteria. Be strict. When in doubt, score false.
 
@@ -33,7 +33,10 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
 
 2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not about the other person's reaction ("she'd get upset"), not third-person ("men who don't listen lose their marriages"). If he's talking about the other person's feelings instead of his own, false.
 
-3. touches_self_image: The worry touches how he sees himself or dreads being seen — identity-level. "I'd be the kind of husband who chose ego over her" is self-image. "It'd take longer" is not.
+3. touches_identity: The worry lands on identity in one of two ITC-valid shapes:
+   (a) Self-labeling identity — a label he'd apply to himself. "I'm not enough," "I'm weak," "I'm a fraud," "I'd be the kind of husband who chose ego over her."
+   (b) Role/relational identity — a role he'd have failed in or a relationship whose collapse he can't face. "I've failed my family as a provider," "the guy who let people down," "someone whose work didn't help," "the husband who hurts her."
+   Both shapes pass. A worry that has clearly landed on either passes this criterion. Practical outcomes ("it'd take longer," "we'd lose the deal," "the money might not come") do NOT pass. But once the chain reaches "I couldn't provide for my family" or "I would have failed as a father," that IS role/relational identity — pass it. Do not require the further step of "and that means I'm unworthy" — that's imposing a self-labeling frame ITC doesn't require.
 
 Return your judgment as three booleans plus one short reason (under 40 words) explaining what would need to change to score better if any is false.
 `.trim();
@@ -159,13 +162,13 @@ export async function scoreWorryDepth(input: {
   const score =
     (object.is_fear ? 1 : 0) +
     (object.is_first_person_felt ? 1 : 0) +
-    (object.touches_self_image ? 1 : 0);
+    (object.touches_identity ? 1 : 0);
 
   return {
     score: score as 0 | 1 | 2 | 3,
     is_fear: object.is_fear,
     is_first_person_felt: object.is_first_person_felt,
-    touches_self_image: object.touches_self_image,
+    touches_identity: object.touches_identity,
     reason: object.reason,
   };
 }

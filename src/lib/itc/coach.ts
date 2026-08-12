@@ -200,6 +200,22 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   if (placeholderRe.test(trimmed)) {
     return true;
   }
+
+  // Truncated fragments — the model stopped mid-thought but the JSON
+  // was still valid, so the SDK returned it. Observed: "keep going,
+  // this one" (4 words, no terminal punctuation). Heuristic: short,
+  // single-line replies that don't end with terminal punctuation are
+  // very likely mid-sentence. Legitimate short coach replies end with
+  // . ! ? " ) or ]. 200 chars is the ceiling — beyond that, the reply
+  // is substantial enough that a missing final period is more likely
+  // an intentional stylistic choice than truncation.
+  if (
+    trimmed.length < 200 &&
+    !/\n/.test(trimmed) &&
+    !/[.!?"')\]}]$/.test(trimmed)
+  ) {
+    return true;
+  }
   // Two or more JSON-structural fragments in the same reply strongly
   // suggest bracket-sequence bleed.
   const structuralBits = [
