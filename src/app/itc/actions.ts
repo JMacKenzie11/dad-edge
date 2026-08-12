@@ -394,51 +394,69 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
-  // Auto-advance review → immune_system when the coachee affirms the
-  // full-map picture and the coach forgot to emit advance_stage. Observed
-  // failure: coach replied "Good - that's the map, confirmed. Next is
-  // walking through how this actually runs as a system, so you can see
-  // the loop in motion" and stopped, leaving the coachee stuck. Any
-  // short affirmative-ish message counts here since the map is already
-  // complete by the time we're in review.
-  if (
-    map.current_stage === "review" &&
-    reply.action?.type !== "advance_stage" &&
-    looksAffirmative(parsed.data.text)
-  ) {
-    try {
-      await advanceStage(map.id, "review", "immune_system");
-    } catch {
-      // ignore — already advanced or race
-    }
-  }
+  // Cascade auto-advance for the late stages (assumptions → review →
+  // immune_system → prioritize). The coach can only emit one action per
+  // turn but this run of stages sometimes needs multiple stage advances
+  // in quick succession — and when ANY one is missed, the observed
+  // behavior is: coach improvises walkthrough content while the DB
+  // stage lags several transitions behind. Nav shows the true DB stage
+  // (correctly), so the coachee sees the nav stuck on an earlier
+  // column while the chat is deep into a later step.
+  //
+  // Cascade means: on any affirmation, re-read the map after each
+  // advance and try the next transition if its conditions are met.
+  // Runs until no transition applies. Bounded to 4 iterations so a
+  // logic bug can't spin forever.
+  if (looksAffirmative(parsed.data.text)) {
+    for (let step = 0; step < 4; step++) {
+      const currentMap = await getMapById(map.id);
+      if (!currentMap) break;
+      const from = currentMap.current_stage;
+      let advanced = false;
 
-  // Auto-mark walkthrough delivered + advance immune_system → prioritize
-  // when the coachee affirms. This transition requires TWO actions
-  // (mark_walkthrough_delivered then advance_stage) but the coach only
-  // has one action slot per turn — leaving the coach to loop with
-  // announcements like "That's the walkthrough done" and "let's mark
-  // this part done and move into deciding which assumption to test
-  // first" without ever firing either action. Server handles both.
-  // Aggressive on purpose: by the time the coachee is affirming in
-  // this stage, the walkthrough is done or done-enough, and being
-  // stuck is worse than advancing.
-  if (
-    map.current_stage === "immune_system" &&
-    looksAffirmative(parsed.data.text)
-  ) {
-    const mapForImmune = await getMapById(map.id);
-    if (mapForImmune && !mapForImmune.walkthrough_delivered) {
-      try {
-        await markWalkthroughDelivered(map.id);
-      } catch {
-        // ignore — already marked
+      if (from === "assumptions") {
+        // Only advance to review when every commitment is covered by
+        // at least one assumption. This matches the advanceStage
+        // gate; without the coverage check, advanceStage would throw
+        // and we'd loop uselessly.
+        const [commitmentsNow, links] = await Promise.all([
+          listCommitments(map.id),
+          listAssumptionLinks(map.id),
+        ]);
+        const covered = new Set(links.map((l) => l.commitment_id));
+        const uncovered = commitmentsNow.filter((c) => !covered.has(c.id));
+        if (uncovered.length === 0 && commitmentsNow.length > 0) {
+          try {
+            await advanceStage(map.id, "assumptions", "review");
+            advanced = true;
+          } catch {
+            // ignore — race or advance guard rejected
+          }
+        }
+      } else if (from === "review") {
+        try {
+          await advanceStage(map.id, "review", "immune_system");
+          advanced = true;
+        } catch {
+          // ignore
+        }
+      } else if (from === "immune_system") {
+        if (!currentMap.walkthrough_delivered) {
+          try {
+            await markWalkthroughDelivered(map.id);
+          } catch {
+            // ignore
+          }
+        }
+        try {
+          await advanceStage(map.id, "immune_system", "prioritize");
+          advanced = true;
+        } catch {
+          // ignore
+        }
       }
-    }
-    try {
-      await advanceStage(map.id, "immune_system", "prioritize");
-    } catch {
-      // ignore — already advanced or race
+
+      if (!advanced) break;
     }
   }
 
