@@ -413,6 +413,35 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     }
   }
 
+  // Auto-mark walkthrough delivered + advance immune_system → prioritize
+  // when the coachee affirms. This transition requires TWO actions
+  // (mark_walkthrough_delivered then advance_stage) but the coach only
+  // has one action slot per turn — leaving the coach to loop with
+  // announcements like "That's the walkthrough done" and "let's mark
+  // this part done and move into deciding which assumption to test
+  // first" without ever firing either action. Server handles both.
+  // Aggressive on purpose: by the time the coachee is affirming in
+  // this stage, the walkthrough is done or done-enough, and being
+  // stuck is worse than advancing.
+  if (
+    map.current_stage === "immune_system" &&
+    looksAffirmative(parsed.data.text)
+  ) {
+    const mapForImmune = await getMapById(map.id);
+    if (mapForImmune && !mapForImmune.walkthrough_delivered) {
+      try {
+        await markWalkthroughDelivered(map.id);
+      } catch {
+        // ignore — already marked
+      }
+    }
+    try {
+      await advanceStage(map.id, "immune_system", "prioritize");
+    } catch {
+      // ignore — already advanced or race
+    }
+  }
+
   // If the stage changed during this turn (via coach action or one of the
   // safety nets), retag the assistant message with the new stage so the
   // transition reply ("Locked. Now column 2…") lives in the new stage's

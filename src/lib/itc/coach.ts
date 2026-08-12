@@ -143,9 +143,12 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   ) {
     return true;
   }
-  // Model apologizing for JSON leakage in its own reply.
+  // Model apologizing for JSON leakage in its own reply. Observed
+  // variants: "ignore that formatting", "wait, the format leaked",
+  // "let me answer properly", "sorry, that was internal", etc. The
+  // shared signal is: model self-corrects mid-reply about output shape.
   if (
-    /ignore (that|this|the) formatting|ignore this artifact|sorry.*(json|formatting)|that was.*(json|internal)|ambient artifact/i.test(
+    /ignore (that|this|the) formatting|ignore this artifact|sorry.*(json|formatting|internal)|that was.*(json|internal)|ambient artifact|wait[,.]?\s*(the\s+)?(format|json|output|reply)\s+(leaked|is\s+off|slipped|got\s+through|bled)|let me (answer|reply|try|start|do that) (properly|again|correctly|over)|let me redo|scratch that.*(let me|here's)/i.test(
       trimmed,
     )
   ) {
