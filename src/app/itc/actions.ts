@@ -41,6 +41,7 @@ import {
 } from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
+  ASSUMPTION_STEM,
   COMMITMENT_STEM,
   GOAL_STEM,
   WORRY_STEM,
@@ -311,15 +312,16 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
 
   // Commitments backstop: if the coachee just affirmed the drafted list
   // and the coach forgot to emit propose_commitments_batch (observed:
-  // "Locking these in." reply with action=null), extract the numbered
-  // "I'm also committed to ..." drafts from the prior assistant message
-  // and insert them ourselves. Only fires when no commitments are locked
-  // yet AND the draft count matches the locked-worry count, so partial
-  // states can't get scrambled. Same pattern as the goal backstop above.
+  // "Locking these in." reply with action=null, repeated for many turns
+  // as the drafts scrolled further back in history), scan backwards
+  // through prior assistant messages and use the most recent one that
+  // has a matching draft count. Only fires when no commitments are
+  // locked yet AND we find drafts matching the locked-worry count, so
+  // partial states can't get scrambled. Same pattern as the goal
+  // backstop above.
   if (
     reply.action?.type !== "propose_commitments_batch" &&
-    looksLikeCommitmentAffirmation(parsed.data.text, reply.reply) &&
-    priorAssistantContent
+    looksLikeCommitmentAffirmation(parsed.data.text, reply.reply)
   ) {
     const [worriesForBackstop, commitmentsNow, mapForBackstop] =
       await Promise.all([
@@ -330,16 +332,35 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
     const lockedWorries = worriesForBackstop.filter(
       (w) => w.depth_score !== null,
     );
-    const drafts = extractCommitmentDrafts(priorAssistantContent);
     const stageOk =
       mapForBackstop?.current_stage === "commitments" ||
       mapForBackstop?.current_stage === "worries";
+
+    // Scan priorHistory backwards for the first assistant message whose
+    // draft count matches the locked-worry count. Only look at
+    // assistant messages — user messages never contain drafts.
+    let draftsFromHistory: string[] = [];
+    if (
+      stageOk &&
+      commitmentsNow.length === 0 &&
+      lockedWorries.length > 0
+    ) {
+      for (let i = priorHistory.length - 1; i >= 0; i--) {
+        const msg = priorHistory[i];
+        if (msg.role !== "assistant") continue;
+        const candidate = extractCommitmentDrafts(msg.content);
+        if (candidate.length === lockedWorries.length) {
+          draftsFromHistory = candidate;
+          break;
+        }
+      }
+    }
 
     if (
       stageOk &&
       commitmentsNow.length === 0 &&
       lockedWorries.length > 0 &&
-      drafts.length === lockedWorries.length
+      draftsFromHistory.length === lockedWorries.length
     ) {
       if (mapForBackstop?.current_stage === "worries") {
         try {
@@ -353,7 +374,7 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
           await addCommitment(
             map.id,
             lockedWorries[i].id,
-            ensureStem(drafts[i], COMMITMENT_STEM),
+            ensureStem(draftsFromHistory[i], COMMITMENT_STEM),
           );
         } catch (err) {
           console.warn(
@@ -363,8 +384,8 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
         }
       }
       console.warn(
-        "[itc] commitments backstop: inserted %d drafts from prior assistant message",
-        drafts.length,
+        "[itc] commitments backstop: inserted %d drafts from history scan",
+        draftsFromHistory.length,
       );
     }
   }
@@ -713,6 +734,26 @@ async function applyCoachAction(
       if (currentStage !== "commitments" && currentStage !== "assumptions") {
         return;
       }
+      // Reveal is not allowed until every locked worry has a commitment.
+      // Without this gate the coach delivers the summary text while the
+      // map is still empty, the coachee notices, and the flow loops for
+      // many turns as the coach tries to "lock them in" without firing
+      // the batch. Reject here so the coach's next turn gets the
+      // rejection feedback and is forced to run the batch first.
+      const [worriesForReveal, commitmentsForReveal] = await Promise.all([
+        listWorries(mapId),
+        listCommitments(mapId),
+      ]);
+      const lockedWorries = worriesForReveal.filter(
+        (w) => w.depth_score !== null,
+      );
+      const covered = new Set(commitmentsForReveal.map((c) => c.worry_id));
+      const uncovered = lockedWorries.filter((w) => !covered.has(w.id));
+      if (uncovered.length > 0) {
+        throw new Error(
+          `reveal blocked: ${uncovered.length} locked worries still have no commitment on the map. Fire propose_commitments_batch first, then deliver the reveal on the following turn.`,
+        );
+      }
       await markRevealDelivered(mapId);
       return;
     }
@@ -723,10 +764,11 @@ async function applyCoachAction(
     }
     case "propose_assumption": {
       if (currentStage !== "assumptions") return;
+      const stemmedText = ensureStem(action.text, ASSUMPTION_STEM);
       const map = await getMapById(mapId);
       const rubric = await scoreAssumptionDepth({
         goalText: map?.improvement_goal ?? "",
-        assumptionText: action.text,
+        assumptionText: stemmedText,
       });
       if (rubric.score < 2) {
         throw new Error(
@@ -744,7 +786,7 @@ async function applyCoachAction(
           `propose_assumption: commitment_indices resolved to no valid commitments.`,
         );
       }
-      const assumption = await addAssumption(mapId, action.text, rubric.score);
+      const assumption = await addAssumption(mapId, stemmedText, rubric.score);
       await linkAssumptionToCommitments(assumption.id, linkedIds);
       return;
     }

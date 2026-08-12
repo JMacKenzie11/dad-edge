@@ -144,7 +144,7 @@ export function MapPanel({
 
         <Column title="5. Big Assumptions">
           {assumptions.length === 0 ? (
-            <Placeholder>If-then form. Reveal at the end.</Placeholder>
+            <Placeholder>Comes together from the commitments.</Placeholder>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {assumptions.map((a) => {

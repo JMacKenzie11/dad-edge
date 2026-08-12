@@ -59,6 +59,7 @@ export function canTransitionTo(from: ItcStage, to: ItcStage): boolean {
 export const GOAL_STEM = "I'm committed to getting better at";
 export const WORRY_STEM = "I worry that";
 export const COMMITMENT_STEM = "I'm also committed to";
+export const ASSUMPTION_STEM = "I assume that";
 
 /**
  * Prepend a stem if the text doesn't already start with it. Tolerates
