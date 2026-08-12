@@ -124,6 +124,48 @@ const CoachReplySchema = z.object({
 
 export type CoachReply = z.infer<typeof CoachReplySchema>;
 
+/**
+ * Detects JSON-fragment leakage in the reply string. Observed in the wild:
+ * `Here's the full map, locked - showing this]},."action"}) Wait, ignore
+ * that formatting].` The model produces a technically-valid structured
+ * response but the reply field contains schema-key artifacts, bracket
+ * sequences, or a self-disclaimer about formatting. All three are signs
+ * that structured output partially collapsed; we should retry rather than
+ * ship the garbage to the coachee.
+ */
+export function looksLikeStructuredOutputLeakage(text: string): boolean {
+  const trimmed = text.trim();
+  // Schema key quoted mid-reply followed by JSON punctuation.
+  if (
+    /"(action|actions|items|text|type|worry_index|behavior_index|commitment_indices|assumption_index|reply|options|to|keep_indices|index|reason)"\s*[:,\]}]/.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  // Model apologizing for JSON leakage in its own reply.
+  if (
+    /ignore (that|this|the) formatting|ignore this artifact|sorry.*(json|formatting)|that was.*(json|internal)|ambient artifact/i.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  // Two or more JSON-structural fragments in the same reply strongly
+  // suggest bracket-sequence bleed.
+  const structuralBits = [
+    /\]\}/, // ]}
+    /\}\)/, // })
+    /\}"\s*:/, // }":
+    /"\s*\}/, // " }
+    /\}\s*,\s*"/, // }, "
+  ];
+  const hits = structuralBits.filter((re) => re.test(trimmed)).length;
+  if (hits >= 2) return true;
+
+  return false;
+}
+
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
 type RunCoachInput = {
@@ -196,6 +238,14 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
       if (object.reply.trim().length === 0) {
         // Treat empty output the same as a schema miss: retry.
         lastError = new Error("empty reply");
+        continue;
+      }
+      if (looksLikeStructuredOutputLeakage(object.reply)) {
+        console.warn(
+          "[itc] coach reply contained JSON-fragment leakage, retrying. raw=%o",
+          object.reply,
+        );
+        lastError = new Error("structured-output leakage");
         continue;
       }
       return object;

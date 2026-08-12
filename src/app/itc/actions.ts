@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
-import { runItcCoachTurn, type CoachAction } from "@/lib/itc/coach";
+import {
+  looksLikeStructuredOutputLeakage,
+  runItcCoachTurn,
+  type CoachAction,
+} from "@/lib/itc/coach";
 import {
   addAssumption,
   addBehavior,
@@ -460,15 +464,20 @@ async function runItcCoachTurnWithGuards(
   const isDupe =
     priorAssistantContent !== null &&
     trimmed === priorAssistantContent.trim();
-  // A well-formed coach reply always contains at least one letter. Zero
-  // letters means we got a JSON-fragment artifact (e.g. `.}`) that
-  // slipped through the schema's min(1) check.
-  const isGarbage = !isEmpty && !/[A-Za-z]/.test(trimmed);
+  // Two garbage shapes to catch: (a) zero letters (`.}` etc.) and (b)
+  // JSON-fragment leakage where the reply has letters but is polluted
+  // with schema keys / bracket bleed / model self-disclaimers. The
+  // per-attempt loop inside runItcCoachTurn already retries on (b); this
+  // is the belt-and-suspenders backup in case leakage still lands here.
+  const isNoLetters = !isEmpty && !/[A-Za-z]/.test(trimmed);
+  const isJsonLeakage = !isEmpty && looksLikeStructuredOutputLeakage(trimmed);
+  const isGarbage = isNoLetters || isJsonLeakage;
   if (!isEmpty && !isDupe && !isGarbage) return first;
 
   if (isGarbage) {
     console.warn(
-      "[itc] coach reply looked like JSON-fragment garbage, regenerating. raw=%o",
+      "[itc] coach reply looked like garbage (%s), regenerating. raw=%o",
+      isJsonLeakage ? "json-leakage" : "no-letters",
       first.reply,
     );
   }
@@ -476,7 +485,7 @@ async function runItcCoachTurnWithGuards(
   const nudge = isEmpty
     ? "Your previous attempt returned empty. Produce a real reply this time."
     : isGarbage
-      ? "Your previous attempt returned characters that were not a real reply. Write plain prose the coachee can read."
+      ? "Your previous attempt included JSON-fragment artifacts or non-prose characters in the reply text. Write plain prose the coachee can read — no schema keys, no bracket sequences, no meta-commentary about formatting."
       : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
   const regenerated = await runItcCoachTurn({
     ...coachInput,
