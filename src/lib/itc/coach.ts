@@ -268,8 +268,21 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   //  2. The reply ends with a trailing colon and nothing after —
   //     model was about to deliver content and stopped mid-transition.
   const metaEditingRe =
-    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a )?(actual|real|proper|new|full|next)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write|actually let me/i;
+    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a |it )?(actual|real|proper|properly|new|full|next|out)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write|actually let me|step(ping)? back|final json|produce (the |a )?(final |proper )?(json|reply|response|output)|write (this |the |it )?(out |up )?properly|need to (produce|write|generate|deliver|give)/i;
   if (metaEditingRe.test(trimmed)) {
+    return true;
+  }
+  // Bare mention of the word "JSON" in a coach reply. The coach never
+  // has occasion to talk about JSON, output formats, or schemas —
+  // that's model-side plumbing. If the word appears, the model leaked
+  // its own reasoning about the output shape.
+  if (/\bjson\b/i.test(trimmed)) {
+    return true;
+  }
+  // Trailing brace runs like "}}}" or "}}." — JSON structure that
+  // spilled out of the object into the visible reply. A single
+  // "}" trailing is caught above; two or more in a row is unambiguous.
+  if (/\}\s*\}/.test(trimmed)) {
     return true;
   }
   // Trailing colon with no continuation. A legitimate reply that ends

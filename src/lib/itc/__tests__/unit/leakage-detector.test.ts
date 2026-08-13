@@ -225,6 +225,44 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
       looksLikeStructuredOutputLeakage("Locked. </endoftext>"),
     ).toBe(true);
   });
+
+  it("meta reasoning chatter with 'let me write out properly' + 'produce final JSON' (real 2026-08-13)", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        ".>{ let me write out properly.}...}}} - stepping back, need to produce final JSON now....",
+      ),
+    ).toBe(true);
+  });
+
+  it("bare 'produce final JSON' variant", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "OK. Now I need to produce final JSON with the action.",
+      ),
+    ).toBe(true);
+  });
+
+  it("bare mention of the word JSON in coach reply", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "Locked. Now emitting the JSON.",
+      ),
+    ).toBe(true);
+  });
+
+  it("trailing '}}' brace runs", () => {
+    expect(
+      looksLikeStructuredOutputLeakage("That's what came up. }}"),
+    ).toBe(true);
+  });
+
+  it("'stepping back' meta chatter", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "Hmm, stepping back — that's not quite the shape I want.",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("looksLikeStructuredOutputLeakage — should NOT catch (real coach replies)", () => {
