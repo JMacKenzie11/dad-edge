@@ -411,6 +411,12 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
 
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
+    // Per-attempt timeout — observed a "coach spins forever after user
+    // types 'OK'" case where the request never returned. Cap at 90s so
+    // three attempts is bounded at ~4.5 minutes worst case and the
+    // fallback path still gets a chance to run.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
     try {
       const { object } = await generateObject({
         model: itcCoachModel(),
@@ -424,6 +430,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         // 8192 (doubled from 4096) so the batch+reveal turn and the
         // full immune-system walkthrough have room without truncating.
         maxOutputTokens: 8192,
+        abortSignal: controller.signal,
       });
       if (object.reply.trim().length === 0) {
         // Treat empty output the same as a schema miss: retry.
@@ -441,6 +448,8 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
       return object;
     } catch (err) {
       lastError = err;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -451,12 +460,29 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     "[itc] coach structured-output failed after retries, falling back to text:",
     lastError instanceof Error ? lastError.message : String(lastError),
   );
-  const { text } = await generateText({
-    model: itcCoachModel(),
-    system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
-    messages,
-    maxOutputTokens: 4096,
-  });
+  const fallbackController = new AbortController();
+  const fallbackTimeoutId = setTimeout(
+    () => fallbackController.abort(),
+    60_000,
+  );
+  let text = "";
+  try {
+    const result = await generateText({
+      model: itcCoachModel(),
+      system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
+      messages,
+      maxOutputTokens: 4096,
+      abortSignal: fallbackController.signal,
+    });
+    text = result.text;
+  } catch (err) {
+    console.warn(
+      "[itc] coach text fallback also failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+  } finally {
+    clearTimeout(fallbackTimeoutId);
+  }
   const fallback = text.trim();
   return {
     reply: fallback.length > 0 ? fallback : "Give me one more sec — mind repeating that?",

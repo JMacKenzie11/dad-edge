@@ -119,6 +119,18 @@ describe("extractWorryDraft", () => {
     expect(extractWorryDraft("no fear-shaped content here")).toBeNull();
     expect(extractWorryDraft("")).toBeNull();
   });
+
+  it("extracts a worry the coachee wrote themselves (real observed miss)", () => {
+    // From the 2026-08-13 session: coach forgot to fire propose_worry
+    // for worry #4 because the user wrote it directly and the coach's
+    // reply just acknowledged. The backstop now scans the user's
+    // message as its first extraction target.
+    const userMessage =
+      "I worry that if I let myself feel small or wrong in front of her, she'd lose respect for me as a man";
+    const extracted = extractWorryDraft(userMessage);
+    expect(extracted).toContain("I worry that");
+    expect(extracted).toContain("lose respect for me as a man");
+  });
 });
 
 describe("extractAssumptionDraft", () => {

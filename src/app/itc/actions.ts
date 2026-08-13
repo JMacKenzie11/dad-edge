@@ -425,7 +425,13 @@ export async function runCoachTurnForMap(
       (b) => b.selected && !pairedIds.has(b.id),
     );
     if (firstUnpaired) {
+      // Extraction priority: user's current message first (coachees
+      // often write the worry themselves in "I worry that if X, then
+      // Y" form, and if the coach forgot to fire propose_worry on
+      // that turn, this is where the real content lives). Fall back
+      // to the coach's reply and prior assistant message.
       const extracted =
+        extractWorryDraft(parsed.data.text) ??
         extractWorryDraft(reply.reply) ??
         (priorAssistantContent
           ? extractWorryDraft(priorAssistantContent)
