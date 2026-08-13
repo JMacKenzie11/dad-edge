@@ -50,6 +50,14 @@ import {
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
+import {
+  coachAcknowledgedNewBehavior,
+  extractAssumptionDraft,
+  extractCoachBehaviorCount,
+  extractCommitmentDrafts,
+  extractWorryDraft,
+  looksLikeBehaviorCandidate,
+} from "@/lib/itc/backstop-extractors";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   ASSUMPTION_STEM,
@@ -344,6 +352,120 @@ export async function runCoachTurnForMap(
       await advanceStage(map.id, "goal", "behaviors");
     } catch {
       // ignore — already advanced or race
+    }
+  }
+
+  // Behaviors backstop: coach says "That's a second one, two on the map"
+  // but forgets to emit propose_behavior — the reply text and the actual
+  // behavior list drift apart, and the coachee sees two bubbles in chat
+  // but only one card on the map. Recovery: if we're in the behaviors
+  // stage, the user's just-sent message is behavior-shaped, the coach's
+  // reply acknowledges it as a new behavior (via count-claim or "that's
+  // a Nth one" pattern), and the action this turn wasn't
+  // propose_behavior/replace_behavior — insert the user's message as a
+  // new behavior. Bounded by the same 5-cap the propose_behavior handler
+  // enforces (never insert past 5).
+  if (
+    map.current_stage === "behaviors" &&
+    reply.action?.type !== "propose_behavior" &&
+    reply.action?.type !== "replace_behavior" &&
+    looksLikeBehaviorCandidate(parsed.data.text) &&
+    coachAcknowledgedNewBehavior(reply.reply)
+  ) {
+    const behaviorsBefore = await listBehaviors(map.id);
+    const selectedCount = behaviorsBefore.filter((b) => b.selected).length;
+    if (selectedCount < 5) {
+      // Only insert if the coach's claimed count is actually greater
+      // than reality — this prevents double-inserting if the coach DID
+      // fire propose_behavior and is just recapping. The extractor
+      // looks for "N on the map", "Now N", "That's N so far" claims.
+      const claimedCount = extractCoachBehaviorCount(reply.reply);
+      if (claimedCount !== null && claimedCount > selectedCount) {
+        try {
+          await addBehavior(map.id, parsed.data.text.trim(), "user");
+          console.warn(
+            "[itc] behaviors backstop: inserted behavior (coach claimed %d on map, actual was %d)",
+            claimedCount,
+            selectedCount,
+          );
+        } catch (err) {
+          console.warn(
+            "[itc] behaviors backstop: addBehavior failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+  }
+
+  // Worries backstop: coach probes to depth, gets a fear-shaped answer,
+  // acknowledges it, but forgets to emit propose_worry. The next probe
+  // fires against a behavior that doesn't have its worry paired yet, so
+  // the pairing shifts by one and the whole map degrades. Recovery: if
+  // we're in worries stage, the action this turn wasn't propose_worry,
+  // and the coach's reply contains a quoted "I worry that if X ..."
+  // sentence, extract it, run the depth rubric, and pair it with the
+  // first unpaired selected behavior in order. Same rubric-gate rule as
+  // the assumptions backstop: don't force in a proposal that would have
+  // been rejected on the normal path.
+  if (
+    map.current_stage === "worries" &&
+    reply.action?.type !== "propose_worry"
+  ) {
+    const [behaviorsForWorry, worriesForBackstop] = await Promise.all([
+      listBehaviors(map.id),
+      listWorries(map.id),
+    ]);
+    const pairedIds = new Set(
+      worriesForBackstop
+        .filter((w) => w.depth_score !== null)
+        .map((w) => w.behavior_id),
+    );
+    const firstUnpaired = behaviorsForWorry.find(
+      (b) => b.selected && !pairedIds.has(b.id),
+    );
+    if (firstUnpaired) {
+      const extracted =
+        extractWorryDraft(reply.reply) ??
+        (priorAssistantContent
+          ? extractWorryDraft(priorAssistantContent)
+          : null);
+      if (extracted) {
+        try {
+          const stemmed = ensureStem(extracted, WORRY_STEM);
+          const rubric = await scoreWorryDepth({
+            goalText: map.improvement_goal ?? "",
+            behaviorText: firstUnpaired.text,
+            worryText: stemmed,
+          });
+          if (rubric.score >= 2) {
+            await upsertWorry(map.id, firstUnpaired.id, stemmed, rubric.score);
+            await logWorryAttempt({
+              mapId: map.id,
+              behaviorId: firstUnpaired.id,
+              text: stemmed,
+              depthScore: rubric.score,
+              accepted: true,
+              rejectReason: null,
+            });
+            console.warn(
+              "[itc] worries backstop: paired extracted worry to behavior %s (score %d/3)",
+              firstUnpaired.id,
+              rubric.score,
+            );
+          } else {
+            console.warn(
+              "[itc] worries backstop: rubric would reject draft (score %d/3) — not persisting",
+              rubric.score,
+            );
+          }
+        } catch (err) {
+          console.warn(
+            "[itc] worries backstop: upsertWorry failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
     }
   }
 
@@ -776,10 +898,20 @@ export async function runCoachTurnForMap(
             } catch {
               // ignore
             }
+          } else if (assumptionsNow.length === 1) {
+            // Single-assumption case (common when the coverage
+            // walk-through consolidated to one) — no ambiguity, pick
+            // it. Skips the coach having to fire
+            // select_assumption_for_testing for the trivial case.
+            try {
+              await setAssumptionSelected(assumptionsNow[0].id, map.id);
+            } catch {
+              // ignore
+            }
           } else {
-            // No selection and no recommendation — don't fabricate a
-            // pick. Break out of cascade; coach's next turn must fire
-            // select_assumption_for_testing before we can advance.
+            // Multiple assumptions with no recommendation and no pick
+            // — don't fabricate one; cascade stalls at prioritize
+            // until the coach fires select_assumption_for_testing.
             break;
           }
         }
@@ -941,24 +1073,6 @@ async function runItcCoachTurnWithGuards(
   return regenerated;
 }
 
-// Pulls numbered "I'm also committed to ..." drafts out of an assistant
-// message. Tolerant of smart-apostrophes and leading whitespace. Order is
-// preserved — the caller aligns index N to the Nth locked worry.
-function extractCommitmentDrafts(text: string): string[] {
-  const drafts: string[] = [];
-  const re = /^\s*\d+[.)]\s+(I[\u2019'\u02BC]?m also committed to [^\n]+?)\s*$/i;
-  for (const rawLine of text.split("\n")) {
-    const m = rawLine.match(re);
-    if (!m) continue;
-    // Canonicalize the "I'm" apostrophe so ensureStem matches.
-    const draft = m[1]
-      .replace(/^I[\u2019\u02BC]?m/i, "I'm")
-      .replace(/[.!?]+$/, "")
-      .trim();
-    if (draft.length > 0) drafts.push(draft);
-  }
-  return drafts;
-}
 
 // Affirmation detector tuned for the commitments-batch backstop. Wider
 // than looksAffirmative (which is for the tight goal-lock path) because
@@ -1010,18 +1124,6 @@ function looksLikeCommitmentAffirmation(
 // — a bare "I assume that" fragment inside general prose is too easy
 // to false-positive on. Returns the extracted text WITHOUT the stem
 // (caller re-applies via ensureStem).
-function extractAssumptionDraft(text: string): string | null {
-  // Delimiters: double-quotes only (straight " or curly \u201C \u201D).
-  // Single quotes are excluded because apostrophes inside I'm / don't
-  // would prematurely terminate the character class and break the match.
-  const re =
-    /["\u201C]\s*(I\s*['\u2019\u02BC]?\s*assume\s+that\b[^"\u201C\u201D]{5,300}?)\s*["\u201D]/i;
-  const m = text.match(re);
-  if (!m) return null;
-  const draft = m[1].replace(/[.!?]+$/, "").trim();
-  return draft.length > 0 ? draft : null;
-}
-
 // Pulls a drafted test out of a prior assistant message so the server
 // can fire save_test_design when the coach forgot to. Requires all four
 // field labels + a target_date + a recognizable test_type — otherwise
