@@ -1017,8 +1017,15 @@ function looksAffirmative(text: string): boolean {
     /^i['\u2019]?m ready\b/,
     /^ready (to|for)\b/,
     /^let['\u2019]?s (move|go|do it)\b/,
-    /^(yeah|yes|ok|sure|good)[\s,]+(let['\u2019]?s|move|go)\b/,
+    /^(yeah|yes|ok|sure|good)[\s,]+(let['\u2019]?s|move|go|close|finish|wrap)\b/,
     /^(next|next step|move on|keep going|continue)\b/,
+    // Close signals — needed to trip the outer cascade gate so the
+    // results → done branch has a chance to run its looksLikeMapClose
+    // check.
+    /^(yes|yeah|ok|sure)[\s,]+close/,
+    /^close (it|the map|out|for now)/,
+    /\bwe['\u2019]?re done\b/,
+    /\bdone for (today|now)\b/,
   ];
   return movePatterns.some((re) => re.test(t));
 }
