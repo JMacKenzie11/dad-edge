@@ -1506,7 +1506,16 @@ async function applyCoachAction(
       return;
     }
     case "select_assumption_for_testing": {
-      if (currentStage !== "prioritize") return;
+      // Allowed at prioritize AND test_design — if the coachee changes
+      // his mind after auto-advance, the coach needs to be able to
+      // update the selection without walking back a stage. Was
+      // observed: coach recommended #1, cascade auto-selected #1,
+      // advanced to test_design, coachee then asked for #2 — coach
+      // couldn't fire the action to switch and the whole test was
+      // built against the wrong assumption.
+      if (currentStage !== "prioritize" && currentStage !== "test_design") {
+        return;
+      }
       const assumptions = await listAssumptions(mapId);
       const target = assumptions[action.assumption_index - 1];
       if (!target) {
