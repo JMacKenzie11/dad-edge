@@ -265,6 +265,17 @@ export async function addBehavior(
 }
 
 export function normalizeBehaviorText(text: string): string {
+  return normalizeMapText(text);
+}
+
+/**
+ * Shared text-normalization key used by every "refuse exact-text
+ * duplicate" check on the map (behaviors, assumptions, etc.). Lowercase,
+ * whitespace-collapsed, straight/curly-apostrophe-normalized, trailing
+ * punctuation stripped. Case-insensitive by construction so "I lie" and
+ * "i lie." match.
+ */
+export function normalizeMapText(text: string): string {
   return text
     .trim()
     .toLowerCase()
@@ -434,12 +445,41 @@ export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
   return (data ?? []) as ItcCommitment[];
 }
 
+/**
+ * Insert a commitment paired to a worry. Refuses to create a second
+ * commitment on the same worry (that's what "pairing" means — 1:1),
+ * AND refuses exact-text duplicates across the map even if they'd
+ * belong to different worries. Same failure family as the assumptions
+ * and behaviors dupes. Returns the existing row on duplicate.
+ */
 export async function addCommitment(
   mapId: string,
   worryId: string,
   text: string,
 ): Promise<ItcCommitment> {
   const supabase = createSupabaseServiceClient();
+  const existing = await listCommitments(mapId);
+  const normalized = normalizeMapText(text);
+  const worryDuplicate = existing.find((c) => c.worry_id === worryId);
+  if (worryDuplicate) {
+    console.warn(
+      "[itc] addCommitment: worry %s already has a commitment on map %s — returning existing",
+      worryId,
+      mapId,
+    );
+    return worryDuplicate;
+  }
+  const textDuplicate = existing.find(
+    (c) => normalizeMapText(c.text) === normalized,
+  );
+  if (textDuplicate) {
+    console.warn(
+      "[itc] addCommitment: refusing exact-text duplicate on map %s (text=%o)",
+      mapId,
+      text.trim(),
+    );
+    return textDuplicate;
+  }
   const { data, error } = await supabase
     .from("itc_commitments")
     .insert({ map_id: mapId, worry_id: worryId, text: text.trim() })
@@ -460,6 +500,15 @@ export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {
   return (data ?? []) as ItcAssumption[];
 }
 
+/**
+ * Insert a new assumption on the map. Refuses exact-text duplicates
+ * (same normalization as addBehavior). Observed failure: coach fired
+ * propose_assumption for the same cluster three times across three
+ * "yes" affirmations and ended up with three identical rows in
+ * column 5. When a duplicate is detected, return the existing row so
+ * the caller (and any assumption→commitment link handler) proceeds
+ * against a single canonical row.
+ */
 export async function addAssumption(
   mapId: string,
   text: string,
@@ -467,6 +516,18 @@ export async function addAssumption(
 ): Promise<ItcAssumption> {
   const supabase = createSupabaseServiceClient();
   const existing = await listAssumptions(mapId);
+  const normalized = normalizeMapText(text);
+  const duplicate = existing.find(
+    (a) => normalizeMapText(a.text) === normalized,
+  );
+  if (duplicate) {
+    console.warn(
+      "[itc] addAssumption: refusing exact-text duplicate on map %s (text=%o)",
+      mapId,
+      text.trim(),
+    );
+    return duplicate;
+  }
   const { data, error } = await supabase
     .from("itc_assumptions")
     .insert({
