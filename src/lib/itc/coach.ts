@@ -30,6 +30,16 @@ const CoachActionSchema = z.discriminatedUnion("type", [
     index: z.number().int().min(1),
     text: z.string().min(1),
   }),
+  // Remove a behavior from the map. index is 1-based into the behavior
+  // list the coach sees. Use this when the coachee asks to "drop" or
+  // "remove" a behavior (typical trigger: a duplicate the coach
+  // noticed after firing propose_behavior on both). Only allowed at
+  // the behaviors stage — once worries are being paired against the
+  // set, deletion would orphan a locked worry.
+  z.object({
+    type: z.literal("remove_behavior"),
+    index: z.number().int().min(1),
+  }),
   // Propose a worry paired to a specific behavior. behavior_index is
   // 1-based into the behaviors list the coach sees. Server runs the depth
   // rubric before locking; a score <2 always rejects, a score of 2
@@ -187,7 +197,7 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   // an "Action:" label at the start of a line, an unquoted action-type
   // name mentioned in prose, or an assignment like "X_index=N".
   const unquotedSchemaRe =
-    /(^|\n)\s*n?Action\s*[:=]|\b(propose_(?:worry|behavior|commitment|commitments_batch|goal|assumption)|advance_stage|mark_reveal_delivered|mark_walkthrough_delivered|save_test_design|record_test_results|replace_behavior|suggest_behaviors|recommend_assumption_for_testing|select_assumption_for_testing)\b|\b(?:behavior|worry|assumption|commitment)_index\s*[=:]|\bkeep_indices\s*[=:]|\bcommitment_indices\s*[=:]|\btextting\b|setting the (worry|commitment|assumption) text/i;
+    /(^|\n)\s*n?Action\s*[:=]|\b(propose_(?:worry|behavior|commitment|commitments_batch|goal|assumption)|advance_stage|mark_reveal_delivered|mark_walkthrough_delivered|save_test_design|record_test_results|replace_behavior|remove_behavior|suggest_behaviors|recommend_assumption_for_testing|select_assumption_for_testing)\b|\b(?:behavior|worry|assumption|commitment)_index\s*[=:]|\bkeep_indices\s*[=:]|\bcommitment_indices\s*[=:]|\btextting\b|setting the (worry|commitment|assumption) text/i;
   if (unquotedSchemaRe.test(trimmed)) {
     return true;
   }

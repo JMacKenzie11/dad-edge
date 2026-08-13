@@ -296,6 +296,61 @@ export async function updateBehaviorText(
   if (error) throw new Error(`updateBehaviorText: ${error.message}`);
 }
 
+/**
+ * Delete a behavior from the map. Used by the coach's remove_behavior
+ * action when the coachee asks to drop one (typically a duplicate).
+ *
+ * Refuses to delete if a worry is already paired to the behavior —
+ * once excavation has landed a fear underneath, removing the behavior
+ * would orphan that worry and drop the whole coaching thread. The
+ * schema uses ON DELETE CASCADE on itc_worries so the DB would silently
+ * accept it; we enforce here in application code to keep the guarantee
+ * explicit and give the coach a rejection reason it can react to.
+ *
+ * After delete, sort_order values on the remaining behaviors are
+ * compacted (0, 1, 2, …) so 1-based coach indices continue to line up
+ * with the visible list.
+ */
+export async function deleteBehavior(
+  id: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const worries = await supabase
+    .from("itc_worries")
+    .select("id")
+    .eq("map_id", mapId)
+    .eq("behavior_id", id)
+    .limit(1);
+  if (worries.error) {
+    throw new Error(`deleteBehavior worry-check: ${worries.error.message}`);
+  }
+  if ((worries.data ?? []).length > 0) {
+    throw new Error(
+      `deleteBehavior: behavior has a paired worry — remove via replace_behavior instead, or return to worries stage first.`,
+    );
+  }
+  const { error } = await supabase
+    .from("itc_behaviors")
+    .delete()
+    .eq("id", id)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`deleteBehavior: ${error.message}`);
+  const remaining = await listBehaviors(mapId);
+  for (let i = 0; i < remaining.length; i++) {
+    if (remaining[i].sort_order === i) continue;
+    const { error: reorderErr } = await supabase
+      .from("itc_behaviors")
+      .update({ sort_order: i })
+      .eq("id", remaining[i].id);
+    if (reorderErr) {
+      throw new Error(
+        `deleteBehavior compact sort_order: ${reorderErr.message}`,
+      );
+    }
+  }
+}
+
 export async function listWorries(mapId: string): Promise<ItcWorry[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase

@@ -18,6 +18,7 @@ import {
   clearSelectedAssumption,
   countWorryAttempts,
   createMap,
+  deleteBehavior,
   deleteMap,
   findInProgressMap,
   getActiveTest,
@@ -1265,6 +1266,22 @@ async function applyCoachAction(
         );
       }
       await updateBehaviorText(target.id, mapId, action.text);
+      return;
+    }
+    case "remove_behavior": {
+      if (currentStage !== "behaviors") {
+        throw new Error(
+          `remove_behavior: only allowed at behaviors stage (current: ${currentStage}). Removing a behavior after worries pair against it would orphan a locked worry.`,
+        );
+      }
+      const all = await listBehaviors(mapId);
+      const target = all[action.index - 1];
+      if (!target) {
+        throw new Error(
+          `remove_behavior: index ${action.index} out of range (${all.length} behaviors).`,
+        );
+      }
+      await deleteBehavior(target.id, mapId);
       return;
     }
     case "propose_worry": {
