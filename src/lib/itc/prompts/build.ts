@@ -170,8 +170,20 @@ export function buildItcCoachSystem(input: BuildInput): string {
         .join("\n")
     : "  (none yet)";
 
+  // Today's date, injected fresh each turn so the model can pick real
+  // future dates for target_date fields. The LLM's training cutoff
+  // makes "today" a hallucination guess — observed a test with
+  // target_date=2025-06-13 (14 months in the past). Also compute the
+  // one-week horizon that tests must fall within.
+  const today = new Date();
+  const todayISO = today.toISOString().slice(0, 10);
+  const oneWeekOut = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const oneWeekISO = oneWeekOut.toISOString().slice(0, 10);
+
   const contextBlock = `
 Current context
+- Today's date: ${todayISO}. Any target_date you propose MUST be on or after this date; picking a past date is a bug (the LLM has no idea what today is unless you look at this line).
+- One-week horizon (test target_date must fall on or before this): ${oneWeekISO}. Tests are timed so results land before the next mastermind call — 7 days is the outer bound, sooner is fine.
 - BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
 - Current stage: ${input.stage}.
 - Map status: ${input.mapStatus}.
