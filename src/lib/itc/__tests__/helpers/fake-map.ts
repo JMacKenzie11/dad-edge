@@ -44,7 +44,6 @@ export type CoachTurnInput = {
   worries: FakeWorry[];
   commitments: FakeCommitment[];
   assumptions: FakeAssumption[];
-  revealDelivered: boolean;
   walkthroughDelivered: boolean;
   tests: never[];
   testResults: never[];
@@ -77,7 +76,6 @@ export function baseCoachInput(
     worries: [],
     commitments: [],
     assumptions: [],
-    revealDelivered: false,
     walkthroughDelivered: false,
     tests: [],
     testResults: [],

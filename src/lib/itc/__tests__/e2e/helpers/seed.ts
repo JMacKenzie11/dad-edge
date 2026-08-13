@@ -21,7 +21,8 @@ import type { TestMapContext } from "./fixtures";
  * - 4 commitments
  * - 1 Big Assumption (selected_for_testing, all commitments linked)
  * - 1 test row (status=run) + 1 test_result row (partially_challenged)
- * - reveal_delivered = true, walkthrough_delivered = true
+ * - walkthrough_delivered = true (reveal_delivered set too but no
+ *   longer read anywhere — vestigial DB column)
  * - stage = results
  *
  * Ready for the iteration turn — user says "let me run another test"

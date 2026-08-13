@@ -341,7 +341,6 @@ type RunCoachInput = {
     coach_recommended: boolean;
     linked_commitment_ids: string[];
   }[];
-  revealDelivered: boolean;
   walkthroughDelivered: boolean;
   tests: {
     id: string;
@@ -388,7 +387,6 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     worries: input.worries,
     commitments: input.commitments,
     assumptions: input.assumptions,
-    revealDelivered: input.revealDelivered,
     walkthroughDelivered: input.walkthroughDelivered,
     tests: input.tests,
     testResults: input.testResults,

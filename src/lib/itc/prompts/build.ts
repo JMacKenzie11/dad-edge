@@ -61,7 +61,6 @@ type BuildInput = {
     coach_recommended: boolean;
     linked_commitment_ids: string[];
   }[];
-  revealDelivered: boolean;
   walkthroughDelivered: boolean;
   tests: {
     id: string;
@@ -176,8 +175,7 @@ Current context
 - BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
 - Current stage: ${input.stage}.
 - Map status: ${input.mapStatus}.
-- Brief reveal delivered (v2 3.3b): ${input.revealDelivered ? "yes" : "no"}.
-- Full immune-system walkthrough delivered: ${input.walkthroughDelivered ? "yes" : "no"}.
+- Immune-system walkthrough delivered: ${input.walkthroughDelivered ? "yes" : "no"}.
 - Improvement goal on the map: ${input.improvementGoal ?? "(not yet set)"}.
 - Behaviors on the map so far (${selectedCount} on the map${input.behaviors.length - selectedCount > 0 ? `, ${input.behaviors.length - selectedCount} legacy-parked from an older flow — treat as off-map` : ""}):
 ${behaviorList}

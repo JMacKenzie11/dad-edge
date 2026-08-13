@@ -137,17 +137,12 @@ describe("E2E: full happy path (goal → done)", () => {
       // state" test. LLM turn interpretation varies enough that the
       // full path won't reliably reach done every run. We assert:
       //   - Goal saved
-      //   - Reveal delivered (past commitments)
       //   - At least 3 of each intermediate DB shape (map is built)
       //   - Stage is past behaviors (real progression happened)
       //
       // If stage=done, status=complete, and results are recorded, we
       // consider it a "clean pass" and log — but don't fail otherwise.
       expect(finalMap?.improvement_goal, "goal should be set").toBeTruthy();
-      expect(
-        finalMap?.reveal_delivered,
-        `reveal should be delivered (past commitments). Stage: ${finalMap?.current_stage}. Last reply:\n${lastReply}`,
-      ).toBe(true);
       expect(
         behaviors.filter((b) => b.selected).length,
       ).toBeGreaterThanOrEqual(3);

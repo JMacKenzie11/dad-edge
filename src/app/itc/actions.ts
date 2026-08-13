@@ -228,7 +228,6 @@ export async function runCoachTurnForMap(
         text: c.text,
       })),
       assumptions: assumptionsForCoach,
-      revealDelivered: map.reveal_delivered,
       walkthroughDelivered: map.walkthrough_delivered,
       tests: tests.map((t) => ({
         id: t.id,
@@ -574,16 +573,6 @@ export async function runCoachTurnForMap(
           );
         }
       }
-      // Mark reveal_delivered too — the batch handler does this on the
-      // normal path (trusting the prompt that reveal is in the batch
-      // turn's reply). Backstop path skips the handler and inserts
-      // directly, so we mark here to match. Prevents the downstream
-      // review → immune_system advance gate from silently failing.
-      try {
-        await markRevealDelivered(map.id);
-      } catch {
-        // non-fatal — may already be marked
-      }
       console.warn(
         "[itc] commitments backstop: inserted %d drafts from history scan",
         draftsFromHistory.length,
@@ -766,22 +755,17 @@ export async function runCoachTurnForMap(
           }
         }
       } else if (from === "commitments") {
-        // Only advance if every locked worry has a commitment AND
-        // the reveal has been delivered. Reveal_delivered is set by
-        // the propose_commitments_batch handler (which trusts the
-        // prompt that the reveal narrative is in the batch turn's
-        // reply). If we're still in commitments and reveal is not
-        // delivered, don't advance — the coach hasn't finished the
-        // reveal + reflection beat and skipping it drops the whole
-        // point of Column 3's gas-and-brake moment.
+        // Advance to assumptions the moment every locked worry has a
+        // commitment. The old flow required reveal_delivered=true here
+        // because the coach used to deliver a mini gas-and-brake
+        // reveal at commitments; that's been removed (the full
+        // walkthrough lands at immune_system after review) so the
+        // reveal flag no longer gates this transition.
         //
-        // Additional guard: if the current turn's action IS the
-        // batch itself, do NOT advance on this turn — the coachee is
-        // still reading the reveal narrative that just landed. Wait
-        // for their next affirmation.
+        // Additional guard: if the current turn's action IS the batch
+        // itself, do NOT advance on this turn — leave the coachee a
+        // beat with the freshly-locked list before the stage flips.
         if (reply.action?.type === "propose_commitments_batch") {
-          // Batch just fired this turn; hold on advance so the
-          // coachee has a beat to reflect on the reveal.
           break;
         }
         const [worriesNow, commitmentsNow] = await Promise.all([
@@ -791,11 +775,7 @@ export async function runCoachTurnForMap(
         const lockedWorries = worriesNow.filter((w) => w.depth_score !== null);
         const covered = new Set(commitmentsNow.map((c) => c.worry_id));
         const uncoveredWorries = lockedWorries.filter((w) => !covered.has(w.id));
-        if (
-          lockedWorries.length > 0 &&
-          uncoveredWorries.length === 0 &&
-          currentMap.reveal_delivered
-        ) {
+        if (lockedWorries.length > 0 && uncoveredWorries.length === 0) {
           try {
             await advanceStage(map.id, "commitments", "assumptions");
             advanced = true;
@@ -823,24 +803,10 @@ export async function runCoachTurnForMap(
           }
         }
       } else if (from === "review") {
-        // The review → immune_system advance gate requires
-        // reveal_delivered=true. If it's still false at this point
-        // (backstop path skipped the marking, or the coach delivered
-        // the reveal text without the batch action firing), auto-mark
-        // it here. We're already past the reveal beat conceptually —
-        // the user got to review, which means commitments landed and
-        // the map is complete. Blocking the cascade over this state
-        // flag is worse than trusting the flow forward.
-        if (!currentMap.reveal_delivered) {
-          try {
-            await markRevealDelivered(map.id);
-          } catch (err) {
-            console.warn(
-              "[itc cascade] review branch: markRevealDelivered failed: %s",
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        }
+        // review → immune_system has no reveal_delivered gate anymore
+        // (the mini reveal at commitments was removed; the full
+        // walkthrough happens at immune_system). Advance on any
+        // affirmation once the map holds a complete picture.
         try {
           await advanceStage(map.id, "review", "immune_system");
           advanced = true;
@@ -1436,17 +1402,6 @@ async function applyCoachAction(
 
       for (const t of targets) {
         await addCommitment(mapId, t.worryId, t.text);
-      }
-      // Auto-mark reveal_delivered — the prompt for Turn 2 of the
-      // commitments batch REQUIRES the reply to include the reveal
-      // narrative + "What's it like to see that?" question in the same
-      // turn as the batch. Marking here keeps the downstream review /
-      // immune_system gates from blocking on a missing action while
-      // trusting the prompt that reveal is in the reply text.
-      try {
-        await markRevealDelivered(mapId);
-      } catch {
-        // non-fatal — reveal may already be marked
       }
       return;
     }

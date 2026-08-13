@@ -224,6 +224,15 @@ export async function listBehaviors(mapId: string): Promise<ItcBehavior[]> {
   return (data ?? []) as ItcBehavior[];
 }
 
+/**
+ * Insert a new behavior on the map. Refuses to create an exact-text
+ * duplicate — observed failure was the same text landing twice (coach
+ * double-fired across turns) with no way for the user to remove one
+ * later. Comparison is case-insensitive and ignores trailing
+ * punctuation so "I lie to get out." and "i lie to get out" don't
+ * create two rows. When a duplicate is detected, return the existing
+ * row so the caller sees "the behavior is on the map" and moves on.
+ */
 export async function addBehavior(
   mapId: string,
   text: string,
@@ -233,6 +242,18 @@ export async function addBehavior(
   if (trimmed.length < 3) throw new Error("Behavior is too short.");
   const supabase = createSupabaseServiceClient();
   const existing = await listBehaviors(mapId);
+  const normalized = normalizeBehaviorText(trimmed);
+  const duplicate = existing.find(
+    (b) => normalizeBehaviorText(b.text) === normalized,
+  );
+  if (duplicate) {
+    console.warn(
+      "[itc] addBehavior: refusing exact-text duplicate on map %s (text=%o)",
+      mapId,
+      trimmed,
+    );
+    return duplicate;
+  }
   const sortOrder = existing.length;
   const { data, error } = await supabase
     .from("itc_behaviors")
@@ -241,6 +262,16 @@ export async function addBehavior(
     .single();
   if (error || !data) throw new Error(`addBehavior: ${error?.message ?? "no row"}`);
   return data as ItcBehavior;
+}
+
+export function normalizeBehaviorText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+/g, " ");
 }
 
 /**
@@ -741,14 +772,6 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
       if (uncovered.length > 0) {
         throw new Error(
           `Every commitment must be covered by an assumption before review. Uncovered: ${uncovered.length}.`,
-        );
-      }
-    }
-    if (to === "immune_system") {
-      const map = await getMapById(mapId);
-      if (!map?.reveal_delivered) {
-        throw new Error(
-          `Deliver the brief reveal (gas/brake beat) before moving to the immune-system walkthrough.`,
         );
       }
     }

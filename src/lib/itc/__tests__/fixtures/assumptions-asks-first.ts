@@ -14,7 +14,6 @@ import { baseCoachInput, type CoachTurnInput } from "../helpers/fake-map";
 
 export const assumptionsAsksFirst: CoachTurnInput = baseCoachInput({
   stage: "assumptions",
-  revealDelivered: true,
   worries: [
     { behavior_id: "b1", text: "I worry that if I stop pointing out her flaws, I'll be the guy who let her down", depth_score: 3 },
     { behavior_id: "b2", text: "I worry that if I stop going silent, I'll say something that makes me the husband who hurt her", depth_score: 3 },

@@ -11,7 +11,6 @@ import { baseCoachInput, type CoachTurnInput } from "../helpers/fake-map";
 
 export const resultsNonBinary: CoachTurnInput = baseCoachInput({
   stage: "results",
-  revealDelivered: true,
   walkthroughDelivered: true,
   worries: [
     { behavior_id: "b1", text: "I worry that if I stop pointing out her flaws, I'll be the guy who let her down", depth_score: 3 },
