@@ -528,10 +528,13 @@ export async function runCoachTurnForMap(
   // locked yet AND we find drafts matching the locked-worry count, so
   // partial states can't get scrambled. Same pattern as the goal
   // backstop above.
-  if (
-    reply.action?.type !== "propose_commitments_batch" &&
-    looksLikeCommitmentAffirmation(parsed.data.text, reply.reply)
-  ) {
+  if (looksLikeCommitmentAffirmation(parsed.data.text, reply.reply)) {
+    // Guard removed: was skipping the backstop when the coach EMITTED
+    // propose_commitments_batch, but that action can fail silently
+    // (rubric rejects, garbled text, etc.) and leave the map without
+    // commitments even though the coach thinks it succeeded. The inner
+    // `commitmentsNow.length === 0` check prevents double-inserts on
+    // the success path, so removing the outer guard is safe.
     const [worriesForBackstop, commitmentsNow, mapForBackstop] =
       await Promise.all([
         listWorries(map.id),
@@ -676,10 +679,13 @@ export async function runCoachTurnForMap(
   // message. Persist it linked to ALL commitments (the coverage
   // walk-through defends coverage of all four; a coach who skipped the
   // action but wrote the reveal text was working with the same premise).
-  if (
-    reply.action?.type !== "propose_assumption" &&
-    looksAffirmative(parsed.data.text)
-  ) {
+  if (looksAffirmative(parsed.data.text)) {
+    // Guard removed: was skipping the backstop when the coach EMITTED
+    // propose_assumption, but that action can fail silently (rubric
+    // rejects, no valid commitment_indices, etc.) — the assumption
+    // never lands on the map even though the coach thinks it did.
+    // The inner `assumptionsNow.length === 0` check prevents
+    // double-inserts on the success path.
     const mapForAssumption = await getMapById(map.id);
     if (mapForAssumption?.current_stage === "assumptions") {
       const [assumptionsNow, commitmentsForLink] = await Promise.all([
@@ -1044,15 +1050,23 @@ async function runItcCoachTurnWithGuards(
   const isDupe =
     priorAssistantContent !== null &&
     trimmed === priorAssistantContent.trim();
-  // Two garbage shapes to catch: (a) zero letters (`.}` etc.) and (b)
-  // JSON-fragment leakage where the reply has letters but is polluted
-  // with schema keys / bracket bleed / model self-disclaimers. The
-  // per-attempt loop inside runItcCoachTurn already retries on (b); this
-  // is the belt-and-suspenders backup in case leakage still lands here.
+  // Three garbage shapes to catch:
+  // (a) zero letters (`.}` etc.)
+  // (b) JSON-fragment leakage where the reply has letters but is polluted
+  //     with schema keys / bracket bleed / model self-disclaimers
+  // (c) bare status — no question, no call-to-action anywhere. Preamble
+  //     rule "every reply ends with a question or instruction" is
+  //     violated frequently by the model even when spelled out. Enforce
+  //     at guard layer with a retry.
   const isNoLetters = !isEmpty && !/[A-Za-z]/.test(trimmed);
   const isJsonLeakage = !isEmpty && looksLikeStructuredOutputLeakage(trimmed);
   const isGarbage = isNoLetters || isJsonLeakage;
-  if (!isEmpty && !isDupe && !isGarbage) return first;
+  const isBareStatus =
+    !isEmpty &&
+    !isDupe &&
+    !isGarbage &&
+    looksLikeBareStatus(trimmed, first.action?.type ?? null);
+  if (!isEmpty && !isDupe && !isGarbage && !isBareStatus) return first;
 
   if (isGarbage) {
     console.warn(
@@ -1061,12 +1075,20 @@ async function runItcCoachTurnWithGuards(
       first.reply,
     );
   }
+  if (isBareStatus) {
+    console.warn(
+      "[itc] coach reply had no question or call-to-action, regenerating. raw=%o",
+      first.reply,
+    );
+  }
 
   const nudge = isEmpty
     ? "Your previous attempt returned empty. Produce a real reply this time."
     : isGarbage
       ? "Your previous attempt included JSON-fragment artifacts or non-prose characters in the reply text. Write plain prose the coachee can read — no schema keys, no bracket sequences, no meta-commentary about formatting."
-      : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
+      : isBareStatus
+        ? "Your previous attempt ended on a bare status ('Locked.', 'That covers #3 and #4.', 'Locking it in.') with no question or instruction. Every reply must end with something the coachee can respond to — a question ('does that hold?', 'ready for the next cluster?') or an actionable instruction ('read each and tell me which don't fit', 'save it when ready'). Rewrite ending with a specific ask tied to what just happened."
+        : "Your previous attempt duplicated the last assistant message verbatim. Say something different that moves the work forward.";
   const regenerated = await runItcCoachTurn({
     ...coachInput,
     history: [
@@ -1078,6 +1100,98 @@ async function runItcCoachTurnWithGuards(
   // If the regen still fails, take it anyway — the plain-text fallback
   // inside runItcCoachTurn guarantees a non-empty reply.
   return regenerated;
+}
+
+/**
+ * True when the reply looks like a bare status update with no question
+ * and no clear call-to-action. Backstop for the preamble rule "every
+ * reply ends with a question or instruction" — the model violates this
+ * often even when the rule is spelled out, so we retry at the guard
+ * layer.
+ *
+ * The check is a simple two-signal test on the LAST 300 characters:
+ *   - Contains a `?` (any question), OR
+ *   - Contains a recognizable call-to-action phrase
+ * If neither is present, the reply is a bare status. Retry.
+ *
+ * The heuristic must be tolerant of legitimate reply shapes:
+ *   - Numbered lists (suggest_behaviors) — usually end without `?` but
+ *     the closing line typically has a CTA ("pick one", "which fits").
+ *     If the prompt is updated to require one, this check enforces it.
+ *   - Done-stage close — invitation-to-return line counts as CTA
+ *     ("your map stays here… anytime you want").
+ *
+ * Skip the check for very short replies (<40 chars) — a brief
+ * acknowledgment before an action-only turn is legitimate and rare.
+ */
+function looksLikeBareStatus(
+  reply: string,
+  actionType: string | null,
+): boolean {
+  if (reply.length < 40) return false;
+  // A reply that carries certain actions is naturally short-and-status
+  // (e.g. mark_reveal_delivered acknowledges an already-delivered
+  // reveal). Don't force a CTA on those.
+  if (
+    actionType === "mark_reveal_delivered" ||
+    actionType === "mark_walkthrough_delivered"
+  ) {
+    return false;
+  }
+  const tail = reply.slice(-350);
+  // Any question mark in the tail counts as a question.
+  if (tail.includes("?")) return false;
+  // Call-to-action phrases that legitimately close a reply without a
+  // question mark. Lowercased match. Keep this list conservative —
+  // false positives just cost a retry (~1-3s), false negatives ship
+  // the bug the user has been catching.
+  const ctaPhrases = [
+    "tell me",
+    "let me know",
+    "ready to",
+    "ready when",
+    "want to",
+    "want me to",
+    "want a",
+    "pick one",
+    "choose one",
+    "choose which",
+    "which one",
+    "which of",
+    "read each",
+    "read it",
+    "read them",
+    "read the",
+    "come back",
+    "save it",
+    "type ",
+    "type in",
+    "answer with",
+    "wait for",
+    "when you're ready",
+    "when it's ready",
+    "when the set",
+    "next time",
+    "your call",
+    "your move",
+    "say the word",
+    "say 'lock",
+    "reword any",
+    "give me",
+    "walk me through",
+    "take a minute",
+    "take a swing",
+    "sit with",
+    "notice when",
+    "look back",
+    "come here",
+    "come find",
+    "map stays here",
+    "anytime you want",
+    "we're done for today",
+  ];
+  const lowerTail = tail.toLowerCase();
+  return !ctaPhrases.some((p) => lowerTail.includes(p));
 }
 
 
