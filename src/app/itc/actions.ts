@@ -679,19 +679,34 @@ export async function runCoachTurnForMap(
         // coach recommended one and the coachee affirmed without an
         // explicit select, auto-adopt the recommendation as the
         // selection — his "yes" reasonably endorses the coach's pick.
+        //
+        // Bug fix: previously fell back to assumptions[0] when neither
+        // selected nor recommended. That silently picked the wrong
+        // assumption when coachee came back to prioritize from results
+        // to test a DIFFERENT one — clearSelectedAssumption clears
+        // BOTH selection and recommendation, so the fallback picked
+        // the original assumption and the coachee's intent got lost.
+        // Now: no recommendation, no auto-advance. Cascade stalls at
+        // prioritize until coach fires select_assumption_for_testing.
         const assumptionsNow = await listAssumptions(map.id);
         const alreadySelected = assumptionsNow.find(
           (a) => a.selected_for_testing,
         );
         if (!alreadySelected) {
-          const recommended = assumptionsNow.find((a) => a.coach_recommended);
-          const fallback = recommended ?? assumptionsNow[0];
-          if (fallback) {
+          const recommended = assumptionsNow.find(
+            (a) => a.coach_recommended,
+          );
+          if (recommended) {
             try {
-              await setAssumptionSelected(fallback.id, map.id);
+              await setAssumptionSelected(recommended.id, map.id);
             } catch {
               // ignore
             }
+          } else {
+            // No selection and no recommendation — don't fabricate a
+            // pick. Break out of cascade; coach's next turn must fire
+            // select_assumption_for_testing before we can advance.
+            break;
           }
         }
         try {

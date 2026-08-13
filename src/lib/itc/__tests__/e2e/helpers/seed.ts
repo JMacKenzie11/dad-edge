@@ -166,3 +166,66 @@ export async function seedToResultsAfterFirstTest(
   });
   if (rErr) throw new Error(`seed test result: ${rErr.message}`);
 }
+
+/**
+ * Same as seedToResultsAfterFirstTest but with a SECOND Big Assumption
+ * on the map (unselected, unlinked). Used to test the "results →
+ * new_assumption" iteration path where the coachee wants to test a
+ * different assumption rather than another test on the same one.
+ *
+ * Returns the ids of both assumptions so the test can assert the
+ * SECOND test row ends up linked to the second (previously-unselected)
+ * assumption after the iteration.
+ */
+export async function seedToResultsWithSecondAssumption(
+  ctx: TestMapContext,
+): Promise<{ firstAssumptionId: string; secondAssumptionId: string }> {
+  await seedToResultsAfterFirstTest(ctx);
+  const supabase = createSupabaseServiceClient();
+
+  const { data: existing, error: eErr } = await supabase
+    .from("itc_assumptions")
+    .select("id")
+    .eq("map_id", ctx.mapId)
+    .order("sort_order", { ascending: true });
+  if (eErr || !existing || existing.length === 0)
+    throw new Error(`read seeded assumption: ${eErr?.message ?? "missing"}`);
+  const firstAssumptionId = existing[0].id;
+
+  const { data: second, error: sErr } = await supabase
+    .from("itc_assumptions")
+    .insert({
+      map_id: ctx.mapId,
+      text: "I assume that if I ever fail her financially, I'll have proved I'm not the man I claimed to be.",
+      depth_score: 3,
+      sort_order: 1,
+      selected_for_testing: false,
+      coach_recommended: false,
+    })
+    .select("id")
+    .single();
+  if (sErr || !second)
+    throw new Error(`seed second assumption: ${sErr?.message}`);
+
+  // Link the second assumption to at least one commitment so it's a
+  // valid coverage entry (otherwise assumption-list rubric complaints).
+  const { data: commitments, error: cErr } = await supabase
+    .from("itc_commitments")
+    .select("id")
+    .eq("map_id", ctx.mapId)
+    .limit(2);
+  if (cErr || !commitments)
+    throw new Error(`read seeded commitments: ${cErr?.message}`);
+
+  const { error: lErr } = await supabase
+    .from("itc_assumption_commitments")
+    .insert(
+      commitments.map((c) => ({
+        assumption_id: second.id,
+        commitment_id: c.id,
+      })),
+    );
+  if (lErr) throw new Error(`seed second assumption links: ${lErr.message}`);
+
+  return { firstAssumptionId, secondAssumptionId: second.id };
+}
