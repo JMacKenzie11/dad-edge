@@ -86,17 +86,7 @@ export default async function ItcMapPage({
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:min-h-0">
         <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0 md:overflow-hidden flex flex-col">
-          <Conversation
-            mapId={map.id}
-            stage={map.current_stage}
-            messages={messages}
-            behaviors={behaviors.map((b) => ({
-              id: b.id,
-              text: b.text,
-              source: b.source,
-              selected: b.selected,
-            }))}
-          />
+          <Conversation mapId={map.id} messages={messages} />
         </section>
         <section className="p-4 md:min-h-0 md:overflow-y-auto">
           <MapPanel

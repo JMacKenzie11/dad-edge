@@ -2,28 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcMessage } from "@/lib/itc/maps";
-import type { ItcStage } from "@/lib/itc/stage";
-import { advanceMapStage, sendCoachMessage } from "../actions";
-
-type Behavior = {
-  id: string;
-  text: string;
-  source: "user" | "suggested";
-  selected: boolean;
-};
-
-const MAX_SELECTED = 5;
+import { sendCoachMessage } from "../actions";
 
 export function Conversation({
   mapId,
-  stage,
   messages,
-  behaviors,
 }: {
   mapId: string;
-  stage: ItcStage;
   messages: ItcMessage[];
-  behaviors: Behavior[];
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -113,14 +99,6 @@ export function Conversation({
         </button>
       </form>
 
-      {stage === "behaviors" ? (
-        <BehaviorPanel
-          mapId={mapId}
-          behaviors={behaviors}
-          onError={setError}
-        />
-      ) : null}
-
       {error ? (
         <p className="mt-2 text-xs text-[color:var(--color-danger)]">{error}</p>
       ) : null}
@@ -141,63 +119,3 @@ function TypingDots() {
   );
 }
 
-function BehaviorPanel({
-  mapId,
-  behaviors,
-  onError,
-}: {
-  mapId: string;
-  behaviors: Behavior[];
-  onError: (msg: string | null) => void;
-}) {
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <div className="mt-3 border-t border-[color:var(--color-border)] pt-3">
-      <ContinueBar
-        mapId={mapId}
-        selectedCount={behaviors.filter((b) => b.selected).length}
-        pending={pending}
-        onError={onError}
-        startTransition={startTransition}
-      />
-    </div>
-  );
-}
-
-function ContinueBar({
-  mapId,
-  selectedCount,
-  pending,
-  onError,
-  startTransition,
-}: {
-  mapId: string;
-  selectedCount: number;
-  pending: boolean;
-  onError: (msg: string | null) => void;
-  startTransition: React.TransitionStartFunction;
-}) {
-  const canContinue = selectedCount >= 1 && selectedCount <= MAX_SELECTED;
-  return (
-    <form
-      action={(fd) => {
-        onError(null);
-        fd.set("to", "worries");
-        startTransition(async () => {
-          const res = await advanceMapStage(fd);
-          if (!res.ok) onError(res.reason ?? "Not ready to advance yet.");
-        });
-      }}
-    >
-      <input type="hidden" name="map_id" value={mapId} />
-      <button
-        type="submit"
-        disabled={pending || !canContinue}
-        className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-      >
-        I'm done adding behaviors — continue
-      </button>
-    </form>
-  );
-}

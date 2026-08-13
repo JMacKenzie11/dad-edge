@@ -534,6 +534,80 @@ export async function runCoachTurnForMap(
     }
   }
 
+  // Assumptions backstop: same failure mode as commitments. Coach walks
+  // the coverage check, coachee affirms ("that makes sense", "yes",
+  // etc.), coach's reply says "Locking that in..." but the actual
+  // propose_assumption action never fires. Result: the map stays on the
+  // commitments/assumptions stage forever with an empty Big Assumptions
+  // column, and downstream stages (review, immune_system) can't unlock.
+  //
+  // Recovery: if we're in assumptions with zero assumptions on the map,
+  // scan history for a quoted "I assume that ..." from a prior assistant
+  // message. Persist it linked to ALL commitments (the coverage
+  // walk-through defends coverage of all four; a coach who skipped the
+  // action but wrote the reveal text was working with the same premise).
+  if (
+    reply.action?.type !== "propose_assumption" &&
+    looksAffirmative(parsed.data.text)
+  ) {
+    const mapForAssumption = await getMapById(map.id);
+    if (mapForAssumption?.current_stage === "assumptions") {
+      const [assumptionsNow, commitmentsForLink] = await Promise.all([
+        listAssumptions(map.id),
+        listCommitments(map.id),
+      ]);
+      if (assumptionsNow.length === 0 && commitmentsForLink.length > 0) {
+        let draftText: string | null = null;
+        for (let i = priorHistory.length - 1; i >= 0; i--) {
+          const msg = priorHistory[i];
+          if (msg.role !== "assistant") continue;
+          const extracted = extractAssumptionDraft(msg.content);
+          if (extracted) {
+            draftText = extracted;
+            break;
+          }
+        }
+        if (draftText) {
+          try {
+            const stemmed = ensureStem(draftText, ASSUMPTION_STEM);
+            const rubric = await scoreAssumptionDepth({
+              goalText: mapForAssumption.improvement_goal ?? "",
+              assumptionText: stemmed,
+            });
+            // Only land if the rubric would have passed. If it wouldn't
+            // have, the coach was probably going to be rejected anyway
+            // and forcing it in via the backstop hides a real problem.
+            if (rubric.score >= 2) {
+              const assumption = await addAssumption(
+                map.id,
+                stemmed,
+                rubric.score,
+              );
+              await linkAssumptionToCommitments(
+                assumption.id,
+                commitmentsForLink.map((c) => c.id),
+              );
+              console.warn(
+                "[itc] assumptions backstop: inserted assumption from history scan (linked to %d commitments)",
+                commitmentsForLink.length,
+              );
+            } else {
+              console.warn(
+                "[itc] assumptions backstop: rubric would reject draft (score %d/3) — not persisting",
+                rubric.score,
+              );
+            }
+          } catch (err) {
+            console.warn(
+              "[itc] assumptions backstop: addAssumption failed: %s",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+    }
+  }
+
   // Cascade auto-advance across every stage transition where the coach
   // has proven capable of forgetting the action. On any affirmation,
   // re-read the map after each advance and try the next transition if
@@ -906,6 +980,13 @@ function looksLikeCommitmentAffirmation(
     "lock them in", "lock these in", "lock it in", "lock em in",
     "lock in", "locked", "locking in",
     "yes lock them in", "yes lock", "yes please",
+    // Same "that makes sense" family as looksAffirmative — coachees
+    // affirm the drafted commitment set this way just as often as
+    // "lock them in", and the batch backstop needs to catch both.
+    "that makes sense", "makes sense", "yeah that makes sense",
+    "yes that makes sense", "yeah makes sense", "yes makes sense",
+    "that tracks", "tracks", "that's right", "thats right",
+    "you got it", "you nailed it", "exactly", "correct",
   ];
   if (userAffirms.some((p) => t === p || t.startsWith(`${p} `))) return true;
 
@@ -920,6 +1001,25 @@ function looksLikeCommitmentAffirmation(
   }
 
   return false;
+}
+
+// Pulls a quoted "I assume that if X, then Y" out of an assistant
+// message so the assumptions backstop can persist it when the coach
+// wrote the reveal text ("Locking that in: '...'") but never fired
+// propose_assumption. Only extracts if we can find a QUOTED assumption
+// — a bare "I assume that" fragment inside general prose is too easy
+// to false-positive on. Returns the extracted text WITHOUT the stem
+// (caller re-applies via ensureStem).
+function extractAssumptionDraft(text: string): string | null {
+  // Delimiters: double-quotes only (straight " or curly \u201C \u201D).
+  // Single quotes are excluded because apostrophes inside I'm / don't
+  // would prematurely terminate the character class and break the match.
+  const re =
+    /["\u201C]\s*(I\s*['\u2019\u02BC]?\s*assume\s+that\b[^"\u201C\u201D]{5,300}?)\s*["\u201D]/i;
+  const m = text.match(re);
+  if (!m) return null;
+  const draft = m[1].replace(/[.!?]+$/, "").trim();
+  return draft.length > 0 ? draft : null;
 }
 
 // Pulls a drafted test out of a prior assistant message so the server
@@ -1020,6 +1120,13 @@ function looksAffirmative(text: string): boolean {
     "agreed", "agree", "confirm", "confirmed",
     "yes please", "yes lock it", "yes lock it in",
     "that works", "works for me", "fine", "sounds right",
+    // "that makes sense" family — a very common natural affirmation
+    // that was slipping past the cascade until we added it here. When a
+    // coachee says "that makes sense" they mean "I accept it, move on."
+    "that makes sense", "makes sense", "yeah that makes sense",
+    "yes that makes sense", "yeah makes sense", "yes makes sense",
+    "that tracks", "tracks", "that's right", "thats right", "right",
+    "you got it", "you nailed it", "exactly", "correct",
     "👍", "✅", "yes 👍",
   ];
   if (affirmations.includes(t)) return true;
