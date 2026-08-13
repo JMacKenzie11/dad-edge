@@ -694,16 +694,19 @@ export async function runCoachTurnForMap(
         // question, not asking to close the map. Requires looksLikeClose
         // (below) which matches "close it out", "we're done", etc.
         if (looksLikeMapClose(parsed.data.text)) {
-          try {
-            await markMapComplete(map.id);
-          } catch {
-            // ignore
-          }
+          // Advance first — if the transition fails (illegal jump,
+          // etc.) we don't want markMapComplete to leave the map in
+          // an inconsistent state.
           try {
             await advanceStage(map.id, "results", "done");
             advanced = true;
+            try {
+              await markMapComplete(map.id);
+            } catch {
+              // ignore — non-fatal
+            }
           } catch {
-            // ignore
+            // ignore — race or advance guard rejected
           }
         }
       }
@@ -1346,10 +1349,17 @@ async function applyCoachAction(
     case "advance_stage": {
       const from = currentStage;
       const to = action.to;
-      // Side effects on late-stage backward jumps. Kept here (not in
-      // advanceStage itself) so callers that go backwards for other
-      // reasons — e.g., a coach nudging back to hone an entry — don't
-      // trigger accidental resets.
+      // Do the stage transition FIRST so its guards run. If it throws
+      // (illegal transition, missing gate flag, etc.), the side
+      // effects below don't fire. Previously markMapComplete ran
+      // before advanceStage — meant a failed review→done attempt
+      // would leave the map with status=complete AND stage=review,
+      // which broke every downstream cascade.
+      await advanceStage(mapId, from, to);
+      // Side effects that depend on the transition succeeding. Kept
+      // here (not inside advanceStage itself) so callers that go
+      // backwards for OTHER reasons — e.g., a coach nudging back to
+      // hone an entry — don't trigger accidental resets.
       if (from === "results" && to === "prioritize") {
         // Coachee wants to test a different assumption. Clear the pick
         // so prioritize can re-run cleanly.
@@ -1366,7 +1376,6 @@ async function applyCoachAction(
           // non-fatal
         }
       }
-      await advanceStage(mapId, from, to);
       return;
     }
   }
