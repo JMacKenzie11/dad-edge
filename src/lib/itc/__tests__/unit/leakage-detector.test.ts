@@ -199,6 +199,32 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
       ),
     ).toBe(true);
   });
+
+  it("special/control token like <|control11|> in reply (real 2026-08-13)", () => {
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "Want a fifth, or is that the set? <|control11|>{",
+      ),
+    ).toBe(true);
+    // Bare token, no surrounding prose
+    expect(looksLikeStructuredOutputLeakage("<|endoftext|>")).toBe(true);
+    // Token with different name
+    expect(
+      looksLikeStructuredOutputLeakage("Some prose. <|reserved_special_token_1|>"),
+    ).toBe(true);
+  });
+
+  it("reply ends with a bare trailing '{' (JSON object starting to render)", () => {
+    expect(
+      looksLikeStructuredOutputLeakage("That was a real one. Want to add another? {"),
+    ).toBe(true);
+  });
+
+  it("raw endoftext-style tags", () => {
+    expect(
+      looksLikeStructuredOutputLeakage("Locked. </endoftext>"),
+    ).toBe(true);
+  });
 });
 
 describe("looksLikeStructuredOutputLeakage — should NOT catch (real coach replies)", () => {

@@ -181,6 +181,26 @@ export type CoachReply = z.infer<typeof CoachReplySchema>;
  */
 export function looksLikeStructuredOutputLeakage(text: string): boolean {
   const trimmed = text.trim();
+  // Special / control tokens leaking from the tokenizer. Observed on
+  // 2026-08-13: reply ended with "Want a fifth, or is that the set?
+  // <|control11|>{" — the |...| angle-bracket token is a raw model
+  // token that never should reach the coachee, and the trailing "{"
+  // suggests a JSON object was starting to render. Catch any
+  // <|...|> pattern, and any raw <endoftext> / <|endoftext|> variants.
+  if (/<\|[^|>\n]{1,40}\|>/i.test(trimmed)) {
+    return true;
+  }
+  if (/<\/?(?:endoftext|eot_id|start_header_id|end_header_id|bos|eos|s)[^>]*>/i.test(trimmed)) {
+    return true;
+  }
+  // Reply ends with a bare "{" (or "{ " ), suggesting the model started
+  // emitting an object after the prose. Bounded to trailing position so
+  // legitimate uses of "{" mid-reply (rare — coach never quotes JSON)
+  // don't trip. Combined with the length check on truncation elsewhere,
+  // this catches the "…set? <|control11|>{" style of trailing garbage.
+  if (/\{\s*$/.test(trimmed)) {
+    return true;
+  }
   // Schema key quoted mid-reply followed by JSON punctuation.
   if (
     /"(action|actions|items|text|type|worry_index|behavior_index|commitment_indices|assumption_index|reply|options|to|keep_indices|index|reason)"\s*[:,\]}]/.test(
