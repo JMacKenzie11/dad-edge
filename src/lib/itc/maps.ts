@@ -644,6 +644,12 @@ export async function getActiveTest(mapId: string): Promise<ItcTest | null> {
   return (data as ItcTest | null) ?? null;
 }
 
+/**
+ * Save a designed test. Refuses exact-content duplicates for the same
+ * assumption (all four text fields + type identical). Iteration paths
+ * where the coachee legitimately wants a second test on the same
+ * assumption will differ in at least one field, so the dedup is safe.
+ */
 export async function saveTestDraft(input: {
   mapId: string;
   assumptionId: string;
@@ -655,6 +661,34 @@ export async function saveTestDraft(input: {
   targetDate: string;
 }): Promise<ItcTest> {
   const supabase = createSupabaseServiceClient();
+  const existing = await listTests(input.mapId);
+  const [
+    normSays,
+    normMove,
+    normData,
+    normFind,
+  ] = [
+    input.assumptionSays,
+    input.behaviorChange,
+    input.dataToCollect,
+    input.inOrderToFindOut,
+  ].map(normalizeMapText);
+  const duplicate = existing.find(
+    (t) =>
+      t.assumption_id === input.assumptionId &&
+      t.test_type === input.testType &&
+      normalizeMapText(t.assumption_says ?? "") === normSays &&
+      normalizeMapText(t.behavior_change ?? "") === normMove &&
+      normalizeMapText(t.data_to_collect ?? "") === normData &&
+      normalizeMapText(t.in_order_to_find_out ?? "") === normFind,
+  );
+  if (duplicate) {
+    console.warn(
+      "[itc] saveTestDraft: refusing exact-content duplicate on assumption %s",
+      input.assumptionId,
+    );
+    return duplicate;
+  }
   const { data, error } = await supabase
     .from("itc_tests")
     .insert({
@@ -699,6 +733,12 @@ export async function listTestResults(
   return (data ?? []) as ItcTestResult[];
 }
 
+/**
+ * Record test results. One result per test — if a result already
+ * exists for this test_id, return the existing row instead of
+ * inserting a second (would happen if the coach re-fires
+ * record_test_results across turns).
+ */
 export async function recordTestResult(input: {
   testId: string;
   ranOn: string;
@@ -709,6 +749,21 @@ export async function recordTestResult(input: {
   nextStep: ItcNextStep;
 }): Promise<ItcTestResult> {
   const supabase = createSupabaseServiceClient();
+  const existingCheck = await supabase
+    .from("itc_test_results")
+    .select("*")
+    .eq("test_id", input.testId)
+    .maybeSingle();
+  if (existingCheck.error) {
+    throw new Error(`recordTestResult lookup: ${existingCheck.error.message}`);
+  }
+  if (existingCheck.data) {
+    console.warn(
+      "[itc] recordTestResult: refusing duplicate result for test %s — returning existing",
+      input.testId,
+    );
+    return existingCheck.data as ItcTestResult;
+  }
   const { data, error } = await supabase
     .from("itc_test_results")
     .insert({
