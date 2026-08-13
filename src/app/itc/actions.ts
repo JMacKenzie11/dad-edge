@@ -638,29 +638,41 @@ export async function runCoachTurnForMap(
         if (!currentMap.reveal_delivered) {
           try {
             await markRevealDelivered(map.id);
-          } catch {
-            // ignore
+          } catch (err) {
+            console.warn(
+              "[itc cascade] review branch: markRevealDelivered failed: %s",
+              err instanceof Error ? err.message : String(err),
+            );
           }
         }
         try {
           await advanceStage(map.id, "review", "immune_system");
           advanced = true;
-        } catch {
-          // ignore
+        } catch (err) {
+          console.warn(
+            "[itc cascade] review → immune_system advance failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
         }
       } else if (from === "immune_system") {
         if (!currentMap.walkthrough_delivered) {
           try {
             await markWalkthroughDelivered(map.id);
-          } catch {
-            // ignore
+          } catch (err) {
+            console.warn(
+              "[itc cascade] immune_system branch: markWalkthroughDelivered failed: %s",
+              err instanceof Error ? err.message : String(err),
+            );
           }
         }
         try {
           await advanceStage(map.id, "immune_system", "prioritize");
           advanced = true;
-        } catch {
-          // ignore
+        } catch (err) {
+          console.warn(
+            "[itc cascade] immune_system → prioritize advance failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
         }
       } else if (from === "prioritize") {
         // Advance to test_design only if a pick is on record. If the
@@ -711,7 +723,17 @@ export async function runCoachTurnForMap(
         }
       }
 
-      if (!advanced) break;
+      if (!advanced) {
+        // Log where cascade stopped and why. Helps debug the "coach
+        // stuck at stage X even after N affirmations" family of bugs
+        // that only show up in E2E runs.
+        console.warn(
+          "[itc cascade] stopped at stage=%s after step=%d (advance conditions not met — check reveal/walkthrough flags, coverage counts, and stage-specific gates)",
+          from,
+          step,
+        );
+        break;
+      }
     }
   }
 
