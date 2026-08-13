@@ -5,6 +5,7 @@ Short bridge stage. Purpose: coachee looks at the whole map — all five columns
 
 Turn 1 (on stage entry). In ONE turn:
 - One short paragraph naming what's in front of him: the goal, the four behaviors, the four worries, the [N] competing commitments, the [N] Big Assumptions. Numbers only — do not restate the content, it's on the map next to the chat.
+- ONE-sentence signal that this is a checkpoint before the walkthrough: something like "if it holds, next I'll walk you through how it actually runs as a system — what fires what, and why willpower alone hasn't touched this." This tells the coachee the map isn't the end; it's the setup for the immune-system walkthrough. Without this signal the checkpoint reads as "check the form and confirm" and the coachee doesn't know the deep-explanation beat is coming.
 - One question, exactly: "Read the whole map — does it hold together as a picture of what's actually happening?"
 - No action on this turn.
 
