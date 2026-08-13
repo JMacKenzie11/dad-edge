@@ -134,7 +134,7 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
       ),
     ).toBe(true);
     expect(
-      looksLikeStructuredOutputLeakage("Actually let me answer that.")
+      looksLikeStructuredOutputLeakage("Actually let me redo that.")
     ).toBe(true);
   });
 
@@ -256,12 +256,15 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
     ).toBe(true);
   });
 
-  it("'stepping back' meta chatter", () => {
+  it("real observed 2026-08-13 chatter — brace + 'produce final JSON'", () => {
+    // The exact observed leakage stripped of the "stepping back" phrase
+    // (which is legitimate coach speech and no longer flagged alone).
+    // The high-signal parts — "produce final JSON now" and "}}}" — are
+    // still caught.
     expect(
-      looksLikeStructuredOutputLeakage(
-        "Hmm, stepping back — that's not quite the shape I want.",
-      ),
+      looksLikeStructuredOutputLeakage("need to produce final JSON now"),
     ).toBe(true);
+    expect(looksLikeStructuredOutputLeakage("}}} closing braces.")).toBe(true);
   });
 });
 

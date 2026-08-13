@@ -267,8 +267,16 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   //     text is the internal chain, not the intended output.
   //  2. The reply ends with a trailing colon and nothing after —
   //     model was about to deliver content and stopped mid-transition.
+  // Meta-editing chatter — model narrates its own editing process
+  // instead of writing the reply. Every clause here must contain a
+  // clear "output shape" tell (json, "the actual/real/proper reply",
+  // "write it properly as/for"). Do NOT include phrases the coach
+  // would legitimately say — "step back", "need to produce", "let me
+  // try", "let me start", "let me give" — those false-positive on
+  // real replies and every false positive triggers a retry, which
+  // adds 1-3s of LLM latency per turn.
   const metaEditingRe =
-    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a |it )?(actual|real|proper|properly|new|full|next|out)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write|actually let me|step(ping)? back|final json|produce (the |a )?(final |proper )?(json|reply|response|output)|write (this |the |it )?(out |up )?properly|need to (produce|write|generate|deliver|give)/i;
+    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a |it )?(actual|real|proper|properly|new|full|next)\s+(reply|answer|response|json|output|version|attempt)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write (the |a )?(reply|answer|response|json|output)|actually let me (redo|start over|try again|do that (again|over))|final json|produce (the |a )?(final |proper )?(json|reply|response|output)|write (this |the |it )?(out |up )?properly (as|for|in) (a |the )?(reply|json|response|output)/i;
   if (metaEditingRe.test(trimmed)) {
     return true;
   }
@@ -450,6 +458,8 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     // fallback path still gets a chance to run.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90_000);
+    const attemptStart = Date.now();
+    let outcome: "accepted" | "empty" | "leakage" | "error" = "error";
     try {
       const { object } = await generateObject({
         model: itcCoachModel(),
@@ -468,6 +478,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
       if (object.reply.trim().length === 0) {
         // Treat empty output the same as a schema miss: retry.
         lastError = new Error("empty reply");
+        outcome = "empty";
         continue;
       }
       if (looksLikeStructuredOutputLeakage(object.reply)) {
@@ -476,13 +487,22 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
           object.reply,
         );
         lastError = new Error("structured-output leakage");
+        outcome = "leakage";
         continue;
       }
+      outcome = "accepted";
       return object;
     } catch (err) {
       lastError = err;
+      outcome = "error";
     } finally {
       clearTimeout(timeoutId);
+      console.warn(
+        "[itc timing] llm attempt=%d outcome=%s ms=%d",
+        attempt + 1,
+        outcome,
+        Date.now() - attemptStart,
+      );
     }
   }
 
@@ -498,6 +518,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     () => fallbackController.abort(),
     60_000,
   );
+  const fallbackStart = Date.now();
   let text = "";
   try {
     const result = await generateText({
@@ -515,6 +536,11 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     );
   } finally {
     clearTimeout(fallbackTimeoutId);
+    console.warn(
+      "[itc timing] llm fallback ms=%d ok=%s",
+      Date.now() - fallbackStart,
+      text.length > 0 ? "yes" : "no",
+    );
   }
   const fallback = text.trim();
   return {

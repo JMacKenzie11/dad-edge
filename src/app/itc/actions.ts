@@ -149,6 +149,7 @@ export async function runCoachTurnForMap(
   mapId: string,
   text: string,
 ): Promise<SendMessageResult> {
+  const turnStart = Date.now();
   const map = await getMapById(mapId);
   if (!map) return { ok: false, reason: "Map not found." };
 
@@ -216,6 +217,8 @@ export async function runCoachTurnForMap(
     .find((m) => m.role === "assistant")?.content ?? null;
 
   let reply;
+  const llmStart = Date.now();
+  let llmMs = 0;
   try {
     reply = await runItcCoachTurnWithGuards({
       pillar: map.pillar_code,
@@ -256,13 +259,22 @@ export async function runCoachTurnForMap(
       userMessage: parsed.data.text,
       priorAssistantContent,
     });
+    llmMs = Date.now() - llmStart;
   } catch (err) {
+    llmMs = Date.now() - llmStart;
     const message = err instanceof Error ? err.message : "Coach unavailable.";
     await appendMessage(
       map.id,
       "system",
       `[coach error] ${message} (model=${process.env.ITC_COACH_MODEL || "claude-sonnet-5"})`,
       map.current_stage,
+    );
+    console.warn(
+      "[itc timing] turn map=%s stage=%s llm=%dms total=%dms outcome=coach-error",
+      map.id,
+      map.current_stage,
+      llmMs,
+      Date.now() - turnStart,
     );
     return { ok: false, reason: `Coach: ${message}` };
   }
@@ -726,6 +738,7 @@ export async function runCoachTurnForMap(
     }
   }
 
+  const cascadeStart = Date.now();
   // Cascade auto-advance across every stage transition where the coach
   // has proven capable of forgetting the action. On any affirmation,
   // re-read the map after each advance and try the next transition if
@@ -931,6 +944,8 @@ export async function runCoachTurnForMap(
     }
   }
 
+  const cascadeMs = Date.now() - cascadeStart;
+
   // If the stage changed during this turn (via coach action or one of the
   // safety nets), retag the assistant message with the new stage so the
   // transition reply ("Locked. Now column 2…") lives in the new stage's
@@ -943,6 +958,25 @@ export async function runCoachTurnForMap(
       // non-fatal
     }
   }
+
+  // Turn-summary timing log — one line per turn so you can grep the
+  // dev terminal or Vercel logs for "[itc timing] turn" and see where
+  // time is going. Breakdown: llm = generateObject + any retries +
+  // fallback. cascade = auto-advance loop (multiple DB reads and
+  // potential advanceStage calls, no LLM). total = end-to-end wall
+  // clock including all pre-LLM DB fetches, action apply, backstops
+  // (which may include rubric LLM calls), and post-turn writes.
+  const stageChanged = finalMap && finalMap.current_stage !== map.current_stage;
+  console.warn(
+    "[itc timing] turn map=%s stage=%s%s action=%s llm=%dms cascade=%dms total=%dms",
+    map.id,
+    map.current_stage,
+    stageChanged ? `->${finalMap.current_stage}` : "",
+    reply.action?.type ?? "none",
+    llmMs,
+    cascadeMs,
+    Date.now() - turnStart,
+  );
 
   // revalidatePath ties into Next's request-scoped static-generation
   // store; when called outside a real request (E2E tests calling this
