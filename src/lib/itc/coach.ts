@@ -1,4 +1,4 @@
-import { generateObject, generateText } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { mainModel } from "@/lib/model-config";
@@ -154,18 +154,24 @@ export const CoachActionSchema = z.discriminatedUnion("type", [
 
 export type CoachAction = z.infer<typeof CoachActionSchema>;
 
-const CoachReplySchema = z.object({
-  reply: z.string().min(1),
-  // Actions the coach wants applied THIS turn, in order. Empty array is
-  // valid (turn was pure conversation, no state change). Multiple actions
-  // are applied in sequence so the coach can do cascades in one turn —
-  // e.g. propose_goal implicit-accepted + advance_stage + propose_behavior
-  // when the coachee skips the "lock it in" step and jumps straight to
-  // naming a behavior. Cap at 6 to protect against runaway batches.
-  actions: z.array(CoachActionSchema).max(6).default([]),
-});
-
-export type CoachReply = z.infer<typeof CoachReplySchema>;
+/**
+ * Coach reply shape.
+ *
+ * The coach LLM writes prose only — it does NOT emit structured
+ * actions. All state changes come from the separate extract-actions
+ * module which runs after the coach reply, reads the reply + the
+ * current DB state, and emits actions. See src/lib/itc/extract-actions.ts.
+ *
+ * Historically the coach emitted { reply, actions[] } in one
+ * generateObject call. That coupled two very different jobs
+ * (conversation and state) into one model call, and every session
+ * found new phrasings where the coach forgot an action or fired the
+ * wrong one. Splitting the jobs into two focused LLM calls removed
+ * that entire class of bug.
+ */
+export type CoachReply = {
+  reply: string;
+};
 
 /**
  * Detects JSON-fragment leakage in the reply string. Observed in the wild:
@@ -456,10 +462,12 @@ type RunCoachInput = {
 };
 
 /**
- * One coach turn. Wraps the structured-output call with two retries and a
- * plain-text fallback so a schema-parse failure never bubbles a "No object
- * generated" error to the coachee. The fallback returns action:null so the
- * server-side stage machine stays untouched — a text-only reply is safe.
+ * One coach turn. Coach outputs PROSE only via generateText — no
+ * structured output, no action array. State changes are computed by
+ * extract-actions.ts which runs after this returns.
+ *
+ * One retry on empty reply or leakage-detector hit. On second failure
+ * ships a short apology so the coachee always sees a message.
  */
 export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply> {
   const pillar = PILLAR_BY_CODE[input.pillar];
@@ -484,48 +492,43 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
   ];
 
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    // Per-attempt timeout — observed a "coach spins forever after user
-    // types 'OK'" case where the request never returned. Cap at 90s so
-    // three attempts is bounded at ~4.5 minutes worst case and the
-    // fallback path still gets a chance to run.
+  // Two attempts — one primary + one retry if the first is empty or
+  // trips the leakage detector. Structured-output retries are gone
+  // because there is no structured output. If both attempts fail we
+  // fall through to the short-apology fallback below.
+  for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90_000);
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
     const attemptStart = Date.now();
     let outcome: "accepted" | "empty" | "leakage" | "error" = "error";
     try {
-      const { object } = await generateObject({
+      const { text } = await generateText({
         model: mainModel(),
-        schema: CoachReplySchema,
         system,
         messages,
-        // NOTE: temperature is left off intentionally. Some Anthropic
-        // reasoning-optimized models (observed with Sonnet-5) reject or
-        // ignore temperature and log a warning; if the currently
-        // configured ITC_COACH_MODEL supports temperature and you want
-        // to tune it, add it back here.
-        // 8192 (doubled from 4096) so the batch+reveal turn and the
-        // full immune-system walkthrough have room without truncating.
-        maxOutputTokens: 8192,
+        // 4096 covers the longest legitimate reply (immune-system
+        // walkthrough with all three movements). No structured
+        // output means we don't need the 8192 buffer anymore.
+        maxOutputTokens: 4096,
         abortSignal: controller.signal,
       });
-      if (object.reply.trim().length === 0) {
-        // Treat empty output the same as a schema miss: retry.
+      const trimmed = text.trim();
+      if (trimmed.length === 0) {
         lastError = new Error("empty reply");
         outcome = "empty";
         continue;
       }
-      if (looksLikeStructuredOutputLeakage(object.reply)) {
+      if (looksLikeStructuredOutputLeakage(trimmed)) {
         console.warn(
-          "[itc] coach reply contained JSON-fragment leakage, retrying. raw=%o",
-          object.reply,
+          "[itc] coach reply tripped leakage detector, retrying. raw=%o",
+          trimmed,
         );
-        lastError = new Error("structured-output leakage");
+        lastError = new Error("leakage detector");
         outcome = "leakage";
         continue;
       }
       outcome = "accepted";
-      return object;
+      return { reply: trimmed };
     } catch (err) {
       lastError = err;
       outcome = "error";
@@ -547,51 +550,11 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     }
   }
 
-  // Plain-text fallback so the coachee always receives a real message.
-  // Tell the model that structured output failed and to answer in prose;
-  // no action is emitted, so nothing state-machine touches the DB.
   console.warn(
-    "[itc] coach structured-output failed after retries, falling back to text:",
+    "[itc] coach failed after retries: %s",
     lastError instanceof Error ? lastError.message : String(lastError),
   );
-  const fallbackController = new AbortController();
-  const fallbackTimeoutId = setTimeout(
-    () => fallbackController.abort(),
-    60_000,
-  );
-  const fallbackStart = Date.now();
-  let text = "";
-  try {
-    const result = await generateText({
-      model: mainModel(),
-      system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
-      messages,
-      maxOutputTokens: 4096,
-      abortSignal: fallbackController.signal,
-    });
-    text = result.text;
-  } catch (err) {
-    console.warn(
-      "[itc] coach text fallback also failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-  } finally {
-    clearTimeout(fallbackTimeoutId);
-    const fallbackMs = Date.now() - fallbackStart;
-    console.warn(
-      "[itc timing] llm fallback ms=%d ok=%s",
-      fallbackMs,
-      text.length > 0 ? "yes" : "no",
-    );
-    input.onLlmAttempt?.({
-      kind: "fallback",
-      outcome: text.length > 0 ? "ok" : "no-text",
-      durationMs: fallbackMs,
-    });
-  }
-  const fallback = text.trim();
   return {
-    reply: fallback.length > 0 ? fallback : "Give me one more sec — mind repeating that?",
-    actions: [],
+    reply: "Give me one more sec — mind repeating that?",
   };
 }

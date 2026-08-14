@@ -52,17 +52,7 @@ import {
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
-import {
-  coachAcknowledgedNewBehavior,
-  extractAssumptionDraft,
-  extractAssumptionDrafts,
-  extractCoachBehaviorCount,
-  extractCommitmentDrafts,
-  extractCommitmentIndicesInText,
-  extractWorryDraft,
-  looksLikeBehaviorCandidate,
-} from "@/lib/itc/backstop-extractors";
-import { reconcileTurn } from "@/lib/itc/reconciliation";
+import { extractActions } from "@/lib/itc/extract-actions";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { TurnEventLog } from "@/lib/itc/turn-events";
 import {
@@ -332,27 +322,6 @@ export async function runCoachTurnForMap(
     return { ok: false, reason: `Coach: ${message}` };
   }
 
-  // If the coach emitted suggest_behaviors but didn't write the options
-  // into the reply text, append them as a numbered list. Observed in a
-  // real turn: the coach wrote "Here's a few more — see if any fit:" and
-  // stopped, leaving the coachee staring at a colon.
-  const suggestBehaviorsAction = reply.actions.find(
-    (a) => a.type === "suggest_behaviors",
-  );
-  if (suggestBehaviorsAction && suggestBehaviorsAction.type === "suggest_behaviors") {
-    const options = suggestBehaviorsAction.options;
-    const firstSnippet = options[0]?.slice(0, 20).toLowerCase() ?? "";
-    const alreadyIncluded =
-      firstSnippet.length > 0 &&
-      reply.reply.toLowerCase().includes(firstSnippet);
-    if (!alreadyIncluded) {
-      const list = options
-        .map((o, i) => `${i + 1}. ${o}`)
-        .join("\n");
-      reply = { ...reply, reply: `${reply.reply.trim()}\n\n${list}` };
-    }
-  }
-
   const assistantMessage = await appendMessage(
     map.id,
     "assistant",
@@ -360,20 +329,101 @@ export async function runCoachTurnForMap(
     map.current_stage,
   );
 
-  // Apply actions in order. Each action's stage guard runs against the
-  // CURRENT stage after previous actions in the batch — so advance_stage
-  // in an earlier action moves the map into a stage where subsequent
-  // actions become valid. A single rejected action does not stop the
-  // batch; the coach sees the rejection next turn.
-  for (const action of reply.actions) {
+  // Extractor pass — the primary path for state changes. Reads the
+  // just-completed turn plus current state and emits every action the
+  // server should apply. Replaces the old regex-backstop + cascade +
+  // reconciler-as-backstop dance with one focused LLM call.
+  const extractStart = Date.now();
+  const recentAssistantMessages = priorHistory
+    .filter((m) => m.role === "assistant")
+    .slice(-3)
+    .map((m) => m.content);
+  const linksByAssumptionExtract = new Map<string, number[]>();
+  const commitmentIndexById = new Map<string, number>();
+  commitments.forEach((c, i) => commitmentIndexById.set(c.id, i + 1));
+  for (const l of links) {
+    const idx = commitmentIndexById.get(l.commitment_id);
+    if (!idx) continue;
+    const arr = linksByAssumptionExtract.get(l.assumption_id) ?? [];
+    arr.push(idx);
+    linksByAssumptionExtract.set(l.assumption_id, arr);
+  }
+  const selectedBehaviorsExtract = behaviors.filter((b) => b.selected);
+  const behaviorIndexByIdExtract = new Map<string, number>();
+  selectedBehaviorsExtract.forEach((b, i) =>
+    behaviorIndexByIdExtract.set(b.id, i + 1),
+  );
+  const lockedWorriesExtract = worries.filter((w) => w.depth_score !== null);
+  const worryIndexByIdExtract = new Map<string, number>();
+  lockedWorriesExtract.forEach((w, i) =>
+    worryIndexByIdExtract.set(w.id, i + 1),
+  );
+  const activeTestExtract =
+    tests.find((t) => t.status === "designed" || t.status === "run") ??
+    tests[tests.length - 1] ??
+    null;
+  const extraction = await extractActions({
+    stage: map.current_stage,
+    goalText: map.improvement_goal,
+    behaviors: behaviors.map((b) => ({ text: b.text, selected: b.selected })),
+    worries: worries.map((w) => ({
+      behavior_index: behaviorIndexByIdExtract.get(w.behavior_id) ?? 0,
+      text: w.text,
+      locked: w.depth_score !== null,
+    })),
+    commitments: commitments.map((c) => ({
+      worry_index: worryIndexByIdExtract.get(c.worry_id) ?? 0,
+      text: c.text,
+    })),
+    assumptions: assumptions.map((a) => ({
+      text: a.text,
+      commitment_indices: linksByAssumptionExtract.get(a.id) ?? [],
+      selected_for_testing: a.selected_for_testing,
+      coach_recommended: a.coach_recommended,
+    })),
+    activeTest: activeTestExtract
+      ? {
+          test_type: activeTestExtract.test_type,
+          assumption_says: activeTestExtract.assumption_says,
+          behavior_change: activeTestExtract.behavior_change,
+          data_to_collect: activeTestExtract.data_to_collect,
+          in_order_to_find_out: activeTestExtract.in_order_to_find_out,
+          target_date: activeTestExtract.target_date,
+          status: activeTestExtract.status,
+        }
+      : null,
+    walkthroughDelivered: map.walkthrough_delivered,
+    userMessage: parsed.data.text,
+    coachReply: reply.reply,
+    recentAssistantMessages,
+    recentActionRejections: recentActionFeedback,
+  });
+  const extractMs = extraction.durationMs;
+  events.record(
+    "extract",
+    {
+      emitted_actions: extraction.actions.map((a) => a.type),
+      reason: extraction.reason,
+    },
+    { durationMs: extractMs, stage: map.current_stage },
+  );
+
+  // Apply each extracted action in order. Stage guards run against
+  // the CURRENT stage after previous actions in the batch — so an
+  // advance_stage earlier in the array lets a subsequent action land
+  // at the new stage. Rejections are non-fatal and land as [action
+  // rejected] system messages the extractor sees on the next turn.
+  let appliedCount = 0;
+  for (const action of extraction.actions) {
     const applyStart = Date.now();
     try {
       const mapNow = await getMapById(map.id);
       const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
       await applyCoachAction(map.id, stageNow, action);
+      appliedCount++;
       events.record(
         "action_apply",
-        { action_type: action.type, applied: true },
+        { action_type: action.type, applied: true, via: "extract" },
         { durationMs: Date.now() - applyStart, stage: stageNow },
       );
     } catch (err) {
@@ -386,881 +436,14 @@ export async function runCoachTurnForMap(
       );
       events.record(
         "action_rejected",
-        { action_type: action.type, error: message },
+        { action_type: action.type, error: message, via: "extract" },
         { durationMs: Date.now() - applyStart, stage: map.current_stage },
       );
     }
   }
 
-  // Backstop that saves the goal only when the coachee affirms the coach's
-  // proposal. Fires on the "yes" turn — extracts the last coach-proposed
-  // goal from the prior assistant message and writes it. If we ran this
-  // unconditionally, the coach's proposal turn (which contains the stem)
-  // would save the goal before the coachee confirmed anything.
-  const currentGoal = await refreshImprovementGoal(map.id);
-  const affirmative = looksAffirmative(parsed.data.text);
-  if (map.current_stage === "goal" && !currentGoal && affirmative) {
-    // Prefer the prior assistant message (the coach's proposal) — this
-    // turn's reply is typically "Locked. Now column 2…" after the "yes".
-    const extracted =
-      (priorAssistantContent
-        ? extractGoalSentence(priorAssistantContent)
-        : null) ?? extractGoalSentence(reply.reply);
-    console.warn(
-      "[itc] goal backstop: affirmative=yes extracted-len=%d actions=%s",
-      extracted?.length ?? 0,
-      reply.actions.map((a) => a.type).join(",") || "none",
-    );
-    if (extracted) {
-      try {
-        await saveImprovementGoal(map.id, extracted);
-        console.warn("[itc] goal backstop: saved goal via extractor");
-        events.record(
-          "backstop_fire",
-          { name: "goal", note: "saved goal via extractor" },
-          { stage: map.current_stage },
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn("[itc] goal backstop: saveImprovementGoal threw: %s", msg);
-        events.record(
-          "backstop_fire",
-          { name: "goal", note: "saveImprovementGoal threw", error: msg },
-          { stage: map.current_stage },
-        );
-      }
-    }
-  }
-
-  // Safety net: if the coachee affirmed a proposed goal and the coach
-  // forgot to emit advance_stage, advance for them. Re-read the goal in
-  // case the extractor above just saved it in this same turn.
-  let goalNow = await refreshImprovementGoal(map.id);
-  const emittedAdvanceStage = reply.actions.some(
-    (a) => a.type === "advance_stage",
-  );
-  if (
-    map.current_stage === "goal" &&
-    goalNow &&
-    !emittedAdvanceStage &&
-    affirmative
-  ) {
-    try {
-      await advanceStage(map.id, "goal", "behaviors");
-    } catch {
-      // ignore — already advanced or race
-    }
-  }
-
-  // Goal-skipped backstop: the coachee didn't say "yes" to the goal but
-  // instead answered by naming a behavior. The coach reads that as
-  // implicit acceptance and fires propose_behavior — which the stage
-  // guard silently drops because we're still in `goal`. Result: coach
-  // says "I'm going to add it to the map" and NOTHING lands on the map.
-  // Recovery: if we're in goal stage with no saved goal, the prior
-  // assistant message contained a goal proposal, the user's message is
-  // behavior-shaped, and the coach's reply either fired propose_behavior
-  // or acknowledged the message as a new behavior — auto-lock the goal,
-  // advance to behaviors, then insert the user's message as behavior #1.
-  const proposeBehaviorAction = reply.actions.find(
-    (a) => a.type === "propose_behavior",
-  );
-  if (
-    map.current_stage === "goal" &&
-    !goalNow &&
-    !affirmative &&
-    looksLikeBehaviorCandidate(parsed.data.text) &&
-    (proposeBehaviorAction || coachAcknowledgedNewBehavior(reply.reply))
-  ) {
-    const extractedGoal = priorAssistantContent
-      ? extractGoalSentence(priorAssistantContent)
-      : null;
-    if (extractedGoal) {
-      try {
-        await saveImprovementGoal(map.id, extractedGoal);
-        goalNow = extractedGoal;
-        console.warn("[itc] goal-skipped backstop: saved goal from prior turn");
-        try {
-          await advanceStage(map.id, "goal", "behaviors");
-        } catch {
-          // ignore — race
-        }
-        const behaviorText =
-          proposeBehaviorAction && proposeBehaviorAction.type === "propose_behavior"
-            ? proposeBehaviorAction.text
-            : parsed.data.text.trim();
-        try {
-          await addBehavior(map.id, behaviorText, "user");
-          console.warn(
-            "[itc] goal-skipped backstop: inserted behavior after auto-lock",
-          );
-        } catch (err) {
-          console.warn(
-            "[itc] goal-skipped backstop: addBehavior failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      } catch (err) {
-        console.warn(
-          "[itc] goal-skipped backstop: saveImprovementGoal threw: %s",
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-  }
-
-  // Behaviors backstop: coach says "That's a second one, two on the map"
-  // but forgets to emit propose_behavior — the reply text and the actual
-  // behavior list drift apart, and the coachee sees two bubbles in chat
-  // but only one card on the map. Recovery: if we're in the behaviors
-  // stage, the user's just-sent message is behavior-shaped, the coach's
-  // reply acknowledges it as a new behavior (via count-claim or "that's
-  // a Nth one" pattern), and the action this turn wasn't
-  // propose_behavior/replace_behavior — insert the user's message as a
-  // new behavior. Bounded by the same 5-cap the propose_behavior handler
-  // enforces (never insert past 5).
-  const emittedBehaviorAction = reply.actions.some(
-    (a) => a.type === "propose_behavior" || a.type === "replace_behavior",
-  );
-  if (
-    map.current_stage === "behaviors" &&
-    !emittedBehaviorAction &&
-    looksLikeBehaviorCandidate(parsed.data.text) &&
-    coachAcknowledgedNewBehavior(reply.reply)
-  ) {
-    const behaviorsBefore = await listBehaviors(map.id);
-    const selectedCount = behaviorsBefore.filter((b) => b.selected).length;
-    if (selectedCount < 5) {
-      // Only insert if the coach's claimed count is actually greater
-      // than reality — this prevents double-inserting if the coach DID
-      // fire propose_behavior and is just recapping. The extractor
-      // looks for "N on the map", "Now N", "That's N so far" claims.
-      const claimedCount = extractCoachBehaviorCount(reply.reply);
-      if (claimedCount !== null && claimedCount > selectedCount) {
-        try {
-          await addBehavior(map.id, parsed.data.text.trim(), "user");
-          console.warn(
-            "[itc] behaviors backstop: inserted behavior (coach claimed %d on map, actual was %d)",
-            claimedCount,
-            selectedCount,
-          );
-        } catch (err) {
-          console.warn(
-            "[itc] behaviors backstop: addBehavior failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
-    }
-  }
-
-  // Worries backstop: coach probes to depth, gets a fear-shaped answer,
-  // acknowledges it, but forgets to emit propose_worry. The next probe
-  // fires against a behavior that doesn't have its worry paired yet, so
-  // the pairing shifts by one and the whole map degrades. Recovery: if
-  // we're in worries stage, the action this turn wasn't propose_worry,
-  // and the coach's reply contains a quoted "I worry that if X ..."
-  // sentence, extract it, run the depth rubric, and pair it with the
-  // first unpaired selected behavior in order. Same rubric-gate rule as
-  // the assumptions backstop: don't force in a proposal that would have
-  // been rejected on the normal path.
-  const emittedProposeWorry = reply.actions.some(
-    (a) => a.type === "propose_worry",
-  );
-  if (map.current_stage === "worries" && !emittedProposeWorry) {
-    const [behaviorsForWorry, worriesForBackstop] = await Promise.all([
-      listBehaviors(map.id),
-      listWorries(map.id),
-    ]);
-    const pairedIds = new Set(
-      worriesForBackstop
-        .filter((w) => w.depth_score !== null)
-        .map((w) => w.behavior_id),
-    );
-    const firstUnpaired = behaviorsForWorry.find(
-      (b) => b.selected && !pairedIds.has(b.id),
-    );
-    if (firstUnpaired) {
-      // Extraction priority: user's current message first (coachees
-      // often write the worry themselves in "I worry that if X, then
-      // Y" form, and if the coach forgot to fire propose_worry on
-      // that turn, this is where the real content lives). Fall back
-      // to the coach's reply and prior assistant message.
-      const extracted =
-        extractWorryDraft(parsed.data.text) ??
-        extractWorryDraft(reply.reply) ??
-        (priorAssistantContent
-          ? extractWorryDraft(priorAssistantContent)
-          : null);
-      if (extracted) {
-        try {
-          const stemmed = ensureStem(extracted, WORRY_STEM);
-          const rubric = await scoreWorryDepth({
-            goalText: map.improvement_goal ?? "",
-            behaviorText: firstUnpaired.text,
-            worryText: stemmed,
-          });
-          if (rubric.score >= 2) {
-            await upsertWorry(map.id, firstUnpaired.id, stemmed, rubric.score);
-            await logWorryAttempt({
-              mapId: map.id,
-              behaviorId: firstUnpaired.id,
-              text: stemmed,
-              depthScore: rubric.score,
-              accepted: true,
-              rejectReason: null,
-            });
-            console.warn(
-              "[itc] worries backstop: paired extracted worry to behavior %s (score %d/3)",
-              firstUnpaired.id,
-              rubric.score,
-            );
-          } else {
-            console.warn(
-              "[itc] worries backstop: rubric would reject draft (score %d/3) — not persisting",
-              rubric.score,
-            );
-          }
-        } catch (err) {
-          console.warn(
-            "[itc] worries backstop: upsertWorry failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
-    }
-  }
-
-  // Auto-advance worries → commitments the moment every selected behavior
-  // has a locked worry. Runs regardless of what action fired this turn:
-  // the coach only has one action slot and may have spent it on a
-  // draft-related pseudo-action or nothing, so gating on
-  // reply.action?.type === "propose_worry" missed the case where the
-  // last worry landed on an earlier turn and the coach then drafted
-  // commitments without ever emitting advance_stage. Idempotent — no-ops
-  // if already advanced.
-  if (map.current_stage === "worries") {
-    const [behaviorsNow, worriesNow] = await Promise.all([
-      listBehaviors(map.id),
-      listWorries(map.id),
-    ]);
-    const selectedIds = new Set(
-      behaviorsNow.filter((b) => b.selected).map((b) => b.id),
-    );
-    const lockedBehaviorIds = new Set(
-      worriesNow
-        .filter((w) => w.depth_score !== null && selectedIds.has(w.behavior_id))
-        .map((w) => w.behavior_id),
-    );
-    const allLocked =
-      selectedIds.size > 0 && lockedBehaviorIds.size === selectedIds.size;
-    if (allLocked) {
-      try {
-        await advanceStage(map.id, "worries", "commitments");
-      } catch {
-        // ignore — race or already advanced
-      }
-    }
-  }
-
-  // Commitments backstop: if the coachee just affirmed the drafted list
-  // and the coach forgot to emit propose_commitments_batch (observed:
-  // "Locking these in." reply with action=null, repeated for many turns
-  // as the drafts scrolled further back in history), scan backwards
-  // through prior assistant messages and use the most recent one that
-  // has a matching draft count. Only fires when no commitments are
-  // locked yet AND we find drafts matching the locked-worry count, so
-  // partial states can't get scrambled. Same pattern as the goal
-  // backstop above.
-  if (looksLikeCommitmentAffirmation(parsed.data.text, reply.reply)) {
-    // Guard removed: was skipping the backstop when the coach EMITTED
-    // propose_commitments_batch, but that action can fail silently
-    // (rubric rejects, garbled text, etc.) and leave the map without
-    // commitments even though the coach thinks it succeeded. The inner
-    // `commitmentsNow.length === 0` check prevents double-inserts on
-    // the success path, so removing the outer guard is safe.
-    const [worriesForBackstop, commitmentsNow, mapForBackstop] =
-      await Promise.all([
-        listWorries(map.id),
-        listCommitments(map.id),
-        getMapById(map.id),
-      ]);
-    const lockedWorries = worriesForBackstop.filter(
-      (w) => w.depth_score !== null,
-    );
-    const stageOk =
-      mapForBackstop?.current_stage === "commitments" ||
-      mapForBackstop?.current_stage === "worries";
-
-    // Scan priorHistory backwards for the first assistant message whose
-    // draft count matches the locked-worry count. Only look at
-    // assistant messages — user messages never contain drafts.
-    let draftsFromHistory: string[] = [];
-    if (
-      stageOk &&
-      commitmentsNow.length === 0 &&
-      lockedWorries.length > 0
-    ) {
-      for (let i = priorHistory.length - 1; i >= 0; i--) {
-        const msg = priorHistory[i];
-        if (msg.role !== "assistant") continue;
-        const candidate = extractCommitmentDrafts(msg.content);
-        if (candidate.length === lockedWorries.length) {
-          draftsFromHistory = candidate;
-          break;
-        }
-      }
-    }
-
-    if (
-      stageOk &&
-      commitmentsNow.length === 0 &&
-      lockedWorries.length > 0 &&
-      draftsFromHistory.length === lockedWorries.length
-    ) {
-      if (mapForBackstop?.current_stage === "worries") {
-        try {
-          await advanceStage(map.id, "worries", "commitments");
-        } catch {
-          // ignore — race or advance guard already fired
-        }
-      }
-      for (let i = 0; i < lockedWorries.length; i++) {
-        try {
-          await addCommitment(
-            map.id,
-            lockedWorries[i].id,
-            ensureStem(draftsFromHistory[i], COMMITMENT_STEM),
-          );
-        } catch (err) {
-          console.warn(
-            "[itc] commitments backstop: addCommitment failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
-      console.warn(
-        "[itc] commitments backstop: inserted %d drafts from history scan",
-        draftsFromHistory.length,
-      );
-    }
-  }
-
-  // Test-design backstop: if the coachee affirms "save it" style and the
-  // coach didn't fire save_test_design, extract the drafted test from a
-  // prior assistant message and persist it ourselves. Only fires when no
-  // test row exists yet on this map so multi-test iterations aren't
-  // disturbed. All-or-nothing extraction — if any field is missing, skip.
-  const emittedSaveTestDesign = reply.actions.some(
-    (a) => a.type === "save_test_design",
-  );
-  if (!emittedSaveTestDesign && looksAffirmative(parsed.data.text)) {
-    const mapForTest = await getMapById(map.id);
-    if (
-      mapForTest?.current_stage === "test_design" ||
-      mapForTest?.current_stage === "prioritize"
-    ) {
-      const existingTests = await listTests(map.id);
-      const selectedAssumption = (
-        await listAssumptions(map.id)
-      ).find((a) => a.selected_for_testing);
-      if (existingTests.length === 0 && selectedAssumption) {
-        for (let i = priorHistory.length - 1; i >= 0; i--) {
-          const msg = priorHistory[i];
-          if (msg.role !== "assistant") continue;
-          const draft = extractTestDraft(msg.content);
-          if (!draft) continue;
-          try {
-            // Advance to test_design first if we're still in prioritize
-            // (backstop is tolerant of the coach skipping the explicit
-            // advance action).
-            if (mapForTest.current_stage === "prioritize") {
-              try {
-                await advanceStage(map.id, "prioritize", "test_design");
-              } catch {
-                // ignore
-              }
-            }
-            await saveTestDraft({
-              mapId: map.id,
-              assumptionId: selectedAssumption.id,
-              testType: draft.test_type,
-              assumptionSays: draft.assumption_says,
-              behaviorChange: draft.behavior_change,
-              dataToCollect: draft.data_to_collect,
-              inOrderToFindOut: draft.in_order_to_find_out,
-              targetDate: draft.target_date,
-            });
-            try {
-              await advanceStage(map.id, "test_design", "test_running");
-            } catch {
-              // ignore
-            }
-            console.warn(
-              "[itc] test-design backstop: saved test from history scan",
-            );
-          } catch (err) {
-            console.warn(
-              "[itc] test-design backstop: saveTestDraft failed: %s",
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  // Assumptions backstop (multi-assumption). Rewritten because the old
-  // single-assumption version had two blind spots that both surfaced in
-  // real sessions:
-  //   1. Only extracted DOUBLE-quoted assumption text — coach reveals
-  //      that use single-quotes ('I assume that ...') were invisible.
-  //   2. Only fired when zero assumptions were on the map — could not
-  //      recover a missing second cluster after the first landed.
-  //
-  // New behavior: on any turn where current_stage is assumptions or
-  // immune_system, scan the last N assistant messages for EVERY "I
-  // assume that ..." sentence (quoted or unquoted, single or double).
-  // For each extracted draft that isn't already on the map (by
-  // normalized text), run the depth rubric; if it passes, insert it
-  // linked to the commitments the coach's message named explicitly
-  // ("Commitment #1", "Commitment #4") or falling back to all
-  // commitments. Idempotent by construction — dedup happens on
-  // normalized text at both the extractor and the addAssumption layers.
-  {
-    const mapForAssumption = await getMapById(map.id);
-    const stageForBackstop = mapForAssumption?.current_stage;
-    if (
-      stageForBackstop === "assumptions" ||
-      stageForBackstop === "immune_system"
-    ) {
-      const [assumptionsNow, commitmentsForLink] = await Promise.all([
-        listAssumptions(map.id),
-        listCommitments(map.id),
-      ]);
-      if (commitmentsForLink.length > 0) {
-        const existingNorm = new Set(
-          assumptionsNow.map((a) => normalizeMapText(a.text)),
-        );
-        // Walk the transcript newest-first so a later message's
-        // more-refined phrasing wins if the same assumption appears
-        // twice. Bound the scan at the last 12 assistant messages so
-        // we don't rescore ancient content on long sessions.
-        const assistantMessages = priorHistory
-          .filter((m) => m.role === "assistant")
-          .slice(-12)
-          .reverse();
-        const seenNorm = new Set<string>(existingNorm);
-        const toInsert: {
-          text: string;
-          commitmentIndices: number[];
-        }[] = [];
-        for (const msg of assistantMessages) {
-          const drafts = extractAssumptionDrafts(msg.content);
-          if (drafts.length === 0) continue;
-          const commitmentIndicesInMsg = extractCommitmentIndicesInText(
-            msg.content,
-          );
-          for (const draft of drafts) {
-            const stemmed = ensureStem(draft, ASSUMPTION_STEM);
-            const norm = normalizeMapText(stemmed);
-            if (seenNorm.has(norm)) continue;
-            seenNorm.add(norm);
-            toInsert.push({
-              text: stemmed,
-              commitmentIndices:
-                commitmentIndicesInMsg.length > 0
-                  ? commitmentIndicesInMsg
-                  : commitmentsForLink.map((_, i) => i + 1),
-            });
-          }
-        }
-        for (const item of toInsert) {
-          try {
-            const rubric = await scoreAssumptionDepth({
-              goalText: mapForAssumption?.improvement_goal ?? "",
-              assumptionText: item.text,
-            });
-            if (rubric.score < 2) {
-              console.warn(
-                "[itc] assumptions backstop: rubric rejected draft (score %d/3) — not persisting: %o",
-                rubric.score,
-                item.text,
-              );
-              events.record(
-                "backstop_fire",
-                {
-                  name: "assumptions",
-                  note: "rubric rejected draft",
-                  score: rubric.score,
-                  text: item.text,
-                },
-                { stage: stageForBackstop },
-              );
-              continue;
-            }
-            const assumption = await addAssumption(
-              map.id,
-              item.text,
-              rubric.score,
-            );
-            const linkIds = item.commitmentIndices
-              .map((i) => commitmentsForLink[i - 1]?.id)
-              .filter((id): id is string => Boolean(id));
-            if (linkIds.length > 0) {
-              await linkAssumptionToCommitments(assumption.id, linkIds);
-            }
-            console.warn(
-              "[itc] assumptions backstop: inserted assumption (linked to %d commitments, indices=%o)",
-              linkIds.length,
-              item.commitmentIndices,
-            );
-            events.record(
-              "backstop_fire",
-              {
-                name: "assumptions",
-                note: "inserted assumption",
-                commitment_indices: item.commitmentIndices,
-                linked_count: linkIds.length,
-                text: item.text,
-              },
-              { stage: stageForBackstop },
-            );
-          } catch (err) {
-            console.warn(
-              "[itc] assumptions backstop: addAssumption failed: %s",
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        }
-      }
-    }
-  }
-
-  const cascadeStart = Date.now();
-  // Cascade auto-advance across every stage transition where the coach
-  // has proven capable of forgetting the action. On any affirmation,
-  // re-read the map after each advance and try the next transition if
-  // its conditions are met. Runs until no transition applies. Bounded
-  // so a logic bug can't spin forever.
-  //
-  // Covers, in order:
-  //   behaviors    → worries          (needs 3-5 selected)
-  //   commitments  → assumptions      (auto-marks reveal_delivered first)
-  //   assumptions  → review           (needs full commitment coverage)
-  //   review       → immune_system
-  //   immune_system→ prioritize       (auto-marks walkthrough_delivered)
-  //   prioritize   → test_design      (needs a selected_for_testing pick)
-  //
-  // Aggressive on purpose: by the time the coachee is affirming in any
-  // of these stages, the substantive work is done or done-enough. Being
-  // stuck is worse than advancing.
-  if (looksAffirmative(parsed.data.text)) {
-    for (let step = 0; step < 8; step++) {
-      const currentMap = await getMapById(map.id);
-      if (!currentMap) break;
-      const from = currentMap.current_stage;
-      let advanced = false;
-
-      if (from === "behaviors") {
-        const behaviorsNow = await listBehaviors(map.id);
-        const selectedCount = behaviorsNow.filter((b) => b.selected).length;
-        if (selectedCount >= 1 && selectedCount <= 5) {
-          try {
-            await advanceStage(map.id, "behaviors", "worries");
-            advanced = true;
-          } catch {
-            // ignore — race or advance guard rejected
-          }
-        }
-      } else if (from === "commitments") {
-        // Advance to assumptions the moment every locked worry has a
-        // commitment. The old flow required reveal_delivered=true here
-        // because the coach used to deliver a mini gas-and-brake
-        // reveal at commitments; that's been removed (the full
-        // walkthrough lands at immune_system after review) so the
-        // reveal flag no longer gates this transition.
-        //
-        // Additional guard: if the current turn's action IS the batch
-        // itself, do NOT advance on this turn — leave the coachee a
-        // beat with the freshly-locked list before the stage flips.
-        if (reply.actions.some((a) => a.type === "propose_commitments_batch")) {
-          break;
-        }
-        const [worriesNow, commitmentsNow] = await Promise.all([
-          listWorries(map.id),
-          listCommitments(map.id),
-        ]);
-        const lockedWorries = worriesNow.filter((w) => w.depth_score !== null);
-        const covered = new Set(commitmentsNow.map((c) => c.worry_id));
-        const uncoveredWorries = lockedWorries.filter((w) => !covered.has(w.id));
-        if (lockedWorries.length > 0 && uncoveredWorries.length === 0) {
-          try {
-            await advanceStage(map.id, "commitments", "assumptions");
-            advanced = true;
-          } catch {
-            // ignore
-          }
-        }
-      } else if (from === "assumptions") {
-        // Advance directly to immune_system, skipping review. Review
-        // was a mid-flow checkpoint that added a turn without moving
-        // the map forward; the walkthrough (Movement 1) should land
-        // the moment the coachee's map is complete. Stage machine
-        // allows the assumptions → immune_system skip explicitly.
-        const [commitmentsNow, links] = await Promise.all([
-          listCommitments(map.id),
-          listAssumptionLinks(map.id),
-        ]);
-        const covered = new Set(links.map((l) => l.commitment_id));
-        const uncovered = commitmentsNow.filter((c) => !covered.has(c.id));
-        if (uncovered.length === 0 && commitmentsNow.length > 0) {
-          try {
-            await advanceStage(map.id, "assumptions", "immune_system");
-            advanced = true;
-          } catch {
-            // ignore — race or advance guard rejected
-          }
-        }
-      }
-      // NOTE: NO cascade out of immune_system. Removed because the
-      // previous auto-mark-walkthrough-delivered + auto-advance to
-      // prioritize was actively skipping the walkthrough — on any
-      // affirmation while in immune_system, cascade fired the flag and
-      // advanced before the coach's Movement 1 reply had a chance to
-      // stand alone. Now the coach must explicitly fire
-      // mark_walkthrough_delivered when the walkthrough has actually
-      // happened (see immune-system.ts prompt for the batched-actions
-      // shape). If the coach forgets, the map sits in immune_system
-      // and the coachee prompts them — better than the coachee
-      // silently landing on the test-picking screen without ever
-      // hearing their immune system explained.
-      else if (from === "prioritize") {
-        // Advance to test_design only if a pick is on record. If the
-        // coach recommended one and the coachee affirmed without an
-        // explicit select, auto-adopt the recommendation as the
-        // selection — his "yes" reasonably endorses the coach's pick.
-        //
-        // Bug fix: previously fell back to assumptions[0] when neither
-        // selected nor recommended. That silently picked the wrong
-        // assumption when coachee came back to prioritize from results
-        // to test a DIFFERENT one — clearSelectedAssumption clears
-        // BOTH selection and recommendation, so the fallback picked
-        // the original assumption and the coachee's intent got lost.
-        // Now: no recommendation, no auto-advance. Cascade stalls at
-        // prioritize until coach fires select_assumption_for_testing.
-        const assumptionsNow = await listAssumptions(map.id);
-        const alreadySelected = assumptionsNow.find(
-          (a) => a.selected_for_testing,
-        );
-        if (!alreadySelected) {
-          const recommended = assumptionsNow.find(
-            (a) => a.coach_recommended,
-          );
-          if (recommended) {
-            try {
-              await setAssumptionSelected(recommended.id, map.id);
-            } catch {
-              // ignore
-            }
-          } else if (assumptionsNow.length === 1) {
-            // Single-assumption case (common when the coverage
-            // walk-through consolidated to one) — no ambiguity, pick
-            // it. Skips the coach having to fire
-            // select_assumption_for_testing for the trivial case.
-            try {
-              await setAssumptionSelected(assumptionsNow[0].id, map.id);
-            } catch {
-              // ignore
-            }
-          } else {
-            // Multiple assumptions with no recommendation and no pick
-            // — don't fabricate one; cascade stalls at prioritize
-            // until the coach fires select_assumption_for_testing.
-            break;
-          }
-        }
-        try {
-          await advanceStage(map.id, "prioritize", "test_design");
-          advanced = true;
-        } catch {
-          // ignore
-        }
-      } else if (from === "results") {
-        // Only advance to done on EXPLICIT close signals. A generic "yes"
-        // in the results stage might just be acknowledging a coach
-        // question, not asking to close the map. Requires looksLikeClose
-        // (below) which matches "close it out", "we're done", etc.
-        if (looksLikeMapClose(parsed.data.text)) {
-          // Advance first — if the transition fails (illegal jump,
-          // etc.) we don't want markMapComplete to leave the map in
-          // an inconsistent state.
-          try {
-            await advanceStage(map.id, "results", "done");
-            advanced = true;
-            try {
-              await markMapComplete(map.id);
-            } catch {
-              // ignore — non-fatal
-            }
-          } catch {
-            // ignore — race or advance guard rejected
-          }
-        }
-      }
-
-      if (!advanced) {
-        // Log where cascade stopped and why. Helps debug the "coach
-        // stuck at stage X even after N affirmations" family of bugs
-        // that only show up in E2E runs.
-        console.warn(
-          "[itc cascade] stopped at stage=%s after step=%d (advance conditions not met — check reveal/walkthrough flags, coverage counts, and stage-specific gates)",
-          from,
-          step,
-        );
-        break;
-      }
-    }
-  }
-
-  const cascadeMs = Date.now() - cascadeStart;
-
-  // Post-turn LLM reconciliation. Reads the coach's just-sent reply
-  // against the current DB state and asks a small model: what state
-  // changes did the reply imply that haven't landed? Fills the gap
-  // left by regex backstops that miss novel phrasings. Cheap, capped
-  // at 3 follow-up actions, failures are non-fatal.
-  const reconcileStart = Date.now();
-  let reconcileMs = 0;
-  let reconcileAppliedCount = 0;
-  try {
-    const [
-      behaviorsForRecon,
-      worriesForRecon,
-      commitmentsForRecon,
-      assumptionsForRecon,
-      linksForRecon,
-      activeTestForRecon,
-      mapForRecon,
-    ] = await Promise.all([
-      listBehaviors(map.id),
-      listWorries(map.id),
-      listCommitments(map.id),
-      listAssumptions(map.id),
-      listAssumptionLinks(map.id),
-      getActiveTest(map.id),
-      getMapById(map.id),
-    ]);
-
-    const selectedBehaviors = behaviorsForRecon.filter((b) => b.selected);
-    const behaviorIndexById = new Map<string, number>();
-    selectedBehaviors.forEach((b, i) => behaviorIndexById.set(b.id, i + 1));
-
-    const lockedWorries = worriesForRecon.filter(
-      (w) => w.depth_score !== null,
-    );
-    const worryIndexById = new Map<string, number>();
-    lockedWorries.forEach((w, i) => worryIndexById.set(w.id, i + 1));
-
-    const commitmentIndexById = new Map<string, number>();
-    commitmentsForRecon.forEach((c, i) =>
-      commitmentIndexById.set(c.id, i + 1),
-    );
-
-    const commitmentIndicesByAssumption = new Map<string, number[]>();
-    for (const link of linksForRecon) {
-      const idx = commitmentIndexById.get(link.commitment_id);
-      if (!idx) continue;
-      const arr = commitmentIndicesByAssumption.get(link.assumption_id) ?? [];
-      arr.push(idx);
-      commitmentIndicesByAssumption.set(link.assumption_id, arr);
-    }
-
-    const followUpActions = await reconcileTurn({
-      stage: mapForRecon?.current_stage ?? map.current_stage,
-      goalText: mapForRecon?.improvement_goal ?? null,
-      behaviors: behaviorsForRecon.map((b) => ({
-        text: b.text,
-        selected: b.selected,
-      })),
-      worries: worriesForRecon.map((w) => ({
-        behavior_index: behaviorIndexById.get(w.behavior_id) ?? 0,
-        text: w.text,
-        locked: w.depth_score !== null,
-      })),
-      commitments: commitmentsForRecon.map((c) => ({
-        worry_index: worryIndexById.get(c.worry_id) ?? 0,
-        text: c.text,
-      })),
-      assumptions: assumptionsForRecon.map((a) => ({
-        text: a.text,
-        commitment_indices: commitmentIndicesByAssumption.get(a.id) ?? [],
-        selected_for_testing: a.selected_for_testing,
-      })),
-      hasActiveTest: activeTestForRecon !== null,
-      coachReplyText: reply.reply,
-      actionsAppliedThisTurn: reply.actions,
-      coacheeMessage: parsed.data.text,
-    });
-
-    for (const action of followUpActions) {
-      try {
-        const mapNow = await getMapById(map.id);
-        const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
-        await applyCoachAction(map.id, stageNow, action);
-        reconcileAppliedCount++;
-        console.warn(
-          "[itc] reconcile: applied follow-up action %s",
-          action.type,
-        );
-        events.record(
-          "action_apply",
-          { action_type: action.type, applied: true, via: "reconcile" },
-          { stage: stageNow },
-        );
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.warn(
-          "[itc] reconcile: follow-up action %s rejected: %s",
-          action.type,
-          errMsg,
-        );
-        events.record(
-          "action_rejected",
-          { action_type: action.type, error: errMsg, via: "reconcile" },
-          { stage: map.current_stage },
-        );
-      }
-    }
-    events.record(
-      "reconcile",
-      {
-        emitted_actions: followUpActions.map((a) => a.type),
-        applied_count: reconcileAppliedCount,
-      },
-      { durationMs: Date.now() - reconcileStart },
-    );
-  } catch (err) {
-    console.warn(
-      "[itc] reconciliation wrapper failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    events.record(
-      "error",
-      {
-        where: "reconciliation-wrapper",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { durationMs: Date.now() - reconcileStart },
-    );
-  }
-  reconcileMs = Date.now() - reconcileStart;
-
-  // If the stage changed during this turn (via coach action or one of the
-  // safety nets), retag the assistant message with the new stage so the
-  // transition reply ("Locked. Now column 2…") lives in the new stage's
-  // chat pane rather than the one we just left.
+  // If the stage changed, retag the assistant message so it lives in
+  // the new stage's chat pane rather than the one we just left.
   const finalMap = await getMapById(map.id);
   if (finalMap && finalMap.current_stage !== map.current_stage) {
     try {
@@ -1270,27 +453,19 @@ export async function runCoachTurnForMap(
     }
   }
 
-  // Turn-summary timing log — one line per turn so you can grep the
-  // dev terminal or Vercel logs for "[itc timing] turn" and see where
-  // time is going. Breakdown: llm = generateObject + any retries +
-  // fallback. cascade = auto-advance loop (multiple DB reads and
-  // potential advanceStage calls, no LLM). total = end-to-end wall
-  // clock including all pre-LLM DB fetches, action apply, backstops
-  // (which may include rubric LLM calls), and post-turn writes.
   const stageChanged = finalMap && finalMap.current_stage !== map.current_stage;
   const totalMs = Date.now() - turnStart;
-  const otherMs = totalMs - prefetchMs - llmMs - cascadeMs - reconcileMs;
+  const otherMs = totalMs - prefetchMs - llmMs - extractMs;
   console.warn(
-    "[itc timing] turn map=%s stage=%s%s actions=%s prefetch=%dms llm=%dms cascade=%dms reconcile=%dms(+%d) other=%dms total=%dms",
+    "[itc timing] turn map=%s stage=%s%s actions=%s prefetch=%dms llm=%dms extract=%dms(+%d) other=%dms total=%dms",
     map.id,
     map.current_stage,
     stageChanged ? `->${finalMap.current_stage}` : "",
-    reply.actions.map((a) => a.type).join(",") || "none",
+    extraction.actions.map((a) => a.type).join(",") || "none",
     prefetchMs,
     llmMs,
-    cascadeMs,
-    reconcileMs,
-    reconcileAppliedCount,
+    extractMs,
+    appliedCount,
     otherMs,
     totalMs,
   );
@@ -1299,24 +474,18 @@ export async function runCoachTurnForMap(
     {
       prefetch_ms: prefetchMs,
       llm_ms: llmMs,
-      cascade_ms: cascadeMs,
-      reconcile_ms: reconcileMs,
-      reconcile_applied: reconcileAppliedCount,
+      extract_ms: extractMs,
+      extract_applied: appliedCount,
       other_ms: otherMs,
       total_ms: totalMs,
       stage_from: map.current_stage,
       stage_to: finalMap?.current_stage ?? map.current_stage,
-      actions: reply.actions.map((a) => a.type),
+      actions: extraction.actions.map((a) => a.type),
     },
     { durationMs: totalMs, stage: finalMap?.current_stage ?? map.current_stage },
   );
   await events.flush();
 
-  // revalidatePath ties into Next's request-scoped static-generation
-  // store; when called outside a real request (E2E tests calling this
-  // function directly) it throws "static generation store missing".
-  // Cache invalidation is fire-and-forget from our perspective, so a
-  // failure here shouldn't fail the whole turn.
   try {
     revalidatePath(`/itc/${map.id}`);
   } catch {
@@ -1325,44 +494,14 @@ export async function runCoachTurnForMap(
   return { ok: true };
 }
 
-async function refreshImprovementGoal(mapId: string): Promise<string | null> {
-  const m = await getMapById(mapId);
-  return m?.improvement_goal ?? null;
-}
+// ==========================================================================
+// EVERYTHING BELOW THIS LINE was the old backstop + cascade + reconciler
+// machinery. The extract-actions.ts module is now the primary path for
+// state changes; the old code is deleted here. See git history if you
+// need to see how it worked before.
+// ==========================================================================
 
-// Pull the first "I'm committed to getting better at ..." sentence out of a
-// coach reply so we can save the goal even when the model skips propose_goal.
-// Two subtleties observed in the wild:
-// 1. Models often output smart quotes/apostrophes even when the prompt uses
-//    straight ASCII. Normalizing both sides before indexOf so U+2019 in the
-//    coach's "I'm" doesn't miss the stem match.
-// 2. The captured sentence ends at the first period followed by a quote,
-//    whitespace, or end-of-string — this dodges the apostrophe inside "I'm".
-function extractGoalSentence(text: string): string | null {
-  // Match the whole stem+tail directly with a case-insensitive regex that
-  // tolerates a smart-apostrophe or missing apostrophe in "I'm". Reconstruct
-  // the sentence with canonical ASCII punctuation regardless of what the
-  // coach emitted. This is more resilient than an indexOf + slice pipeline
-  // which broke silently in the field.
-  const re = /I[\u2019'\u02BC]?m committed to getting better at ([^\n.]+)\./i;
-  const match = text.match(re);
-  if (match) {
-    const tail = match[1].trim();
-    if (tail.length > 0) return `I'm committed to getting better at ${tail}.`;
-  }
 
-  // No period-terminated sentence — take everything up to first newline or
-  // closing quote as a fallback.
-  const looseRe = /I[\u2019'\u02BC]?m committed to getting better at ([^\n"\u201D]+)/i;
-  const loose = text.match(looseRe);
-  if (!loose) return null;
-  const tail = loose[1]
-    .trim()
-    .replace(/[,;:—–]\s+.*$/, "") // drop trailing clauses like ", right?"
-    .replace(/[!?.]+$/, "")
-    .trim();
-  return tail.length > 0 ? `I'm committed to getting better at ${tail}.` : null;
-}
 
 // Guard around the coach call: filters out empty replies, consecutive
 // duplicates, and JSON-fragment garbage (all seen in real sessions —
@@ -1393,7 +532,7 @@ async function runItcCoachTurnWithGuards(
     !isEmpty &&
     !isDupe &&
     !isGarbage &&
-    looksLikeBareStatus(trimmed, first.actions[0]?.type ?? null);
+    looksLikeBareStatus(trimmed, null);
   if (!isEmpty && !isDupe && !isGarbage && !isBareStatus) return first;
 
   if (isGarbage) {
@@ -1523,185 +662,6 @@ function looksLikeBareStatus(
 }
 
 
-// Affirmation detector tuned for the commitments-batch backstop. Wider
-// than looksAffirmative (which is for the tight goal-lock path) because
-// coachees say things like "these are great" here. Also fires if the
-// coach's own reply signals a lock ("locked", "locking these in") since
-// that's the exact failure mode we're recovering from.
-function looksLikeCommitmentAffirmation(
-  userMessage: string,
-  coachReply: string,
-): boolean {
-  const t = userMessage.trim().toLowerCase().replace(/[.!?,]+$/g, "");
-  if (t.length === 0 || t.length > 200) return false;
-
-  const userAffirms = [
-    "these are great", "these are good", "these are perfect",
-    "these are it", "these work", "these fit", "these look right",
-    "these look good", "these are right", "go with these",
-    "nailed it", "spot on", "perfect", "sounds right",
-    "lock them in", "lock these in", "lock it in", "lock em in",
-    "lock in", "locked", "locking in",
-    "yes lock them in", "yes lock", "yes please",
-    // Same "that makes sense" family as looksAffirmative — coachees
-    // affirm the drafted commitment set this way just as often as
-    // "lock them in", and the batch backstop needs to catch both.
-    "that makes sense", "makes sense", "yeah that makes sense",
-    "yes that makes sense", "yeah makes sense", "yes makes sense",
-    "that tracks", "tracks", "that's right", "thats right",
-    "you got it", "you nailed it", "exactly", "correct",
-  ];
-  if (userAffirms.some((p) => t === p || t.startsWith(`${p} `))) return true;
-
-  // Fallback: coach's own reply announced the lock. If we're recovering
-  // from a missing batch action, the coach is likely saying "Locked" /
-  // "Locking these in" as the reply text.
-  if (/\b(locking|locked|lock in|locking these in|locking them in)\b/i.test(coachReply)) {
-    // Only count coach-signal if the user said something short and
-    // non-negative — filters out "no wait, change #2".
-    const looksNegative = /\b(no|wait|hold on|change|swap|tweak|reword|not quite|not right)\b/i.test(userMessage);
-    if (!looksNegative) return true;
-  }
-
-  return false;
-}
-
-// Pulls a quoted "I assume that if X, then Y" out of an assistant
-// message so the assumptions backstop can persist it when the coach
-// wrote the reveal text ("Locking that in: '...'") but never fired
-// propose_assumption. Only extracts if we can find a QUOTED assumption
-// — a bare "I assume that" fragment inside general prose is too easy
-// to false-positive on. Returns the extracted text WITHOUT the stem
-// (caller re-applies via ensureStem).
-// Pulls a drafted test out of a prior assistant message so the server
-// can fire save_test_design when the coach forgot to. Requires all four
-// field labels + a target_date + a recognizable test_type — otherwise
-// the extraction is not confident enough to persist. Same defensive
-// pattern as extractCommitmentDrafts and the goal extractor.
-type ExtractedTestDraft = {
-  test_type: "data_mining" | "observation" | "thought_experiment" | "behavioral";
-  assumption_says: string;
-  behavior_change: string;
-  data_to_collect: string;
-  in_order_to_find_out: string;
-  target_date: string;
-};
-
-function extractTestDraft(text: string): ExtractedTestDraft | null {
-  const fieldRe = (label: string) =>
-    new RegExp(
-      `${label}\\s*[:\\-–]\\s*(.+?)(?=\\n\\s*(?:assumption[_ ]says|test[_ ]move|behavior[_ ]change|data[_ ]to[_ ]collect|in[_ ]order[_ ]to[_ ]find[_ ]out|target[_ ]date)\\s*[:\\-–]|\\n\\n|$)`,
-      "is",
-    );
-  const assumptionSays = text.match(fieldRe("assumption[_ ]says"))?.[1]?.trim();
-  const testMove = text.match(fieldRe("(?:test[_ ]move|behavior[_ ]change)"))?.[1]?.trim();
-  const dataToCollect = text.match(fieldRe("data[_ ]to[_ ]collect"))?.[1]?.trim();
-  const inOrderTo = text.match(fieldRe("in[_ ]order[_ ]to[_ ]find[_ ]out"))?.[1]?.trim();
-  const dateMatch = text.match(/target[_ ]date\s*[:\-–]\s*(\d{4}-\d{2}-\d{2})/i);
-  const targetDate = dateMatch?.[1];
-
-  if (!assumptionSays || !testMove || !dataToCollect || !inOrderTo || !targetDate) {
-    return null;
-  }
-
-  // Test type from the header. Match on the labels the coach uses in prose.
-  let testType: ExtractedTestDraft["test_type"] | null = null;
-  if (/data[- ]mining|data_mining/i.test(text)) testType = "data_mining";
-  else if (/self[- ]observation|self_observation|\bobservation\b/i.test(text))
-    testType = "observation";
-  else if (/thought[- ]experiment|thought_experiment/i.test(text))
-    testType = "thought_experiment";
-  else if (/\bbehavioral\b/i.test(text)) testType = "behavioral";
-
-  if (!testType) return null;
-
-  return {
-    test_type: testType,
-    assumption_says: assumptionSays,
-    behavior_change: testMove,
-    data_to_collect: dataToCollect,
-    in_order_to_find_out: inOrderTo,
-    target_date: targetDate,
-  };
-}
-
-// Recognizes an explicit "close the map for now" from the coachee at
-// results stage. Stricter than looksAffirmative because a generic "yes"
-// at results might just be acknowledging a coach probe; we only advance
-// to `done` on unambiguous close signals.
-function looksLikeMapClose(text: string): boolean {
-  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
-  if (t.length === 0 || t.length > 120) return false;
-  const closes = [
-    "close it out",
-    "close it",
-    "close the map",
-    "close for now",
-    "we're done",
-    "we are done",
-    "done for now",
-    "i'm done",
-    "im done",
-    "that's it for today",
-    "thats it for today",
-    "that's a wrap",
-    "thats a wrap",
-    "wrap it up",
-    "map complete",
-    "mark it complete",
-    "finished",
-    "we're good",
-    "were good",
-    "all set",
-  ];
-  return closes.some((c) => t === c || t.includes(c));
-}
-
-// Very permissive affirmation detector — the only cost of a false positive
-// is auto-advancing to behaviors, which the coachee can still walk back.
-function looksAffirmative(text: string): boolean {
-  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
-  if (t.length === 0 || t.length > 80) return false;
-  const affirmations = [
-    "y", "ya", "ye", "yes", "yeah", "yep", "yup", "yessir",
-    "ok", "okay", "kk", "k",
-    "sure", "sounds good", "sounds great", "good", "great", "perfect",
-    "lock it in", "lock it", "locked", "lock",
-    "do it", "let's do it", "lets do it", "let's go", "lets go",
-    "agreed", "agree", "confirm", "confirmed",
-    "yes please", "yes lock it", "yes lock it in",
-    "that works", "works for me", "fine", "sounds right",
-    // "that makes sense" family — a very common natural affirmation
-    // that was slipping past the cascade until we added it here. When a
-    // coachee says "that makes sense" they mean "I accept it, move on."
-    "that makes sense", "makes sense", "yeah that makes sense",
-    "yes that makes sense", "yeah makes sense", "yes makes sense",
-    "that tracks", "tracks", "that's right", "thats right", "right",
-    "you got it", "you nailed it", "exactly", "correct",
-    "👍", "✅", "yes 👍",
-  ];
-  if (affirmations.includes(t)) return true;
-  // Broader "move forward" patterns for late-stage messages that don't
-  // fit the exact-match list. Observed: "Let's design a test", "I'm
-  // ready for testing", "ready to test", "let's build the test".
-  // These all mean "advance me" but wouldn't match the list above.
-  const movePatterns = [
-    /^let['\u2019]?s (design|build|do|run|test|move|make|go|create|start|try)\b/,
-    /^i['\u2019]?m ready\b/,
-    /^ready (to|for)\b/,
-    /^let['\u2019]?s (move|go|do it)\b/,
-    /^(yeah|yes|ok|sure|good)[\s,]+(let['\u2019]?s|move|go|close|finish|wrap)\b/,
-    /^(next|next step|move on|keep going|continue)\b/,
-    // Close signals — needed to trip the outer cascade gate so the
-    // results → done branch has a chance to run its looksLikeMapClose
-    // check.
-    /^(yes|yeah|ok|sure)[\s,]+close/,
-    /^close (it|the map|out|for now)/,
-    /\bwe['\u2019]?re done\b/,
-    /\bdone for (today|now)\b/,
-  ];
-  return movePatterns.some((re) => re.test(t));
-}
 
 function assertStage(
   actionName: string,

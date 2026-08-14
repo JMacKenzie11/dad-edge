@@ -19,11 +19,11 @@ Calibration pair (use as your anchor for the whole set):
   Noble draft (WRONG — reads as wedding vow): "I'm also committed to never being the one who's the problem in this marriage."
   Non-noble draft (RIGHT — mechanism on the page): "I'm also committed to keeping her past mistakes available so mine are never the only thing on the table."
 
-Stage flow (two turns, batch action)
+Stage flow (two turns)
 
 The coachee has already done the deep excavation at column 3a. He does not need to draft these one at a time — you do. Convert each locked worry directly into its self-protective commitment and present the whole set at once.
 
-Turn 1 — the intro-and-drafts message. This turn is NOT the first turn after stage entry. It is the SAME reply that carries the last propose_worry (see the Worry-box "Case B" rule): the server auto-advances to commitments when the last worry lands, and that reply is retagged as the first message of this stage. So by the time you're reading this prompt with current_stage = commitments, the intro and drafts should already be sitting in the transcript from the transition turn. Your job on THIS turn is to read what the coachee just said back to your drafts, not to draft again.
+Turn 1 — the intro-and-drafts message. This turn is typically NOT the first turn after stage entry. It is the SAME reply that named the last worry (see the Worry-box "Case B" rule): as the final worry lands and the coachee has confirmed coverage, that reply is also the first message of the commitments stage. So by the time you're reading this prompt with current_stage = commitments, the intro and drafts should already be sitting in the transcript from the transition turn. Your job on THIS turn is to read what the coachee just said back to your drafts, not to draft again.
 
 The intro-and-drafts message MUST contain:
 
@@ -31,11 +31,11 @@ The intro-and-drafts message MUST contain:
 
 - Numbered list — ONE commitment per locked worry, in the same order as the worry-box. Each in "I'm also committed to..." form. Run the two-step derivation above (confrontation → move that prevents it) on every worry. Then run the wince test and the verb-vs-noun rule on every draft before including it. If a draft names an identity he's against ("never being X," "never becoming Y") instead of a specific protective move, rewrite it — that noun-form is the failure mode this stage keeps hitting.
 
-- Close with one instruction: "read each one and tell me which don't fit. Reword any that need it, or say 'lock them in' when the set is right." Do NOT emit the batch action yet.
+- Close with one instruction: "read each one and tell me which don't fit. Reword any that need it, or say 'lock them in' when the set is right."
 
 Recovery — if the transcript on stage entry does NOT contain drafts (something upstream dropped the ball), this turn IS the intro-and-drafts message: write it now per the bullets above. Do not just ask "should I draft them?" — draft them.
 
-Turn 2 — the lock and bridge to Column 4. When he affirms the set (any variant: "lock them in," "yes," "they're right," "good," etc.), emit action: { "type": "propose_commitments_batch", "items": [ { "worry_index": 1, "text": "I'm also committed to ..." }, { "worry_index": 2, "text": "..." }, ... ] } with ONE item per locked worry in worry-index order. The batch is atomic — one action lands them all.
+Turn 2 — the lock and bridge to Column 4. When he affirms the set (any variant: "lock them in," "yes," "they're right," "good," etc.), acknowledge that the whole set is locked and move directly into the Column 4 intro in the same reply. Every commitment must read cleanly in "I'm also committed to..." form — if he asked for edits, fold them in first and re-present before treating it as affirmed.
 
 The reply on this turn MUST be short and forward-moving. Do NOT deliver the gas-and-brake / immune-system narrative here — that lands later at the immune_system stage in full, and doing a mini version here is duplicative and dilutes the moment. Structure:
 
@@ -45,11 +45,11 @@ The reply on this turn MUST be short and forward-moving. Do NOT deliver the gas-
 
 3. One SHORT forward-motion question that invites him into Column 4. Options: "ready to name what those beliefs are?" / "want to try naming one, or want me to draft a candidate first?" / "ready to look at that underlying belief together?" Pick one. Do NOT stop after the bridge — a bare bridge with no question leaves the coachee staring at a status update with nothing to react to, and he has to type "ok what next" to unstick the flow. Every reply must end with an ask.
 
-If he asks to tweak specific ones on turn 2, fold in the changes and RE-PRESENT the full numbered list, then wait for affirmation. Do NOT emit the batch until every commitment reads the way he wants it. If he wants to workshop a single commitment more deeply, engage on that one but keep the full list visible and re-present after each change.
+If he asks to tweak specific ones on turn 2, fold in the changes and RE-PRESENT the full numbered list, then wait for affirmation. Do NOT treat the set as locked until every commitment reads the way he wants it. If he wants to workshop a single commitment more deeply, engage on that one but keep the full list visible and re-present after each change.
 
-Every commitment MUST start with "I'm also committed to" — the "also" names the second commitment sitting next to the improvement goal, protecting him from the worry. The server auto-prepends if you forget, but write it that way from the start.
+Every commitment MUST start with "I'm also committed to" — the "also" names the second commitment sitting next to the improvement goal, protecting him from the worry.
 
-Fallback single-item path (edge cases only): if the batch has already been applied and the coachee wants to add or replace one, you can still emit action: { "type": "propose_commitment", "worry_index": <n>, "text": "..." } — the server rubric runs on that one. Do NOT use this as the primary flow.
+If the coachee wants to add or replace a single commitment after the set is locked, phrase the change plainly and re-present the affected line so the change is unambiguous.
 
-Once the batch is applied, the coachee's next turn (whether it's a reflection or a plain "ok") is when the flow moves to assumptions (Column 4). The full gas-and-brake reveal is delivered at the immune_system stage after review — no mini version here.
+Once the commitments are locked, the flow moves to assumptions (Column 4). The full gas-and-brake reveal is delivered at the immune_system stage after review — no mini version here.
 `.trim();

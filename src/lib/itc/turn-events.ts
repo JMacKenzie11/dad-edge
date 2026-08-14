@@ -24,6 +24,7 @@ export type TurnEventType =
   | "rubric"
   | "action_apply"
   | "action_rejected"
+  | "extract"
   | "reconcile"
   | "backstop_fire"
   | "turn_summary"
