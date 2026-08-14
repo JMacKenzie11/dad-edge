@@ -57,7 +57,12 @@ Rules:
 3. Never re-emit an action the coach already fired this turn (see actionsAppliedThisTurn). Only fill gaps.
 4. Respect stage guards. propose_behavior only makes sense in the behaviors stage — if the current stage is wrong, include the required advance_stage FIRST in your actions array.
 5. Return { "actions": [] } liberally. Under-emission is safe; over-emission corrupts the map.
-6. Never emit propose_goal (server no-op) or suggest_behaviors (reply-text-only).
+6. Never emit these actions:
+   - propose_goal (server no-op)
+   - suggest_behaviors (reply-text-only)
+   - propose_commitment (singular — always use propose_commitments_batch instead, one item per uncovered worry)
+   - propose_worry (rubric-gated; if a worry is missing, the coach's next turn will re-attempt with better excavation — do not force in a mid-flow worry via reconciliation)
+   - propose_assumption (rubric-gated; same reason as propose_worry — the assumptions backstop already handles multi-quote extraction across the transcript with rubric checks, do not duplicate)
 7. Cap at 3 actions total.
 `.trim();
 

@@ -282,6 +282,17 @@ export async function runCoachTurnForMap(
       history: priorHistory,
       userMessage: parsed.data.text,
       priorAssistantContent,
+      onLlmAttempt: (ev) => {
+        events.record(
+          "llm_attempt",
+          {
+            kind: ev.kind,
+            attempt: ev.attempt,
+            outcome: ev.outcome,
+          },
+          { durationMs: ev.durationMs, stage: map.current_stage },
+        );
+      },
     });
     llmMs = Date.now() - llmStart;
   } catch (err) {
@@ -1858,19 +1869,17 @@ async function applyCoachAction(
       const locked = worries.filter((w) => w.depth_score !== null);
       const existing = await listCommitments(mapId);
       const alreadyCovered = new Set(existing.map((c) => c.worry_id));
-      const uncoveredCount = locked.length - alreadyCovered.size;
 
-      if (action.items.length !== uncoveredCount) {
-        throw new Error(
-          `propose_commitments_batch: expected ${uncoveredCount} items (one per uncovered worry), got ${action.items.length}.`,
-        );
-      }
-
-      // Validate every index first so partial writes don't happen. Each
-      // worry_index must resolve to a locked worry that doesn't already
-      // have a commitment, and each worry must be covered exactly once
-      // in this batch. Also reject garbled text on any item.
-      const targets: { worryId: string; text: string }[] = [];
+      // Idempotent: filter to items whose worry is uncovered, skip the
+      // rest. Old behavior rejected the whole batch if item count
+      // didn't equal uncovered count — but the reconciler and worries
+      // backstops can land a commitment or two mid-flow, leaving the
+      // coach with a batch of N and only N-K worries uncovered. That
+      // shouldn't kill the batch; the K items pointing at
+      // already-covered worries are just duplicates the coach didn't
+      // know about.
+      const targets: { worryId: string; text: string; index: number }[] = [];
+      const skippedIndices: number[] = [];
       const seenIndices = new Set<number>();
       for (const item of action.items) {
         if (looksLikeStructuredOutputLeakage(item.text)) {
@@ -1891,18 +1900,26 @@ async function applyCoachAction(
           );
         }
         if (alreadyCovered.has(worry.id)) {
-          throw new Error(
-            `propose_commitments_batch: worry #${item.worry_index} already has a commitment.`,
-          );
+          skippedIndices.push(item.worry_index);
+          continue;
         }
         targets.push({
           worryId: worry.id,
           text: ensureStem(item.text, COMMITMENT_STEM),
+          index: item.worry_index,
         });
       }
 
       for (const t of targets) {
         await addCommitment(mapId, t.worryId, t.text);
+      }
+      if (skippedIndices.length > 0) {
+        console.warn(
+          "[itc] propose_commitments_batch: skipped %d already-covered worries (indices=%o), applied %d",
+          skippedIndices.length,
+          skippedIndices,
+          targets.length,
+        );
       }
       return;
     }

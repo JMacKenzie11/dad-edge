@@ -441,6 +441,18 @@ type RunCoachInput = {
   // into the context block so the coach can respond to the rubric instead
   // of re-proposing the same rejected text.
   recentActionFeedback: string[];
+  // Optional per-attempt event sink. When provided, each LLM attempt +
+  // the text fallback records a timing event to the caller's TurnEventLog
+  // (which flushes as one bulk INSERT with the rest of the turn's
+  // events). Kept optional so this module doesn't have a hard dep on
+  // the events buffer; callers that don't need per-attempt DB tracing
+  // can leave it out.
+  onLlmAttempt?: (event: {
+    kind: "attempt" | "fallback";
+    attempt?: number;
+    outcome: "accepted" | "empty" | "leakage" | "error" | "ok" | "no-text";
+    durationMs: number;
+  }) => void;
 };
 
 /**
@@ -519,12 +531,19 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
       outcome = "error";
     } finally {
       clearTimeout(timeoutId);
+      const durationMs = Date.now() - attemptStart;
       console.warn(
         "[itc timing] llm attempt=%d outcome=%s ms=%d",
         attempt + 1,
         outcome,
-        Date.now() - attemptStart,
+        durationMs,
       );
+      input.onLlmAttempt?.({
+        kind: "attempt",
+        attempt: attempt + 1,
+        outcome,
+        durationMs,
+      });
     }
   }
 
@@ -558,11 +577,17 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     );
   } finally {
     clearTimeout(fallbackTimeoutId);
+    const fallbackMs = Date.now() - fallbackStart;
     console.warn(
       "[itc timing] llm fallback ms=%d ok=%s",
-      Date.now() - fallbackStart,
+      fallbackMs,
       text.length > 0 ? "yes" : "no",
     );
+    input.onLlmAttempt?.({
+      kind: "fallback",
+      outcome: text.length > 0 ? "ok" : "no-text",
+      durationMs: fallbackMs,
+    });
   }
   const fallback = text.trim();
   return {
