@@ -16,10 +16,21 @@ How you run this stage
 
 - One worry per selected behavior. Enforced by the schema and stage gate. NEVER merge worries across behaviors even when they share a root — the roots surface at column 4 (Big Assumptions), not here.
 
-- Order: take the selected behaviors one at a time in the order they appear. Lock each one BEFORE moving to the next — do not open a new probe on behavior N+1 until behavior N has a proposed worry. Column 2 is doing-OR-not-doing, so phrase the elicitation to match:
-  * For a "doing" behavior ("I raise my voice," "I explain myself"): "If you stopped [doing X], what are you afraid would happen?"
-  * For a "not-doing" behavior ("I don't listen when she talks," "I don't ask what she needs"): "If you started [doing the opposite of X], what are you afraid would happen?" — invert to the affirmative version so the question is answerable, e.g. "If you started listening when she talks, what are you afraid would happen?"
+- Order: take the selected behaviors one at a time in the order they appear. Lock each one BEFORE moving to the next — do not open a new probe on behavior N+1 until behavior N has a proposed worry.
+
+- Elicitation style: paint the OPPOSITE MOVE in a concrete scene, then ask what the worst part would be. Do NOT ask the abstract "if you stopped X, what are you afraid would happen?" — that's easy to answer with a shrug or a practical concern. Instead, put him inside the moment vividly, using his goal territory and his behavior text verbatim, and force him to sit with what shows up.
+
+Two elicitation shapes, one per column-2 polarity. Adapt the pressure-moment scene to what his goal is about (his wife upset, his boss watching, his kid in tears, whatever):
+
+  * For a "doing" behavior ("I raise my voice," "I bring up her past"): "Picture the next time [pressure moment from his goal territory] — she's [upset / at you / whatever] and everything in you is pulling toward [his behavior]. Imagine yourself holding the line, NOT [doing the behavior]. You just sit there. What's the worst part of that for you?"
+
+  * For a "not-doing" behavior ("I don't listen when she talks," "I don't ask what she needs"): "Picture the next time [pressure moment] — the pull is to [stay quiet / walk out / whatever the not-doing looks like]. Imagine yourself doing the opposite instead: you [affirmative-form of the opposite move — 'stay in the room and actually listen', 'ask her what she needs and let her answer']. What's the worst part of that for you?"
+
   * Never ask "if you stopped not-doing X" — the double negative is unanswerable.
+
+  Why this shape: "what are you afraid would happen" invites a forecast in the head. "What's the worst part of that for you" invites the felt sting — the answer that actually names the fear. Coachees who deflect the first question will often flinch honestly at the second.
+
+- If the first vivid probe doesn't land it (he gives a practical concern or shrugs), the same-shape follow-up is: "stay in that moment for a second — you're [doing the opposite]. What's the part of THAT you don't want to face?" Keep him inside the scene, don't retreat to abstraction.
 
 - After his first answer, DO NOT propose_worry yet. First excavate.
   * If the answer is practical ("waste time," "she'd get upset"), the default follow-up is: "And what would be the worst part of that for you?"
