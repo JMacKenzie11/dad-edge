@@ -64,6 +64,7 @@ import {
 } from "@/lib/itc/backstop-extractors";
 import { reconcileTurn } from "@/lib/itc/reconciliation";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
+import { TurnEventLog } from "@/lib/itc/turn-events";
 import {
   ASSUMPTION_STEM,
   COMMITMENT_STEM,
@@ -187,6 +188,22 @@ export async function runCoachTurnForMap(
     listTestResults(map.id),
   ]);
   const prefetchMs = Date.now() - prefetchStart;
+  // Per-turn diagnostic buffer. Flushed as one bulk INSERT near the
+  // end of the turn — no per-event round-trip overhead. Failures to
+  // flush are non-fatal (see TurnEventLog.flush).
+  const turnIndex = Math.max(
+    0,
+    Math.floor(
+      history.filter((m) => m.role === "user" || m.role === "assistant")
+        .length / 2,
+    ),
+  );
+  const events = new TurnEventLog(map.id, turnIndex);
+  events.record(
+    "prefetch",
+    { msgs: history.length },
+    { durationMs: prefetchMs, stage: map.current_stage },
+  );
   console.warn("[itc timing] prefetch ms=%d msgs=%d", prefetchMs, history.length);
   const linksByAssumption = new Map<string, string[]>();
   for (const l of links) {
@@ -283,6 +300,24 @@ export async function runCoachTurnForMap(
       llmMs,
       Date.now() - turnStart,
     );
+    events.record(
+      "error",
+      { where: "coach-llm", message },
+      { durationMs: llmMs, stage: map.current_stage },
+    );
+    events.record(
+      "turn_summary",
+      {
+        prefetch_ms: prefetchMs,
+        llm_ms: llmMs,
+        total_ms: Date.now() - turnStart,
+        stage_from: map.current_stage,
+        stage_to: map.current_stage,
+        outcome: "coach-error",
+      },
+      { durationMs: Date.now() - turnStart, stage: map.current_stage },
+    );
+    await events.flush();
     return { ok: false, reason: `Coach: ${message}` };
   }
 
@@ -320,10 +355,16 @@ export async function runCoachTurnForMap(
   // actions become valid. A single rejected action does not stop the
   // batch; the coach sees the rejection next turn.
   for (const action of reply.actions) {
+    const applyStart = Date.now();
     try {
       const mapNow = await getMapById(map.id);
       const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
       await applyCoachAction(map.id, stageNow, action);
+      events.record(
+        "action_apply",
+        { action_type: action.type, applied: true },
+        { durationMs: Date.now() - applyStart, stage: stageNow },
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await appendMessage(
@@ -331,6 +372,11 @@ export async function runCoachTurnForMap(
         "system",
         `[action rejected] ${message}`,
         map.current_stage,
+      );
+      events.record(
+        "action_rejected",
+        { action_type: action.type, error: message },
+        { durationMs: Date.now() - applyStart, stage: map.current_stage },
       );
     }
   }
@@ -358,10 +404,18 @@ export async function runCoachTurnForMap(
       try {
         await saveImprovementGoal(map.id, extracted);
         console.warn("[itc] goal backstop: saved goal via extractor");
+        events.record(
+          "backstop_fire",
+          { name: "goal", note: "saved goal via extractor" },
+          { stage: map.current_stage },
+        );
       } catch (err) {
-        console.warn(
-          "[itc] goal backstop: saveImprovementGoal threw: %s",
-          err instanceof Error ? err.message : String(err),
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn("[itc] goal backstop: saveImprovementGoal threw: %s", msg);
+        events.record(
+          "backstop_fire",
+          { name: "goal", note: "saveImprovementGoal threw", error: msg },
+          { stage: map.current_stage },
         );
       }
     }
@@ -823,6 +877,16 @@ export async function runCoachTurnForMap(
                 rubric.score,
                 item.text,
               );
+              events.record(
+                "backstop_fire",
+                {
+                  name: "assumptions",
+                  note: "rubric rejected draft",
+                  score: rubric.score,
+                  text: item.text,
+                },
+                { stage: stageForBackstop },
+              );
               continue;
             }
             const assumption = await addAssumption(
@@ -840,6 +904,17 @@ export async function runCoachTurnForMap(
               "[itc] assumptions backstop: inserted assumption (linked to %d commitments, indices=%o)",
               linkIds.length,
               item.commitmentIndices,
+            );
+            events.record(
+              "backstop_fire",
+              {
+                name: "assumptions",
+                note: "inserted assumption",
+                commitment_indices: item.commitmentIndices,
+                linked_count: linkIds.length,
+                text: item.text,
+              },
+              { stage: stageForBackstop },
             );
           } catch (err) {
             console.warn(
@@ -1148,18 +1223,45 @@ export async function runCoachTurnForMap(
           "[itc] reconcile: applied follow-up action %s",
           action.type,
         );
+        events.record(
+          "action_apply",
+          { action_type: action.type, applied: true, via: "reconcile" },
+          { stage: stageNow },
+        );
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         console.warn(
           "[itc] reconcile: follow-up action %s rejected: %s",
           action.type,
-          err instanceof Error ? err.message : String(err),
+          errMsg,
+        );
+        events.record(
+          "action_rejected",
+          { action_type: action.type, error: errMsg, via: "reconcile" },
+          { stage: map.current_stage },
         );
       }
     }
+    events.record(
+      "reconcile",
+      {
+        emitted_actions: followUpActions.map((a) => a.type),
+        applied_count: reconcileAppliedCount,
+      },
+      { durationMs: Date.now() - reconcileStart },
+    );
   } catch (err) {
     console.warn(
       "[itc] reconciliation wrapper failed: %s",
       err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      {
+        where: "reconciliation-wrapper",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      { durationMs: Date.now() - reconcileStart },
     );
   }
   reconcileMs = Date.now() - reconcileStart;
@@ -1201,6 +1303,23 @@ export async function runCoachTurnForMap(
     otherMs,
     totalMs,
   );
+  events.record(
+    "turn_summary",
+    {
+      prefetch_ms: prefetchMs,
+      llm_ms: llmMs,
+      cascade_ms: cascadeMs,
+      reconcile_ms: reconcileMs,
+      reconcile_applied: reconcileAppliedCount,
+      other_ms: otherMs,
+      total_ms: totalMs,
+      stage_from: map.current_stage,
+      stage_to: finalMap?.current_stage ?? map.current_stage,
+      actions: reply.actions.map((a) => a.type),
+    },
+    { durationMs: totalMs, stage: finalMap?.current_stage ?? map.current_stage },
+  );
+  await events.flush();
 
   // revalidatePath ties into Next's request-scoped static-generation
   // store; when called outside a real request (E2E tests calling this
