@@ -45,13 +45,21 @@ export function looksLikeBehaviorCandidate(text: string): boolean {
 }
 
 /**
- * True when the coach's reply asserts a new behavior just landed. Two
- * shape families: count-claim ("Two on the map so far", "Three on the
- * map now") and ordinal-claim ("That's a second one", "adds another",
- * "another sharp one").
+ * True when the coach's reply asserts a new behavior just landed.
+ * Recognized shape families (all case-insensitive):
+ *   - Bare-count recap:  "That's one.", "That's three.", "That's 4."
+ *   - Count-on-the-map:  "Two on the map so far", "three on the map now"
+ *   - Ordinal-claim:     "That's a second one", "the third one"
+ *   - Loose accept:      "adds another", "another sharp one", "solid one"
+ *
+ * Bare-count is the compressed recap style the coach actually uses
+ * mid-behaviors — was missing here previously and caused the 3rd
+ * behavior to disappear silently.
  */
 export function coachAcknowledgedNewBehavior(replyText: string): boolean {
   const t = replyText.toLowerCase();
+  if (/^\s*that['\u2019]?s\s+(one|two|three|four|five|\d+)\b/m.test(t))
+    return true;
   if (/\b(one|two|three|four|five|\d+)\s+on the map\b/.test(t)) return true;
   if (
     /\bthat['\u2019]?s (a|the) (second|third|fourth|fifth|next)\s+\w*\s?one\b/.test(
@@ -70,8 +78,9 @@ export function coachAcknowledgedNewBehavior(replyText: string): boolean {
 
 /**
  * Pulls a count out of the coach's reply text. Returns null when no
- * count claim is present. Only matches the "N on the map" style — the
- * canonical recap phrasing in the behaviors-stage prompt.
+ * count claim is present. Matches both the canonical "N on the map"
+ * recap phrasing and the compressed "That's N." shape the coach uses
+ * mid-behaviors.
  */
 export function extractCoachBehaviorCount(replyText: string): number | null {
   const wordToNumber: Record<string, number> = {
@@ -81,14 +90,19 @@ export function extractCoachBehaviorCount(replyText: string): number | null {
     four: 4,
     five: 5,
   };
-  const m = replyText.match(
+  const patterns = [
+    /^\s*that['\u2019]?s\s+(one|two|three|four|five|\d+)\b/im,
     /\b(one|two|three|four|five|\d+)\s+on the map\b/i,
-  );
-  if (!m) return null;
-  const key = m[1].toLowerCase();
-  if (key in wordToNumber) return wordToNumber[key];
-  const n = Number(key);
-  return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+  ];
+  for (const re of patterns) {
+    const m = replyText.match(re);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key in wordToNumber) return wordToNumber[key];
+    const n = Number(key);
+    if (Number.isFinite(n) && n >= 1 && n <= 10) return n;
+  }
+  return null;
 }
 
 /**

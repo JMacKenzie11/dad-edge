@@ -77,6 +77,22 @@ describe("coachAcknowledgedNewBehavior", () => {
     expect(coachAcknowledgedNewBehavior("another real move")).toBe(true);
   });
 
+  it("matches bare-count recap like 'That's three.' (real observed 2026-08-14 miss)", () => {
+    // Coach's compressed recap style. Was missing from the extractor
+    // and caused the 3rd behavior to disappear silently mid-session.
+    expect(coachAcknowledgedNewBehavior("That's one.")).toBe(true);
+    expect(coachAcknowledgedNewBehavior("That's two. Anything else?")).toBe(
+      true,
+    );
+    expect(
+      coachAcknowledgedNewBehavior(
+        "That's three. Anything else you notice, or does that cover the main moves?",
+      ),
+    ).toBe(true);
+    expect(coachAcknowledgedNewBehavior("That's four.")).toBe(true);
+    expect(coachAcknowledgedNewBehavior("That\u2019s 4.")).toBe(true);
+  });
+
   it("does NOT match generic acknowledgments without count/ordinal", () => {
     expect(coachAcknowledgedNewBehavior("Interesting — say more?")).toBe(false);
     expect(coachAcknowledgedNewBehavior("What else do you notice?")).toBe(false);
@@ -92,6 +108,17 @@ describe("extractCoachBehaviorCount", () => {
 
   it("extracts numeric-form counts", () => {
     expect(extractCoachBehaviorCount("3 on the map.")).toBe(3);
+  });
+
+  it("extracts bare-count recap 'That's N.' (real observed 2026-08-14 miss)", () => {
+    expect(extractCoachBehaviorCount("That's one.")).toBe(1);
+    expect(
+      extractCoachBehaviorCount(
+        "That's three. Anything else you notice, or does that cover the main moves?",
+      ),
+    ).toBe(3);
+    expect(extractCoachBehaviorCount("That's 4. One more if there's another?")).toBe(4);
+    expect(extractCoachBehaviorCount("That\u2019s five.")).toBe(5);
   });
 
   it("returns null for missing patterns", () => {
