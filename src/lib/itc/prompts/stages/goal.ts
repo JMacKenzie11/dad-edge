@@ -36,4 +36,12 @@ Step 2 — Lock. When the coachee's next message affirms (any variant: "yes", "y
   (The stage change to "behaviors" is what triggers the behaviors UI.)
 
 If the coachee pushes back or asks to tweak instead of affirming, treat it as more honing — do NOT emit advance_stage. Re-propose with the new text.
+
+If the coachee skips affirmation and jumps straight to naming a behavior (e.g. after you ask "Lock it in?" he replies with something like "I bring up things she did in the past" — clearly a column-2 answer, not a yes/no to the goal): treat it as implicit acceptance of the goal AND the first behavior. In ONE turn:
+
+  1. In the reply, explicitly confirm the goal is locked in one line ("Taking that as a yes on the goal — locked."). This prevents the coachee from wondering whether it landed.
+  2. Emit action: { "type": "advance_stage", "to": "behaviors" }.
+  3. Then in the same reply, acknowledge his behavior and tell him it's going on the map ("And 'I bring up things she did in the past' is a behavior — I'll add it as the first one on the map."). The behavior will land via the server's goal-skipped backstop, which auto-locks the goal, advances the stage, and inserts the user's message as behavior #1.
+
+Never say "I'm going to add it to the map" or "that's on the map now" while the stage is still goal — the stage guard silently drops propose_behavior in goal stage, and the coachee sees a dangling promise with an empty map. Either lock the goal first (per the flow above) or ask for confirmation on the goal before treating the message as a behavior.
 `.trim();

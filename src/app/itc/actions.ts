@@ -353,7 +353,7 @@ export async function runCoachTurnForMap(
   // Safety net: if the coachee affirmed a proposed goal and the coach
   // forgot to emit advance_stage, advance for them. Re-read the goal in
   // case the extractor above just saved it in this same turn.
-  const goalNow = await refreshImprovementGoal(map.id);
+  let goalNow = await refreshImprovementGoal(map.id);
   if (
     map.current_stage === "goal" &&
     goalNow &&
@@ -364,6 +364,61 @@ export async function runCoachTurnForMap(
       await advanceStage(map.id, "goal", "behaviors");
     } catch {
       // ignore — already advanced or race
+    }
+  }
+
+  // Goal-skipped backstop: the coachee didn't say "yes" to the goal but
+  // instead answered by naming a behavior. The coach reads that as
+  // implicit acceptance and fires propose_behavior — which the stage
+  // guard silently drops because we're still in `goal`. Result: coach
+  // says "I'm going to add it to the map" and NOTHING lands on the map.
+  // Recovery: if we're in goal stage with no saved goal, the prior
+  // assistant message contained a goal proposal, the user's message is
+  // behavior-shaped, and the coach's reply either fired propose_behavior
+  // or acknowledged the message as a new behavior — auto-lock the goal,
+  // advance to behaviors, then insert the user's message as behavior #1.
+  if (
+    map.current_stage === "goal" &&
+    !goalNow &&
+    !affirmative &&
+    looksLikeBehaviorCandidate(parsed.data.text) &&
+    (reply.action?.type === "propose_behavior" ||
+      coachAcknowledgedNewBehavior(reply.reply))
+  ) {
+    const extractedGoal = priorAssistantContent
+      ? extractGoalSentence(priorAssistantContent)
+      : null;
+    if (extractedGoal) {
+      try {
+        await saveImprovementGoal(map.id, extractedGoal);
+        goalNow = extractedGoal;
+        console.warn("[itc] goal-skipped backstop: saved goal from prior turn");
+        try {
+          await advanceStage(map.id, "goal", "behaviors");
+        } catch {
+          // ignore — race
+        }
+        const behaviorText =
+          reply.action?.type === "propose_behavior"
+            ? reply.action.text
+            : parsed.data.text.trim();
+        try {
+          await addBehavior(map.id, behaviorText, "user");
+          console.warn(
+            "[itc] goal-skipped backstop: inserted behavior after auto-lock",
+          );
+        } catch (err) {
+          console.warn(
+            "[itc] goal-skipped backstop: addBehavior failed: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      } catch (err) {
+        console.warn(
+          "[itc] goal-skipped backstop: saveImprovementGoal threw: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
   }
 
