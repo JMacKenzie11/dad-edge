@@ -266,7 +266,7 @@ export async function runCoachTurnForMap(
     await appendMessage(
       map.id,
       "system",
-      `[coach error] ${message} (model=${process.env.ITC_COACH_MODEL || "claude-sonnet-4-6"})`,
+      `[coach error] ${message} (model=${process.env.ITC_COACH_MODEL || "claude-sonnet-5"})`,
       map.current_stage,
     );
     console.warn(

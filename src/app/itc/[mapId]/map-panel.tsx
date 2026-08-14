@@ -318,10 +318,19 @@ function TestCard({
         </div>
       ) : null}
 
-      <TestField label="Assumption predicts" value={test.assumption_says} />
-      <TestField label="Test move" value={test.behavior_change} />
-      <TestField label="Data to collect" value={test.data_to_collect} />
-      <TestField label="Find out" value={test.in_order_to_find_out} />
+      <TestField label="My Big Assumption says" value={test.assumption_says} />
+      <TestField
+        label="So I will (change my behavior this way)"
+        value={test.behavior_change}
+      />
+      <TestField
+        label="And collect the following data"
+        value={test.data_to_collect}
+      />
+      <TestField
+        label="In order to find out whether"
+        value={test.in_order_to_find_out}
+      />
 
       {result ? (
         <div className="mt-2 pt-2 border-t border-[color:var(--color-border)] space-y-1">
@@ -331,10 +340,16 @@ function TestCard({
               ? ` · ${result.assumption_verdict.replace(/_/g, " ")}`
               : ""}
           </div>
-          <TestField label="What I did" value={result.what_i_did} />
-          <TestField label="Data collected" value={result.data_collected} />
           <TestField
-            label="What it says"
+            label="So in order to test it I changed my behavior this way"
+            value={result.what_i_did}
+          />
+          <TestField
+            label="This is what I observed happening"
+            value={result.data_collected}
+          />
+          <TestField
+            label="And this is what it tells me about my Big Assumption"
             value={result.what_it_says_about_assumption}
           />
           {result.next_step ? (

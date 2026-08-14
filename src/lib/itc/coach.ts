@@ -7,10 +7,10 @@ import type { ItcStage } from "./stage";
 
 /**
  * Anthropic model for the ITC coach. Configurable via env so the user can
- * swap without redeploy. Defaults to claude-sonnet-4-6.
+ * swap without redeploy. Defaults to claude-sonnet-5.
  */
 function itcCoachModel(): LanguageModel {
-  const id = process.env.ITC_COACH_MODEL || "claude-sonnet-4-6";
+  const id = process.env.ITC_COACH_MODEL || "claude-sonnet-5";
   return anthropic(id);
 }
 
@@ -490,7 +490,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         schema: CoachReplySchema,
         system,
         messages,
-        // NOTE: temperature is NOT supported by claude-sonnet-4-6 — the
+        // NOTE: temperature is NOT supported by claude-sonnet-5 — the
         // AI SDK warns and ignores it. Leaving it off explicitly so we
         // don't get a confusing runtime warning. If we switch to a
         // model that supports temperature, add it back.
