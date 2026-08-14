@@ -59,9 +59,11 @@ import {
   ASSUMPTION_STEM,
   COMMITMENT_STEM,
   GOAL_STEM,
+  ITC_STAGES,
   WORRY_STEM,
   ensureStem,
   hasGoalStem,
+  stageIndex,
   type ItcStage,
 } from "@/lib/itc/stage";
 
@@ -418,7 +420,26 @@ export async function runCoachTurnForMap(
     const applyStart = Date.now();
     try {
       const mapNow = await getMapById(map.id);
-      const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+      let stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+
+      // Auto-cascade: if this action needs a stage the map hasn't
+      // reached yet (or is past), walk the stage machine to the
+      // required stage FIRST. Removes reliance on the extractor
+      // getting action ordering right within a batch. If cascade
+      // fails at an intermediate gate (e.g. can't advance to worries
+      // without a selected behavior), the subsequent applyCoachAction
+      // will throw a specific stage-mismatch error and land as an
+      // [action rejected] the extractor sees next turn.
+      const allowedStages = ACTION_ALLOWED_STAGES[action.type];
+      if (allowedStages && !allowedStages.includes(stageNow)) {
+        stageNow = await autoCascadeToActionStage(
+          map.id,
+          stageNow,
+          allowedStages[0],
+          events,
+        );
+      }
+
       await applyCoachAction(map.id, stageNow, action);
       appliedCount++;
       events.record(
@@ -674,6 +695,111 @@ function assertStage(
       `${actionName}: only valid at stage ${allowedList} (current: ${currentStage}). Do NOT re-fire the same action — first move the map into a valid stage (or check whether the prerequisite step landed) and try again.`,
     );
   }
+}
+
+/**
+ * Which stages each coach action is valid at. Keep in sync with the
+ * assertStage() calls in applyCoachAction below. Used by
+ * autoCascadeToActionStage() to walk the stage machine up (or back)
+ * to a stage where the action can land, so the extractor doesn't have
+ * to get action ordering right within a batch.
+ *
+ * null = valid at any stage (only advance_stage — the stage machine
+ * itself enforces legality via canTransitionTo).
+ */
+const ACTION_ALLOWED_STAGES: Record<CoachAction["type"], ItcStage[] | null> = {
+  propose_goal: ["goal"],
+  propose_behavior: ["behaviors"],
+  suggest_behaviors: ["behaviors"],
+  replace_behavior: ["behaviors"],
+  remove_behavior: ["behaviors"],
+  propose_worry: ["worries"],
+  propose_commitment: ["commitments"],
+  propose_commitments_batch: ["commitments"],
+  mark_reveal_delivered: ["commitments", "assumptions"],
+  mark_walkthrough_delivered: ["immune_system"],
+  propose_assumption: ["assumptions"],
+  recommend_assumption_for_testing: ["prioritize"],
+  select_assumption_for_testing: ["prioritize", "test_design"],
+  save_test_design: ["test_design"],
+  record_test_results: ["test_running", "results"],
+  advance_stage: null,
+};
+
+/**
+ * Walk the stage machine from currentStage toward targetStage, one
+ * legal step at a time. Returns the stage we ended up at (which may
+ * be short of the target if an intermediate gate rejected — e.g.
+ * can't advance to worries without a selected behavior).
+ *
+ * Backward walks skip gates (advanceStage allows toIdx <= fromIdx
+ * unconditionally); forward walks respect them.
+ *
+ * Called BEFORE each coach action apply so extract-actions doesn't
+ * have to get action ordering right within a batch. The old flow
+ * required the extractor to put advance_stage before any downstream
+ * action that needed a new stage; missing the ordering meant silent
+ * rejections. This makes ordering LLM-independent.
+ */
+async function autoCascadeToActionStage(
+  mapId: string,
+  currentStage: ItcStage,
+  targetStage: ItcStage,
+  events: TurnEventLog,
+): Promise<ItcStage> {
+  let stage = currentStage;
+  // Bounded walk — 12 stages total, cascading through all of them is
+  // the worst case. Anything more is a bug.
+  for (let step = 0; step < 12; step++) {
+    if (stage === targetStage) return stage;
+    const stageIdx = stageIndex(stage);
+    const targetIdx = stageIndex(targetStage);
+    // Pick the next hop: for forward walks, use the stage-machine's
+    // +1 rule (plus the assumptions→immune_system skip). For
+    // backward walks, jump straight to targetStage (backward
+    // transitions are always allowed).
+    let nextHop: ItcStage;
+    if (targetIdx > stageIdx) {
+      // Forward. Special case: assumptions → immune_system skip.
+      if (stage === "assumptions" && targetStage === "immune_system") {
+        nextHop = "immune_system";
+      } else {
+        nextHop = ITC_STAGES[stageIdx + 1] as ItcStage;
+      }
+    } else {
+      // Backward — jump directly.
+      nextHop = targetStage;
+    }
+    try {
+      await advanceStage(mapId, stage, nextHop);
+      events.record(
+        "action_apply",
+        {
+          action_type: "advance_stage",
+          applied: true,
+          via: "auto-cascade",
+          from: stage,
+          to: nextHop,
+        },
+        { stage: nextHop },
+      );
+      stage = nextHop;
+    } catch (err) {
+      // Gate rejected (e.g. missing a selected behavior for
+      // worries). Return what we've reached — the caller's action
+      // will re-throw with a specific error if the stage still
+      // doesn't allow it, and that error surfaces the actual gate
+      // reason.
+      console.warn(
+        "[itc] auto-cascade: stage-machine step %s -> %s rejected: %s",
+        stage,
+        nextHop,
+        err instanceof Error ? err.message : String(err),
+      );
+      return stage;
+    }
+  }
+  return stage;
 }
 
 async function applyCoachAction(
