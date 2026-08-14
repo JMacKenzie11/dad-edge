@@ -69,18 +69,29 @@ export async function scoreCommitmentDepth(input: {
   worryText: string;
   commitmentText: string;
 }): Promise<CommitmentRubricResult> {
-  const { object } = await generateObject({
-    model: utilityModel(),
-    schema: CommitmentSchema,
-    system: COMMITMENT_SYSTEM,
-    prompt: [
-      `Improvement goal: ${input.goalText || "(not set)"}`,
-      `Paired worry: ${input.worryText}`,
-      `Proposed commitment: ${input.commitmentText}`,
-    ].join("\n"),
-    maxOutputTokens: 512,
-  });
-  return object;
+  const started = Date.now();
+  let passed: boolean | null = null;
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: CommitmentSchema,
+      system: COMMITMENT_SYSTEM,
+      prompt: [
+        `Improvement goal: ${input.goalText || "(not set)"}`,
+        `Paired worry: ${input.worryText}`,
+        `Proposed commitment: ${input.commitmentText}`,
+      ].join("\n"),
+      maxOutputTokens: 512,
+    });
+    passed = object.passes;
+    return object;
+  } finally {
+    console.warn(
+      "[itc timing] rubric kind=commitment ms=%d passed=%s",
+      Date.now() - started,
+      passed === null ? "error" : passed ? "yes" : "no",
+    );
+  }
 }
 
 const AssumptionSchema = z.object({
@@ -116,27 +127,38 @@ export async function scoreAssumptionDepth(input: {
   goalText: string;
   assumptionText: string;
 }): Promise<AssumptionRubricResult> {
-  const { object } = await generateObject({
-    model: utilityModel(),
-    schema: AssumptionSchema,
-    system: ASSUMPTION_SYSTEM,
-    prompt: [
-      `Improvement goal: ${input.goalText || "(not set)"}`,
-      `Proposed Big Assumption: ${input.assumptionText}`,
-    ].join("\n"),
-    maxOutputTokens: 512,
-  });
-  const score =
-    (object.has_finished_then ? 1 : 0) +
-    (object.is_first_person_felt ? 1 : 0) +
-    (object.lands_in_identity_or_big_time_bad ? 1 : 0);
-  return {
-    score: score as 0 | 1 | 2 | 3,
-    has_finished_then: object.has_finished_then,
-    is_first_person_felt: object.is_first_person_felt,
-    lands_in_identity_or_big_time_bad: object.lands_in_identity_or_big_time_bad,
-    reason: object.reason,
-  };
+  const started = Date.now();
+  let scoreForLog: number | null = null;
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: AssumptionSchema,
+      system: ASSUMPTION_SYSTEM,
+      prompt: [
+        `Improvement goal: ${input.goalText || "(not set)"}`,
+        `Proposed Big Assumption: ${input.assumptionText}`,
+      ].join("\n"),
+      maxOutputTokens: 512,
+    });
+    const score =
+      (object.has_finished_then ? 1 : 0) +
+      (object.is_first_person_felt ? 1 : 0) +
+      (object.lands_in_identity_or_big_time_bad ? 1 : 0);
+    scoreForLog = score;
+    return {
+      score: score as 0 | 1 | 2 | 3,
+      has_finished_then: object.has_finished_then,
+      is_first_person_felt: object.is_first_person_felt,
+      lands_in_identity_or_big_time_bad: object.lands_in_identity_or_big_time_bad,
+      reason: object.reason,
+    };
+  } finally {
+    console.warn(
+      "[itc timing] rubric kind=assumption ms=%d score=%s",
+      Date.now() - started,
+      scoreForLog === null ? "error" : `${scoreForLog}/3`,
+    );
+  }
 }
 
 export async function scoreWorryDepth(input: {
@@ -144,28 +166,39 @@ export async function scoreWorryDepth(input: {
   behaviorText: string;
   worryText: string;
 }): Promise<WorryDepthResult> {
-  const { object } = await generateObject({
-    model: utilityModel(),
-    schema: RubricSchema,
-    system: SYSTEM,
-    prompt: [
-      `Improvement goal: ${input.goalText || "(not set)"}`,
-      `Behavior it pairs to: ${input.behaviorText}`,
-      `Proposed worry: ${input.worryText}`,
-    ].join("\n"),
-    maxOutputTokens: 512,
-  });
+  const started = Date.now();
+  let scoreForLog: number | null = null;
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: RubricSchema,
+      system: SYSTEM,
+      prompt: [
+        `Improvement goal: ${input.goalText || "(not set)"}`,
+        `Behavior it pairs to: ${input.behaviorText}`,
+        `Proposed worry: ${input.worryText}`,
+      ].join("\n"),
+      maxOutputTokens: 512,
+    });
 
-  const score =
-    (object.is_fear ? 1 : 0) +
-    (object.is_first_person_felt ? 1 : 0) +
-    (object.touches_identity ? 1 : 0);
+    const score =
+      (object.is_fear ? 1 : 0) +
+      (object.is_first_person_felt ? 1 : 0) +
+      (object.touches_identity ? 1 : 0);
+    scoreForLog = score;
 
-  return {
-    score: score as 0 | 1 | 2 | 3,
-    is_fear: object.is_fear,
-    is_first_person_felt: object.is_first_person_felt,
-    touches_identity: object.touches_identity,
-    reason: object.reason,
-  };
+    return {
+      score: score as 0 | 1 | 2 | 3,
+      is_fear: object.is_fear,
+      is_first_person_felt: object.is_first_person_felt,
+      touches_identity: object.touches_identity,
+      reason: object.reason,
+    };
+  } finally {
+    console.warn(
+      "[itc timing] rubric kind=worry ms=%d score=%s",
+      Date.now() - started,
+      scoreForLog === null ? "error" : `${scoreForLog}/3`,
+    );
+  }
 }

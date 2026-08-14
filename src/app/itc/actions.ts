@@ -163,6 +163,7 @@ export async function runCoachTurnForMap(
 
   await appendMessage(map.id, "user", parsed.data.text, map.current_stage);
 
+  const prefetchStart = Date.now();
   const [
     history,
     behaviors,
@@ -182,6 +183,8 @@ export async function runCoachTurnForMap(
     listTests(map.id),
     listTestResults(map.id),
   ]);
+  const prefetchMs = Date.now() - prefetchStart;
+  console.warn("[itc timing] prefetch ms=%d msgs=%d", prefetchMs, history.length);
   const linksByAssumption = new Map<string, string[]>();
   for (const l of links) {
     const arr = linksByAssumption.get(l.assumption_id) ?? [];
@@ -1150,17 +1153,21 @@ export async function runCoachTurnForMap(
   // clock including all pre-LLM DB fetches, action apply, backstops
   // (which may include rubric LLM calls), and post-turn writes.
   const stageChanged = finalMap && finalMap.current_stage !== map.current_stage;
+  const totalMs = Date.now() - turnStart;
+  const otherMs = totalMs - prefetchMs - llmMs - cascadeMs - reconcileMs;
   console.warn(
-    "[itc timing] turn map=%s stage=%s%s actions=%s llm=%dms cascade=%dms reconcile=%dms(+%d) total=%dms",
+    "[itc timing] turn map=%s stage=%s%s actions=%s prefetch=%dms llm=%dms cascade=%dms reconcile=%dms(+%d) other=%dms total=%dms",
     map.id,
     map.current_stage,
     stageChanged ? `->${finalMap.current_stage}` : "",
     reply.actions.map((a) => a.type).join(",") || "none",
+    prefetchMs,
     llmMs,
     cascadeMs,
     reconcileMs,
     reconcileAppliedCount,
-    Date.now() - turnStart,
+    otherMs,
+    totalMs,
   );
 
   // revalidatePath ties into Next's request-scoped static-generation
