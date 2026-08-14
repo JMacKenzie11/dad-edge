@@ -139,6 +139,69 @@ export function extractAssumptionDraft(text: string): string | null {
 }
 
 /**
+ * Pulls EVERY "I assume that ..." sentence out of an assistant message,
+ * regardless of quoting. Coach replies at the assumptions stage
+ * frequently use single-quotes as delimiters ('I assume that ...'),
+ * which the double-quote-only extractor above misses; a coach reveal
+ * that recaps all assumptions in one message may also contain multiple
+ * assumption sentences, only some of which have landed on the map.
+ *
+ * Extraction strategy: scan for "I assume that" openings, then take
+ * everything up to the next terminating punctuation (. ! ?) or newline
+ * or closing quote of any kind. Trim leading/trailing quote marks so
+ * the return value is stem-normalized text ready to feed to ensureStem.
+ * Returns extractions in reply order — the caller dedupes against the
+ * current DB state via normalizeMapText.
+ */
+export function extractAssumptionDrafts(text: string): string[] {
+  const drafts: string[] = [];
+  // Global, case-insensitive. Body ends at .!?\n or a closing quote
+  // (either straight " or curly \u201D or straight ' or curly \u2019).
+  const re = /\bI\s*[\u2019'\u02BC]?\s*assume\s+that\b([^\n.!?"\u201C\u201D]{5,300}?)(?=[.!?\n"\u201D]|$)/gi;
+  let m: RegExpExecArray | null;
+  const seen = new Set<string>();
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[1]
+      .trim()
+      // Strip trailing closing single-quote / curly-single-quote /
+      // ASCII apostrophe used as a closing delimiter. Do NOT strip
+      // apostrophes that are clearly part of a contraction (I'll,
+      // she's) — those live inside the body, not at the end.
+      .replace(/[\u2019\u02BC']+$/, "")
+      .trim();
+    if (raw.length === 0) continue;
+    const draft = `I assume that ${raw}`;
+    const norm = draft.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    drafts.push(draft);
+  }
+  return drafts;
+}
+
+/**
+ * Pulls "Commitment #N" reference indices out of an assistant message.
+ * Used by the assumptions backstop to figure out which commitments an
+ * extracted assumption underwrites (the coach's coverage walk-through
+ * names them explicitly as "Commitment #1 (...)", "Commitment #4 (...)"
+ * etc.). Returns 1-based indices in the order they appear, deduped.
+ */
+export function extractCommitmentIndicesInText(text: string): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  const re = /\bCommitment\s*#(\d{1,2})\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n < 1 || n > 20) continue;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
+
+/**
  * Pulls numbered "I'm also committed to ..." drafts out of an assistant
  * message. Tolerant of smart-apostrophes and leading whitespace. Order
  * is preserved — the caller aligns index N to the Nth locked worry.

@@ -37,6 +37,7 @@ import {
   markMapComplete,
   markRevealDelivered,
   markWalkthroughDelivered,
+  normalizeMapText,
   recordTestResult,
   retagMessageStage,
   saveImprovementGoal,
@@ -54,8 +55,10 @@ import {
 import {
   coachAcknowledgedNewBehavior,
   extractAssumptionDraft,
+  extractAssumptionDrafts,
   extractCoachBehaviorCount,
   extractCommitmentDrafts,
+  extractCommitmentIndicesInText,
   extractWorryDraft,
   looksLikeBehaviorCandidate,
 } from "@/lib/itc/backstop-extractors";
@@ -743,72 +746,101 @@ export async function runCoachTurnForMap(
     }
   }
 
-  // Assumptions backstop: same failure mode as commitments. Coach walks
-  // the coverage check, coachee affirms ("that makes sense", "yes",
-  // etc.), coach's reply says "Locking that in..." but the actual
-  // propose_assumption action never fires. Result: the map stays on the
-  // commitments/assumptions stage forever with an empty Big Assumptions
-  // column, and downstream stages (review, immune_system) can't unlock.
+  // Assumptions backstop (multi-assumption). Rewritten because the old
+  // single-assumption version had two blind spots that both surfaced in
+  // real sessions:
+  //   1. Only extracted DOUBLE-quoted assumption text — coach reveals
+  //      that use single-quotes ('I assume that ...') were invisible.
+  //   2. Only fired when zero assumptions were on the map — could not
+  //      recover a missing second cluster after the first landed.
   //
-  // Recovery: if we're in assumptions with zero assumptions on the map,
-  // scan history for a quoted "I assume that ..." from a prior assistant
-  // message. Persist it linked to ALL commitments (the coverage
-  // walk-through defends coverage of all four; a coach who skipped the
-  // action but wrote the reveal text was working with the same premise).
-  if (looksAffirmative(parsed.data.text)) {
-    // Guard removed: was skipping the backstop when the coach EMITTED
-    // propose_assumption, but that action can fail silently (rubric
-    // rejects, no valid commitment_indices, etc.) — the assumption
-    // never lands on the map even though the coach thinks it did.
-    // The inner `assumptionsNow.length === 0` check prevents
-    // double-inserts on the success path.
+  // New behavior: on any turn where current_stage is assumptions or
+  // immune_system, scan the last N assistant messages for EVERY "I
+  // assume that ..." sentence (quoted or unquoted, single or double).
+  // For each extracted draft that isn't already on the map (by
+  // normalized text), run the depth rubric; if it passes, insert it
+  // linked to the commitments the coach's message named explicitly
+  // ("Commitment #1", "Commitment #4") or falling back to all
+  // commitments. Idempotent by construction — dedup happens on
+  // normalized text at both the extractor and the addAssumption layers.
+  {
     const mapForAssumption = await getMapById(map.id);
-    if (mapForAssumption?.current_stage === "assumptions") {
+    const stageForBackstop = mapForAssumption?.current_stage;
+    if (
+      stageForBackstop === "assumptions" ||
+      stageForBackstop === "immune_system"
+    ) {
       const [assumptionsNow, commitmentsForLink] = await Promise.all([
         listAssumptions(map.id),
         listCommitments(map.id),
       ]);
-      if (assumptionsNow.length === 0 && commitmentsForLink.length > 0) {
-        let draftText: string | null = null;
-        for (let i = priorHistory.length - 1; i >= 0; i--) {
-          const msg = priorHistory[i];
-          if (msg.role !== "assistant") continue;
-          const extracted = extractAssumptionDraft(msg.content);
-          if (extracted) {
-            draftText = extracted;
-            break;
+      if (commitmentsForLink.length > 0) {
+        const existingNorm = new Set(
+          assumptionsNow.map((a) => normalizeMapText(a.text)),
+        );
+        // Walk the transcript newest-first so a later message's
+        // more-refined phrasing wins if the same assumption appears
+        // twice. Bound the scan at the last 12 assistant messages so
+        // we don't rescore ancient content on long sessions.
+        const assistantMessages = priorHistory
+          .filter((m) => m.role === "assistant")
+          .slice(-12)
+          .reverse();
+        const seenNorm = new Set<string>(existingNorm);
+        const toInsert: {
+          text: string;
+          commitmentIndices: number[];
+        }[] = [];
+        for (const msg of assistantMessages) {
+          const drafts = extractAssumptionDrafts(msg.content);
+          if (drafts.length === 0) continue;
+          const commitmentIndicesInMsg = extractCommitmentIndicesInText(
+            msg.content,
+          );
+          for (const draft of drafts) {
+            const stemmed = ensureStem(draft, ASSUMPTION_STEM);
+            const norm = normalizeMapText(stemmed);
+            if (seenNorm.has(norm)) continue;
+            seenNorm.add(norm);
+            toInsert.push({
+              text: stemmed,
+              commitmentIndices:
+                commitmentIndicesInMsg.length > 0
+                  ? commitmentIndicesInMsg
+                  : commitmentsForLink.map((_, i) => i + 1),
+            });
           }
         }
-        if (draftText) {
+        for (const item of toInsert) {
           try {
-            const stemmed = ensureStem(draftText, ASSUMPTION_STEM);
             const rubric = await scoreAssumptionDepth({
-              goalText: mapForAssumption.improvement_goal ?? "",
-              assumptionText: stemmed,
+              goalText: mapForAssumption?.improvement_goal ?? "",
+              assumptionText: item.text,
             });
-            // Only land if the rubric would have passed. If it wouldn't
-            // have, the coach was probably going to be rejected anyway
-            // and forcing it in via the backstop hides a real problem.
-            if (rubric.score >= 2) {
-              const assumption = await addAssumption(
-                map.id,
-                stemmed,
-                rubric.score,
-              );
-              await linkAssumptionToCommitments(
-                assumption.id,
-                commitmentsForLink.map((c) => c.id),
-              );
+            if (rubric.score < 2) {
               console.warn(
-                "[itc] assumptions backstop: inserted assumption from history scan (linked to %d commitments)",
-                commitmentsForLink.length,
-              );
-            } else {
-              console.warn(
-                "[itc] assumptions backstop: rubric would reject draft (score %d/3) — not persisting",
+                "[itc] assumptions backstop: rubric rejected draft (score %d/3) — not persisting: %o",
                 rubric.score,
+                item.text,
               );
+              continue;
             }
+            const assumption = await addAssumption(
+              map.id,
+              item.text,
+              rubric.score,
+            );
+            const linkIds = item.commitmentIndices
+              .map((i) => commitmentsForLink[i - 1]?.id)
+              .filter((id): id is string => Boolean(id));
+            if (linkIds.length > 0) {
+              await linkAssumptionToCommitments(assumption.id, linkIds);
+            }
+            console.warn(
+              "[itc] assumptions backstop: inserted assumption (linked to %d commitments, indices=%o)",
+              linkIds.length,
+              item.commitmentIndices,
+            );
           } catch (err) {
             console.warn(
               "[itc] assumptions backstop: addAssumption failed: %s",

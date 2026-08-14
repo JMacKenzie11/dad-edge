@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   coachAcknowledgedNewBehavior,
   extractAssumptionDraft,
+  extractAssumptionDrafts,
   extractCoachBehaviorCount,
   extractCommitmentDrafts,
+  extractCommitmentIndicesInText,
   extractWorryDraft,
   looksLikeBehaviorCandidate,
 } from "../../backstop-extractors";
@@ -184,6 +186,74 @@ describe("extractAssumptionDraft", () => {
 
   it("returns null on empty input", () => {
     expect(extractAssumptionDraft("")).toBeNull();
+  });
+});
+
+describe("extractAssumptionDrafts (plural, multi-quote-style)", () => {
+  it("extracts a single-quoted assumption (real 2026-08-14 miss)", () => {
+    // Real coach reply from the session where cluster A landed but
+    // cluster B did not — single-quotes were invisible to the old
+    // double-quote-only extractor.
+    const t =
+      "Let's start with Cluster A. Here's the candidate: 'I assume that if I let her see me as flawed, then I'm not a man worth respecting.' Walking it against those two:";
+    const drafts = extractAssumptionDrafts(t);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toBe(
+      "I assume that if I let her see me as flawed, then I'm not a man worth respecting",
+    );
+  });
+
+  it("extracts multiple assumptions from a single-message recap", () => {
+    const t = `Here's how it hangs together:
+1. 'I assume that if I admit I'm wrong, then I'm fundamentally not good enough.'
+2. 'I assume that if I let her see me as flawed, then I'm not a man worth respecting.'`;
+    const drafts = extractAssumptionDrafts(t);
+    expect(drafts).toHaveLength(2);
+    expect(drafts[0]).toContain("not good enough");
+    expect(drafts[1]).toContain("not a man worth respecting");
+  });
+
+  it("extracts an unquoted assumption sentence", () => {
+    const t =
+      "Landing this in: I assume that if I stay in the room when she's upset, I'll say something I can't take back. That's the belief.";
+    const drafts = extractAssumptionDrafts(t);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toContain("stay in the room when she's upset");
+  });
+
+  it("dedupes when the same assumption appears twice in one message", () => {
+    const t = `First: 'I assume that if X, then Y.'
+Refined: 'I assume that if X, then Y.'`;
+    const drafts = extractAssumptionDrafts(t);
+    expect(drafts).toHaveLength(1);
+  });
+
+  it("returns empty array when no assumption sentences present", () => {
+    expect(extractAssumptionDrafts("no assumption here")).toEqual([]);
+    expect(extractAssumptionDrafts("")).toEqual([]);
+  });
+});
+
+describe("extractCommitmentIndicesInText", () => {
+  it("extracts explicit Commitment #N references in order", () => {
+    const t =
+      "Walking it: - Commitment #1 (keeping her mistakes available) - Commitment #4 (controlling how she sees you). Does that hold?";
+    expect(extractCommitmentIndicesInText(t)).toEqual([1, 4]);
+  });
+
+  it("dedupes repeated references", () => {
+    expect(
+      extractCommitmentIndicesInText("Commitment #2 and again Commitment #2"),
+    ).toEqual([2]);
+  });
+
+  it("returns empty when no references present", () => {
+    expect(extractCommitmentIndicesInText("no numbers here")).toEqual([]);
+    expect(extractCommitmentIndicesInText("")).toEqual([]);
+  });
+
+  it("ignores unreasonable numbers", () => {
+    expect(extractCommitmentIndicesInText("Commitment #99")).toEqual([]);
   });
 });
 
