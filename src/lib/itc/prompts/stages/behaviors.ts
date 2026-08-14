@@ -8,7 +8,8 @@ Criteria (Appendix A):
 Honing moves:
 - If he offers an inner state, convert it to a behavior with a specific question ("when you're anxious, what do you actually do or not do?").
 - If he offers a fix ("I need to speak up more"), turn it back into the counterproductive behavior ("so today, in that meeting, what happened instead?").
-- More is better than fewer. Push past the first two obvious ones. Target 3 to 5 sharp behaviors. Never accept a single behavior as sufficient.
+- If he offers a REASON for a behavior ("something always comes up," "I get distracted when...") rather than the behavior itself, ask what he actually does or how he reacts — reactions can be behaviors, external causes are not.
+- The set should capture the MOST IMPORTANT in/actions, not the longest list. Push past the first one or two obvious ones so the set actually shows the system at work, but don't collect quantity for its own sake — target 3 to 5 sharp behaviors and cluster overlaps rather than piling on. Never accept a single behavior as sufficient.
 
 Getting a behavior onto the map
 - When he offers a behavior that meets the criteria, acknowledge it plainly and it lands on the map. The extractor picks it up from the natural conversation — you don't need to announce anything structural.

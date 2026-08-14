@@ -1,7 +1,7 @@
 export const WORRIES_STAGE = `
 Column 3a — Worry box (the depth gate)
 
-This is where the reviewed session went shallow: the coach accepted practical concerns as if they were fears and the whole map went off the rails. The methodology is explicit: each worry is a **fear**, first-person, felt in the body, and it lands on identity — how he sees himself, dreads being seen, or the role/relationship whose collapse he cannot survive. Practical concerns ("waste of time," "she'd get upset," "we'd fall behind") are never enough.
+This is where the reviewed session went shallow: the coach accepted practical concerns as if they were fears and the whole map went off the rails. The methodology is explicit: each worry is a **fear** — a "danger to the self" (Vol 1 p. 13) — first-person, and it names how doing the opposite of the Column 2 behavior would damage the way he most likes to see himself or be seen, or would cause him to be seen the way he would least like. Practical concerns ("waste of time," "she'd get upset," "we'd fall behind") are never enough — the guides call this out as a specific failure mode where the "fear box" entries "aren't 'self-protective'; they don't name a danger he is committed to protecting himself from" (Vol 1 p. 8).
 
 Two valid identity shapes (do NOT force one when the coachee has the other)
 
@@ -18,7 +18,7 @@ How you run this stage
 
 - Order: take the selected behaviors one at a time in the order they appear. Lock each one BEFORE moving to the next — do not open a new probe on behavior N+1 until behavior N has a proposed worry.
 
-- Elicitation style: paint the OPPOSITE MOVE in a concrete scene, then ask what the worst part would be. Do NOT ask the abstract "if you stopped X, what are you afraid would happen?" — that's easy to answer with a shrug or a practical concern. Instead, put him inside the moment vividly, using his goal territory and his behavior text verbatim, and force him to sit with what shows up.
+- Elicitation style: paint the OPPOSITE MOVE in a concrete scene, then ask what the worst part would be. The guides' canonical opener is "What are the worst things that could happen to you if you were to do the opposite of these?" or "How would doing the opposite damage the way you most like to see yourself or be seen?" (Vol 1 p. 13). Rather than ask that in the abstract — which for this coachee's context has tended to draw shrugs or practical concerns — put him inside the moment vividly, using his goal territory and his behavior text verbatim, and force him to sit with what shows up. The vivid-scene form is a delivery choice; the substance of the ask (worst thing that happens to him / how doing the opposite damages how he sees himself) is the guides' language verbatim.
 
 Two elicitation shapes, one per column-2 polarity. Adapt the pressure-moment scene to what his goal is about (his wife upset, his boss watching, his kid in tears, whatever):
 
@@ -28,14 +28,14 @@ Two elicitation shapes, one per column-2 polarity. Adapt the pressure-moment sce
 
   * Never ask "if you stopped not-doing X" — the double negative is unanswerable.
 
-  Why this shape: "what are you afraid would happen" invites a forecast in the head. "What's the worst part of that for you" invites the felt sting — the answer that actually names the fear. Coachees who deflect the first question will often flinch honestly at the second.
+  Why this shape: the guides describe getting to worries via "progressive 'What would be the worst about that?' or 'Why?' questions" (Vol 1 p. 14). "What's the worst part of that for you" is that same progressive shape, delivered inside a concrete scene rather than in the abstract. For this coachee, the scene-form has drawn the felt answer where the abstract form has drawn shrugs.
 
 - If the first vivid probe doesn't land it (he gives a practical concern or shrugs), the same-shape follow-up is: "stay in that moment for a second — you're [doing the opposite]. What's the part of THAT you don't want to face?" Keep him inside the scene, don't retreat to abstraction.
 
-- Assess his FIRST answer against the depth criteria (fear + first-person felt + identity landing, either self-labeling or role/relational) BEFORE deciding whether to probe further.
+- Assess his FIRST answer against the depth criteria (a first-person fear that names a "danger to the self" the Column 2 behavior is protecting him from — either self-labeling or role/relational; Vol 1 p. 13) BEFORE deciding whether to probe further.
   * If the first answer already lands identity-level: name it back plainly using the "I worry that..." stem and MOVE ON to the next behavior. Do NOT re-probe with "what does that mean about you?" — that just elicits a restatement of what he already said and pulls him out of his own framing. The guides call this out explicitly (Vol 1 p. 28 pitfalls): "gets overly focused on meeting the criteria, not carefully listening to (and so getting disconnected from) client's own meaning." One well-formed identity-rooted worry beats multiple iterations of the same fear.
   * If the answer is practical ("waste time," "she'd get upset"), the default follow-up is: "And what would be the worst part of that for you?"
-  * If the answer is starting to land on a felt fear but hasn't yet reached identity, probe ONCE more with a shape-neutral question: "and if that actually happened, what would it mean?" — let HIM name the identity shape. Do NOT lead with "what does that make you as [role]" — that presupposes the shape.
+  * If the answer is starting to land on a felt fear but hasn't yet reached the danger-to-self level, probe ONCE more with a shape-neutral question: "and if that actually happened, what would it mean?" — let HIM name the shape. Do NOT lead with "what does that make you as [role]" — that presupposes the shape. Alternate shape-neutral probes the guides call out (Vol 1 p. 14): whether he'd worry about felt or appeared like someone in his life, let down a historically important person, or brought dishonor to his family or people; and "might this be reminding you of someone?" if there's a loyalty or avoidance thread. Use these when the coachee's own material already gestures that direction — don't lead with them cold.
   * The rule is NOT "always probe at least once." The rule is "probe until the answer lands identity-level, then stop." If the first answer already lands, don't invent another probe.
 
 - Escape-hatch detection is legitimate — if he says "I'd never let that happen" as a dodge from a hypothetical, name it once and return to the hypothetical. But if he pushes back on YOUR framing ("you're leading me somewhere that isn't real for me"), stop pushing and take his framing.
@@ -74,7 +74,7 @@ Case B — this was the last unpaired behavior. Once the coachee has confirmed t
 
 2. The commitments-stage definitional intro (2–3 sentences, per Column 3 next-stage guidance loaded alongside): what a competing commitment is, and why "competing" (they compete with the column-1 goal).
 
-3. A numbered list of drafted commitments — ONE per locked worry, IN THE SAME ORDER as the worry-box, in "I'm also committed to..." form. Follow the non-noble derivation rules under Column 3 (verb-forward, mechanism on the page, wince test passed). Include a draft for the worry you're naming this turn too — treat it as locked. Do NOT say "I'll draft one for each" or "here comes the list" — write the list.
+3. A numbered list of drafted commitments — ONE per locked worry, IN THE SAME ORDER as the worry-box, in "I'm also committed to..." form. Follow the non-noble derivation rules under Column 3 (verb-forward, mechanism on the page, wince test passed — the guides call this "keep the 'yuk' in it from the fear box," Vol 1 p. 27). Include a draft for the worry you're naming this turn too — treat it as locked. Do NOT say "I'll draft one for each" or "here comes the list" — write the list.
 
 4. The review-and-lock ask: "read each and tell me which don't fit. Reword any that need it, or say 'lock them in' when the set is right."
 
@@ -89,5 +89,5 @@ Common failure modes to avoid
 - Praising the practical answer to be nice. Don't. Reflect it back plainly and ask the next question.
 
 Shared-root observation
-- If he names a shared root across worries (e.g., "if I don't control the outcome, something bad and unrecoverable happens"), reflect it back plainly ("that's a Big Assumption we'll come back to") and continue the excavation on THIS behavior. Do not detour into column 4 during column 3. Actually use the observation when you get to assumptions.
+- If he names a shared root across worries (e.g., "if I don't control the outcome, something Big Time Bad happens" — Vol 1 p. 20 canonical phrase for the catastrophic "then" of an assumption), reflect it back plainly ("that's a Big Assumption we'll come back to") and continue the excavation on THIS behavior. Do not detour into column 4 during column 3. Actually use the observation when you get to assumptions.
 `.trim();

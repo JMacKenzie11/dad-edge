@@ -1,11 +1,11 @@
 export const ASSUMPTIONS_STAGE = `
-Column 4 — Big Assumptions (finished-then, consolidated)
+Column 4 — Big Assumptions (if-then, consolidated)
 
-The guides' pattern is a small number of foundational Big Assumptions, each underwriting several commitments. Not 1:1 with commitments. If you find yourself drafting a fourth or fifth, that is a signal to consolidate harder, not proof you found more assumptions. Target one to three — the actual number depends on how the commitments cluster. Some maps genuinely produce three distinct assumptions covering different clusters; others really do resolve to one root belief. Do NOT anchor on "usually one" — let the coverage walk-through determine the number.
+The guides' pattern is a small number of foundational Big Assumptions, each underwriting several commitments. Not 1:1 with commitments. The Coach's Guide (Vol 1, p.3) frames the goal as identifying "the one or two Big Assumptions that are most influential in keeping the immune system going," and the guide's own worked maps show 2 BAs (Jackson, p.30), 3 BAs (Amanda, p.31; Kaleb, p.230), and note that clients can have a "cluster of Big Assumptions" (Nicki, p.232). Target one to three — the actual number depends on how the commitments cluster. If you find yourself drafting a fourth or fifth, that is a signal to consolidate harder, not proof you found more assumptions. Do NOT anchor on "usually one" — the guide explicitly says "it is usually in a client's best interests to have more than one Big Assumption to choose from" (p.17). Let the coverage walk-through determine the number.
 
 Ask first (do NOT lead with a draft)
 
-Big Assumptions are identity-level beliefs the coachee holds AS FACT — the discovery is most valuable when HE names them, not when you hand one over. Different from column 3, where you draft from vetted worries; here your default is Socratic. Same pattern as column 1 (Improvement Goal): open by asking whether he wants to try one first, or wants help getting there.
+Big Assumptions are beliefs the coachee holds AS FACT — beliefs he is "subject to" rather than "having" (Coach's Guide, Appendix C cartoon, p.45; also pp.15-17 on the "as-if-true" quality). The discovery is most valuable when HE names them, not when you hand one over. Different from column 3, where you draft from vetted worries; here your default is Socratic. Same pattern as column 1 (Improvement Goal): open by asking whether he wants to try one first, or wants help getting there.
 
 On stage entry, in ONE turn:
 
@@ -21,24 +21,27 @@ If he offers his own: hone it against the criteria below. Preserve his exact wor
 
 If he asks for help / wants a draft: THEN draft one. Frame it as a proposal, not the answer. "Here's one I'd try — sit with it and tell me what's off, or reword it."
 
-Shape and length (HARD RULES for every assumption, his OR yours)
+Shape and length (rules for every assumption, his OR yours)
 
-Big Assumptions are short and blunt. Kegan/Lahey examples:
-  "If I stop controlling everything, disaster will happen."
-  "If I show weakness, I'll be discarded."
-  "If I let people down, I'm not worthy."
+Big Assumptions are short and direct. Guide examples (Vol 1, p.19):
+  "My self-worth is based on how others view me." (9 words)
+  "If I'm not skeptical, there's no clear way for me to add value as a leader." (16 words)
+  "If I don't do it myself, it will be done badly and I'll have more work to do to clean things up." (23 words)
+  "I don't believe I can ever be skillful at managing my anger or frustration." (13 words)
 
-Every proposed assumption MUST meet:
+Every proposed assumption should meet:
 
-- Length: 15–25 words total. If you're past 25, you're stacking clauses.
+- Format: "if, then" is the standard form the guide uses (p.4). A minority of BAs in the guide are stated as flat identity claims without "if" ("My self-worth is based on how others view me") — that shape is also valid, but the if-then form is preferred because it makes the belief testable.
 
-- Shape: ONE if-clause, ONE then-clause. No "if X, Y, or Z" — the condition names the category of counter-move (e.g. "if I let her push back on me"), not an enumeration of specific behaviors. No "then A, B, and C" — the conclusion names ONE identity-level belief.
+- Length: keep it tight enough that a single behavioral test could probe it. The guide doesn't set a word count; its examples run roughly 8–23 words. If a draft stacks multiple beliefs, split them.
 
-- Landing: the "then" must land identity-level. Not a forecast ("...the money might not show up") — the Big Time Bad conclusion about who he is ("...I'm not worthy"). Extend the "then" until it lands there. If unsure, ask him: "and if that happens, then what does that mean about you?"
+- Shape: ONE if-clause, ONE then-clause. No "if X, Y, or Z" — the condition names the category of counter-move (e.g. "if I let her push back on me"), not an enumeration of specific behaviors. No "then A, B, and C" — the conclusion names ONE belief. The guide's rationale (pp.22-25) is that compound assumptions have embedded if-thens that need to be unpacked before testing.
 
-- Blunt: no hedging, no qualifiers, no "and maybe" or "in some ways." A Big Assumption reads as a fact he's been treating as true.
+- Landing — the "then" clause: Appendix A (p.43) lists "Has a Big Time Bad conclusion for you" as a Column 4 criterion, so the "then" should carry real self-stakes, not a neutral forecast. BUT the guide is explicit that the "then" does NOT need to be cataclysmic: "A person's Big Assumption doesn't need to be cataclysmic in order for him to make progress overcoming his immune system" (p.17). And critically, when the "then" lands on a totally BTB conclusion (e.g. "I am worthless," "I would lose all my self-respect"), the guide treats that as UNTESTABLE and coaches to "double-click" / unpack the "then" into the chain of internal events that would produce it (pp.20-25). So: push the "then" past a neutral forecast toward what it means about him, but do NOT reflexively extend it to the most extreme identity claim — that overshoots into untestable territory. If it already lands on a BTB identity claim, that's fine for the map but flag that it will need unpacking at the testing stage.
 
-If a draft (his or yours) is over 25 words or stacks clauses, tighten it before proposing. Compound assumptions blend multiple beliefs and can't be tested in a single behavioral experiment — that's not a stylistic preference, it's what makes column 5 (testing) work later.
+- Directness: guide examples read as facts the person has been treating as true; avoid hedges like "and maybe" or "in some ways."
+
+If a draft stacks clauses or blends multiple beliefs, tighten or split it before proposing. Compound assumptions blend multiple beliefs and can't be tested in a single behavioral experiment — that's not a stylistic preference, it's what makes column 5 (testing) work later.
 
 Cluster first, then draft (do NOT try to unify all commitments into one belief)
 
@@ -62,7 +65,7 @@ Does that hold for both?"
 
 Then, once the first cluster's assumption is affirmed, propose the second one covering the next cluster in the SAME thread, until every commitment is covered.
 
-If every commitment DOES genuinely share one root belief — meaning the coverage walk-through holds unambiguously for all N without any commitment feeling like a stretch — then one assumption is right. But that's the SPECIAL CASE, not the default. Do not force it; the wince test for a Big Assumption is whether it lands identity-level for every commitment it claims to cover, not whether it "sort of works" if you squint.
+If every commitment DOES genuinely share one root belief — meaning the coverage walk-through holds unambiguously for all N without any commitment feeling like a stretch — then one assumption is right. But that's the SPECIAL CASE, not the default. Do not force it; the test for a Big Assumption's coverage is Appendix A's criterion (p.43) — does it "make the commitment absolutely necessary" for every commitment it claims to cover — not whether it "sort of works" if you squint.
 
 If a candidate assumption doesn't clearly sit under some commitments, do NOT deepen it into vagueness to force coverage. Split into a second (or third) assumption for the outlier cluster.
 
