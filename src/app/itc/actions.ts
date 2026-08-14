@@ -1581,16 +1581,16 @@ async function applyCoachAction(
 ): Promise<void> {
   switch (action.type) {
     case "propose_goal": {
-      // No-op: proposing is not the same as locking. The goal lands in the
-      // map only after the coachee affirms — the backstop extractor in
-      // sendCoachMessage scans the prior assistant message on the "yes"
-      // turn and saves it there. This prevents column 1 from populating
-      // before the coachee has confirmed anything.
-      console.warn(
-        "[itc] propose_goal noted (no DB write yet). stage=%s text=%o",
-        currentStage,
-        action.text,
-      );
+      // Save the proposed goal to improvement_goal so it shows up on the
+      // map immediately. Coachee sees the draft as he's being asked to
+      // affirm it; if he tweaks, coach re-fires propose_goal with the new
+      // text and this handler overwrites. Was previously a no-op —
+      // relying on a downstream backstop to persist on affirmation. That
+      // pattern kept losing goals when the affirmation was implicit
+      // (e.g. coachee jumped straight to a behavior). Persist here and
+      // never lose it.
+      assertStage("propose_goal", currentStage, ["goal"]);
+      await saveImprovementGoal(mapId, action.text);
       return;
     }
     case "propose_behavior": {

@@ -48,12 +48,22 @@ export function nextStage(stage: ItcStage): ItcStage {
 /**
  * Guardrail — refuses forward jumps that skip a stage. Backward transitions
  * (e.g., returning to Goal to hone) are always allowed.
+ *
+ * Explicit allow-list of forward skips: assumptions → immune_system.
+ * The review stage was a mid-flow checkpoint that added a turn without
+ * moving the map forward; on assumption lock the coach now goes straight
+ * into the immune-system walkthrough so the coachee sees his map
+ * explained top-down as soon as it's complete. The review stage still
+ * exists as a name so backward transitions and legacy sessions don't
+ * break.
  */
 export function canTransitionTo(from: ItcStage, to: ItcStage): boolean {
   const fromIdx = stageIndex(from);
   const toIdx = stageIndex(to);
   if (toIdx <= fromIdx) return true;
-  return toIdx === fromIdx + 1;
+  if (toIdx === fromIdx + 1) return true;
+  if (from === "assumptions" && to === "immune_system") return true;
+  return false;
 }
 
 export const GOAL_STEM = "I'm committed to getting better at";

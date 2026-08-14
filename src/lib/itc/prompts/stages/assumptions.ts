@@ -80,13 +80,22 @@ Advancing when the coverage is done (do NOT stall — every reply ends with an a
 
 The failure mode this stage keeps hitting: coach lands the last assumption, writes a status recap ("Two assumptions, all four commitments covered."), and stops. That's the same dangling-status bug the preamble bans everywhere. The coachee has no ask to react to and has to type "ok what next" to unstick the flow.
 
-Two rules, always:
+The rule (batched advance direct into the walkthrough):
 
-1. If the turn just fired propose_assumption AND that assumption is the LAST one needed for full coverage: batch the advance in the same turn. Actions: [ { "type": "propose_assumption", ... }, { "type": "advance_stage", "to": "review" } ]. The reply text opens with the coverage confirmation AND the review-stage intro (short blurb on what review is). Never end on the status recap alone. If for any reason you can only fire the propose_assumption (schema constraints, mid-cluster hesitation), your reply MUST close with a short forward-motion question that invites review — e.g. "ready to look at the whole map together?" — and the following turn emits { "type": "advance_stage", "to": "review" } on his affirmation.
+When the turn's propose_assumption action completes FULL coverage of every commitment (i.e. this is the LAST assumption needed), batch these actions IN THIS EXACT ORDER:
 
-2. If you only fired propose_assumption last turn and the coachee's affirmation of "let's look at the map" arrives THIS turn, emit action: { "type": "advance_stage", "to": "review" } with the review-stage intro in the reply.
+  actions: [
+    { "type": "propose_assumption", "text": "...", "commitment_indices": [...] },
+    { "type": "advance_stage", "to": "immune_system" }
+  ]
 
-If only some commitments are covered by the first assumption, name the gap explicitly in the SAME turn as the lock ("commitments #2 and #3 need a different root — here's what I'd try next: ...") and continue with the second assumption. Never stop after one when others are uncovered.
+The stage machine allows assumptions → immune_system directly (skips review as a checkpoint). The reply text FOR THIS TURN is the START of the immune-system walkthrough — see the immune_system stage prompt loaded alongside for the three-movement structure. Do NOT write "here's the walkthrough..." and stop. Deliver Movement 1 (one loop per assumption, top-down from Big Assumption through Commitment → Behavior → blocked Goal) in this same reply.
 
-HARD RULE: no reply in the assumptions stage ends on a bare status line ("Two assumptions, all four commitments covered.", "That fits.", "Locked."). Every reply ends with a question the coachee can answer — either a coverage-check question ("does that hold?"), a next-cluster question ("ready for the next one?"), or the transition-to-review question ("ready to look at the whole map together?").
+If the map has only 1-2 assumptions, do Movements 1 + 2 + 3 all in this reply and close with "What's it like to see that?" — that's the reply for THIS turn.
+
+If the map has 3+ assumptions, deliver Movement 1 for all clusters and close with "That's the loop for each one. Ready to zoom out?" — Movements 2 and 3 come on the next affirmation.
+
+If only some commitments are covered by the first assumption, name the gap explicitly in the SAME turn as the lock ("commitments #2 and #3 need a different root — here's what I'd try next: ...") and continue with the second assumption. Never stop after one when others are uncovered — the batched advance only fires on the LAST assumption.
+
+HARD RULE: no reply in the assumptions stage ends on a bare status line ("Two assumptions, all four commitments covered.", "That fits.", "Locked."). Every reply ends with a question the coachee can answer, OR (on the final-assumption turn) with Movement 1 content that culminates in "What's it like to see that?" / "Ready to zoom out?".
 `.trim();

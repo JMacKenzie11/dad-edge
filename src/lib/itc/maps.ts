@@ -929,20 +929,22 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
         );
       }
     }
-    if (to === "review") {
+    if (to === "review" || to === "immune_system") {
       const [assumptions, commitments, links] = await Promise.all([
         listAssumptions(mapId),
         listCommitments(mapId),
         listAssumptionLinks(mapId),
       ]);
       if (assumptions.length === 0) {
-        throw new Error(`Add at least one Big Assumption before review.`);
+        throw new Error(
+          `Add at least one Big Assumption before advancing to ${to}.`,
+        );
       }
       const coveredCommitments = new Set(links.map((l) => l.commitment_id));
       const uncovered = commitments.filter((c) => !coveredCommitments.has(c.id));
       if (uncovered.length > 0) {
         throw new Error(
-          `Every commitment must be covered by an assumption before review. Uncovered: ${uncovered.length}.`,
+          `Every commitment must be covered by an assumption before advancing to ${to}. Uncovered: ${uncovered.length}.`,
         );
       }
     }
