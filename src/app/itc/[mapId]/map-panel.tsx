@@ -129,7 +129,7 @@ export function MapPanel({
 
         <Column title="4. Competing commitments">
           {commitments.length === 0 ? (
-            <Placeholder>Follows from each worry.</Placeholder>
+            <Placeholder>My vows to make sure my worries never come true.</Placeholder>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {commitments.map((c, i) => {
