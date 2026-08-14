@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel } from "@/lib/coach/client";
+import { utilityModel } from "@/lib/model-config";
 
 /**
  * Strip proper nouns from a mission description so it's shareable as an
@@ -39,7 +39,7 @@ export async function anonymizeMissionText(
   if (trimmed.length === 0) return trimmed;
   try {
     const { object } = await generateObject({
-      model: haikuModel(),
+      model: utilityModel(),
       schema: OutSchema,
       system: SYSTEM,
       prompt: trimmed,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject, type ModelMessage } from "ai";
-import { coachModel } from "@/lib/coach/client";
+import { mainModel, mainModelIdOrUnset } from "@/lib/model-config";
 import { buildUserContext } from "@/lib/coach/context";
 import { systemBase, PROMPT_VERSION, type Mode } from "@/lib/coach/prompts";
 import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
@@ -168,7 +168,7 @@ export async function sendCoachMessage(opts: {
 
   try {
     const result = await generateObject({
-      model: coachModel(),
+      model: mainModel(),
       schema: CoachReplySchema,
       system: systemPrompt,
       messages: historyMessages,
@@ -196,7 +196,7 @@ export async function sendCoachMessage(opts: {
     if (!gate.ok) {
       try {
         const retry = await generateObject({
-          model: coachModel(),
+          model: mainModel(),
           schema: CoachReplySchema,
           system: systemPrompt,
           messages: [
@@ -248,7 +248,7 @@ export async function sendCoachMessage(opts: {
         mission_suggestion: reply.mission_suggestion,
         prompt_version: PROMPT_VERSION,
       }),
-      model_used: process.env.PRIMARY_COACH_MODEL ?? "(unset)",
+      model_used: mainModelIdOrUnset(),
       tokens_in: inTokens,
       tokens_out: usageOutput,
     })

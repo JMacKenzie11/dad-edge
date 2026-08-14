@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel } from "@/lib/coach/client";
+import { utilityModel } from "@/lib/model-config";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { PILLARS } from "@/lib/pillars";
 import type { JobResult } from "@/lib/jobs/utils";
@@ -73,7 +73,7 @@ export async function runExemplarNovelty(now: Date = new Date()): Promise<JobRes
     let demoteIds: string[] = [];
     try {
       const { object } = await generateObject({
-        model: haikuModel(),
+        model: utilityModel(),
         schema: OutSchema,
         system: SYSTEM,
         prompt: `Pillar: ${p.label}\n\nExemplars:\n${list

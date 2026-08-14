@@ -1,7 +1,7 @@
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
-import { coachModel } from "@/lib/model-config";
+import { mainModel } from "@/lib/model-config";
 import { buildItcCoachSystem } from "./prompts";
 import type { ItcStage } from "./stage";
 
@@ -483,7 +483,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     let outcome: "accepted" | "empty" | "leakage" | "error" = "error";
     try {
       const { object } = await generateObject({
-        model: coachModel(),
+        model: mainModel(),
         schema: CoachReplySchema,
         system,
         messages,
@@ -544,7 +544,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
   let text = "";
   try {
     const result = await generateText({
-      model: coachModel(),
+      model: mainModel(),
       system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
       messages,
       maxOutputTokens: 4096,

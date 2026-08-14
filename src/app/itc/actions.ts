@@ -267,7 +267,7 @@ export async function runCoachTurnForMap(
     await appendMessage(
       map.id,
       "system",
-      `[coach error] ${message} (model=${process.env.ITC_COACH_MODEL ?? "(unset)"})`,
+      `[coach error] ${message} (model=${process.env.ANTHROPIC_MODEL ?? "(unset)"})`,
       map.current_stage,
     );
     console.warn(

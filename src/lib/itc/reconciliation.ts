@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { reconcileModel } from "@/lib/model-config";
+import { utilityModel } from "@/lib/model-config";
 import { CoachActionSchema, type CoachAction } from "./coach";
 import type { ItcStage } from "./stage";
 
@@ -18,9 +18,9 @@ import type { ItcStage } from "./stage";
  * regex backstops, which drift as the coach's phrasing changes. This
  * gives us a phrasing-agnostic recovery layer.
  *
- * Cost/latency: one small-model call per turn (Anthropic Haiku by
- * default; set ITC_RECONCILE_MODEL to override). Bounded to 3 actions.
- * Failures return an empty array — never break the turn.
+ * Cost/latency: one utility-tier LLM call per turn (see ANTHROPIC_UTILITY_MODEL
+ * env — Haiku-class recommended). Bounded to 3 actions. Failures return
+ * an empty array — never break the turn.
  */
 
 const ReconcileOutputSchema = z.object({
@@ -135,7 +135,7 @@ export async function reconcileTurn(
   const started = Date.now();
   try {
     const { object } = await generateObject({
-      model: reconcileModel(),
+      model: utilityModel(),
       schema: ReconcileOutputSchema,
       system: RECONCILER_SYSTEM,
       messages: [{ role: "user", content: buildContextBlock(input) }],

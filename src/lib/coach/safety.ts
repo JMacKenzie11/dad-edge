@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel } from "@/lib/coach/client";
+import { utilityModel, utilityModelIdOrUnset } from "@/lib/model-config";
 
 export type Severity = "none" | "low" | "medium" | "high" | "critical";
 
@@ -43,7 +43,7 @@ Be conservative. False negatives are worse than false positives. If in doubt, es
 export async function classifyMessage(text: string): Promise<Classification> {
   try {
     const { object } = await generateObject({
-      model: haikuModel(),
+      model: utilityModel(),
       schema: ClassificationSchema,
       system: SYSTEM,
       prompt: text,
@@ -52,7 +52,7 @@ export async function classifyMessage(text: string): Promise<Classification> {
     return object;
   } catch (err) {
     console.error("safety classifier failed", err, {
-      model: process.env.PRIMARY_HAIKU_MODEL ?? "(unset)",
+      model: utilityModelIdOrUnset(),
     });
     return { severity: "none", categories: [], reason: "classifier error" };
   }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel } from "@/lib/coach/client";
+import { utilityModel } from "@/lib/model-config";
 import type { Mode } from "@/lib/coach/prompts";
 
 const SCHEMA = z.object({
@@ -31,7 +31,7 @@ Return JSON only.`;
 
   try {
     const { object } = await generateObject({
-      model: haikuModel(),
+      model: utilityModel(),
       schema: SCHEMA,
       system,
       prompt: `Mode: ${opts.mode}\n\nFirst message:\n"""\n${trimmed}\n"""`,

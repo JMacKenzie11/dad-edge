@@ -9,7 +9,7 @@
 
 import { generateObject } from "ai";
 import { z } from "zod";
-import { judgeModel } from "@/lib/model-config";
+import { utilityModel } from "@/lib/model-config";
 
 const JudgeSchema = z.object({
   passes: z.boolean(),
@@ -31,7 +31,7 @@ async function judgeWith(
     ? `\n[Context: alongside this reply, the coach fired action type "${ctx.actionType}". A present-tense claim like "Locked" or "Done" is legitimate if the corresponding action fired.]\n`
     : "";
   const { object } = await generateObject({
-    model: judgeModel(),
+    model: utilityModel(),
     schema: JudgeSchema,
     system,
     prompt: `${contextLine}Reply to judge:\n\n${replyText}`,

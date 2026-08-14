@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { rubricModel } from "@/lib/model-config";
+import { utilityModel } from "@/lib/model-config";
 
 /**
  * Server-side depth rubric. Prompt language alone drifted in the reviewed
@@ -70,7 +70,7 @@ export async function scoreCommitmentDepth(input: {
   commitmentText: string;
 }): Promise<CommitmentRubricResult> {
   const { object } = await generateObject({
-    model: rubricModel(),
+    model: utilityModel(),
     schema: CommitmentSchema,
     system: COMMITMENT_SYSTEM,
     prompt: [
@@ -117,7 +117,7 @@ export async function scoreAssumptionDepth(input: {
   assumptionText: string;
 }): Promise<AssumptionRubricResult> {
   const { object } = await generateObject({
-    model: rubricModel(),
+    model: utilityModel(),
     schema: AssumptionSchema,
     system: ASSUMPTION_SYSTEM,
     prompt: [
@@ -145,7 +145,7 @@ export async function scoreWorryDepth(input: {
   worryText: string;
 }): Promise<WorryDepthResult> {
   const { object } = await generateObject({
-    model: rubricModel(),
+    model: utilityModel(),
     schema: RubricSchema,
     system: SYSTEM,
     prompt: [

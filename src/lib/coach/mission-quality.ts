@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel } from "@/lib/coach/client";
+import { utilityModel } from "@/lib/model-config";
 import type { PillarCode } from "@/lib/pillars";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 
@@ -88,7 +88,7 @@ Return JSON only.`;
 
   try {
     const { object } = await generateObject({
-      model: haikuModel(),
+      model: utilityModel(),
       schema: SchemaZ,
       system: SYSTEM,
       prompt: userPrompt,
