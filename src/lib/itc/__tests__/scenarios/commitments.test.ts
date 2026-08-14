@@ -15,15 +15,15 @@ describe("commitments stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must fire propose_worry for behavior #4 (the unlocked one).
       expect(
-        reply.action?.type,
-        `Expected propose_worry for behavior #4. Got: ${reply.action?.type ?? "null"}`,
+        reply.actions[0]?.type,
+        `Expected propose_worry for behavior #4. Got: ${reply.actions[0]?.type ?? "null"}`,
       ).toBe("propose_worry");
 
       // Reply must contain the numbered commitment drafts. Count
@@ -53,23 +53,24 @@ describe("commitments stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       expect(
-        reply.action?.type,
-        `Expected propose_commitments_batch. Got: ${reply.action?.type ?? "null"}`,
+        reply.actions[0]?.type,
+        `Expected propose_commitments_batch. Got: ${reply.actions[0]?.type ?? "null"}`,
       ).toBe("propose_commitments_batch");
 
-      if (reply.action?.type === "propose_commitments_batch") {
+      const first = reply.actions[0];
+      if (first?.type === "propose_commitments_batch") {
         expect(
-          reply.action.items.length,
-          `Batch should have 4 items (one per locked worry). Got ${reply.action.items.length}.`,
+          first.items.length,
+          `Batch should have 4 items (one per locked worry). Got ${first.items.length}.`,
         ).toBe(4);
         // Every item must use "I'm also committed to" stem.
-        for (const item of reply.action.items) {
+        for (const item of first.items) {
           expect(
             /^I['\u2019]?m also committed to/i.test(item.text),
             `Batch item missing "I'm also committed to" stem: "${item.text}"`,

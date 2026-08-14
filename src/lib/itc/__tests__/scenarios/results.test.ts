@@ -11,16 +11,16 @@ describe("results stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT accept the "confirmed" verdict and fire
       // record_test_results — needs to unpack what actually happened.
       expect(
-        reply.action?.type,
-        `Coach accepted pass/fail framing and shipped results. Fired: ${reply.action?.type}`,
+        reply.actions[0]?.type,
+        `Coach accepted pass/fail framing and shipped results. Fired: ${reply.actions[0]?.type}`,
       ).not.toBe("record_test_results");
 
       // Reply should probe past pass/fail — ask about the gap between

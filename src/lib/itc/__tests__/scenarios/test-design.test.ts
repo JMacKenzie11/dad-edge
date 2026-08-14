@@ -11,16 +11,16 @@ describe("test_design stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT fire save_test_design on entry — the coachee
       // hasn't picked a type yet.
       expect(
-        reply.action?.type,
-        `Coach jumped past type-picking. Fired: ${reply.action?.type}`,
+        reply.actions[0]?.type,
+        `Coach jumped past type-picking. Fired: ${reply.actions[0]?.type}`,
       ).not.toBe("save_test_design");
 
       // Reply must offer options — mention at least 2 of the 4 test

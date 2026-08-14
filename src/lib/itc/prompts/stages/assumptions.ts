@@ -82,9 +82,9 @@ The failure mode this stage keeps hitting: coach lands the last assumption, writ
 
 Two rules, always:
 
-1. If the turn just fired propose_assumption AND that assumption is the LAST one needed for full coverage: you can't also fire advance_stage on the same turn (one action per turn). So your reply MUST close with a short forward-motion question that invites review — e.g. "ready to look at the whole map together?" / "want to step back and see how the five columns hang together?" Never end on the status recap alone.
+1. If the turn just fired propose_assumption AND that assumption is the LAST one needed for full coverage: batch the advance in the same turn. Actions: [ { "type": "propose_assumption", ... }, { "type": "advance_stage", "to": "review" } ]. The reply text opens with the coverage confirmation AND the review-stage intro (short blurb on what review is). Never end on the status recap alone. If for any reason you can only fire the propose_assumption (schema constraints, mid-cluster hesitation), your reply MUST close with a short forward-motion question that invites review — e.g. "ready to look at the whole map together?" — and the following turn emits { "type": "advance_stage", "to": "review" } on his affirmation.
 
-2. On the FOLLOWING turn (his affirmation), emit action: { "type": "advance_stage", "to": "review" } with the review-stage intro in the reply. Do NOT ask "shall we move on?" as a separate turn — his affirmation of "let's look at the map" IS his consent to move.
+2. If you only fired propose_assumption last turn and the coachee's affirmation of "let's look at the map" arrives THIS turn, emit action: { "type": "advance_stage", "to": "review" } with the review-stage intro in the reply.
 
 If only some commitments are covered by the first assumption, name the gap explicitly in the SAME turn as the lock ("commitments #2 and #3 need a different root — here's what I'd try next: ...") and continue with the second assumption. Never stop after one when others are uncovered.
 

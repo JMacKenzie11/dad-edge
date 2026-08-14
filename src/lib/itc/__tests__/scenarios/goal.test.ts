@@ -14,20 +14,21 @@ describe("goal stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // The core regression: coach must fire advance_stage → behaviors
       // on the lock turn. Not doing so leaves the coachee stuck on goal
       // even though the goal is affirmed.
       expect(
-        reply.action?.type,
-        `Expected advance_stage on lock turn. Got: ${reply.action?.type ?? "null"}`,
+        reply.actions[0]?.type,
+        `Expected advance_stage on lock turn. Got: ${reply.actions[0]?.type ?? "null"}`,
       ).toBe("advance_stage");
-      if (reply.action?.type === "advance_stage") {
-        expect(reply.action.to).toBe("behaviors");
+      const first = reply.actions[0];
+      if (first?.type === "advance_stage") {
+        expect(first.to).toBe("behaviors");
       }
 
       // Reply must open Column 2 — mention behaviors / doing / not-doing
@@ -42,7 +43,7 @@ describe("goal stage", () => {
       ).toBe(true);
 
       // No unearned praise ("brave," "vulnerable," etc.).
-      const ctx = { actionType: reply.action?.type ?? null };
+      const ctx = { actionType: reply.actions[0]?.type ?? null };
       const praise = await judgeNoUnearnedPraise(reply.reply, ctx);
       expect(
         praise.passes,

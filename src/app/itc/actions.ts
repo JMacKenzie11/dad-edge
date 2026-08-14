@@ -283,8 +283,11 @@ export async function runCoachTurnForMap(
   // into the reply text, append them as a numbered list. Observed in a
   // real turn: the coach wrote "Here's a few more — see if any fit:" and
   // stopped, leaving the coachee staring at a colon.
-  if (reply.action?.type === "suggest_behaviors") {
-    const options = reply.action.options;
+  const suggestBehaviorsAction = reply.actions.find(
+    (a) => a.type === "suggest_behaviors",
+  );
+  if (suggestBehaviorsAction && suggestBehaviorsAction.type === "suggest_behaviors") {
+    const options = suggestBehaviorsAction.options;
     const firstSnippet = options[0]?.slice(0, 20).toLowerCase() ?? "";
     const alreadyIncluded =
       firstSnippet.length > 0 &&
@@ -304,9 +307,16 @@ export async function runCoachTurnForMap(
     map.current_stage,
   );
 
-  if (reply.action) {
+  // Apply actions in order. Each action's stage guard runs against the
+  // CURRENT stage after previous actions in the batch — so advance_stage
+  // in an earlier action moves the map into a stage where subsequent
+  // actions become valid. A single rejected action does not stop the
+  // batch; the coach sees the rejection next turn.
+  for (const action of reply.actions) {
     try {
-      await applyCoachAction(map.id, map.current_stage, reply.action);
+      const mapNow = await getMapById(map.id);
+      const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+      await applyCoachAction(map.id, stageNow, action);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await appendMessage(
@@ -333,9 +343,9 @@ export async function runCoachTurnForMap(
         ? extractGoalSentence(priorAssistantContent)
         : null) ?? extractGoalSentence(reply.reply);
     console.warn(
-      "[itc] goal backstop: affirmative=yes extracted-len=%d action=%s",
+      "[itc] goal backstop: affirmative=yes extracted-len=%d actions=%s",
       extracted?.length ?? 0,
-      reply.action?.type ?? "null",
+      reply.actions.map((a) => a.type).join(",") || "none",
     );
     if (extracted) {
       try {
@@ -354,10 +364,13 @@ export async function runCoachTurnForMap(
   // forgot to emit advance_stage, advance for them. Re-read the goal in
   // case the extractor above just saved it in this same turn.
   let goalNow = await refreshImprovementGoal(map.id);
+  const emittedAdvanceStage = reply.actions.some(
+    (a) => a.type === "advance_stage",
+  );
   if (
     map.current_stage === "goal" &&
     goalNow &&
-    reply.action?.type !== "advance_stage" &&
+    !emittedAdvanceStage &&
     affirmative
   ) {
     try {
@@ -377,13 +390,15 @@ export async function runCoachTurnForMap(
   // behavior-shaped, and the coach's reply either fired propose_behavior
   // or acknowledged the message as a new behavior — auto-lock the goal,
   // advance to behaviors, then insert the user's message as behavior #1.
+  const proposeBehaviorAction = reply.actions.find(
+    (a) => a.type === "propose_behavior",
+  );
   if (
     map.current_stage === "goal" &&
     !goalNow &&
     !affirmative &&
     looksLikeBehaviorCandidate(parsed.data.text) &&
-    (reply.action?.type === "propose_behavior" ||
-      coachAcknowledgedNewBehavior(reply.reply))
+    (proposeBehaviorAction || coachAcknowledgedNewBehavior(reply.reply))
   ) {
     const extractedGoal = priorAssistantContent
       ? extractGoalSentence(priorAssistantContent)
@@ -399,8 +414,8 @@ export async function runCoachTurnForMap(
           // ignore — race
         }
         const behaviorText =
-          reply.action?.type === "propose_behavior"
-            ? reply.action.text
+          proposeBehaviorAction && proposeBehaviorAction.type === "propose_behavior"
+            ? proposeBehaviorAction.text
             : parsed.data.text.trim();
         try {
           await addBehavior(map.id, behaviorText, "user");
@@ -432,10 +447,12 @@ export async function runCoachTurnForMap(
   // propose_behavior/replace_behavior — insert the user's message as a
   // new behavior. Bounded by the same 5-cap the propose_behavior handler
   // enforces (never insert past 5).
+  const emittedBehaviorAction = reply.actions.some(
+    (a) => a.type === "propose_behavior" || a.type === "replace_behavior",
+  );
   if (
     map.current_stage === "behaviors" &&
-    reply.action?.type !== "propose_behavior" &&
-    reply.action?.type !== "replace_behavior" &&
+    !emittedBehaviorAction &&
     looksLikeBehaviorCandidate(parsed.data.text) &&
     coachAcknowledgedNewBehavior(reply.reply)
   ) {
@@ -475,10 +492,10 @@ export async function runCoachTurnForMap(
   // first unpaired selected behavior in order. Same rubric-gate rule as
   // the assumptions backstop: don't force in a proposal that would have
   // been rejected on the normal path.
-  if (
-    map.current_stage === "worries" &&
-    reply.action?.type !== "propose_worry"
-  ) {
+  const emittedProposeWorry = reply.actions.some(
+    (a) => a.type === "propose_worry",
+  );
+  if (map.current_stage === "worries" && !emittedProposeWorry) {
     const [behaviorsForWorry, worriesForBackstop] = await Promise.all([
       listBehaviors(map.id),
       listWorries(map.id),
@@ -662,10 +679,10 @@ export async function runCoachTurnForMap(
   // prior assistant message and persist it ourselves. Only fires when no
   // test row exists yet on this map so multi-test iterations aren't
   // disturbed. All-or-nothing extraction — if any field is missing, skip.
-  if (
-    reply.action?.type !== "save_test_design" &&
-    looksAffirmative(parsed.data.text)
-  ) {
+  const emittedSaveTestDesign = reply.actions.some(
+    (a) => a.type === "save_test_design",
+  );
+  if (!emittedSaveTestDesign && looksAffirmative(parsed.data.text)) {
     const mapForTest = await getMapById(map.id);
     if (
       mapForTest?.current_stage === "test_design" ||
@@ -846,7 +863,7 @@ export async function runCoachTurnForMap(
         // Additional guard: if the current turn's action IS the batch
         // itself, do NOT advance on this turn — leave the coachee a
         // beat with the freshly-locked list before the stage flips.
-        if (reply.action?.type === "propose_commitments_batch") {
+        if (reply.actions.some((a) => a.type === "propose_commitments_batch")) {
           break;
         }
         const [worriesNow, commitmentsNow] = await Promise.all([
@@ -1029,11 +1046,11 @@ export async function runCoachTurnForMap(
   // (which may include rubric LLM calls), and post-turn writes.
   const stageChanged = finalMap && finalMap.current_stage !== map.current_stage;
   console.warn(
-    "[itc timing] turn map=%s stage=%s%s action=%s llm=%dms cascade=%dms total=%dms",
+    "[itc timing] turn map=%s stage=%s%s actions=%s llm=%dms cascade=%dms total=%dms",
     map.id,
     map.current_stage,
     stageChanged ? `->${finalMap.current_stage}` : "",
-    reply.action?.type ?? "none",
+    reply.actions.map((a) => a.type).join(",") || "none",
     llmMs,
     cascadeMs,
     Date.now() - turnStart,
@@ -1120,7 +1137,7 @@ async function runItcCoachTurnWithGuards(
     !isEmpty &&
     !isDupe &&
     !isGarbage &&
-    looksLikeBareStatus(trimmed, first.action?.type ?? null);
+    looksLikeBareStatus(trimmed, first.actions[0]?.type ?? null);
   if (!isEmpty && !isDupe && !isGarbage && !isBareStatus) return first;
 
   if (isGarbage) {

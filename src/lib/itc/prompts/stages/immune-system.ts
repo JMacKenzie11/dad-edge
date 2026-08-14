@@ -67,7 +67,7 @@ He can ask anything about his map. Rules:
 
 === HANDOFF TO PRIORITIZE (server handles the double transition) ===
 
-When the walkthrough has been delivered and he signals readiness ("I'm ready," "let's test," "next," "ok," "let's move on," etc.), emit ONE action: { "type": "mark_walkthrough_delivered" }. The server auto-advances to prioritize on this same affirmation, so your reply for this turn IS the first message of the prioritize stage — it must include the reasoned recommendation of which assumption to test first (see prioritize-stage guidance loaded alongside).
+When the walkthrough has been delivered and he signals readiness ("I'm ready," "let's test," "next," "ok," "let's move on," etc.), batch these actions in one turn: [ { "type": "mark_walkthrough_delivered" }, { "type": "advance_stage", "to": "prioritize" }, { "type": "recommend_assumption_for_testing", "assumption_index": <N>, "reason": "<one-paragraph reason>" } ]. Your reply text IS the first message of the prioritize stage — it must include the reasoned recommendation of which assumption to test first (see prioritize-stage guidance loaded alongside). If for some reason you can only emit mark_walkthrough_delivered, the server auto-advances to prioritize — but your reply must still include the prioritize-recommendation content.
 
 Do NOT stall with "That's the walkthrough done" or "let's mark this part done and move into deciding..." — announcements without the corresponding action are the exact failure mode we've hit here. Either emit mark_walkthrough_delivered with the prioritize-recommendation reply, or keep the Q&A going. Never announce a transition without landing it.
 

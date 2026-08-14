@@ -12,21 +12,22 @@ describe("behaviors stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT accept an inner state as a behavior. If it fires
       // propose_behavior, the text should not be the pure inner state.
-      if (reply.action?.type === "propose_behavior") {
-        const t = reply.action.text.toLowerCase();
+      const first = reply.actions[0];
+      if (first?.type === "propose_behavior") {
+        const t = first.text.toLowerCase();
         const isInnerState =
           /^i (feel|felt) (anxious|nervous|scared|angry|afraid|frustrated)/.test(t) ||
           /^i (feel|felt) [a-z]+$/.test(t);
         expect(
           isInnerState,
-          `Coach accepted an inner state as a behavior: "${reply.action.text}"`,
+          `Coach accepted an inner state as a behavior: "${first.text}"`,
         ).toBe(false);
       }
 
@@ -56,9 +57,9 @@ describe("behaviors stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT propose the candidate as a NEW behavior (would
@@ -66,10 +67,11 @@ describe("behaviors stage", () => {
       // Acceptable actions: replace_behavior (if new phrasing sharper),
       // no action (leaves existing), or advance_stage (if the coachee's
       // message read as "I'm done, let's move on").
-      if (reply.action?.type === "propose_behavior") {
+      const first = reply.actions[0];
+      if (first?.type === "propose_behavior") {
         throw new Error(
           `Coach created a duplicate behavior instead of consolidating. ` +
-            `Proposed: "${reply.action.text}"`,
+            `Proposed: "${first.text}"`,
         );
       }
 

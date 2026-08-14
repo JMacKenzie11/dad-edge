@@ -16,16 +16,16 @@ describe("worries stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT propose_worry on a practical outcome. Doing so
       // was the original failure mode this whole rubric was built for.
       expect(
-        reply.action?.type,
-        `Coach proposed a worry on a practical outcome. Fired: ${reply.action?.type}`,
+        reply.actions[0]?.type,
+        `Coach proposed a worry on a practical outcome. Fired: ${reply.actions[0]?.type}`,
       ).not.toBe("propose_worry");
 
       // Reply should escalate the probe — "worst part of that", "what
@@ -61,9 +61,9 @@ describe("worries stage", () => {
       // not just which assertion failed. Cheap and pays off every time.
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Structural: coach may legitimately fire propose_worry on this
@@ -71,20 +71,21 @@ describe("worries stage", () => {
       // own words (that's actually ideal ITC behavior). What's banned
       // is firing propose_worry with self-labeling wording ("not
       // enough", "unworthy", "weak") that the coachee just disowned.
-      if (reply.action?.type === "propose_worry") {
-        const worryText = reply.action.text.toLowerCase();
+      const first = reply.actions[0];
+      if (first?.type === "propose_worry") {
+        const worryText = first.text.toLowerCase();
         const usesSelfLabeling =
           /\bnot enough\b|\bunworthy\b|\bweak\b|\bworthless\b/.test(worryText);
         expect(
           usesSelfLabeling,
-          `propose_worry fired with self-labeling wording after coachee disowned that frame: "${reply.action.text}"`,
+          `propose_worry fired with self-labeling wording after coachee disowned that frame: "${first.text}"`,
         ).toBe(false);
       }
       // advance_stage is fine either way — a coach that locks worry #1
       // in this turn (via propose_worry with role-identity framing)
       // shouldn't ALSO advance the whole stage; there are more worries
       // pending.
-      expect(reply.action?.type).not.toBe("advance_stage");
+      expect(reply.actions[0]?.type).not.toBe("advance_stage");
 
       // Content: reply must acknowledge the pushback and shift stance.
       // Cheap regex check — "you're right", "fair", "own", "leading"

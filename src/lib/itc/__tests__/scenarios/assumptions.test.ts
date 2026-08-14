@@ -15,16 +15,16 @@ describe("assumptions stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // Coach must NOT fire propose_assumption unilaterally on stage
       // entry. The coachee hasn't asked for a draft.
       expect(
-        reply.action?.type,
-        `Coach shipped a Big Assumption unsolicited. Action: ${reply.action?.type}`,
+        reply.actions[0]?.type,
+        `Coach shipped a Big Assumption unsolicited. Action: ${reply.actions[0]?.type}`,
       ).not.toBe("propose_assumption");
 
       // Reply must invite the coachee to name one first (either
@@ -60,26 +60,27 @@ describe("assumptions stage", () => {
 
       // eslint-disable-next-line no-console
       console.log("\n[coach reply]\n" + reply.reply + "\n");
-      if (reply.action) {
+      if (reply.actions.length > 0) {
         // eslint-disable-next-line no-console
-        console.log("[coach action]\n" + JSON.stringify(reply.action, null, 2) + "\n");
+        console.log("[coach actions]\n" + JSON.stringify(reply.actions, null, 2) + "\n");
       }
 
       // If coach fires propose_assumption, the text must be short
       // (< 25 words) and single-clause on each side.
-      if (reply.action?.type === "propose_assumption") {
-        const wordCount = reply.action.text.trim().split(/\s+/).length;
+      const first = reply.actions[0];
+      if (first?.type === "propose_assumption") {
+        const wordCount = first.text.trim().split(/\s+/).length;
         expect(
           wordCount,
-          `Big Assumption too long — ${wordCount} words, target 15-25.\nText: ${reply.action.text}`,
+          `Big Assumption too long — ${wordCount} words, target 15-25.\nText: ${first.text}`,
         ).toBeLessThanOrEqual(30); // some slack for edge cases
 
         // Ban compound conditions: "or", "and", or comma in the if-clause
-        const ifPart = reply.action.text.match(/if\s+([^,]+?),\s*then/i)?.[1] ?? "";
+        const ifPart = first.text.match(/if\s+([^,]+?),\s*then/i)?.[1] ?? "";
         const hasCompoundIf = /\b(or|,)\b/.test(ifPart);
         expect(
           hasCompoundIf,
-          `If-clause is compound (contains 'or' or ','). Text: ${reply.action.text}`,
+          `If-clause is compound (contains 'or' or ','). Text: ${first.text}`,
         ).toBe(false);
       } else {
         // If coach didn't propose — that's also acceptable, coach might

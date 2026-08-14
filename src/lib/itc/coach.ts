@@ -165,7 +165,13 @@ export type CoachAction = z.infer<typeof CoachActionSchema>;
 
 const CoachReplySchema = z.object({
   reply: z.string().min(1),
-  action: CoachActionSchema.nullable(),
+  // Actions the coach wants applied THIS turn, in order. Empty array is
+  // valid (turn was pure conversation, no state change). Multiple actions
+  // are applied in sequence so the coach can do cascades in one turn —
+  // e.g. propose_goal implicit-accepted + advance_stage + propose_behavior
+  // when the coachee skips the "lock it in" step and jumps straight to
+  // naming a behavior. Cap at 6 to protect against runaway batches.
+  actions: z.array(CoachActionSchema).max(6).default([]),
 });
 
 export type CoachReply = z.infer<typeof CoachReplySchema>;
@@ -569,6 +575,6 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
   const fallback = text.trim();
   return {
     reply: fallback.length > 0 ? fallback : "Give me one more sec — mind repeating that?",
-    action: null,
+    actions: [],
   };
 }

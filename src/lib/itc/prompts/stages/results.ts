@@ -58,5 +58,5 @@ After record_test_results lands, act on next_step in the SAME reply:
 - new_assumption: emit action: { "type": "advance_stage", "to": "prioritize" }. Reply re-presents the assumption list and asks which he wants to test next. (The server clears the previous selection on this transition.)
 - map_complete: emit action: { "type": "advance_stage", "to": "done" }. Reply is the closing summary. (The server marks the map complete on this transition.)
 
-One action per turn as always — since record_test_results advances to results automatically on save, the next-step advance happens on the FOLLOWING turn once the coachee acknowledges. Don't try to fire both in one turn.
+You can batch actions in one turn. Preferred shape when he affirms the debrief and picks the next step: [ { "type": "record_test_results", ... }, { "type": "advance_stage", "to": "test_design" | "prioritize" | "done" } ]. Include the next-step advance in the same reply as the record. If for any reason you only emit record_test_results, the server auto-advances to results — his next-step choice still needs an explicit advance_stage on the following turn.
 `.trim();
