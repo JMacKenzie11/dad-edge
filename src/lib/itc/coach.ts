@@ -14,7 +14,7 @@ function itcCoachModel(): LanguageModel {
   return anthropic(id);
 }
 
-const CoachActionSchema = z.discriminatedUnion("type", [
+export const CoachActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propose_goal"), text: z.string().min(1) }),
   z.object({ type: z.literal("propose_behavior"), text: z.string().min(1) }),
   z.object({

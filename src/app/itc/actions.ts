@@ -59,6 +59,7 @@ import {
   extractWorryDraft,
   looksLikeBehaviorCandidate,
 } from "@/lib/itc/backstop-extractors";
+import { reconcileTurn } from "@/lib/itc/reconciliation";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   ASSUMPTION_STEM,
@@ -1024,6 +1025,110 @@ export async function runCoachTurnForMap(
 
   const cascadeMs = Date.now() - cascadeStart;
 
+  // Post-turn LLM reconciliation. Reads the coach's just-sent reply
+  // against the current DB state and asks a small model: what state
+  // changes did the reply imply that haven't landed? Fills the gap
+  // left by regex backstops that miss novel phrasings. Cheap, capped
+  // at 3 follow-up actions, failures are non-fatal.
+  const reconcileStart = Date.now();
+  let reconcileMs = 0;
+  let reconcileAppliedCount = 0;
+  try {
+    const [
+      behaviorsForRecon,
+      worriesForRecon,
+      commitmentsForRecon,
+      assumptionsForRecon,
+      linksForRecon,
+      activeTestForRecon,
+      mapForRecon,
+    ] = await Promise.all([
+      listBehaviors(map.id),
+      listWorries(map.id),
+      listCommitments(map.id),
+      listAssumptions(map.id),
+      listAssumptionLinks(map.id),
+      getActiveTest(map.id),
+      getMapById(map.id),
+    ]);
+
+    const selectedBehaviors = behaviorsForRecon.filter((b) => b.selected);
+    const behaviorIndexById = new Map<string, number>();
+    selectedBehaviors.forEach((b, i) => behaviorIndexById.set(b.id, i + 1));
+
+    const lockedWorries = worriesForRecon.filter(
+      (w) => w.depth_score !== null,
+    );
+    const worryIndexById = new Map<string, number>();
+    lockedWorries.forEach((w, i) => worryIndexById.set(w.id, i + 1));
+
+    const commitmentIndexById = new Map<string, number>();
+    commitmentsForRecon.forEach((c, i) =>
+      commitmentIndexById.set(c.id, i + 1),
+    );
+
+    const commitmentIndicesByAssumption = new Map<string, number[]>();
+    for (const link of linksForRecon) {
+      const idx = commitmentIndexById.get(link.commitment_id);
+      if (!idx) continue;
+      const arr = commitmentIndicesByAssumption.get(link.assumption_id) ?? [];
+      arr.push(idx);
+      commitmentIndicesByAssumption.set(link.assumption_id, arr);
+    }
+
+    const followUpActions = await reconcileTurn({
+      stage: mapForRecon?.current_stage ?? map.current_stage,
+      goalText: mapForRecon?.improvement_goal ?? null,
+      behaviors: behaviorsForRecon.map((b) => ({
+        text: b.text,
+        selected: b.selected,
+      })),
+      worries: worriesForRecon.map((w) => ({
+        behavior_index: behaviorIndexById.get(w.behavior_id) ?? 0,
+        text: w.text,
+        locked: w.depth_score !== null,
+      })),
+      commitments: commitmentsForRecon.map((c) => ({
+        worry_index: worryIndexById.get(c.worry_id) ?? 0,
+        text: c.text,
+      })),
+      assumptions: assumptionsForRecon.map((a) => ({
+        text: a.text,
+        commitment_indices: commitmentIndicesByAssumption.get(a.id) ?? [],
+        selected_for_testing: a.selected_for_testing,
+      })),
+      hasActiveTest: activeTestForRecon !== null,
+      coachReplyText: reply.reply,
+      actionsAppliedThisTurn: reply.actions,
+      coacheeMessage: parsed.data.text,
+    });
+
+    for (const action of followUpActions) {
+      try {
+        const mapNow = await getMapById(map.id);
+        const stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+        await applyCoachAction(map.id, stageNow, action);
+        reconcileAppliedCount++;
+        console.warn(
+          "[itc] reconcile: applied follow-up action %s",
+          action.type,
+        );
+      } catch (err) {
+        console.warn(
+          "[itc] reconcile: follow-up action %s rejected: %s",
+          action.type,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "[itc] reconciliation wrapper failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  reconcileMs = Date.now() - reconcileStart;
+
   // If the stage changed during this turn (via coach action or one of the
   // safety nets), retag the assistant message with the new stage so the
   // transition reply ("Locked. Now column 2…") lives in the new stage's
@@ -1046,13 +1151,15 @@ export async function runCoachTurnForMap(
   // (which may include rubric LLM calls), and post-turn writes.
   const stageChanged = finalMap && finalMap.current_stage !== map.current_stage;
   console.warn(
-    "[itc timing] turn map=%s stage=%s%s actions=%s llm=%dms cascade=%dms total=%dms",
+    "[itc timing] turn map=%s stage=%s%s actions=%s llm=%dms cascade=%dms reconcile=%dms(+%d) total=%dms",
     map.id,
     map.current_stage,
     stageChanged ? `->${finalMap.current_stage}` : "",
     reply.actions.map((a) => a.type).join(",") || "none",
     llmMs,
     cascadeMs,
+    reconcileMs,
+    reconcileAppliedCount,
     Date.now() - turnStart,
   );
 
