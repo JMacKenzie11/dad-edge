@@ -993,10 +993,11 @@ export async function runCoachTurnForMap(
           }
         }
       } else if (from === "assumptions") {
-        // Only advance to review when every commitment is covered by
-        // at least one assumption. This matches the advanceStage
-        // gate; without the coverage check, advanceStage would throw
-        // and we'd loop uselessly.
+        // Advance directly to immune_system, skipping review. Review
+        // was a mid-flow checkpoint that added a turn without moving
+        // the map forward; the walkthrough (Movement 1) should land
+        // the moment the coachee's map is complete. Stage machine
+        // allows the assumptions → immune_system skip explicitly.
         const [commitmentsNow, links] = await Promise.all([
           listCommitments(map.id),
           listAssumptionLinks(map.id),
@@ -1005,47 +1006,26 @@ export async function runCoachTurnForMap(
         const uncovered = commitmentsNow.filter((c) => !covered.has(c.id));
         if (uncovered.length === 0 && commitmentsNow.length > 0) {
           try {
-            await advanceStage(map.id, "assumptions", "review");
+            await advanceStage(map.id, "assumptions", "immune_system");
             advanced = true;
           } catch {
             // ignore — race or advance guard rejected
           }
         }
-      } else if (from === "review") {
-        // review → immune_system has no reveal_delivered gate anymore
-        // (the mini reveal at commitments was removed; the full
-        // walkthrough happens at immune_system). Advance on any
-        // affirmation once the map holds a complete picture.
-        try {
-          await advanceStage(map.id, "review", "immune_system");
-          advanced = true;
-        } catch (err) {
-          console.warn(
-            "[itc cascade] review → immune_system advance failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      } else if (from === "immune_system") {
-        if (!currentMap.walkthrough_delivered) {
-          try {
-            await markWalkthroughDelivered(map.id);
-          } catch (err) {
-            console.warn(
-              "[itc cascade] immune_system branch: markWalkthroughDelivered failed: %s",
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        }
-        try {
-          await advanceStage(map.id, "immune_system", "prioritize");
-          advanced = true;
-        } catch (err) {
-          console.warn(
-            "[itc cascade] immune_system → prioritize advance failed: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      } else if (from === "prioritize") {
+      }
+      // NOTE: NO cascade out of immune_system. Removed because the
+      // previous auto-mark-walkthrough-delivered + auto-advance to
+      // prioritize was actively skipping the walkthrough — on any
+      // affirmation while in immune_system, cascade fired the flag and
+      // advanced before the coach's Movement 1 reply had a chance to
+      // stand alone. Now the coach must explicitly fire
+      // mark_walkthrough_delivered when the walkthrough has actually
+      // happened (see immune-system.ts prompt for the batched-actions
+      // shape). If the coach forgets, the map sits in immune_system
+      // and the coachee prompts them — better than the coachee
+      // silently landing on the test-picking screen without ever
+      // hearing their immune system explained.
+      else if (from === "prioritize") {
         // Advance to test_design only if a pick is on record. If the
         // coach recommended one and the coachee affirmed without an
         // explicit select, auto-adopt the recommendation as the
@@ -2004,6 +1984,20 @@ async function applyCoachAction(
         );
       }
       await setAssumptionRecommended(target.id, mapId);
+      // Also set selected_for_testing on the same assumption. The
+      // recommendation is a proposal for the pick; if the coachee
+      // silently accepts (says "sounds good" / "let's go with that"
+      // / anything that doesn't match looksAffirmative's word list),
+      // the cascade previously never fired select_assumption_for_testing
+      // and the map got stuck in prioritize — save_test_design would
+      // then reject on the wrong-stage guard and the whole test
+      // conversation happened without landing anywhere. Setting the
+      // selection here makes the pick durable immediately. If the
+      // coachee actually asks for a DIFFERENT one, the coach fires
+      // select_assumption_for_testing with the new index, which
+      // overwrites this one via setAssumptionSelected's single-active
+      // constraint.
+      await setAssumptionSelected(target.id, mapId);
       return;
     }
     case "select_assumption_for_testing": {
