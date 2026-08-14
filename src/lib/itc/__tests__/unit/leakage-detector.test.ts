@@ -256,6 +256,31 @@ describe("looksLikeStructuredOutputLeakage — should CATCH", () => {
     ).toBe(true);
   });
 
+  it("real observed 2026-08-13 token-glitch — 'inthe coun'tmments' + 'worears'", () => {
+    // Model corruption where common short words got fused ("inthe") and
+    // a word got garbled with an apostrophe stuck mid-word ("coun'tmments").
+    // Catches via the fused-compound rule and the apostrophe-mid-word rule.
+    expect(
+      looksLikeStructuredOutputLeakage(
+        "clarity is inthe coun'tmments give you what to do about the worears.",
+      ),
+    ).toBe(true);
+  });
+
+  it("fused short-word compounds ('onthe', 'andis', 'toget')", () => {
+    expect(looksLikeStructuredOutputLeakage("Look onthe map.")).toBe(true);
+    expect(looksLikeStructuredOutputLeakage("That andis the point.")).toBe(true);
+  });
+
+  it("apostrophe corruption ('coun'tmments' / 'don'thing' style)", () => {
+    expect(
+      looksLikeStructuredOutputLeakage("She coun'tmments the mistakes."),
+    ).toBe(true);
+    expect(
+      looksLikeStructuredOutputLeakage("You don'tstop when it fires."),
+    ).toBe(true);
+  });
+
   it("real observed 2026-08-13 chatter — brace + 'produce final JSON'", () => {
     // The exact observed leakage stripped of the "stepping back" phrase
     // (which is legitimate coach speech and no longer flagged alone).

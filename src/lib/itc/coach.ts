@@ -7,10 +7,10 @@ import type { ItcStage } from "./stage";
 
 /**
  * Anthropic model for the ITC coach. Configurable via env so the user can
- * swap without redeploy. Defaults to claude-sonnet-5.
+ * swap without redeploy. Defaults to claude-sonnet-4-6.
  */
 function itcCoachModel(): LanguageModel {
-  const id = process.env.ITC_COACH_MODEL || "claude-sonnet-5";
+  const id = process.env.ITC_COACH_MODEL || "claude-sonnet-4-6";
   return anthropic(id);
 }
 
@@ -237,6 +237,30 @@ export function looksLikeStructuredOutputLeakage(text: string): boolean {
   // in one string (a single worry has it once).
   const doubledStemRe = /\b(\w{3,})\1/i;
   if (doubledStemRe.test(trimmed)) {
+    return true;
+  }
+  // Fused short-word compounds — "inthe", "onthe", "andis", "isit",
+  // "toget" etc. Observed 2026-08-13: "clarity is inthe coun'tmments
+  // give you what to do about the worears." When common short words
+  // are stuck together with no space, the model corrupted its own
+  // output. Enumerating known-safe first+second-word pairs keeps
+  // false-positives near zero — none of these compounds are real
+  // English words. Case-insensitive.
+  const fusedCompoundRe =
+    /\b(in|on|at|to|of|is|it|as|by|be|or|if|so|no|do|we|he|my|us|its|but|and|for|the|that|this|with|from|are|was)(the|a|an|of|it|is|are|was|were|and|but|or|for|with|from|had|has|will|would|can|could|should|need|want)\b/i;
+  if (fusedCompoundRe.test(trimmed)) {
+    return true;
+  }
+  // Apostrophe corruption — "coun'tmments" (should be "commitments").
+  // Contractions end at a word boundary: "wouldn't", "isn't ", "he's ".
+  // If "n't" is followed by 2+ more letters inside the same word,
+  // that's a token-glitch signature (the model fused "wouldn't" with
+  // "the following word" or garbled a longer word). Same for "'s" or
+  // "'ll" in mid-word positions.
+  if (/\w+n['\u2019]t[a-z]{2,}/i.test(trimmed)) {
+    return true;
+  }
+  if (/\w+['\u2019](ll|ve|re|d|m|s)[a-z]{2,}/i.test(trimmed)) {
     return true;
   }
   // Repeated stems WITHIN A SINGLE LINE. A numbered list with 4
@@ -466,7 +490,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         schema: CoachReplySchema,
         system,
         messages,
-        // NOTE: temperature is NOT supported by claude-sonnet-5 — the
+        // NOTE: temperature is NOT supported by claude-sonnet-4-6 — the
         // AI SDK warns and ignores it. Leaving it off explicitly so we
         // don't get a confusing runtime warning. If we switch to a
         // model that supports temperature, add it back.
