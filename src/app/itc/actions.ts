@@ -1430,6 +1430,19 @@ function looksAffirmative(text: string): boolean {
   return movePatterns.some((re) => re.test(t));
 }
 
+function assertStage(
+  actionName: string,
+  currentStage: ItcStage,
+  allowed: readonly ItcStage[],
+): void {
+  if (!allowed.includes(currentStage)) {
+    const allowedList = allowed.join("/");
+    throw new Error(
+      `${actionName}: only valid at stage ${allowedList} (current: ${currentStage}). Do NOT re-fire the same action — first move the map into a valid stage (or check whether the prerequisite step landed) and try again.`,
+    );
+  }
+}
+
 async function applyCoachAction(
   mapId: string,
   currentStage: ItcStage,
@@ -1450,7 +1463,7 @@ async function applyCoachAction(
       return;
     }
     case "propose_behavior": {
-      if (currentStage !== "behaviors") return;
+      assertStage("propose_behavior", currentStage, ["behaviors"]);
       await addBehavior(mapId, action.text, "suggested");
       return;
     }
@@ -1461,7 +1474,7 @@ async function applyCoachAction(
       return;
     }
     case "replace_behavior": {
-      if (currentStage !== "behaviors") return;
+      assertStage("replace_behavior", currentStage, ["behaviors"]);
       const all = await listBehaviors(mapId);
       const target = all[action.index - 1];
       if (!target) {
@@ -1494,7 +1507,7 @@ async function applyCoachAction(
       return;
     }
     case "propose_worry": {
-      if (currentStage !== "worries") return;
+      assertStage("propose_worry", currentStage, ["worries"]);
       // Reject garbled action text before running the depth rubric.
       // Observed on the map: "I worry that i worworry that ifbringing
       // up her past" — doubled stems + missing-space compounds slipped
@@ -1548,7 +1561,7 @@ async function applyCoachAction(
       return;
     }
     case "propose_commitment": {
-      if (currentStage !== "commitments") return;
+      assertStage("propose_commitment", currentStage, ["commitments"]);
       if (looksLikeStructuredOutputLeakage(action.text)) {
         throw new Error(
           `propose_commitment: text is garbled (doubled stems or repeated fragments). Re-draft cleanly.`,
@@ -1578,7 +1591,7 @@ async function applyCoachAction(
       return;
     }
     case "propose_commitments_batch": {
-      if (currentStage !== "commitments") return;
+      assertStage("propose_commitments_batch", currentStage, ["commitments"]);
       const worries = await listWorries(mapId);
       const locked = worries.filter((w) => w.depth_score !== null);
       const existing = await listCommitments(mapId);
@@ -1632,9 +1645,10 @@ async function applyCoachAction(
       return;
     }
     case "mark_reveal_delivered": {
-      if (currentStage !== "commitments" && currentStage !== "assumptions") {
-        return;
-      }
+      assertStage("mark_reveal_delivered", currentStage, [
+        "commitments",
+        "assumptions",
+      ]);
       // Reveal is not allowed until every locked worry has a commitment.
       // Without this gate the coach delivers the summary text while the
       // map is still empty, the coachee notices, and the flow loops for
@@ -1659,12 +1673,12 @@ async function applyCoachAction(
       return;
     }
     case "mark_walkthrough_delivered": {
-      if (currentStage !== "immune_system") return;
+      assertStage("mark_walkthrough_delivered", currentStage, ["immune_system"]);
       await markWalkthroughDelivered(mapId);
       return;
     }
     case "propose_assumption": {
-      if (currentStage !== "assumptions") return;
+      assertStage("propose_assumption", currentStage, ["assumptions"]);
       if (looksLikeStructuredOutputLeakage(action.text)) {
         throw new Error(
           `propose_assumption: text is garbled (doubled stems or repeated fragments). Re-draft cleanly.`,
@@ -1697,7 +1711,9 @@ async function applyCoachAction(
       return;
     }
     case "recommend_assumption_for_testing": {
-      if (currentStage !== "prioritize") return;
+      assertStage("recommend_assumption_for_testing", currentStage, [
+        "prioritize",
+      ]);
       const assumptions = await listAssumptions(mapId);
       const target = assumptions[action.assumption_index - 1];
       if (!target) {
@@ -1716,9 +1732,10 @@ async function applyCoachAction(
       // advanced to test_design, coachee then asked for #2 — coach
       // couldn't fire the action to switch and the whole test was
       // built against the wrong assumption.
-      if (currentStage !== "prioritize" && currentStage !== "test_design") {
-        return;
-      }
+      assertStage("select_assumption_for_testing", currentStage, [
+        "prioritize",
+        "test_design",
+      ]);
       const assumptions = await listAssumptions(mapId);
       const target = assumptions[action.assumption_index - 1];
       if (!target) {
@@ -1730,7 +1747,7 @@ async function applyCoachAction(
       return;
     }
     case "save_test_design": {
-      if (currentStage !== "test_design") return;
+      assertStage("save_test_design", currentStage, ["test_design"]);
       const assumptions = await listAssumptions(mapId);
       const selected = assumptions.find((a) => a.selected_for_testing);
       if (!selected) {
@@ -1758,9 +1775,10 @@ async function applyCoachAction(
       return;
     }
     case "record_test_results": {
-      if (currentStage !== "test_running" && currentStage !== "results") {
-        return;
-      }
+      assertStage("record_test_results", currentStage, [
+        "test_running",
+        "results",
+      ]);
       const active = await getActiveTest(mapId);
       if (!active) {
         throw new Error(
