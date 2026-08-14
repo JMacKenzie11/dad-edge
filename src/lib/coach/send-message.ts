@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject, type ModelMessage } from "ai";
-import { coachModel, MODELS } from "@/lib/coach/client";
+import { coachModel } from "@/lib/coach/client";
 import { buildUserContext } from "@/lib/coach/context";
 import { systemBase, PROMPT_VERSION, type Mode } from "@/lib/coach/prompts";
 import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
@@ -248,7 +248,7 @@ export async function sendCoachMessage(opts: {
         mission_suggestion: reply.mission_suggestion,
         prompt_version: PROMPT_VERSION,
       }),
-      model_used: MODELS.coach,
+      model_used: process.env.PRIMARY_COACH_MODEL ?? "(unset)",
       tokens_in: inTokens,
       tokens_out: usageOutput,
     })

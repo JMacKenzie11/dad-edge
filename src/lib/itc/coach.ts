@@ -1,18 +1,9 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { generateObject, generateText, type LanguageModel } from "ai";
+import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+import { coachModel } from "@/lib/model-config";
 import { buildItcCoachSystem } from "./prompts";
 import type { ItcStage } from "./stage";
-
-/**
- * Anthropic model for the ITC coach. Configurable via env so the user can
- * swap without redeploy. Defaults to claude-sonnet-5.
- */
-function itcCoachModel(): LanguageModel {
-  const id = process.env.ITC_COACH_MODEL || "claude-sonnet-5";
-  return anthropic(id);
-}
 
 export const CoachActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propose_goal"), text: z.string().min(1) }),
@@ -492,14 +483,15 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     let outcome: "accepted" | "empty" | "leakage" | "error" = "error";
     try {
       const { object } = await generateObject({
-        model: itcCoachModel(),
+        model: coachModel(),
         schema: CoachReplySchema,
         system,
         messages,
-        // NOTE: temperature is NOT supported by claude-sonnet-5 — the
-        // AI SDK warns and ignores it. Leaving it off explicitly so we
-        // don't get a confusing runtime warning. If we switch to a
-        // model that supports temperature, add it back.
+        // NOTE: temperature is left off intentionally. Some Anthropic
+        // reasoning-optimized models (observed with Sonnet-5) reject or
+        // ignore temperature and log a warning; if the currently
+        // configured ITC_COACH_MODEL supports temperature and you want
+        // to tune it, add it back here.
         // 8192 (doubled from 4096) so the batch+reveal turn and the
         // full immune-system walkthrough have room without truncating.
         maxOutputTokens: 8192,
@@ -552,7 +544,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
   let text = "";
   try {
     const result = await generateText({
-      model: itcCoachModel(),
+      model: coachModel(),
       system: `${system}\n\nIMPORTANT: Reply in plain prose ONLY. Do NOT emit JSON. No action fields — the previous attempt to produce structured output failed. Keep the reply short and helpful; the coachee should not see the failure.`,
       messages,
       maxOutputTokens: 4096,

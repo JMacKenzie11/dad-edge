@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { haikuModel, MODELS } from "@/lib/coach/client";
+import { haikuModel } from "@/lib/coach/client";
 
 export type Severity = "none" | "low" | "medium" | "high" | "critical";
 
@@ -51,7 +51,9 @@ export async function classifyMessage(text: string): Promise<Classification> {
     });
     return object;
   } catch (err) {
-    console.error("safety classifier failed", err, { model: MODELS.haiku });
+    console.error("safety classifier failed", err, {
+      model: process.env.PRIMARY_HAIKU_MODEL ?? "(unset)",
+    });
     return { severity: "none", categories: [], reason: "classifier error" };
   }
 }

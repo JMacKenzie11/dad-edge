@@ -1,6 +1,6 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { rubricModel } from "@/lib/model-config";
 
 /**
  * Server-side depth rubric. Prompt language alone drifted in the reviewed
@@ -69,9 +69,8 @@ export async function scoreCommitmentDepth(input: {
   worryText: string;
   commitmentText: string;
 }): Promise<CommitmentRubricResult> {
-  const modelId = process.env.ITC_RUBRIC_MODEL || "claude-haiku-4-5-20251001";
   const { object } = await generateObject({
-    model: anthropic(modelId),
+    model: rubricModel(),
     schema: CommitmentSchema,
     system: COMMITMENT_SYSTEM,
     prompt: [
@@ -117,9 +116,8 @@ export async function scoreAssumptionDepth(input: {
   goalText: string;
   assumptionText: string;
 }): Promise<AssumptionRubricResult> {
-  const modelId = process.env.ITC_RUBRIC_MODEL || "claude-haiku-4-5-20251001";
   const { object } = await generateObject({
-    model: anthropic(modelId),
+    model: rubricModel(),
     schema: AssumptionSchema,
     system: ASSUMPTION_SYSTEM,
     prompt: [
@@ -146,9 +144,8 @@ export async function scoreWorryDepth(input: {
   behaviorText: string;
   worryText: string;
 }): Promise<WorryDepthResult> {
-  const modelId = process.env.ITC_RUBRIC_MODEL || "claude-haiku-4-5-20251001";
   const { object } = await generateObject({
-    model: anthropic(modelId),
+    model: rubricModel(),
     schema: RubricSchema,
     system: SYSTEM,
     prompt: [

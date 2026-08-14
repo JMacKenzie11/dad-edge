@@ -1,6 +1,6 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject } from "ai";
 import { z } from "zod";
+import { reconcileModel } from "@/lib/model-config";
 import { CoachActionSchema, type CoachAction } from "./coach";
 import type { ItcStage } from "./stage";
 
@@ -22,11 +22,6 @@ import type { ItcStage } from "./stage";
  * default; set ITC_RECONCILE_MODEL to override). Bounded to 3 actions.
  * Failures return an empty array — never break the turn.
  */
-
-function reconcileModel(): LanguageModel {
-  const id = process.env.ITC_RECONCILE_MODEL || "claude-haiku-4-5";
-  return anthropic(id);
-}
 
 const ReconcileOutputSchema = z.object({
   actions: z.array(CoachActionSchema).max(3).default([]),

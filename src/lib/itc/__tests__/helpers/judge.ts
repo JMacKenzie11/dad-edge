@@ -7,9 +7,9 @@
  * Returns { passes, reason } so failing assertions show WHY.
  */
 
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { judgeModel } from "@/lib/model-config";
 
 const JudgeSchema = z.object({
   passes: z.boolean(),
@@ -17,8 +17,6 @@ const JudgeSchema = z.object({
 });
 
 export type JudgeResult = z.infer<typeof JudgeSchema>;
-
-const JUDGE_MODEL = process.env.ITC_TEST_JUDGE_MODEL || "claude-haiku-4-5-20251001";
 
 type JudgeContext = {
   actionType?: string | null;
@@ -33,7 +31,7 @@ async function judgeWith(
     ? `\n[Context: alongside this reply, the coach fired action type "${ctx.actionType}". A present-tense claim like "Locked" or "Done" is legitimate if the corresponding action fired.]\n`
     : "";
   const { object } = await generateObject({
-    model: anthropic(JUDGE_MODEL),
+    model: judgeModel(),
     schema: JudgeSchema,
     system,
     prompt: `${contextLine}Reply to judge:\n\n${replyText}`,

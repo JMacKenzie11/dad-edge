@@ -1,25 +1,18 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import type { LanguageModel } from "ai";
-
 /**
- * LLM registry. All coach calls go through the Vercel AI SDK so we can swap
- * providers (Anthropic ↔ OpenAI ↔ Google) without touching the coach code.
+ * LLM registry for the non-ITC (primary) coach. All calls go through the
+ * Vercel AI SDK so we can swap providers without touching the coach code.
  *
- * §6 cost tiering — Sonnet for substantive coaching turns, Haiku for
- * classification / routing / short-form tasks (quality gate, safety filter,
- * nudge copy).
+ * Model IDs are ENV-ONLY — no hardcoded fallbacks. When a model is
+ * deprecated we want a loud failure, not a silent switch to a stale
+ * default. See src/lib/model-config.ts for the shared helper.
  *
+ * Env vars used (both required):
+ *   - PRIMARY_COACH_MODEL (Sonnet-class recommended)
+ *   - PRIMARY_HAIKU_MODEL (Haiku-class recommended)
  * Env: ANTHROPIC_API_KEY is picked up automatically by @ai-sdk/anthropic.
  */
-export const MODELS = {
-  coach: "claude-sonnet-4-6",
-  haiku: "claude-haiku-4-5",
-} as const;
 
-export function coachModel(): LanguageModel {
-  return anthropic(MODELS.coach);
-}
-
-export function haikuModel(): LanguageModel {
-  return anthropic(MODELS.haiku);
-}
+export {
+  primaryCoachModel as coachModel,
+  primaryHaikuModel as haikuModel,
+} from "@/lib/model-config";
