@@ -27,6 +27,7 @@ export type TurnEventType =
   | "extract"
   | "reconcile"
   | "backstop_fire"
+  | "dedup_skip"
   | "turn_summary"
   | "error";
 

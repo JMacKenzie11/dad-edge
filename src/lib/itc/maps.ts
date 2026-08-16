@@ -237,7 +237,7 @@ export async function addBehavior(
   mapId: string,
   text: string,
   source: "user" | "suggested",
-): Promise<ItcBehavior> {
+): Promise<{ row: ItcBehavior; deduped: boolean }> {
   const trimmed = text.trim();
   if (trimmed.length < 3) throw new Error("Behavior is too short.");
   const supabase = createSupabaseServiceClient();
@@ -252,7 +252,7 @@ export async function addBehavior(
       mapId,
       trimmed,
     );
-    return duplicate;
+    return { row: duplicate, deduped: true };
   }
   const sortOrder = existing.length;
   const { data, error } = await supabase
@@ -261,7 +261,7 @@ export async function addBehavior(
     .select("*")
     .single();
   if (error || !data) throw new Error(`addBehavior: ${error?.message ?? "no row"}`);
-  return data as ItcBehavior;
+  return { row: data as ItcBehavior, deduped: false };
 }
 
 export function normalizeBehaviorText(text: string): string {
@@ -456,7 +456,7 @@ export async function addCommitment(
   mapId: string,
   worryId: string,
   text: string,
-): Promise<ItcCommitment> {
+): Promise<{ row: ItcCommitment; deduped: boolean }> {
   const supabase = createSupabaseServiceClient();
   const existing = await listCommitments(mapId);
   const normalized = normalizeMapText(text);
@@ -467,7 +467,7 @@ export async function addCommitment(
       worryId,
       mapId,
     );
-    return worryDuplicate;
+    return { row: worryDuplicate, deduped: true };
   }
   const textDuplicate = existing.find(
     (c) => normalizeMapText(c.text) === normalized,
@@ -478,7 +478,7 @@ export async function addCommitment(
       mapId,
       text.trim(),
     );
-    return textDuplicate;
+    return { row: textDuplicate, deduped: true };
   }
   const { data, error } = await supabase
     .from("itc_commitments")
@@ -486,7 +486,7 @@ export async function addCommitment(
     .select("*")
     .single();
   if (error || !data) throw new Error(`addCommitment: ${error?.message ?? "no row"}`);
-  return data as ItcCommitment;
+  return { row: data as ItcCommitment, deduped: false };
 }
 
 export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {
@@ -513,7 +513,7 @@ export async function addAssumption(
   mapId: string,
   text: string,
   depthScore: number,
-): Promise<ItcAssumption> {
+): Promise<{ row: ItcAssumption; deduped: boolean }> {
   const supabase = createSupabaseServiceClient();
   const existing = await listAssumptions(mapId);
   const normalized = normalizeMapText(text);
@@ -526,7 +526,7 @@ export async function addAssumption(
       mapId,
       text.trim(),
     );
-    return duplicate;
+    return { row: duplicate, deduped: true };
   }
   const { data, error } = await supabase
     .from("itc_assumptions")
@@ -539,7 +539,7 @@ export async function addAssumption(
     .select("*")
     .single();
   if (error || !data) throw new Error(`addAssumption: ${error?.message ?? "no row"}`);
-  return data as ItcAssumption;
+  return { row: data as ItcAssumption, deduped: false };
 }
 
 export async function linkAssumptionToCommitments(

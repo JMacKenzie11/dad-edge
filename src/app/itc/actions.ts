@@ -217,13 +217,15 @@ export async function runCoachTurnForMap(
     .slice(0, -1)
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-  // Pull the last 3 [action rejected] system messages so the coach's next
-  // turn sees the server's feedback (the depth rubric, mostly) and can
-  // adjust instead of re-proposing the same rejected content.
+  // Pull the last 3 server-feedback system messages so the coach's next
+  // turn sees them (depth rubric rejections + silent dedup skips) and
+  // can adjust instead of re-proposing the same content.
   const recentActionFeedback = history
     .filter(
       (m) =>
-        m.role === "system" && m.content.startsWith("[action rejected]"),
+        m.role === "system" &&
+        (m.content.startsWith("[action rejected]") ||
+          m.content.startsWith("[dedup]")),
     )
     .slice(-3)
     .map((m) => m.content);
@@ -440,7 +442,7 @@ export async function runCoachTurnForMap(
         );
       }
 
-      await applyCoachAction(map.id, stageNow, action);
+      await applyCoachAction(map.id, stageNow, action, events);
       appliedCount++;
       events.record(
         "action_apply",
@@ -806,7 +808,29 @@ async function applyCoachAction(
   mapId: string,
   currentStage: ItcStage,
   action: CoachAction,
+  events?: TurnEventLog,
 ): Promise<void> {
+  // Record + surface a dedup skip to both the diagnostic log and the
+  // chat transcript. add* functions in maps.ts return { row, deduped }
+  // now; when a duplicate is silently absorbed by their normalized-text
+  // check, this helper emits a dedup_skip event AND appends a system
+  // message so the extractor sees the outcome on its next turn.
+  // Without this, the map silently swallows entries the extractor
+  // thinks it just landed — the event log said 'applied' but the DB
+  // effect was a no-op.
+  const recordDedup = async (kind: string, text: string): Promise<void> => {
+    events?.record(
+      "dedup_skip",
+      { kind, text },
+      { stage: currentStage },
+    );
+    await appendMessage(
+      mapId,
+      "system",
+      `[dedup] ${kind} "${text.length > 120 ? text.slice(0, 120) + "…" : text}" is a duplicate of an existing entry — nothing new landed. If this was intended as a REFINEMENT of an existing entry, use replace_behavior (for behaviors) with the index of the existing one instead of propose_behavior.`,
+      currentStage,
+    );
+  };
   switch (action.type) {
     case "propose_goal": {
       // Save the proposed goal to improvement_goal so it shows up on the
@@ -823,7 +847,8 @@ async function applyCoachAction(
     }
     case "propose_behavior": {
       assertStage("propose_behavior", currentStage, ["behaviors"]);
-      await addBehavior(mapId, action.text, "suggested");
+      const result = await addBehavior(mapId, action.text, "suggested");
+      if (result.deduped) await recordDedup("behavior", action.text);
       return;
     }
     case "suggest_behaviors": {
@@ -946,7 +971,8 @@ async function applyCoachAction(
           `commitment reads as productivity advice, not self-protection: ${rubric.reason}. Rework it — the protective flinch has to be visible.`,
         );
       }
-      await addCommitment(mapId, worry.id, stemmedText);
+      const cResult = await addCommitment(mapId, worry.id, stemmedText);
+      if (cResult.deduped) await recordDedup("commitment", stemmedText);
       return;
     }
     case "propose_commitments_batch": {
@@ -997,7 +1023,8 @@ async function applyCoachAction(
       }
 
       for (const t of targets) {
-        await addCommitment(mapId, t.worryId, t.text);
+        const bResult = await addCommitment(mapId, t.worryId, t.text);
+        if (bResult.deduped) await recordDedup("commitment", t.text);
       }
       if (skippedIndices.length > 0) {
         console.warn(
@@ -1071,8 +1098,9 @@ async function applyCoachAction(
           `propose_assumption: commitment_indices resolved to no valid commitments.`,
         );
       }
-      const assumption = await addAssumption(mapId, stemmedText, rubric.score);
-      await linkAssumptionToCommitments(assumption.id, linkedIds);
+      const aResult = await addAssumption(mapId, stemmedText, rubric.score);
+      if (aResult.deduped) await recordDedup("assumption", stemmedText);
+      await linkAssumptionToCommitments(aResult.row.id, linkedIds);
       return;
     }
     case "recommend_assumption_for_testing": {
