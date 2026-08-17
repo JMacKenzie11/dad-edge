@@ -338,9 +338,14 @@ export async function runCoachTurnForMap(
   // server should apply. Replaces the old regex-backstop + cascade +
   // reconciler-as-backstop dance with one focused LLM call.
   const extractStart = Date.now();
+  // Widened from 3 to 6 assistant turns. The extractor needs to see
+  // draft turns that may be several turns back on a chatty affirmation
+  // sequence (e.g. coach drafts commitments, coachee asks a clarifying
+  // question, coach answers, coachee affirms — that's the draft 3 turns
+  // ago). 3 was too tight for the draft-and-affirm pattern.
   const recentAssistantMessages = priorHistory
     .filter((m) => m.role === "assistant")
-    .slice(-3)
+    .slice(-6)
     .map((m) => m.content);
   const linksByAssumptionExtract = new Map<string, number[]>();
   const commitmentIndexById = new Map<string, number>();

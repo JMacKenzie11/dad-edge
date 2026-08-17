@@ -55,7 +55,7 @@ export type ExtractInput = {
   walkthroughDelivered: boolean;
   userMessage: string;
   coachReply: string;
-  recentAssistantMessages: string[]; // most recent last, up to ~4
+  recentAssistantMessages: string[]; // most recent last, up to ~6
   recentActionRejections: string[]; // last few [action rejected] entries
 };
 
@@ -65,6 +65,8 @@ You are the state-change extractor for an Immunity-to-Change coaching app. You d
 Emit actions ONLY when the prose CLEARLY warrants them. Under-emission is safe (the next turn is another chance). Over-emission corrupts the map and is worse.
 
 DEDUP AWARENESS: propose_behavior / propose_commitment / propose_assumption all silently dedup at the DB layer when the new text normalizes to an existing entry's text. If the coachee's message is a REFINEMENT (a sharper phrasing of something already on the map), emitting propose_X will silently no-op — the map appears to swallow the entry with no error. For refinements: use replace_behavior (only supported for behaviors currently), or emit nothing and let the next turn's excavation land a clean version. If you see a [dedup] system message in recentActionRejections, that's the previous turn's propose_X being absorbed by dedup — do NOT re-fire the same text.
+
+DRAFT-AND-AFFIRM PATTERN (critical — read carefully): The most common pattern is "coach drafts in turn N, coachee affirms in turn N+1." Examples: coach drafts 4 commitments in a numbered list and asks "lock them in?"; coachee says "Perfect" next turn. Coach drafts a 4-field test worksheet; coachee says "save it" next turn. Coach drafts a Big Assumption; coachee says "yes" next turn. On the AFFIRMATION turn, the coach's reply is typically a short lock-in ("Locked. Column 4 is where...") that does NOT re-contain the draft. YOU MUST LOOK IN recentAssistantMessages FOR THE DRAFT, then emit propose_commitments_batch / save_test_design / propose_assumption using those draft values. Emitting nothing on the affirmation turn because "no draft in this turn's reply" is the exact failure mode we've hit repeatedly. If the coachee just affirmed and a draft exists in recentAssistantMessages that matches the stage, emit the corresponding action.
 
 === Actions you may emit ===
 
@@ -88,19 +90,19 @@ Every action's stage guard is enforced server-side. If a downstream action needs
 
 - propose_commitment (SINGULAR — rare): almost never use. The primary flow is propose_commitments_batch after the coach drafts them.
 
-- propose_commitments_batch: coach's reply contains a numbered list of drafted "I'm also committed to ..." items AND the coachee has affirmed the set (lock them in / save / yes / etc.). Include one item per LOCKED worry that doesn't already have a commitment. Emit ONLY on affirmation, not on the coach's initial draft turn. Only at commitments stage.
+- propose_commitments_batch: emit when the coachee's message THIS TURN affirms a numbered list of drafted "I'm also committed to ..." items. THE DRAFTED LIST IS ALMOST NEVER IN THIS TURN'S COACH REPLY. It was in the coach's PRIOR draft turn — look in recentAssistantMessages for the most recent assistant message that contains numbered "I'm also committed to ..." lines, and use THOSE as the batch items. On the affirmation turn the coach's reply is typically "Locked. Column 4 is where..." (no list); do not require the list to be in the current reply. Include one item per LOCKED worry that doesn't already have a commitment. Affirmation words include: lock them in / save / yes / perfect / good / that works / all good / ok / etc. Only at commitments stage.
 
 - mark_reveal_delivered: coach delivered the brief gas-and-brake reveal at commitments/assumptions stage. Rare — the full walkthrough at immune_system is more important.
 
 - mark_walkthrough_delivered: coach delivered the three-movement immune-system walkthrough (Movement 1 loops, Movement 2 whole system, Movement 3 hinge) AND the coachee has signaled readiness ("I'm ready", "let's test", "ok next", etc.). Only at immune_system stage.
 
-- propose_assumption: coach's reply contains a fully-formed "I assume that if X, then Y" candidate (usually quoted) AND either the coachee has affirmed it OR the coach has drafted it explicitly for a cluster of commitments. commitment_indices MUST correspond to the commitments the assumption underwrites (usually named by the coach as "Commitment #1 and #4" or similar). Only at assumptions stage.
+- propose_assumption: emit when the coachee has affirmed a fully-formed "I assume that if X, then Y" candidate. The candidate text may be in THIS turn's coach reply OR in a recent prior assistant message (recentAssistantMessages). On the affirmation turn the coach's reply may be a short lock-in like "Locked. That covers commitments #1 and #4."; do not require the candidate to be quoted in the current reply. commitment_indices MUST correspond to the commitments the assumption underwrites (usually named by the coach as "Commitment #1 and #4" or similar) — search prior assistant messages for that pairing if the current reply is terse. Only at assumptions stage.
 
 - recommend_assumption_for_testing: coach's reply names which assumption to test first and gives a reason. Only at prioritize stage.
 
 - select_assumption_for_testing: coachee explicitly picks a different assumption than the coach recommended. Only at prioritize or test_design stage.
 
-- save_test_design: coachee has affirmed the four-field test draft with "save it" / "lock it in" / etc. All four fields must be present in the coach's reply. Only at test_design stage.
+- save_test_design: emit when the coachee's message THIS TURN affirms the four-field test draft ("save it" / "lock it in" / "perfect" / "yes" / etc.). The full four-field draft is typically in the PRIOR coach reply (the draft turn), not this turn's reply — look in recentAssistantMessages for the most recent assistant message containing the four labeled fields ("My Big Assumption Says:", "So I Will (Change my Behavior This Way):", "And Collect the Following Data:", "In Order to Find Out Whether:"). On the affirmation turn the coach's reply is typically a short "Saved. Go run it..." — do not require the fields to be in the current reply. All four field values must be extractable from the prior draft. Only at test_design stage.
 
 - record_test_results: coachee has affirmed the debrief block (what I did, what I observed, what it tells me) AND picked a next step. Only at test_running or results stage.
 
@@ -178,7 +180,7 @@ function buildExtractorPrompt(input: ExtractInput): string {
     ? input.recentAssistantMessages
         .map(
           (m, i) =>
-            `  [-${input.recentAssistantMessages.length - i}]: ${m.length > 400 ? m.slice(0, 400) + "…" : m}`,
+            `  [-${input.recentAssistantMessages.length - i}]: ${m.length > 1200 ? m.slice(0, 1200) + "…" : m}`,
         )
         .join("\n")
     : "  (none)";
