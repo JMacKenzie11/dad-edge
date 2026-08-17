@@ -86,7 +86,12 @@ Every action's stage guard is enforced server-side. If a downstream action needs
 
 - remove_behavior: coachee asked to drop/remove a specific numbered behavior. Only at behaviors stage.
 
-- propose_worry: coachee's message is a fully-formed "I worry that if X, then Y" candidate AND the coach's reply is accepting it (not still probing). behavior_index MUST point at the behavior the coach was probing. Only emit when the excavation has clearly landed — a partial answer or the coach still probing means do NOT emit.
+- propose_worry: emit when the current turn has produced a fully-formed "I worry that if X, then Y" worry that the coach has ACCEPTED as landed for a specific behavior. The candidate text may come from EITHER:
+  (a) the coachee's own message this turn (they named the worry themselves), OR
+  (b) the coach's just-sent reply — coach frames the worry BASED on the coachee's short answer, typically as "That's the fear. I worry that if [X], then [Y]." or "So the worry is: I worry that if [X], then [Y]."
+  Both are landings. Emit propose_worry using whichever formulation is present. Coach-framed worries are the common case at the WORRIES stage because coachees rarely spontaneously produce a full "I worry that if X then Y" sentence — they answer probes with short phrases and the coach names the worry for them.
+  behavior_index MUST point at the behavior the coach was probing (search the coach's reply and recent assistant messages for "Behavior #N" references). If the same reply also opens a probe on the NEXT behavior ("Behavior #3 was..."), that's a hand-off — the just-locked worry belongs to the PREVIOUS behavior (the one the coach was probing before opening the new one). Do NOT skip the previous worry just because the reply also has next-behavior content.
+  Only emit when the excavation has clearly landed. If the coach's reply is STILL PROBING the current behavior (asking follow-up questions like "and what would that mean?"), do NOT emit — wait for the next turn where the worry gets named.
 
 - propose_commitment (SINGULAR — rare): almost never use. The primary flow is propose_commitments_batch after the coach drafts them.
 

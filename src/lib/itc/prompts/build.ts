@@ -86,7 +86,36 @@ type BuildInput = {
   recentActionFeedback: string[];
 };
 
+/**
+ * The composed coach system prompt split into a stable static prefix
+ * and a per-turn dynamic tail. Callers concat them for the legacy
+ * single-string system path, OR pass them as two SystemModelMessage
+ * entries with cache_control on the static one for prompt caching.
+ */
+export type BuiltCoachSystem = {
+  /** Preamble + current stage rules + next stage transition rules. Stable
+   * per (stage, prompt-version). Prime cache candidate. */
+  static: string;
+  /** Live map state, today's date, recent action feedback. Changes
+   * every turn. Never cache. */
+  dynamic: string;
+};
+
+/**
+ * Split variant. Prefer this in call sites — the legacy string variant
+ * below is kept for callers that don't need caching (rubrics, etc.).
+ */
+export function buildItcCoachSystemSplit(input: BuildInput): BuiltCoachSystem {
+  const { static: staticPart, dynamic } = buildParts(input);
+  return { static: staticPart, dynamic };
+}
+
 export function buildItcCoachSystem(input: BuildInput): string {
+  const { static: staticPart, dynamic } = buildParts(input);
+  return `${staticPart}\n\n${dynamic}`;
+}
+
+function buildParts(input: BuildInput): BuiltCoachSystem {
   const worriesByBehavior = new Map(
     input.worries.map((w) => [w.behavior_id, w]),
   );
@@ -216,5 +245,8 @@ ${testsList}${feedbackBlock}
     ? `${currentStagePrompt}\n\n===== NEXT STAGE (${upcoming}) — for transition intro only =====\n${nextStagePrompt}`
     : currentStagePrompt;
 
-  return `${PREAMBLE}\n\n${stageBlock}\n\n${contextBlock}`;
+  return {
+    static: `${PREAMBLE}\n\n${stageBlock}`,
+    dynamic: contextBlock,
+  };
 }
