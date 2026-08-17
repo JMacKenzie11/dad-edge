@@ -82,3 +82,30 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * Fresh-row highlight for the ITC map panel. Applied to rows whose
+ * created_at is within ~15s of the current page render — flashes a
+ * subtle primary-color glow that fades out over ~3s so the coachee's
+ * eye lands on entries that just appeared. No JS required; the class
+ * is added server-side based on created_at vs now().
+ */
+@keyframes itc-fresh-row-highlight {
+  0% {
+    background-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  }
+  70% {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.itc-fresh-row {
+  animation: itc-fresh-row-highlight 3s ease-out 1;
+}

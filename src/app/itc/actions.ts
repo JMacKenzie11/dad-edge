@@ -21,6 +21,7 @@ import {
   deleteBehavior,
   deleteMap,
   findInProgressMap,
+  listMapsForParticipant,
   getActiveTest,
   getMapById,
   getMapForParticipant,
@@ -78,8 +79,16 @@ export async function startMap(formData: FormData): Promise<void> {
   });
   if (!parsed.success) redirect("/itc?error=pillar");
 
-  const existing = await findInProgressMap(participant.id);
-  if (existing) redirect(`/itc/${existing.id}`);
+  // Allow multiple in-progress maps as long as they're on different
+  // pillars. If the participant already has an in-progress map on THIS
+  // pillar, redirect to that one instead of creating a duplicate.
+  const existingMaps = await listMapsForParticipant(participant.id);
+  const samePillarInProgress = existingMaps.find(
+    (m) =>
+      m.status === "in_progress" &&
+      m.pillar_code === parsed.data.pillar_code,
+  );
+  if (samePillarInProgress) redirect(`/itc/${samePillarInProgress.id}`);
 
   const map = await createMap(participant.id, parsed.data.pillar_code as PillarCode);
   const pillar = PILLAR_BY_CODE[map.pillar_code];

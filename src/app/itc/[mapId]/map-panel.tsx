@@ -17,6 +17,19 @@ const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   behavioral: "Behavioral",
 };
 
+// Rows created within this many ms of the current render get the
+// itc-fresh-row highlight animation. Long enough to cover typical LLM
+// turn latency (5-15s) so the just-landed entry is visible after the
+// server-action revalidate.
+const FRESH_ROW_MS = 15_000;
+
+function isFresh(iso: string | null | undefined, nowMs: number): boolean {
+  if (!iso) return false;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return false;
+  return nowMs - then < FRESH_ROW_MS;
+}
+
 /**
  * The live map. Renders the four numbered columns plus the worry box that
  * sits between behaviors and hidden commitments — the classic ITC bridge:
@@ -42,6 +55,7 @@ export function MapPanel({
   tests?: ItcTest[];
   testResults?: ItcTestResult[];
 }) {
+  const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
@@ -92,7 +106,10 @@ export function MapPanel({
               {selectedBehaviors.map((b) => (
                 <li
                   key={b.id}
-                  className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
+                  className={
+                    "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
+                    (isFresh(b.created_at, renderedAt) ? " itc-fresh-row" : "")
+                  }
                 >
                   {b.text}
                 </li>
@@ -111,7 +128,12 @@ export function MapPanel({
                 return (
                   <li
                     key={b.id}
-                    className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
+                    className={
+                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
+                      (worry && isFresh(worry.created_at, renderedAt)
+                        ? " itc-fresh-row"
+                        : "")
+                    }
                   >
                     {worry ? (
                       worry.text
@@ -137,7 +159,10 @@ export function MapPanel({
                 return (
                   <li
                     key={c.id}
-                    className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5"
+                    className={
+                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
+                      (isFresh(c.created_at, renderedAt) ? " itc-fresh-row" : "")
+                    }
                   >
                     <span className="text-[color:var(--color-muted)] text-[11px]">
                       {i + 1}.
@@ -174,7 +199,8 @@ export function MapPanel({
                         ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10"
                         : a.coach_recommended
                           ? "border-[color:var(--color-primary)]/40 bg-black/20"
-                          : "border-[color:var(--color-border)] bg-black/20")
+                          : "border-[color:var(--color-border)] bg-black/20") +
+                      (isFresh(a.created_at, renderedAt) ? " itc-fresh-row" : "")
                     }
                   >
                     {a.text}
@@ -295,11 +321,16 @@ function TestCard({
   assumption: ItcAssumption | null;
   muted?: boolean;
 }) {
+  const renderedAt = Date.now();
+  const fresh =
+    isFresh(test.created_at, renderedAt) ||
+    (result ? isFresh(result.created_at, renderedAt) : false);
   return (
     <div
       className={
         "rounded-md border border-[color:var(--color-border)] px-3 py-2 text-sm " +
-        (muted ? "bg-black/10 opacity-80" : "bg-black/20")
+        (muted ? "bg-black/10 opacity-80" : "bg-black/20") +
+        (fresh ? " itc-fresh-row" : "")
       }
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">

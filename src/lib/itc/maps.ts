@@ -145,6 +145,24 @@ export async function listAllMaps(): Promise<ItcMap[]> {
   return (data ?? []) as ItcMap[];
 }
 
+/**
+ * All maps owned by one participant, newest-updated first. Used by the
+ * /itc landing page so the user can see prior + in-progress maps and
+ * pick one to continue.
+ */
+export async function listMapsForParticipant(
+  participantId: string,
+): Promise<ItcMap[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_maps")
+    .select("*")
+    .eq("participant_id", participantId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`listMapsForParticipant: ${error.message}`);
+  return (data ?? []) as ItcMap[];
+}
+
 export async function getMapById(mapId: string): Promise<ItcMap | null> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
