@@ -4,4 +4,5 @@
  * are implementation details of this folder.
  */
 
-export { buildItcCoachSystem } from "./build";
+export { buildItcCoachSystem, buildItcCoachSystemSplit } from "./build";
+export type { BuiltCoachSystem } from "./build";

@@ -1,9 +1,49 @@
 import { generateText } from "ai";
+import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { mainModel } from "@/lib/model-config";
-import { buildItcCoachSystem } from "./prompts";
+import { buildItcCoachSystemSplit } from "./prompts";
 import type { ItcStage } from "./stage";
+
+function promptCachingEnabled(): boolean {
+  const raw = process.env.ITC_PROMPT_CACHE;
+  if (!raw) return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+/**
+ * Split the system prompt into two SystemModelMessage entries and
+ * mark the first (static) as cacheable. Anthropic will cache
+ * everything up to and including the marker for the ephemeral TTL
+ * (5m default, refreshed on hit), then charge full price for the
+ * dynamic tail on every turn. Cache-read is 10% of input cost,
+ * cache-write is 125% — break-even after ~3 reads. Coach turns
+ * within the same 5-min window all hit the cache.
+ *
+ * If caching is disabled (env flag off), returns a single-message
+ * array with concatenated content. Model sees the identical text
+ * either way — only the marker differs.
+ */
+function toCoachSystem(
+  staticPart: string,
+  dynamic: string,
+): string | SystemModelMessage[] {
+  if (!promptCachingEnabled()) {
+    return `${staticPart}\n\n${dynamic}`;
+  }
+  return [
+    {
+      role: "system",
+      content: staticPart,
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    },
+    { role: "system", content: dynamic },
+  ];
+}
 
 export const CoachActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propose_goal"), text: z.string().min(1) }),
@@ -471,7 +511,7 @@ type RunCoachInput = {
  */
 export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply> {
   const pillar = PILLAR_BY_CODE[input.pillar];
-  const system = buildItcCoachSystem({
+  const built = buildItcCoachSystemSplit({
     pillarLabel: pillar.label,
     stage: input.stage,
     improvementGoal: input.improvementGoal,
@@ -485,6 +525,7 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     mapStatus: input.mapStatus,
     recentActionFeedback: input.recentActionFeedback,
   });
+  const system = toCoachSystem(built.static, built.dynamic);
 
   const messages: ChatTurn[] = [
     ...input.history,

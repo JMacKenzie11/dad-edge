@@ -1,8 +1,35 @@
 import { generateObject } from "ai";
+import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 import { utilityModel } from "@/lib/model-config";
 import { CoachActionSchema, type CoachAction } from "./coach";
 import type { ItcStage } from "./stage";
+
+function promptCachingEnabled(): boolean {
+  const raw = process.env.ITC_PROMPT_CACHE;
+  if (!raw) return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+/**
+ * Mark the extractor's static system prompt as cacheable when the
+ * ITC_PROMPT_CACHE flag is on. Extractor system is fully invariant
+ * (no per-turn state) so it's a clean cache candidate — the dynamic
+ * input goes in the user message via buildExtractorPrompt below.
+ */
+function toExtractorSystem(text: string): string | SystemModelMessage[] {
+  if (!promptCachingEnabled()) return text;
+  return [
+    {
+      role: "system",
+      content: text,
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    },
+  ];
+}
 
 /**
  * State-change extractor. Primary path for updating the map (not a
@@ -243,7 +270,7 @@ export async function extractActions(
     const { object } = await generateObject({
       model: utilityModel(),
       schema: ExtractOutputSchema,
-      system: EXTRACTOR_SYSTEM,
+      system: toExtractorSystem(EXTRACTOR_SYSTEM),
       messages: [{ role: "user", content: buildExtractorPrompt(input) }],
       maxOutputTokens: 2048,
       abortSignal: controller.signal,
