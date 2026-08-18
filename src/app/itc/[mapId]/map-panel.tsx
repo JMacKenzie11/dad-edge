@@ -99,6 +99,10 @@ export function MapPanel({
           />
         </Row>
 
+        {advanceGate && map.current_stage === "goal" ? (
+          <ContinueBar mapId={map.id} gate={advanceGate} />
+        ) : null}
+
         <Row title="2. Doing / not-doing" active={map.current_stage === "behaviors"}>
           <BehaviorsRow
             mapId={map.id}
@@ -107,6 +111,10 @@ export function MapPanel({
             nowMs={renderedAt}
           />
         </Row>
+
+        {advanceGate && map.current_stage === "behaviors" ? (
+          <ContinueBar mapId={map.id} gate={advanceGate} />
+        ) : null}
 
         <Row title="3. Worry box" active={map.current_stage === "worries"}>
           {selectedBehaviors.length === 0 ? (
@@ -150,6 +158,10 @@ export function MapPanel({
           )}
         </Row>
 
+        {advanceGate && map.current_stage === "worries" ? (
+          <ContinueBar mapId={map.id} gate={advanceGate} />
+        ) : null}
+
         <Row title="4. Competing commitments" active={map.current_stage === "commitments"}>
           {commitments.length === 0 ? (
             <Placeholder>
@@ -184,6 +196,10 @@ export function MapPanel({
             </ul>
           )}
         </Row>
+
+        {advanceGate && map.current_stage === "commitments" ? (
+          <ContinueBar mapId={map.id} gate={advanceGate} />
+        ) : null}
 
         <Row title="5. Big Assumptions" active={map.current_stage === "assumptions"}>
           {assumptions.length === 0 ? (
@@ -224,6 +240,17 @@ export function MapPanel({
         </Row>
       </div>
 
+      {advanceGate &&
+      (map.current_stage === "assumptions" ||
+        map.current_stage === "review" ||
+        map.current_stage === "immune_system" ||
+        map.current_stage === "prioritize" ||
+        map.current_stage === "test_design" ||
+        map.current_stage === "test_running" ||
+        map.current_stage === "results") ? (
+        <ContinueBar mapId={map.id} gate={advanceGate} />
+      ) : null}
+
       {tests.length > 0 ? (
         <TestsPanel
           tests={tests}
@@ -232,8 +259,6 @@ export function MapPanel({
           stage={map.current_stage}
         />
       ) : null}
-
-      {advanceGate ? <ContinueBar mapId={map.id} gate={advanceGate} /> : null}
     </div>
   );
 }

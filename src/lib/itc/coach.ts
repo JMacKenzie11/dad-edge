@@ -254,7 +254,16 @@ function buildReactionPrompt(input: ReactionInput): string {
       "]",
   );
   parts.push(
-    "React briefly in your coaching voice. If the entry is sharp, name why it's a real column entry in one line and prompt the next move. If it needs sharpening, say what would tighten it and offer a specific sharper phrasing as the `refinement` field. Do NOT claim to have saved, added, or locked anything, because you did not do it. He wrote it. He'll write the next one too. The rubric and scores are for you; never reference them in prose. Suggestions are optional; include 3-5 in the `suggestions` field only if the entry could use several angles or he might want variety.",
+    "React briefly in your coaching voice. If the entry is sharp, name why it's a real column entry in one line and STOP. If it needs sharpening, say what would tighten it and offer a specific sharper phrasing as the `refinement` field.",
+  );
+  parts.push(
+    "HARD RULES for this reaction:\n" +
+      "- Do NOT mention the next column, the next stage, moving on, being ready for the next step, or anything that suggests forward motion. The coachee decides when to move to the next column by tapping a Continue button in the UI. Your job is done when you've reacted to this entry.\n" +
+      "- Do NOT ask 'ready to move on?', 'ready for the worry box?', 'want to move to X?', or any variant. He'll advance himself when he sees the button.\n" +
+      "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
+      "- The rubric and scores are for you; never reference them in prose.\n" +
+      "- Suggestions are optional; include 3-5 in the `suggestions` field only if the entry could use several angles or he might want variety.\n" +
+      "- Refinement is optional; only include if the entry needs sharpening. If it's already sharp, leave the refinement field out.",
   );
   return parts.join("\n\n");
 }
@@ -326,26 +335,72 @@ export async function generateSuggestions(
 
 /**
  * Belt-and-suspenders text cleanup. The preamble and voice doc ban
- * em dashes and lock/added/saved claims; the model ignores that
- * intermittently. Two passes:
- *   1. Em dash / en dash to comma. " — " to ", ".
- *   2. Strip "Locked", "Added", "Saved", "I've locked", etc. from any
+ * em dashes, claim-of-action language, and premature next-column
+ * exposition. The model ignores those bans intermittently. Three
+ * passes:
+ *
+ *   1. Em/en dashes → comma.
+ *   2. Claim-of-action strip: "Locked", "That's locked in",
+ *      "Added", "Saved", "I've locked", "That's been added",
+ *      "I've saved that to your map", "Adding it now" — from any
  *      sentence position (coach cannot do those things under
  *      Form-First and must not claim to).
+ *   3. Premature-advance cut: on any reply that contains
+ *      "Now column N", "Column N is what/what you actually", or
+ *      other next-stage exposition, truncate the reply at that
+ *      point. Kept text ends with a period.
  */
 export function scrubReply(text: string): string {
   const dashless = text
     .replace(/\s+[—–]\s+/g, ", ")
     .replace(/[—–]/g, ",")
     .replace(/\s+--\s+/g, ", ");
-  // Strip claim-of-action phrases. Case-insensitive. Cover common
-  // shapes: bare "Locked.", "Added.", "Saved.", "Got it, locked.",
-  // "I've added that", "I locked it in", "That's been added",
-  // "I've saved that to your map", "Adding it now."
-  const claimRe =
-    /(^|\.\s+|\?\s+|!\s+|\n)\s*(?:got it,?\s+)?(?:i(?:'|')ve\s+|i\s+)?(?:just\s+)?(?:locked|added|saved|adding|locking|saving|noted|written|jotted)(?:\s+(?:it|that|those|them|this)(?:\s+(?:in|down|to (?:your |the )?map|on (?:your |the )?map))?)?\s*[.!?]?/gi;
-  let cleaned = dashless.replace(claimRe, (match, sep) => sep || "");
-  // Collapse any double spaces / stranded punctuation the strip left.
+
+  // Pass 1 — claim-of-action strip. Two families:
+  //   (a) "That's <verb> [in/down/to your map]" — "That's locked",
+  //       "That's saved", "That's been added", "That's noted"
+  //   (b) "(Got it,? )?(I(?:'|')?ve? |I |just )?<verb>" — bare
+  //       "Locked.", "Adding it now.", "I've saved that"
+  const thatsClaimRe =
+    /(^|[.!?]\s+|\n)\s*that'?s\s+(?:been\s+|just\s+)?(?:locked|added|saved|noted|written|jotted|adding|saving|locking|got|down|in|there|on\s+(?:your |the )?map)(?:\s+(?:in|down|now|to\s+(?:your |the )?map|on\s+(?:your |the )?map|it|that))?\s*[.!?]?/gi;
+  const bareClaimRe =
+    /(^|[.!?]\s+|\n)\s*(?:got it,?\s+)?(?:i(?:'|')?ve\s+|i\s+)?(?:just\s+)?(?:locked|added|saved|adding|locking|saving|noted|written|jotted)(?:\s+(?:it|that|those|them|this)(?:\s+(?:in|down|to\s+(?:your |the )?map|on\s+(?:your |the )?map|now))?)?\s*[.!?]?/gi;
+  let cleaned = dashless
+    .replace(thatsClaimRe, (_m, sep) => sep || "")
+    .replace(bareClaimRe, (_m, sep) => sep || "");
+
+  // Pass 2 — next-step / advance cut. If the reply mentions the next
+  // column, moving on, or "ready?" — truncate at that point. Coachee
+  // decides when to advance by tapping the Continue button. The coach
+  // must never front-run him.
+  const advanceTells = [
+    /(^|[.!?]\s+|\n)\s*now\s+column\s+\d/i,
+    /(^|[.!?]\s+|\n)\s*column\s+\d\s+is\b/i,
+    /(^|[.!?]\s+|\n)\s*(?:the\s+)?doing\s+and\s+not-doing\b/i,
+    /(^|[.!?]\s+|\n)\s*(?:the\s+)?worry\s+box\b/i,
+    /(^|[.!?]\s+|\n)\s*(?:the\s+)?competing\s+commitments\b/i,
+    /(^|[.!?]\s+|\n)\s*(?:the\s+)?big\s+assumptions?\b/i,
+    // "Ready to move to X?" / "Ready for the worry box?" / "want to
+    // move on?" / "want to continue?" — any variant that prompts the
+    // coachee to advance.
+    /(^|[.!?]\s+|\n)\s*(?:ready\s+(?:to|for)|want\s+to|shall\s+we|let'?s)\s+(?:move|continue|go|advance|start|jump|shift)\b/i,
+    /(^|[.!?]\s+|\n)\s*(?:when\s+you'?re\s+ready|when\s+you\s+are\s+ready)\b/i,
+    // "on to the next column" / "on to the worry box"
+    /(^|[.!?]\s+|\n)\s*on\s+to\s+the\s+/i,
+    // Bare "ready?" as a closing question
+    /(^|[.!?]\s+|\n)\s*ready\s*\?/i,
+  ];
+  let cutAt = -1;
+  for (const re of advanceTells) {
+    const m = re.exec(cleaned);
+    if (m && (cutAt === -1 || m.index < cutAt)) cutAt = m.index;
+  }
+  if (cutAt > 0) {
+    cleaned = cleaned.slice(0, cutAt).trimEnd();
+    if (cleaned && !/[.!?]$/.test(cleaned)) cleaned += ".";
+  }
+
+  // Collapse double spaces / stranded punctuation the strips left.
   cleaned = cleaned
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([.,!?])/g, "$1")

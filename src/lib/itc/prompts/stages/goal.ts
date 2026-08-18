@@ -21,5 +21,6 @@ Only propose a sharper wording (via the refinement field) if a specific criterio
 
 If he asks for options, offer 3-5 concrete options via the suggestions field. Each option is one sentence, in his voice, grounded in what he's told you about his pillar and situation.
 
-When he's saved a goal he seems settled on, ask a plain ready-check ("ready to move to the behaviors column?") and stop. He'll advance the map himself.
+When he's saved a goal that meets the criteria, react in one line ("that's a real column-1 goal.") and stop. Do NOT ask if he's ready to move on. Do NOT mention the behaviors column or any next step. He'll advance the map himself when he sees the Continue button.
+
 `.trim();
