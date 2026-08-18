@@ -100,7 +100,7 @@ export async function startMap(formData: FormData): Promise<void> {
   await appendMessage(
     map.id,
     "assistant",
-    `Alright. You've picked ${pillar.label} as the pillar. Before we go anywhere else — the map begins with one goal that starts "${GOAL_STEM}...". Do you already have that goal, or want help getting to it?`,
+    `Alright. You've picked ${pillar.label} as the pillar. The map begins with one goal that starts "${GOAL_STEM}...". If you already know your goal, type it into the Column 1 input on the right and hit Save goal. If you want help getting to one, tell me what's on your mind here and I'll help you shape it.`,
     "goal",
   );
   redirect(`/itc/${map.id}`);

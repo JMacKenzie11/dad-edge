@@ -13,11 +13,33 @@ import {
   listTests,
   listWorries,
 } from "@/lib/itc/maps";
+import { GOAL_STEM } from "@/lib/itc/stage";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { Conversation } from "./conversation";
 import { MapPanel } from "./map-panel";
 import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
+
+/**
+ * Return the most recent line in the transcript that starts with the
+ * exact goal stem (case-insensitive). Trims trailing punctuation and
+ * whitespace. Returns null if none found. Used to prefill the goal
+ * input on Column 1 with something the coachee can accept-as-is or
+ * tweak, instead of copy/pasting from chat.
+ */
+function extractLatestGoalLine(contents: string[]): string | null {
+  const stem = GOAL_STEM.toLowerCase();
+  for (let i = contents.length - 1; i >= 0; i--) {
+    const lines = contents[i].split(/\n+/);
+    for (let j = lines.length - 1; j >= 0; j--) {
+      const trimmed = lines[j].trim();
+      if (trimmed.toLowerCase().startsWith(stem)) {
+        return trimmed.replace(/\s+/g, " ");
+      }
+    }
+  }
+  return null;
+}
 
 export default async function ItcMapPage({
   params,
@@ -50,6 +72,18 @@ export default async function ItcMapPage({
     listTests(map.id),
     listTestResults(map.id),
   ]);
+
+  // Auto-suggested goal input: on the goal stage before a goal is saved,
+  // scan the transcript for the most recent line that starts with the
+  // goal stem (from either the coach or the coachee). Pass that as a
+  // draft the GoalColumn input can prefill with, so the coachee doesn't
+  // have to copy/paste his own words (or the coach's echo of them) out
+  // of chat into the map. Deterministic string extract, not inference —
+  // the stem is exact.
+  const goalDraftFromChat =
+    map.current_stage === "goal" && !map.improvement_goal
+      ? extractLatestGoalLine(messages.map((m) => m.content))
+      : null;
 
   return (
     <main className="min-h-screen md:h-screen flex flex-col md:overflow-hidden">
@@ -105,6 +139,7 @@ export default async function ItcMapPage({
             assumptionLinks={assumptionLinks}
             tests={tests}
             testResults={testResults}
+            goalDraftFromChat={goalDraftFromChat}
           />
         </section>
       </div>

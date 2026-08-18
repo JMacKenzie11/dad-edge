@@ -46,6 +46,7 @@ export function MapPanel({
   assumptionLinks = [],
   tests = [],
   testResults = [],
+  goalDraftFromChat = null,
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
@@ -55,6 +56,7 @@ export function MapPanel({
   assumptionLinks?: ItcAssumptionCommitment[];
   tests?: ItcTest[];
   testResults?: ItcTestResult[];
+  goalDraftFromChat?: string | null;
 }) {
   const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
@@ -96,6 +98,7 @@ export function MapPanel({
             mapId={map.id}
             currentStage={map.current_stage}
             goalText={map.improvement_goal}
+            draftFromChat={goalDraftFromChat}
           />
         </Column>
 

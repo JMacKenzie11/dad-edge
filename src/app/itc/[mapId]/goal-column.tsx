@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { GOAL_STEM } from "@/lib/itc/stage";
 import type { ItcStage } from "@/lib/itc/stage";
 import { advanceMapStage, saveGoal } from "../actions";
@@ -20,15 +20,34 @@ export function GoalColumn({
   mapId,
   currentStage,
   goalText,
+  draftFromChat = null,
 }: {
   mapId: string;
   currentStage: ItcStage;
   goalText: string | null;
+  /** Latest goal-shaped line pulled from the transcript. Used to
+   *  prefill the input on first render so the coachee doesn't have
+   *  to copy/paste from chat. Ignored once the user starts editing. */
+  draftFromChat?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(goalText === null);
-  const [draft, setDraft] = useState(goalText ?? `${GOAL_STEM} `);
+  const initialDraft =
+    goalText ?? (draftFromChat ? draftFromChat : `${GOAL_STEM} `);
+  const [draft, setDraft] = useState(initialDraft);
+  // Track whether the user has typed in the input at all. If they
+  // have, respect their edits and don't clobber with a new coach
+  // draft that arrives via revalidate. If they haven't, sync the
+  // input with the latest coach draft so a chat exchange feels like
+  // it feeds the input.
+  const userTouched = useRef(false);
+  useEffect(() => {
+    if (goalText) return;
+    if (!draftFromChat) return;
+    if (userTouched.current) return;
+    setDraft(draftFromChat);
+  }, [draftFromChat, goalText]);
   const onGoalStage = currentStage === "goal";
 
   function submitSave() {
@@ -76,7 +95,10 @@ export function GoalColumn({
       <div className="space-y-2">
         <textarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            userTouched.current = true;
+            setDraft(e.target.value);
+          }}
           rows={4}
           disabled={pending}
           placeholder={`${GOAL_STEM} …`}

@@ -577,7 +577,17 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
         continue;
       }
       outcome = "accepted";
-      return { reply: trimmed };
+      // Belt-and-suspenders em-dash strip. The prompt has a HARD RULE
+      // banning em dashes, but the model still ships them ("that's
+      // solid — it's specific"). Replace " — " with ". " so a common
+      // clause-joiner becomes two sentences; strip any remaining bare
+      // em dashes to a period+space. Same for the double-hyphen
+      // stand-in "--".
+      const cleaned = trimmed
+        .replace(/\s+[—–]\s+/g, ". ")
+        .replace(/[—–]/g, ".")
+        .replace(/\s+--\s+/g, ". ");
+      return { reply: cleaned };
     } catch (err) {
       lastError = err;
       outcome = "error";
