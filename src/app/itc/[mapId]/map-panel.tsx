@@ -9,6 +9,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
+import { GoalColumn } from "./goal-column";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   data_mining: "Data mining",
@@ -91,11 +92,11 @@ export function MapPanel({
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
         <Column title="1. Improvement goal">
-          {map.improvement_goal ? (
-            <p className="text-sm leading-relaxed">{map.improvement_goal}</p>
-          ) : (
-            <Placeholder>Not yet set.</Placeholder>
-          )}
+          <GoalColumn
+            mapId={map.id}
+            currentStage={map.current_stage}
+            goalText={map.improvement_goal}
+          />
         </Column>
 
         <Column title="2. Doing / not-doing">

@@ -132,6 +132,14 @@ Cron
 - `GET /api/cron/hourly` — placeholder for TZ-precise streak recalculation.
 - `GET /api/cron/run?job=…` — admin manual trigger.
 
+### 3.7 ITC (Immunity to Change) coaching
+| Path | File | Purpose |
+|------|------|---------|
+| `/itc` | `src/app/itc/page.tsx` | Landing — pick a BRAVE MAN pillar to start a new map, or resume any in-progress / prior map. |
+| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Two-pane workspace: chat with the coach on the left, live 4-column ITC map on the right. Chat resets to the current stage's turns; the map shows all state. |
+| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map viewer (admins only). Read all maps + per-turn diagnostic events (`itc_turn_events`). |
+| `/itc/login`, `/itc/logout` | `src/app/itc/login/`, `src/app/itc/logout/` | Separate email/password auth for Boardroom coachees (distinct from the member-app session). |
+
 ---
 
 ## 4. Data Model
@@ -423,7 +431,79 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 | `/api/missions/quality` | user | member | Server-side concreteness |
 | `/api/missions/examples` | user | member | Exemplar library |
 | `/api/cron/*` | `CRON_SECRET` bearer | system | Vercel cron |
+| `/itc`, `/itc/[mapId]` | itc participant | boardroom coachee | ITC coaching workspace |
+| `/itc/admin` | itc participant + admin | boardroom coach | Read all maps + per-turn events |
 
 ---
 
 _Note on pillar semantics: only the labels (Bond, Raise, Amplify, Vitality, Enjoyment, Movement, Action, Network) are canonical in the code and DB seed. Fuller behavioral definitions of each pillar are not encoded in the app and should be sourced from Dad Edge coaching material before being published._
+
+---
+
+## 15. ITC Coaching Architecture
+
+The ITC ("Immunity to Change") coach is a distinct sub-app at `/itc/*` that walks a Boardroom man through building a Kegan/Lahey 4-column map plus a designed test. Source is `src/app/itc/*` and `src/lib/itc/*`.
+
+### Stage machine (12 stages)
+
+`goal → behaviors → worries → commitments → assumptions → review → immune_system → prioritize → test_design → test_running → results → done`
+
+Defined in `src/lib/itc/stage.ts`. Forward transitions are gated (`advanceStage()` in `maps.ts`) — e.g. can't move to `worries` without at least one selected behavior; can't reach `prioritize` until `walkthrough_delivered = true`. Backward transitions are always allowed so the coach can hone earlier entries.
+
+### Two-model pipeline
+
+Every user turn runs through `runCoachTurnForMap()` in `src/app/itc/actions.ts`:
+
+1. **Coach LLM** (Anthropic Sonnet via `@ai-sdk/anthropic`) — sees a static preamble + the current-stage prompt + prior turns + current map state; writes natural prose to the coachee. When it wants to change map state, it emits inline marker tags inside its prose.
+2. **Extractor LLM** (Anthropic Haiku via `generateObject`) — runs after the coach reply; reads the turn transcript and current map state, emits structured `CoachAction`s for any state change the coach's markers missed. Safety net for the coach forgetting to fire a marker.
+
+Both models are behind an `ITC_PROMPT_CACHE` flag that marks the static preamble as `cacheControl: ephemeral` for Anthropic's 5-minute prompt cache.
+
+### Marker syntax (coach → state change)
+
+The coach embeds tags in its prose. Server strips them from the visible reply and routes them. Parser is `src/lib/itc/marker-parser.ts`; markers validate against `CoachActionSchema` (a discriminated Zod union in `src/lib/itc/coach.ts`).
+
+- **Content markers** (become UI cards, coachee must accept/edit/reject):
+  `<<propose_goal>>…<</propose_goal>>`, `<<propose_behavior>>…<</propose_behavior>>`,
+  `<<propose_worry behavior=N>>…<</propose_worry>>`, `<<propose_commitments_batch>>…<</propose_commitments_batch>>`,
+  `<<propose_assumption commits=1,4>>…<</propose_assumption>>`, `<<save_test_design type=… target=YYYY-MM-DD>>…<</save_test_design>>`,
+  `<<record_test_results verdict=… next=…>>…<</record_test_results>>`, `<<recommend_assumption index=N reason="…">>`,
+  `<<replace_behavior index=N>>…<</replace_behavior>>`, `<<remove_behavior index=N>>`.
+- **Immediate markers** (apply server-side, no card):
+  `<<advance stage=X>>`, `<<mark_walkthrough_delivered>>`, `<<mark_reveal_delivered>>`, `<<select_assumption index=N>>`.
+
+Unknown or malformed tags are stripped from visible text but not applied (logged to `errors[]`).
+
+### Action-proposal cards (the deterministic lock-in path)
+
+Content markers produce `itc_action_proposals` rows tied to the assistant message that emitted them. The UI (`src/app/itc/[mapId]/proposal-cards.tsx`) renders each pending proposal as an inline card below its message. States: `pending → locked | edited_locked | rejected | stale`. Cards call three server actions in `src/app/itc/actions.ts`:
+
+- `acceptProposal` — runs the underlying `CoachAction` through `applyCoachAction()` (same rubric / dedup / stage-guard path as marker-immediate applies). Marks the proposal `locked`.
+- `editAndAcceptProposal` — validates the coachee-edited payload against `CoachActionSchema`, guards `action_type` match, applies. Marks `edited_locked` and stores both original + edited payloads for audit.
+- `rejectProposal` — marks `rejected` and appends a system message (`[coachee passed on X proposal] — keep probing / offer alternatives / take a different angle`) so the coach's next turn sees the rejection and adjusts.
+
+This card layer replaced an earlier pure-inference path where the extractor guessed whether the coachee's affirmation counted as a "lock." The old path lost state routinely; the card path makes lock-in explicit.
+
+### Action application
+
+`applyCoachAction()` in `actions.ts` is the single entry point for every state change (marker-immediate, extractor, proposal-accept). It:
+
+- Enforces stage guards via `ACTION_ALLOWED_STAGES` + `autoCascadeToActionStage()` (walks the stage machine forward one legal step at a time to reach the action's required stage before applying).
+- Runs the depth rubrics (`src/lib/itc/rubric.ts`) for worry/commitment/assumption content — rejects entries that don't meet the "identity-level" bar.
+- Dedups on normalized text (`normalizeMapText()` in `maps.ts`) — refuses second exact-text rows and surfaces a `[dedup]` system message so the coach doesn't re-fire.
+- Records diagnostic events to `itc_turn_events` via `TurnEventLog` (flushed in one bulk insert per turn).
+
+### Data model
+
+- `itc_maps` — one per (participant, pillar). Holds `current_stage`, `improvement_goal`, `reveal_delivered`, `walkthrough_delivered`, `status`.
+- `itc_messages` — chat transcript. `stage_at_creation` tags each message so the UI can filter to the current stage only.
+- `itc_behaviors`, `itc_worries`, `itc_worry_attempts`, `itc_commitments`, `itc_assumptions`, `itc_assumption_commitments` — the 4-column map plus the many-to-many link table between assumptions and commitments.
+- `itc_tests`, `itc_test_results` — designed and completed tests, one active at a time; verdict is three-way (`held | partially_challenged | challenged`) per ITC's non-binary framing.
+- `itc_action_proposals` — pending / resolved cards (see above). `payload` is a validated `CoachAction`.
+- `itc_turn_events` — per-turn structured diagnostic log (LLM attempts, dedup skips, action applies, timing summary).
+
+All tables enforce RLS; server writes go through `createSupabaseServiceClient()` (service role only, bypasses RLS with participant-scoping enforced in application code — see `getMapForParticipant`, `loadProposalForParticipant`).
+
+### Voice and tone
+
+`docs/coach-voice-and-tone.md` is loaded once at module init (`src/lib/itc/prompts/preamble.ts`) and prepended to every coach turn. It's the single source of truth for language rules (no em dashes, no markdown in coach output, every reply ends with a question or CTA, etc.). Update the file to change coach voice; `next.config.mjs` traces it into the serverless bundle.

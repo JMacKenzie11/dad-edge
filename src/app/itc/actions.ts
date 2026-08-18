@@ -340,6 +340,13 @@ export async function runCoachTurnForMap(
     return { ok: false, reason: `Coach: ${message}` };
   }
 
+  // Stages where the human drives state changes via UI controls, not
+  // via coach markers or extractor inference. On these stages the coach
+  // is a pure advisor: no marker parsing, no proposals, no extractor
+  // call. We're rolling this pattern out one stage at a time.
+  const advisorOnlyStages: ReadonlySet<ItcStage> = new Set(["goal"]);
+  const advisorOnly = advisorOnlyStages.has(map.current_stage);
+
   // Parse inline markers from the coach reply. The reply text stored
   // on the message is the STRIPPED version so the coachee never sees
   // raw tags. Immediate actions (advance_stage, mark_walkthrough_delivered,
@@ -347,7 +354,9 @@ export async function runCoachTurnForMap(
   // path. Content markers become itc_action_proposals rows tied to
   // this assistant message; the UI renders each as an inline card the
   // coachee accepts, edits, or rejects.
-  const parsed_markers = parseCoachMarkers(reply.reply);
+  const parsed_markers = advisorOnly
+    ? { strippedText: reply.reply, proposals: [], immediateActions: [], errors: [] }
+    : parseCoachMarkers(reply.reply);
   if (parsed_markers.errors.length > 0) {
     console.warn(
       "[itc] marker parser errors: %s",
@@ -438,12 +447,52 @@ export async function runCoachTurnForMap(
     }
   }
 
-  // Extractor pass — the safety net for state changes. Reads the
-  // just-completed turn plus current state and emits any actions the
-  // coach's markers missed. Extractor content actions become
-  // additional proposals (dedup by matching proposal already existing
-  // for this assistant message with same action_type + payload).
+  // Extractor pass — the safety net for state changes. Skipped on
+  // advisor-only stages where the human drives state via the UI.
   const extractStart = Date.now();
+  if (advisorOnly) {
+    events.record(
+      "extract",
+      { emitted_actions: [], reason: "skipped: advisor-only stage" },
+      { durationMs: 0, stage: map.current_stage },
+    );
+    const finalMap = await getMapById(map.id);
+    const stageChanged =
+      finalMap && finalMap.current_stage !== map.current_stage;
+    const totalMs = Date.now() - turnStart;
+    console.warn(
+      "[itc timing] turn map=%s stage=%s%s advisor-only prefetch=%dms llm=%dms total=%dms",
+      map.id,
+      map.current_stage,
+      stageChanged ? `->${finalMap.current_stage}` : "",
+      prefetchMs,
+      llmMs,
+      totalMs,
+    );
+    events.record(
+      "turn_summary",
+      {
+        prefetch_ms: prefetchMs,
+        llm_ms: llmMs,
+        total_ms: totalMs,
+        stage_from: map.current_stage,
+        stage_to: finalMap?.current_stage ?? map.current_stage,
+        actions: [],
+        advisor_only: true,
+      },
+      {
+        durationMs: totalMs,
+        stage: finalMap?.current_stage ?? map.current_stage,
+      },
+    );
+    await events.flush();
+    try {
+      revalidatePath(`/itc/${map.id}`);
+    } catch {
+      // no-op
+    }
+    return { ok: true };
+  }
   // Widened from 3 to 6 assistant turns. The extractor needs to see
   // draft turns that may be several turns back on a chatty affirmation
   // sequence (e.g. coach drafts commitments, coachee asks a clarifying
@@ -1415,6 +1464,48 @@ async function applyCoachAction(
       return;
     }
   }
+}
+
+// ==========================================================================
+// Coach-as-advisor server actions. State changes on the goal column
+// happen here, not via coach markers. Coach writes prose; user clicks
+// "Save goal" on the map pane; this action validates + persists.
+// Rolling this pattern out one stage at a time — goal first.
+// ==========================================================================
+
+const saveGoalSchema = z.object({
+  map_id: z.string().uuid(),
+  text: z.string().min(1).max(500),
+});
+
+export async function saveGoal(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = saveGoalSchema.safeParse({
+    map_id: formData.get("map_id"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid goal input." };
+
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  const withStem = hasGoalStem(parsed.data.text)
+    ? parsed.data.text
+    : `${GOAL_STEM} ${parsed.data.text.trim()}`;
+
+  try {
+    await saveImprovementGoal(map.id, withStem);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save goal.",
+    };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
 }
 
 const advanceSchema = z.object({
