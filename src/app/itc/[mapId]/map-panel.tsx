@@ -9,6 +9,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
+import { BehaviorsColumn } from "./behaviors-column";
 import { GoalColumn } from "./goal-column";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
@@ -103,23 +104,11 @@ export function MapPanel({
         </Column>
 
         <Column title="2. Doing / not-doing">
-          {selectedBehaviors.length === 0 ? (
-            <Placeholder>None yet.</Placeholder>
-          ) : (
-            <ul className="space-y-1.5 text-sm">
-              {selectedBehaviors.map((b) => (
-                <li
-                  key={b.id}
-                  className={
-                    "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
-                    (isFresh(b.created_at, renderedAt) ? " itc-fresh-row" : "")
-                  }
-                >
-                  {b.text}
-                </li>
-              ))}
-            </ul>
-          )}
+          <BehaviorsColumn
+            mapId={map.id}
+            currentStage={map.current_stage}
+            behaviors={behaviors}
+          />
         </Column>
 
         <Column title="3. Worry box">

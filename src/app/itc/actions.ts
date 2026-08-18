@@ -12,7 +12,7 @@ import {
 } from "@/lib/itc/coach";
 import {
   addAssumption,
-  addBehavior,
+  addBehavior as insertBehaviorRow,
   addCommitment,
   advanceStage,
   appendMessage,
@@ -22,7 +22,7 @@ import {
   createMap,
   getActionProposal,
   updateActionProposalStatus,
-  deleteBehavior,
+  deleteBehavior as deleteBehaviorRow,
   deleteMap,
   findInProgressMap,
   listMapsForParticipant,
@@ -344,7 +344,7 @@ export async function runCoachTurnForMap(
   // via coach markers or extractor inference. On these stages the coach
   // is a pure advisor: no marker parsing, no proposals, no extractor
   // call. We're rolling this pattern out one stage at a time.
-  const advisorOnlyStages: ReadonlySet<ItcStage> = new Set(["goal"]);
+  const advisorOnlyStages: ReadonlySet<ItcStage> = new Set(["goal", "behaviors"]);
   const advisorOnly = advisorOnlyStages.has(map.current_stage);
 
   // Parse inline markers from the coach reply. The reply text stored
@@ -1064,7 +1064,7 @@ async function applyCoachAction(
     }
     case "propose_behavior": {
       assertStage("propose_behavior", currentStage, ["behaviors"]);
-      const result = await addBehavior(mapId, action.text, "suggested");
+      const result = await insertBehaviorRow(mapId, action.text, "suggested");
       if (result.deduped) await recordDedup("behavior", action.text);
       return;
     }
@@ -1104,7 +1104,7 @@ async function applyCoachAction(
           `remove_behavior: index ${action.index} out of range (${all.length} behaviors).`,
         );
       }
-      await deleteBehavior(target.id, mapId);
+      await deleteBehaviorRow(target.id, mapId);
       return;
     }
     case "propose_worry": {
@@ -1501,6 +1501,128 @@ export async function saveGoal(
     return {
       ok: false,
       reason: err instanceof Error ? err.message : "Could not save goal.",
+    };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+// --------------------------------------------------------------------------
+// Behaviors (Column 2) — coach-as-advisor
+// --------------------------------------------------------------------------
+
+const behaviorAddSchema = z.object({
+  map_id: z.string().uuid(),
+  text: z.string().min(3).max(400),
+});
+
+export async function addBehavior(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = behaviorAddSchema.safeParse({
+    map_id: formData.get("map_id"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid behavior input." };
+
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  const existing = await listBehaviors(map.id);
+  const selected = existing.filter((b) => b.selected);
+  if (selected.length >= 5) {
+    return {
+      ok: false,
+      reason: "The map already has 5 behaviors. Refine or remove one before adding another.",
+    };
+  }
+
+  try {
+    const result = await insertBehaviorRow(map.id, parsed.data.text, "user");
+    if (result.deduped) {
+      return {
+        ok: false,
+        reason: "That behavior is already on the map. Refine an existing one if the phrasing is sharper.",
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not add behavior.",
+    };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+const behaviorRefineSchema = z.object({
+  map_id: z.string().uuid(),
+  behavior_id: z.string().uuid(),
+  text: z.string().min(3).max(400),
+});
+
+export async function refineBehavior(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = behaviorRefineSchema.safeParse({
+    map_id: formData.get("map_id"),
+    behavior_id: formData.get("behavior_id"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid refine input." };
+
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  const existing = await listBehaviors(map.id);
+  const target = existing.find((b) => b.id === parsed.data.behavior_id);
+  if (!target) return { ok: false, reason: "Behavior not on this map." };
+
+  try {
+    await updateBehaviorText(target.id, map.id, parsed.data.text);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not refine.",
+    };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+const behaviorRemoveSchema = z.object({
+  map_id: z.string().uuid(),
+  behavior_id: z.string().uuid(),
+});
+
+export async function removeBehavior(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = behaviorRemoveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    behavior_id: formData.get("behavior_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid remove input." };
+
+  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  const existing = await listBehaviors(map.id);
+  const target = existing.find((b) => b.id === parsed.data.behavior_id);
+  if (!target) return { ok: false, reason: "Behavior not on this map." };
+
+  try {
+    await deleteBehaviorRow(target.id, map.id);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not remove.",
     };
   }
 
