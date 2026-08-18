@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import type { ItcMessage } from "@/lib/itc/maps";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { ItcActionProposal, ItcMessage } from "@/lib/itc/maps";
 import { sendCoachMessage } from "../actions";
+import { ProposalCard } from "./proposal-cards";
 
 export function Conversation({
   mapId,
   messages,
+  proposals,
 }: {
   mapId: string;
   messages: ItcMessage[];
+  proposals: ItcActionProposal[];
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +23,20 @@ export function Conversation({
     (m) => m.role === "user" || m.role === "assistant",
   );
 
+  // Group proposals by the assistant message they were created against so
+  // each card renders inline below the message that produced it. Rendered
+  // in creation order so a batch of proposals on one message keeps its
+  // authored ordering.
+  const proposalsByMessage = useMemo(() => {
+    const map = new Map<string, ItcActionProposal[]>();
+    for (const p of proposals) {
+      const arr = map.get(p.assistant_message_id) ?? [];
+      arr.push(p);
+      map.set(p.assistant_message_id, arr);
+    }
+    return map;
+  }, [proposals]);
+
   // Keep the latest turn in view whenever the transcript grows or the
   // typing indicator flips. Scrolls the inner overflow container (not
   // the window) so the map pane on the right stays put.
@@ -27,7 +44,7 @@ export function Conversation({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [displayMessages.length, pending]);
+  }, [displayMessages.length, proposals.length, pending]);
 
   function handleSend(fd: FormData) {
     setError(null);
@@ -49,18 +66,30 @@ export function Conversation({
             Say hello, or tell me what's on your mind about this pillar.
           </li>
         ) : null}
-        {displayMessages.map((m) => (
-          <li
-            key={m.id}
-            className={
-              m.role === "user"
-                ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm"
-                : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm whitespace-pre-wrap"
-            }
-          >
-            {m.content}
-          </li>
-        ))}
+        {displayMessages.map((m) => {
+          const cards =
+            m.role === "assistant" ? proposalsByMessage.get(m.id) ?? [] : [];
+          return (
+            <li key={m.id} className="flex flex-col">
+              <div
+                className={
+                  m.role === "user"
+                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm"
+                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm whitespace-pre-wrap"
+                }
+              >
+                {m.content}
+              </div>
+              {cards.length > 0 ? (
+                <div className="mr-auto w-full max-w-[95%] space-y-1">
+                  {cards.map((p) => (
+                    <ProposalCard key={p.id} proposal={p} />
+                  ))}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
         {pending ? (
           <li className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm">
             <TypingDots />

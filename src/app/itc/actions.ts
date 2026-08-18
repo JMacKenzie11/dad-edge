@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
+  CoachActionSchema,
   looksLikeStructuredOutputLeakage,
   runItcCoachTurn,
   type CoachAction,
@@ -19,6 +20,8 @@ import {
   countWorryAttempts,
   createActionProposal,
   createMap,
+  getActionProposal,
+  updateActionProposalStatus,
   deleteBehavior,
   deleteMap,
   findInProgressMap,
@@ -1455,6 +1458,213 @@ export async function advanceMapStage(formData: FormData): Promise<SendMessageRe
   }
 
   await advanceStage(map.id, map.current_stage, target);
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+// ==========================================================================
+// Server actions for action-proposal cards (accept / edit / reject).
+// The Conversation UI fetches proposals for each message and renders
+// inline cards. Card buttons call these actions.
+// ==========================================================================
+
+const proposalIdSchema = z.object({
+  proposal_id: z.string().uuid(),
+});
+
+async function loadProposalForParticipant(
+  proposalId: string,
+  participantId: string,
+): Promise<
+  | { ok: true; proposal: NonNullable<Awaited<ReturnType<typeof getActionProposal>>>; map: NonNullable<Awaited<ReturnType<typeof getMapForParticipant>>> }
+  | { ok: false; reason: string }
+> {
+  const proposal = await getActionProposal(proposalId);
+  if (!proposal) return { ok: false, reason: "Proposal not found." };
+  const map = await getMapForParticipant(proposal.map_id, participantId);
+  if (!map) return { ok: false, reason: "Not your map." };
+  if (proposal.status !== "pending") {
+    return { ok: false, reason: `Proposal already ${proposal.status}.` };
+  }
+  return { ok: true, proposal, map };
+}
+
+/**
+ * Accept a proposal as-is. Runs the underlying CoachAction through
+ * applyCoachAction — same rubric/dedup/stage gates as any other apply
+ * path. On success, marks the proposal locked. On rejection, the
+ * proposal stays pending so the coachee can try editing.
+ */
+export async function acceptProposal(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = proposalIdSchema.safeParse({
+    proposal_id: formData.get("proposal_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid proposal id." };
+
+  const loaded = await loadProposalForParticipant(
+    parsed.data.proposal_id,
+    participant.id,
+  );
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  const { proposal, map } = loaded;
+
+  const action = proposal.payload as CoachAction;
+  try {
+    // Auto-cascade to the action's required stage first, same as
+    // sendCoachMessage does for immediate actions.
+    let stageNow: ItcStage = map.current_stage;
+    const allowed = ACTION_ALLOWED_STAGES[action.type];
+    if (allowed && !allowed.includes(stageNow)) {
+      // Reuse the same helper — needs an events buffer but we're not
+      // in a coach turn here. Pass a stub-like TurnEventLog just for
+      // consistency (turn_index approximated as 0 for one-off apply).
+      const events = new TurnEventLog(map.id, 0);
+      stageNow = await autoCascadeToActionStage(
+        map.id,
+        stageNow,
+        allowed[0],
+        events,
+      );
+      await events.flush();
+    }
+    await applyCoachAction(map.id, stageNow, action);
+    await updateActionProposalStatus({
+      proposalId: proposal.id,
+      status: "locked",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not apply.";
+    // Don't mark rejected on apply failure — the user might edit and
+    // retry. Surface the error so the UI can show it.
+    return { ok: false, reason: message };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+const editProposalSchema = z.object({
+  proposal_id: z.string().uuid(),
+  edited_payload: z.string().min(1), // JSON-stringified
+});
+
+/**
+ * Accept with edited content. Client submits the edited payload as
+ * JSON (validated against CoachActionSchema server-side). Applied via
+ * the same path as acceptProposal; the proposal row records both the
+ * original payload and the edit for audit.
+ */
+export async function editAndAcceptProposal(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = editProposalSchema.safeParse({
+    proposal_id: formData.get("proposal_id"),
+    edited_payload: formData.get("edited_payload"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid edit input." };
+
+  const loaded = await loadProposalForParticipant(
+    parsed.data.proposal_id,
+    participant.id,
+  );
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  const { proposal, map } = loaded;
+
+  let editedAction: CoachAction;
+  try {
+    const rawEdit = JSON.parse(parsed.data.edited_payload);
+    // Validate the edited payload against the CoachAction schema so
+    // the client can't smuggle in invalid shapes.
+    const validated = CoachActionSchema.safeParse(rawEdit);
+    if (!validated.success) {
+      return { ok: false, reason: `Edited payload invalid: ${validated.error.issues.map((i) => i.message).join(", ")}` };
+    }
+    editedAction = validated.data;
+  } catch {
+    return { ok: false, reason: "Edited payload is not valid JSON." };
+  }
+
+  // Guard: the edited action must be the same type as the proposal's
+  // original (client can't swap propose_worry for propose_goal, etc.).
+  if (editedAction.type !== proposal.action_type) {
+    return {
+      ok: false,
+      reason: `Edited action type (${editedAction.type}) must match proposal (${proposal.action_type}).`,
+    };
+  }
+
+  try {
+    let stageNow: ItcStage = map.current_stage;
+    const allowed = ACTION_ALLOWED_STAGES[editedAction.type];
+    if (allowed && !allowed.includes(stageNow)) {
+      const events = new TurnEventLog(map.id, 0);
+      stageNow = await autoCascadeToActionStage(
+        map.id,
+        stageNow,
+        allowed[0],
+        events,
+      );
+      await events.flush();
+    }
+    await applyCoachAction(map.id, stageNow, editedAction);
+    await updateActionProposalStatus({
+      proposalId: proposal.id,
+      status: "edited_locked",
+      editedPayload: editedAction,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not apply edit.";
+    return { ok: false, reason: message };
+  }
+
+  revalidatePath(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+const rejectProposalSchema = z.object({
+  proposal_id: z.string().uuid(),
+  reason: z.string().max(500).optional(),
+});
+
+/**
+ * Reject a proposal. Marks it rejected in the DB and appends a system
+ * message so the coach sees the rejection on its next turn and can
+ * adjust (keep probing, offer alternatives, take a different angle).
+ */
+export async function rejectProposal(
+  formData: FormData,
+): Promise<SendMessageResult> {
+  const participant = await requireItcParticipant();
+  const parsed = rejectProposalSchema.safeParse({
+    proposal_id: formData.get("proposal_id"),
+    reason: (formData.get("reason") as string) || undefined,
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid reject input." };
+
+  const loaded = await loadProposalForParticipant(
+    parsed.data.proposal_id,
+    participant.id,
+  );
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  const { proposal, map } = loaded;
+
+  await updateActionProposalStatus({
+    proposalId: proposal.id,
+    status: "rejected",
+    rejectReason: parsed.data.reason,
+  });
+  const reasonSuffix = parsed.data.reason ? ` (${parsed.data.reason})` : "";
+  await appendMessage(
+    map.id,
+    "system",
+    `[coachee passed on ${proposal.action_type} proposal]${reasonSuffix} — keep probing / offer alternatives / take a different angle.`,
+    map.current_stage,
+  );
+
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
 }
