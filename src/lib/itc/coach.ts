@@ -1,8 +1,33 @@
-import { generateText } from "ai";
+/**
+ * The coach LLM under Form-First.
+ *
+ * The coach never writes state. It reads the map + the transcript
+ * and responds in prose. Three generation functions:
+ *
+ *   generateCoachChat(input)     — free-form chat reply, prose only.
+ *   generateCoachReaction(input) — reaction to a just-added entry.
+ *                                  Returns { reply, refinement?,
+ *                                  suggestions? } via generateObject.
+ *                                  refinement is a one-line sharper
+ *                                  version the coachee can tap to
+ *                                  fill the input; suggestions are
+ *                                  the same shape for 4-5 options.
+ *                                  Chips are cosmetic — a missing
+ *                                  chip degrades to plain prose, an
+ *                                  entry never fails to land.
+ *   generateSuggestions(input)   — "Give me ideas" trigger. 4-5
+ *                                  grounded options via generateObject.
+ *
+ * All three use the same preamble + stage prompt + map-state context
+ * as before, minus every rule about firing tools, emitting markers,
+ * locking, or claiming to have saved anything.
+ */
+
+import { generateObject, generateText } from "ai";
 import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
-import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { mainModel } from "@/lib/model-config";
+import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { buildItcCoachSystemSplit } from "./prompts";
 import type { ItcStage } from "./stage";
 
@@ -14,25 +39,16 @@ function promptCachingEnabled(): boolean {
 }
 
 /**
- * Split the system prompt into two SystemModelMessage entries and
- * mark the first (static) as cacheable. Anthropic will cache
- * everything up to and including the marker for the ephemeral TTL
- * (5m default, refreshed on hit), then charge full price for the
- * dynamic tail on every turn. Cache-read is 10% of input cost,
- * cache-write is 125% — break-even after ~3 reads. Coach turns
- * within the same 5-min window all hit the cache.
- *
- * If caching is disabled (env flag off), returns a single-message
- * array with concatenated content. Model sees the identical text
- * either way — only the marker differs.
+ * Split the coach system prompt into two SystemModelMessage entries
+ * and mark the static half as cacheable when the env flag is on.
+ * Cache-read is 10% of input cost, cache-write 125%. Break-even after
+ * ~3 turns in the same 5-minute TTL. Same model input either way.
  */
 function toCoachSystem(
   staticPart: string,
   dynamic: string,
 ): string | SystemModelMessage[] {
-  if (!promptCachingEnabled()) {
-    return `${staticPart}\n\n${dynamic}`;
-  }
+  if (!promptCachingEnabled()) return `${staticPart}\n\n${dynamic}`;
   return [
     {
       role: "system",
@@ -45,418 +61,13 @@ function toCoachSystem(
   ];
 }
 
-export const CoachActionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("propose_goal"), text: z.string().min(1) }),
-  z.object({ type: z.literal("propose_behavior"), text: z.string().min(1) }),
-  z.object({
-    type: z.literal("suggest_behaviors"),
-    options: z.array(z.string().min(1)).min(2).max(6),
-  }),
-  // Replace the text of an existing behavior in place. index is 1-based
-  // into the behavior list the coach sees. Use this for consolidation —
-  // when the coachee's new phrasing sharpens an existing behavior, swap
-  // the vaguer text for the sharper one rather than creating a duplicate.
-  z.object({
-    type: z.literal("replace_behavior"),
-    index: z.number().int().min(1),
-    text: z.string().min(1),
-  }),
-  // Remove a behavior from the map. index is 1-based into the behavior
-  // list the coach sees. Use this when the coachee asks to "drop" or
-  // "remove" a behavior (typical trigger: a duplicate the coach
-  // noticed after firing propose_behavior on both). Only allowed at
-  // the behaviors stage — once worries are being paired against the
-  // set, deletion would orphan a locked worry.
-  z.object({
-    type: z.literal("remove_behavior"),
-    index: z.number().int().min(1),
-  }),
-  // Propose a worry paired to a specific behavior. behavior_index is
-  // 1-based into the behaviors list the coach sees. Server runs the depth
-  // rubric before locking; a score <2 always rejects, a score of 2
-  // requires at least two attempts on this behavior.
-  z.object({
-    type: z.literal("propose_worry"),
-    behavior_index: z.number().int().min(1),
-    text: z.string().min(1).max(500),
-  }),
-  // Propose a hidden competing commitment paired to a specific worry.
-  // worry_index is 1-based into the locked-worry list the coach sees.
-  // Server runs a self-protection rubric; commitments that sound like
-  // productivity advice are rejected. Kept for edge cases; the primary
-  // flow for this stage is propose_commitments_batch below.
-  z.object({
-    type: z.literal("propose_commitment"),
-    worry_index: z.number().int().min(1),
-    text: z.string().min(1).max(500),
-  }),
-  // Primary flow for column 3: after the coachee affirms the drafted
-  // set, land every commitment in one action. One item per locked worry
-  // (server rejects the batch if item count != locked worry count).
-  // No per-item rubric — the drafts are derived from worries the
-  // coachee already vetted, so we trust the coach here. If a draft is
-  // weak, the coachee catches it in the review-and-tweak turn before
-  // affirming.
-  z.object({
-    type: z.literal("propose_commitments_batch"),
-    items: z
-      .array(
-        z.object({
-          worry_index: z.number().int().min(1),
-          text: z.string().min(1).max(500),
-        }),
-      )
-      .min(1),
-  }),
-  // The v2 3.3b brief gas-and-brake reveal. Coach emits this after the
-  // commitments column is complete; UI records that the beat happened so
-  // the deeper immune-system walkthrough later doesn't repeat it.
-  z.object({ type: z.literal("mark_reveal_delivered") }),
-  // The deeper immune-system walkthrough (three movements) has been
-  // delivered AND the coachee has explicitly said he's ready to move to
-  // testing. Emit only when both are true — this action unlocks prioritize.
-  z.object({ type: z.literal("mark_walkthrough_delivered") }),
-  // Propose a Big Assumption and the commitments it underwrites.
-  // commitment_indices are 1-based into the ordered commitments list the
-  // coach sees. Server runs the finished-then rubric before locking.
-  z.object({
-    type: z.literal("propose_assumption"),
-    text: z.string().min(1).max(500),
-    commitment_indices: z.array(z.number().int().min(1)).min(1),
-  }),
-  // Coach's prioritization recommendation. assumption_index 1-based into
-  // the locked assumptions. Coach must still ask the coachee to pick;
-  // this action only surfaces the recommendation to the UI.
-  z.object({
-    type: z.literal("recommend_assumption_for_testing"),
-    assumption_index: z.number().int().min(1),
-    reason: z.string().min(1).max(500),
-  }),
-  // Coachee's final choice for testing. Sets selected_for_testing on the
-  // chosen assumption.
-  z.object({
-    type: z.literal("select_assumption_for_testing"),
-    assumption_index: z.number().int().min(1),
-  }),
-  // Persist a drafted test after the coachee affirms all four fields.
-  // Server auto-advances to test_running on successful save. target_date
-  // must be an ISO date string (YYYY-MM-DD). Fires once the coachee has
-  // signed off on the full four-field draft — same "affirm the batch"
-  // pattern as commitments.
-  z.object({
-    type: z.literal("save_test_design"),
-    test_type: z.enum([
-      "data_mining",
-      "observation",
-      "thought_experiment",
-      "behavioral",
-    ]),
-    assumption_says: z.string().min(1).max(600),
-    behavior_change: z.string().min(1).max(600),
-    data_to_collect: z.string().min(1).max(600),
-    in_order_to_find_out: z.string().min(1).max(600),
-    target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  }),
-  // Persist test results after the coachee returns and processes his
-  // observations. Server auto-advances test_running → results on save.
-  // Verdict is deliberately three-way (held / partially_challenged /
-  // challenged) per ITC's non-binary framing — never framed as pass/fail.
-  z.object({
-    type: z.literal("record_test_results"),
-    ran_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    what_i_did: z.string().min(1).max(1200),
-    data_collected: z.string().min(1).max(1200),
-    what_it_says_about_assumption: z.string().min(1).max(1200),
-    assumption_verdict: z.enum([
-      "held",
-      "partially_challenged",
-      "challenged",
-    ]),
-    next_step: z.enum(["new_test", "new_assumption", "map_complete"]),
-  }),
-  z.object({
-    type: z.literal("advance_stage"),
-    to: z.enum([
-      "goal",
-      "behaviors",
-      "worries",
-      "commitments",
-      "assumptions",
-      "review",
-      "prioritize",
-      "test_design",
-      "test_running",
-      "results",
-      "done",
-    ]),
-  }),
-]);
-
-export type CoachAction = z.infer<typeof CoachActionSchema>;
-
-/**
- * Coach reply shape.
- *
- * The coach LLM writes prose only — it does NOT emit structured
- * actions. All state changes come from the separate extract-actions
- * module which runs after the coach reply, reads the reply + the
- * current DB state, and emits actions. See src/lib/itc/extract-actions.ts.
- *
- * Historically the coach emitted { reply, actions[] } in one
- * generateObject call. That coupled two very different jobs
- * (conversation and state) into one model call, and every session
- * found new phrasings where the coach forgot an action or fired the
- * wrong one. Splitting the jobs into two focused LLM calls removed
- * that entire class of bug.
- */
-export type CoachReply = {
-  reply: string;
-};
-
-/**
- * Detects JSON-fragment leakage in the reply string. Observed in the wild:
- * `Here's the full map, locked - showing this]},."action"}) Wait, ignore
- * that formatting].` The model produces a technically-valid structured
- * response but the reply field contains schema-key artifacts, bracket
- * sequences, or a self-disclaimer about formatting. All three are signs
- * that structured output partially collapsed; we should retry rather than
- * ship the garbage to the coachee.
- */
-export function looksLikeStructuredOutputLeakage(text: string): boolean {
-  // Strip inline marker tags before scanning — the coach LEGITIMATELY
-  // emits <<propose_goal>>...<</propose_goal>>, <<advance stage=...>>,
-  // etc., and every "action_name" that appears in the schema regex
-  // below is also a valid marker tag name. Without this preprocess,
-  // any well-formed marker reply trips the "unquoted schema token"
-  // check and falls through to the fallback ("Give me one more sec…").
-  // Mirrors the strip in marker-parser.ts.
-  const stripped = text.replace(/<<\/?[^>]*>>/g, "");
-  const trimmed = stripped.trim();
-  // Special / control tokens leaking from the tokenizer. Observed on
-  // 2026-08-13: reply ended with "Want a fifth, or is that the set?
-  // <|control11|>{" — the |...| angle-bracket token is a raw model
-  // token that never should reach the coachee, and the trailing "{"
-  // suggests a JSON object was starting to render. Catch any
-  // <|...|> pattern, and any raw <endoftext> / <|endoftext|> variants.
-  if (/<\|[^|>\n]{1,40}\|>/i.test(trimmed)) {
-    return true;
-  }
-  if (/<\/?(?:endoftext|eot_id|start_header_id|end_header_id|bos|eos|s)[^>]*>/i.test(trimmed)) {
-    return true;
-  }
-  // Reply ends with a bare "{" (or "{ " ), suggesting the model started
-  // emitting an object after the prose. Bounded to trailing position so
-  // legitimate uses of "{" mid-reply (rare — coach never quotes JSON)
-  // don't trip. Combined with the length check on truncation elsewhere,
-  // this catches the "…set? <|control11|>{" style of trailing garbage.
-  if (/\{\s*$/.test(trimmed)) {
-    return true;
-  }
-  // Schema key quoted mid-reply followed by JSON punctuation.
-  if (
-    /"(action|actions|items|text|type|worry_index|behavior_index|commitment_indices|assumption_index|reply|options|to|keep_indices|index|reason)"\s*[:,\]}]/.test(
-      trimmed,
-    )
-  ) {
-    return true;
-  }
-  // Unquoted schema tokens leaking as prose. Observed: reply ended with
-  // "nAction: propose_worry with beh_derior_index=2, textting the worry
-  // text." The model rendered the action metadata as plain English
-  // instead of firing the action. No quotes to catch, so the first
-  // check misses. Detect by looking for unquoted schema-shaped tokens:
-  // an "Action:" label at the start of a line, an unquoted action-type
-  // name mentioned in prose, or an assignment like "X_index=N".
-  const unquotedSchemaRe =
-    /(^|\n)\s*n?Action\s*[:=]|\b(propose_(?:worry|behavior|commitment|commitments_batch|goal|assumption)|advance_stage|mark_reveal_delivered|mark_walkthrough_delivered|save_test_design|record_test_results|replace_behavior|remove_behavior|suggest_behaviors|recommend_assumption_for_testing|select_assumption_for_testing)\b|\b(?:behavior|worry|assumption|commitment)_index\s*[=:]|\bkeep_indices\s*[=:]|\bcommitment_indices\s*[=:]|\btextting\b|setting the (worry|commitment|assumption) text/i;
-  if (unquotedSchemaRe.test(trimmed)) {
-    return true;
-  }
-  // Banned narration that the prompt explicitly forbids. Observed:
-  // "That's worry #2." even though the prompt says "Do NOT number it
-  // out loud." When the coach violates a banned phrase, treat the reply
-  // as broken and retry — cheaper than shipping the violation.
-  if (/\bThat['\u2019]?s worry #\d/i.test(trimmed)) {
-    return true;
-  }
-  // Text-level corruption. Observed on the worry-box map: "I worry
-  // that i worworry that ifbringing up her past". Doubled stem
-  // fragments ("worworry", "comcommitment") and missing-space
-  // compounds ("ifbringing", "andstill") are model-glitch signatures.
-  // Regex catches: (a) the same 3+ letter run repeated back-to-back
-  // ("worwor", "comcom"); (b) known "I worry that" appearing twice
-  // in one string (a single worry has it once).
-  const doubledStemRe = /\b(\w{3,})\1/i;
-  if (doubledStemRe.test(trimmed)) {
-    return true;
-  }
-  // Fused short-word compounds — "inthe", "onthe", "andis", "isit",
-  // "toget" etc. Observed 2026-08-13: "clarity is inthe coun'tmments
-  // give you what to do about the worears." When common short words
-  // are stuck together with no space, the model corrupted its own
-  // output. Enumerating known-safe first+second-word pairs keeps
-  // false-positives near zero — none of these compounds are real
-  // English words. Case-insensitive.
-  const fusedCompoundRe =
-    /\b(in|on|at|to|of|is|it|as|by|be|or|if|so|no|do|we|he|my|us|its|but|and|for|the|that|this|with|from|are|was)(the|a|an|of|it|is|are|was|were|and|but|or|for|with|from|had|has|will|would|can|could|should|need|want)\b/i;
-  if (fusedCompoundRe.test(trimmed)) {
-    return true;
-  }
-  // Apostrophe corruption — "coun'tmments" (should be "commitments").
-  // Contractions end at a word boundary: "wouldn't", "isn't ", "he's ".
-  // If "n't" is followed by 2+ more letters inside the same word,
-  // that's a token-glitch signature (the model fused "wouldn't" with
-  // "the following word" or garbled a longer word). Same for "'s" or
-  // "'ll" in mid-word positions.
-  if (/\w+n['\u2019]t[a-z]{2,}/i.test(trimmed)) {
-    return true;
-  }
-  if (/\w+['\u2019](ll|ve|re|d|m|s)[a-z]{2,}/i.test(trimmed)) {
-    return true;
-  }
-  // Repeated stems WITHIN A SINGLE LINE. A numbered list with 4
-  // "I'm also committed to..." items across separate lines is legit;
-  // two of the same stem on the same line is corruption. Split on
-  // newlines and check per line.
-  for (const line of trimmed.split(/\n+/)) {
-    const w = (line.match(/i worry that/gi) ?? []).length;
-    const c = (line.match(/i['\u2019]m also committed to/gi) ?? []).length;
-    const a = (line.match(/i assume that/gi) ?? []).length;
-    if (w >= 2 || c >= 2 || a >= 2) return true;
-  }
-  // Global sanity — no reply should have 8+ stem occurrences of any
-  // one kind; that's corruption, not just a long draft list.
-  const worryStemCount = (trimmed.match(/i worry that/gi) ?? []).length;
-  const commitStemCount = (trimmed.match(/i['\u2019]m also committed to/gi) ?? []).length;
-  const assumptionStemCount = (trimmed.match(/i assume that/gi) ?? []).length;
-  if (worryStemCount > 8 || commitStemCount > 8 || assumptionStemCount > 8) {
-    return true;
-  }
-
-  // Model reasoning-chain leak. Observed: the model wrote its INTERNAL
-  // editing narrative as the reply ("Let's writing the actual reply
-  // text properly now:", "Now the last worry locked, that would give
-  // commitments column intro"). Two markers:
-  //  1. Meta-editing phrases where the model announces it's about to
-  //     write the "real" reply. If those appear, the current reply
-  //     text is the internal chain, not the intended output.
-  //  2. The reply ends with a trailing colon and nothing after —
-  //     model was about to deliver content and stopped mid-transition.
-  // Meta-editing chatter — model narrates its own editing process
-  // instead of writing the reply. Every clause here must contain a
-  // clear "output shape" tell (json, "the actual/real/proper reply",
-  // "write it properly as/for"). Do NOT include phrases the coach
-  // would legitimately say — "step back", "need to produce", "let me
-  // try", "let me start", "let me give" — those false-positive on
-  // real replies and every false positive triggers a retry, which
-  // adds 1-3s of LLM latency per turn.
-  const metaEditingRe =
-    /let(['\u2019]?s| me) (writ(e|ing)|start|try|do that|answer|reply|say|redo|give) (the |a |it )?(actual|real|proper|properly|new|full|next)\s+(reply|answer|response|json|output|version|attempt)|writing the actual reply|reply text (properly|correctly|again)|(now|here) (i|let me) write (the |a )?(reply|answer|response|json|output)|actually let me (redo|start over|try again|do that (again|over))|final json|produce (the |a )?(final |proper )?(json|reply|response|output)|write (this |the |it )?(out |up )?properly (as|for|in) (a |the )?(reply|json|response|output)/i;
-  if (metaEditingRe.test(trimmed)) {
-    return true;
-  }
-  // Bare mention of the word "JSON" in a coach reply. The coach never
-  // has occasion to talk about JSON, output formats, or schemas —
-  // that's model-side plumbing. If the word appears, the model leaked
-  // its own reasoning about the output shape.
-  if (/\bjson\b/i.test(trimmed)) {
-    return true;
-  }
-  // Trailing brace runs like "}}}" or "}}." — JSON structure that
-  // spilled out of the object into the visible reply. A single
-  // "}" trailing is caught above; two or more in a row is unambiguous.
-  if (/\}\s*\}/.test(trimmed)) {
-    return true;
-  }
-  // Trailing colon with no continuation. A legitimate reply that ends
-  // in `:` would have a newline + list items following (the caller
-  // provides no such continuation, so we see `:` as the last char).
-  // Distinct from the earlier truncation guard, which only fires on
-  // replies under 200 chars.
-  if (/:\s*$/.test(trimmed) && !/\n[-*\d]/.test(trimmed)) {
-    return true;
-  }
-  // Third-person coach self-narrative. Observed: "that would means
-  // she'd think less of him and he'd look weak as a man" — coach
-  // referred to the coachee as "he/him" in a fear description. Coach
-  // addresses the coachee as "you" per prompt. A reply that uses
-  // "he'd" or "him" or "his" in a way that reads like the coach
-  // narrating ABOUT the coachee (not quoting his wife or a third
-  // party) is a chain-leak. Detect via a conservative pattern: the
-  // reply references "he'd" or "he would" in a fear/behavior
-  // description context. False-positive risk is real, so only trip
-  // when combined with the fear/worry framing that would obviously be
-  // second-person if the coach were talking TO the coachee.
-  const thirdPersonNarrativeRe =
-    /\b(he['\u2019]?d|he would|he['\u2019]?s|his) (look|feel|be exposed|be seen|think|worry|fear|end up|become|prove) /i;
-  if (thirdPersonNarrativeRe.test(trimmed)) {
-    return true;
-  }
-  // Model apologizing for JSON leakage in its own reply. Observed
-  // variants: "ignore that formatting", "wait, the format leaked",
-  // "let me answer properly", "sorry, that was internal", etc. The
-  // shared signal is: model self-corrects mid-reply about output shape.
-  if (
-    /ignore (that|this|the) formatting|ignore this artifact|sorry.*(json|formatting|internal)|that was.*(json|internal)|ambient artifact|wait[,.]?\s*(the\s+)?(format|json|output|reply)\s+(leaked|is\s+off|slipped|got\s+through|bled)|let me (answer|reply|try|start|do that) (properly|again|correctly|over)|let me redo|scratch that.*(let me|here's)/i.test(
-      trimmed,
-    )
-  ) {
-    return true;
-  }
-
-  // Placeholder / stub replies where the model returned a shape without
-  // any content. Observed: "the reply is here", "reply goes here",
-  // "response body goes here", "[content]", "TODO", etc. These all have
-  // letters (so pass the actions.ts no-letters check) but are meaningless.
-  const placeholderRe =
-    /^(the |my |your )?(reply|response|answer|content|message|text)( is| goes)?( here| below| here now)?$|^\[?(placeholder|todo|tbd|fill in|content goes here|reply goes here|insert.*here)\]?$|^\[(content|reply|response|answer|message|text|placeholder|todo|tbd)\]$/i;
-  if (placeholderRe.test(trimmed)) {
-    return true;
-  }
-
-  // Truncated fragments — the model stopped mid-thought but the JSON
-  // was still valid, so the SDK returned it. Observed: "keep going,
-  // this one" (4 words, no terminal punctuation). Heuristic: short,
-  // single-line replies that don't end with terminal punctuation are
-  // very likely mid-sentence. Legitimate short coach replies end with
-  // . ! ? " ) or ]. 200 chars is the ceiling — beyond that, the reply
-  // is substantial enough that a missing final period is more likely
-  // an intentional stylistic choice than truncation.
-  if (
-    trimmed.length < 200 &&
-    !/\n/.test(trimmed) &&
-    !/[.!?"')\]}]$/.test(trimmed)
-  ) {
-    return true;
-  }
-  // Two or more JSON-structural fragments in the same reply strongly
-  // suggest bracket-sequence bleed.
-  const structuralBits = [
-    /\]\}/, // ]}
-    /\}\)/, // })
-    /\}"\s*:/, // }":
-    /"\s*\}/, // " }
-    /\}\s*,\s*"/, // }, "
-  ];
-  const hits = structuralBits.filter((re) => re.test(trimmed)).length;
-  if (hits >= 2) return true;
-
-  return false;
-}
-
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
-type RunCoachInput = {
+type MapContextInput = {
   pillar: PillarCode;
   stage: ItcStage;
   improvementGoal: string | null;
-  // Ordered exactly as the coach sees them in the context block. The
-  // 1-based position in this array is what replace_behavior.index refers
-  // to. `selected` is retained for legacy maps that still have parked
-  // rows from the pre-consolidation flow.
   behaviors: { id: string; text: string; selected: boolean }[];
-  // Worries keyed by behavior_id. Populated during the worries stage so
-  // the coach knows what's already locked and doesn't re-propose.
   worries: { behavior_id: string; text: string; depth_score: number | null }[];
   commitments: { id: string; worry_id: string; text: string }[];
   assumptions: {
@@ -489,35 +100,9 @@ type RunCoachInput = {
     next_step: string | null;
   }[];
   mapStatus: string;
-  history: ChatTurn[];
-  userMessage: string;
-  // Most recent rejected coach actions (e.g., worry_not_deep_enough). Fed
-  // into the context block so the coach can respond to the rubric instead
-  // of re-proposing the same rejected text.
-  recentActionFeedback: string[];
-  // Optional per-attempt event sink. When provided, each LLM attempt +
-  // the text fallback records a timing event to the caller's TurnEventLog
-  // (which flushes as one bulk INSERT with the rest of the turn's
-  // events). Kept optional so this module doesn't have a hard dep on
-  // the events buffer; callers that don't need per-attempt DB tracing
-  // can leave it out.
-  onLlmAttempt?: (event: {
-    kind: "attempt" | "fallback";
-    attempt?: number;
-    outcome: "accepted" | "empty" | "leakage" | "error" | "ok" | "no-text";
-    durationMs: number;
-  }) => void;
 };
 
-/**
- * One coach turn. Coach outputs PROSE only via generateText — no
- * structured output, no action array. State changes are computed by
- * extract-actions.ts which runs after this returns.
- *
- * One retry on empty reply or leakage-detector hit. On second failure
- * ships a short apology so the coachee always sees a message.
- */
-export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply> {
+function buildSystem(input: MapContextInput): string | SystemModelMessage[] {
   const pillar = PILLAR_BY_CODE[input.pillar];
   const built = buildItcCoachSystemSplit({
     pillarLabel: pillar.label,
@@ -531,89 +116,240 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     tests: input.tests,
     testResults: input.testResults,
     mapStatus: input.mapStatus,
-    recentActionFeedback: input.recentActionFeedback,
+    recentActionFeedback: [],
   });
-  const system = toCoachSystem(built.static, built.dynamic);
+  return toCoachSystem(built.static, built.dynamic);
+}
 
+// -------------------------------------------------------------------------
+// generateCoachChat — plain prose reply to a chat message
+// -------------------------------------------------------------------------
+
+export type ChatInput = MapContextInput & {
+  history: ChatTurn[];
+  userMessage: string;
+};
+
+export type ChatOutput = { reply: string; durationMs: number };
+
+export async function generateCoachChat(input: ChatInput): Promise<ChatOutput> {
+  const system = buildSystem(input);
   const messages: ChatTurn[] = [
     ...input.history,
     { role: "user", content: input.userMessage },
   ];
+  const started = Date.now();
+  try {
+    const { text } = await generateText({
+      model: mainModel(),
+      system,
+      messages,
+      maxOutputTokens: 2048,
+    });
+    return { reply: scrubReply(text), durationMs: Date.now() - started };
+  } catch (err) {
+    console.warn(
+      "[itc coach chat] failure: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { reply: "", durationMs: Date.now() - started };
+  }
+}
 
-  let lastError: unknown = null;
-  // Two attempts — one primary + one retry if the first is empty or
-  // trips the leakage detector. Structured-output retries are gone
-  // because there is no structured output. If both attempts fail we
-  // fall through to the short-apology fallback below.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60_000);
-    const attemptStart = Date.now();
-    let outcome: "accepted" | "empty" | "leakage" | "error" = "error";
+// -------------------------------------------------------------------------
+// generateCoachReaction — async response to a just-added entry
+// -------------------------------------------------------------------------
+
+const ReactionSchema = z.object({
+  /** Prose the coachee reads. Two or three sentences, coaching voice. */
+  reply: z.string().min(1).max(1200),
+  /** Optional one-line sharper phrasing of the entry the coachee just
+   *  added. Renders as a "Use this wording" chip that fills the input
+   *  when tapped. Omit unless the sharper version is genuinely
+   *  clearer; do not repeat the coachee's original. */
+  refinement: z.string().min(1).max(300).optional(),
+  /** Optional list of 3-5 concrete alternative phrasings the coachee
+   *  can consider. Chips. Same "tap to fill input" affordance.
+   *  Omit unless the entry could use several angles. */
+  suggestions: z.array(z.string().min(1).max(300)).min(2).max(5).optional(),
+});
+
+export type ReactionOutput = z.infer<typeof ReactionSchema> & {
+  durationMs: number;
+};
+
+export type ReactionInput = MapContextInput & {
+  recentChat: ChatTurn[];
+  /** The entry that just landed — the coach reacts to it. */
+  justAdded: {
+    kind: "behavior" | "worry" | "commitment" | "assumption" | "goal";
+    text: string;
+    depthScore?: number | null;
+    attempts?: number;
+    behaviorText?: string; // for worries — the paired behavior
+  };
+};
+
+export async function generateCoachReaction(
+  input: ReactionInput,
+): Promise<ReactionOutput> {
+  const system = buildSystem(input);
+  const started = Date.now();
+  const promptLine = buildReactionPrompt(input);
+  try {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: ReactionSchema,
+      system,
+      messages: [
+        ...input.recentChat,
+        { role: "user" as const, content: promptLine },
+      ],
+      maxOutputTokens: 1500,
+    });
+    return {
+      ...object,
+      reply: scrubReply(object.reply),
+      refinement: object.refinement ? scrubReply(object.refinement) : undefined,
+      suggestions: object.suggestions?.map(scrubReply),
+      durationMs: Date.now() - started,
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach reaction] schema failure, falling back to prose-only: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    // Fallback: plain prose reaction, no chips. Missing chip is
+    // cosmetic degradation, not lost state.
     try {
       const { text } = await generateText({
         model: mainModel(),
         system,
-        messages,
-        // 4096 covers the longest legitimate reply (immune-system
-        // walkthrough with all three movements). No structured
-        // output means we don't need the 8192 buffer anymore.
-        maxOutputTokens: 4096,
-        abortSignal: controller.signal,
+        messages: [
+          ...input.recentChat,
+          { role: "user" as const, content: promptLine },
+        ],
+        maxOutputTokens: 800,
       });
-      const trimmed = text.trim();
-      if (trimmed.length === 0) {
-        lastError = new Error("empty reply");
-        outcome = "empty";
-        continue;
-      }
-      if (looksLikeStructuredOutputLeakage(trimmed)) {
-        console.warn(
-          "[itc] coach reply tripped leakage detector, retrying. raw=%o",
-          trimmed,
-        );
-        lastError = new Error("leakage detector");
-        outcome = "leakage";
-        continue;
-      }
-      outcome = "accepted";
-      // Belt-and-suspenders em-dash strip. The prompt has a HARD RULE
-      // banning em dashes, but the model still ships them ("that's
-      // solid — it's specific"). Replace " — " with ". " so a common
-      // clause-joiner becomes two sentences; strip any remaining bare
-      // em dashes to a period+space. Same for the double-hyphen
-      // stand-in "--".
-      const cleaned = trimmed
-        .replace(/\s+[—–]\s+/g, ". ")
-        .replace(/[—–]/g, ".")
-        .replace(/\s+--\s+/g, ". ");
-      return { reply: cleaned };
-    } catch (err) {
-      lastError = err;
-      outcome = "error";
-    } finally {
-      clearTimeout(timeoutId);
-      const durationMs = Date.now() - attemptStart;
+      return { reply: scrubReply(text), durationMs: Date.now() - started };
+    } catch (err2) {
       console.warn(
-        "[itc timing] llm attempt=%d outcome=%s ms=%d",
-        attempt + 1,
-        outcome,
-        durationMs,
+        "[itc coach reaction] prose fallback also failed: %s",
+        err2 instanceof Error ? err2.message : String(err2),
       );
-      input.onLlmAttempt?.({
-        kind: "attempt",
-        attempt: attempt + 1,
-        outcome,
-        durationMs,
-      });
+      return { reply: "", durationMs: Date.now() - started };
     }
   }
+}
 
-  console.warn(
-    "[itc] coach failed after retries: %s",
-    lastError instanceof Error ? lastError.message : String(lastError),
+function buildReactionPrompt(input: ReactionInput): string {
+  const { kind, text, depthScore, attempts, behaviorText } = input.justAdded;
+  const parts: string[] = [];
+  parts.push(
+    `[system: the coachee just added a ${kind} to the map: "${text}".` +
+      (behaviorText ? ` (paired to behavior: "${behaviorText}")` : "") +
+      (typeof depthScore === "number"
+        ? ` internal depth score: ${depthScore}/3, attempts: ${attempts ?? 1}.`
+        : "") +
+      "]",
   );
-  return {
-    reply: "Give me one more sec. Mind repeating that?",
-  };
+  parts.push(
+    "React briefly in your coaching voice. If the entry is sharp, name why it's a real column entry in one line and prompt the next move. If it needs sharpening, say what would tighten it and offer a specific sharper phrasing as the `refinement` field. Do NOT claim to have saved, added, or locked anything, because you did not do it. He wrote it. He'll write the next one too. The rubric and scores are for you; never reference them in prose. Suggestions are optional; include 3-5 in the `suggestions` field only if the entry could use several angles or he might want variety.",
+  );
+  return parts.join("\n\n");
+}
+
+// -------------------------------------------------------------------------
+// generateSuggestions — "Give me ideas" button
+// -------------------------------------------------------------------------
+
+const SuggestionsSchema = z.object({
+  reply: z.string().min(1).max(600),
+  suggestions: z.array(z.string().min(1).max(300)).min(3).max(5),
+});
+
+export type SuggestionsOutput = z.infer<typeof SuggestionsSchema> & {
+  durationMs: number;
+};
+
+export type SuggestionsInput = MapContextInput & {
+  /** Which column the suggestions are for. Determines phrasing shape. */
+  kind: "goal" | "behavior" | "worry" | "commitment" | "assumption";
+  /** For worries/commitments: which behavior/worry the suggestion
+   *  attaches to. Coach uses this to ground the options in his
+   *  specific paired entry. */
+  contextText?: string;
+  /** Any extra context — e.g. "he asked for more options that don't
+   *  overlap with the ones he's already seen." */
+  extra?: string;
+};
+
+export async function generateSuggestions(
+  input: SuggestionsInput,
+): Promise<SuggestionsOutput> {
+  const system = buildSystem(input);
+  const started = Date.now();
+  const prompt =
+    `[system: the coachee asked for suggestions for the ${input.kind} column.` +
+    (input.contextText ? ` context entry: "${input.contextText}".` : "") +
+    (input.extra ? ` ${input.extra}` : "") +
+    " Draft 3-5 concrete options grounded in his stated goal, prior entries, and BRAVEMAN domain. Each option is one sentence, sayable out loud, in his voice.]";
+  try {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: SuggestionsSchema,
+      system,
+      prompt,
+      maxOutputTokens: 1200,
+    });
+    return {
+      reply: scrubReply(object.reply),
+      suggestions: object.suggestions.map(scrubReply),
+      durationMs: Date.now() - started,
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach suggestions] schema failure: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return {
+      reply: "",
+      suggestions: [],
+      durationMs: Date.now() - started,
+    };
+  }
+}
+
+// -------------------------------------------------------------------------
+// scrubReply — defensive text cleanup on any visible coach output
+// -------------------------------------------------------------------------
+
+/**
+ * Belt-and-suspenders text cleanup. The preamble and voice doc ban
+ * em dashes and lock/added/saved claims; the model ignores that
+ * intermittently. Two passes:
+ *   1. Em dash / en dash to comma. " — " to ", ".
+ *   2. Strip "Locked", "Added", "Saved", "I've locked", etc. from any
+ *      sentence position (coach cannot do those things under
+ *      Form-First and must not claim to).
+ */
+export function scrubReply(text: string): string {
+  const dashless = text
+    .replace(/\s+[—–]\s+/g, ", ")
+    .replace(/[—–]/g, ",")
+    .replace(/\s+--\s+/g, ", ");
+  // Strip claim-of-action phrases. Case-insensitive. Cover common
+  // shapes: bare "Locked.", "Added.", "Saved.", "Got it, locked.",
+  // "I've added that", "I locked it in", "That's been added",
+  // "I've saved that to your map", "Adding it now."
+  const claimRe =
+    /(^|\.\s+|\?\s+|!\s+|\n)\s*(?:got it,?\s+)?(?:i(?:'|')ve\s+|i\s+)?(?:just\s+)?(?:locked|added|saved|adding|locking|saving|noted|written|jotted)(?:\s+(?:it|that|those|them|this)(?:\s+(?:in|down|to (?:your |the )?map|on (?:your |the )?map))?)?\s*[.!?]?/gi;
+  let cleaned = dashless.replace(claimRe, (match, sep) => sep || "");
+  // Collapse any double spaces / stranded punctuation the strip left.
+  cleaned = cleaned
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .replace(/([.!?])\s*\1/g, "$1")
+    .trim();
+  return cleaned;
 }

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapForParticipant,
-  listActionProposalsForMap,
   listAssumptionLinks,
   listAssumptions,
   listBehaviors,
@@ -32,7 +31,6 @@ export default async function ItcMapPage({
 
   const [
     messages,
-    proposals,
     behaviors,
     worries,
     commitments,
@@ -43,7 +41,6 @@ export default async function ItcMapPage({
     advanceGate,
   ] = await Promise.all([
     listMessagesForStage(map.id, map.current_stage),
-    listActionProposalsForMap(map.id),
     listBehaviors(map.id),
     listWorries(map.id),
     listCommitments(map.id),
@@ -92,12 +89,7 @@ export default async function ItcMapPage({
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:min-h-0">
         <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0 md:overflow-hidden flex flex-col">
-          <Conversation
-            mapId={map.id}
-            messages={messages}
-            proposals={proposals}
-            advanceGate={advanceGate}
-          />
+          <Conversation mapId={map.id} messages={messages} />
         </section>
         <section className="p-4 md:min-h-0 md:overflow-y-auto">
           <MapPanel
@@ -109,6 +101,7 @@ export default async function ItcMapPage({
             assumptionLinks={assumptionLinks}
             tests={tests}
             testResults={testResults}
+            advanceGate={advanceGate}
           />
         </section>
       </div>

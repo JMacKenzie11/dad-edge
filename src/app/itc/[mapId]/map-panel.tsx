@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useTransition } from "react";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
@@ -8,7 +11,9 @@ import type {
   ItcTestResult,
   ItcWorry,
 } from "@/lib/itc/maps";
+import type { ItcStage } from "@/lib/itc/stage";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
+import { advanceToStage, type AdvanceGate } from "../actions";
 import { GoalRow } from "./goal-row";
 import { BehaviorsRow } from "./behaviors-row";
 
@@ -19,25 +24,19 @@ const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   behavioral: "Behavioral",
 };
 
-// Rows created within this many ms of the current render get the
-// itc-fresh-row highlight animation. Long enough to cover typical LLM
-// turn latency (5-15s) so the just-landed entry is visible after the
-// server-action revalidate.
 const FRESH_ROW_MS = 15_000;
-
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
   if (!iso) return false;
   const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return false;
-  return nowMs - then < FRESH_ROW_MS;
+  return Number.isFinite(then) && nowMs - then < FRESH_ROW_MS;
 }
 
 /**
- * The live map, laid out as horizontal rows (one per column of the ITC
- * framework). Rows use the full pane width so text reads without ugly
- * one-word-per-line wrapping. Add/refine/remove is card-driven from
- * chat; the map itself is read-only visualization with per-row edit
- * and delete affordances for quick fixes.
+ * The live map, laid out as horizontal rows. Under Form-First, every
+ * add/edit/remove happens through the map panel — the coach never
+ * writes state. The row that matches the current stage is "active"
+ * and shows its own add/edit affordances. The Continue button at the
+ * bottom advances the stage when preconditions are met.
  */
 export function MapPanel({
   map,
@@ -48,6 +47,7 @@ export function MapPanel({
   assumptionLinks = [],
   tests = [],
   testResults = [],
+  advanceGate,
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
@@ -57,6 +57,7 @@ export function MapPanel({
   assumptionLinks?: ItcAssumptionCommitment[];
   tests?: ItcTest[];
   testResults?: ItcTestResult[];
+  advanceGate?: AdvanceGate;
 }) {
   const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
@@ -82,10 +83,7 @@ export function MapPanel({
           </div>
           <div className="text-sm">
             Pillar:{" "}
-            <span
-              className="font-semibold"
-              style={{ color: pillar.colorVar }}
-            >
+            <span className="font-semibold" style={{ color: pillar.colorVar }}>
               {pillar.label}
             </span>
           </div>
@@ -93,15 +91,24 @@ export function MapPanel({
       </div>
 
       <div className="space-y-2">
-        <Row title="1. Improvement goal">
-          <GoalRow mapId={map.id} goalText={map.improvement_goal} />
+        <Row title="1. Improvement goal" active={map.current_stage === "goal"}>
+          <GoalRow
+            mapId={map.id}
+            goalText={map.improvement_goal}
+            isActive={map.current_stage === "goal"}
+          />
         </Row>
 
-        <Row title="2. Doing / not-doing">
-          <BehaviorsRow mapId={map.id} behaviors={behaviors} nowMs={renderedAt} />
+        <Row title="2. Doing / not-doing" active={map.current_stage === "behaviors"}>
+          <BehaviorsRow
+            mapId={map.id}
+            behaviors={behaviors}
+            isActive={map.current_stage === "behaviors"}
+            nowMs={renderedAt}
+          />
         </Row>
 
-        <Row title="3. Worry box">
+        <Row title="3. Worry box" active={map.current_stage === "worries"}>
           {selectedBehaviors.length === 0 ? (
             <Placeholder>Fills in after behaviors.</Placeholder>
           ) : (
@@ -129,9 +136,7 @@ export function MapPanel({
                         →
                       </span>
                       {worry ? (
-                        <span className="flex-1 min-w-[10rem]">
-                          {worry.text}
-                        </span>
+                        <span className="flex-1 min-w-[10rem]">{worry.text}</span>
                       ) : (
                         <span className="italic text-[color:var(--color-text-muted)]/70">
                           not yet
@@ -145,7 +150,7 @@ export function MapPanel({
           )}
         </Row>
 
-        <Row title="4. Competing commitments">
+        <Row title="4. Competing commitments" active={map.current_stage === "commitments"}>
           {commitments.length === 0 ? (
             <Placeholder>
               My vows to make sure my worries never come true.
@@ -180,7 +185,7 @@ export function MapPanel({
           )}
         </Row>
 
-        <Row title="5. Big Assumptions">
+        <Row title="5. Big Assumptions" active={map.current_stage === "assumptions"}>
           {assumptions.length === 0 ? (
             <Placeholder>Comes together from the commitments.</Placeholder>
           ) : (
@@ -211,15 +216,6 @@ export function MapPanel({
                         </span>
                       ) : null}
                     </div>
-                    {a.selected_for_testing ? (
-                      <div className="text-[10px] text-[color:var(--color-primary)] mt-1">
-                        Selected for testing
-                      </div>
-                    ) : a.coach_recommended ? (
-                      <div className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
-                        Coach recommends
-                      </div>
-                    ) : null}
                   </li>
                 );
               })}
@@ -236,6 +232,8 @@ export function MapPanel({
           stage={map.current_stage}
         />
       ) : null}
+
+      {advanceGate ? <ContinueBar mapId={map.id} gate={advanceGate} /> : null}
     </div>
   );
 }
@@ -243,13 +241,29 @@ export function MapPanel({
 function Row({
   title,
   children,
+  active = false,
 }: {
   title: string;
   children: React.ReactNode;
+  active?: boolean;
 }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3">
-      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)] mb-2">
+    <section
+      className={
+        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-3 " +
+        (active
+          ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
+          : "border-[color:var(--color-border)]")
+      }
+    >
+      <h3
+        className={
+          "text-[11px] uppercase tracking-wide mb-2 " +
+          (active
+            ? "text-[color:var(--color-primary)] font-semibold"
+            : "text-[color:var(--color-text-muted)]")
+        }
+      >
         {title}
       </h3>
       {children}
@@ -264,6 +278,54 @@ function Placeholder({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
+
+function ContinueBar({
+  mapId,
+  gate,
+}: {
+  mapId: string;
+  gate: AdvanceGate;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  if (!gate.to) return null;
+  function submit() {
+    if (!gate.to) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("to", gate.to);
+    startTransition(async () => {
+      const res = await advanceToStage(fd);
+      if (!res.ok) setError(res.reason ?? "Could not advance.");
+    });
+  }
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={submit}
+        disabled={pending || !gate.enabled}
+        title={gate.enabled ? undefined : gate.reason ?? "Not ready to advance."}
+        className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        {pending ? "…" : gate.label}
+      </button>
+      {!gate.enabled && gate.reason ? (
+        <p className="mt-1 text-[11px] text-[color:var(--color-text-muted)]/80 text-center">
+          {gate.reason}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="mt-1 text-[11px] text-[color:var(--color-danger)] text-center">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ---- Tests panel (unchanged from prior — used at test_design/running/results stages) ----
 
 function TestsPanel({
   tests,
@@ -289,7 +351,6 @@ function TestsPanel({
       <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
         Test on the map
       </h3>
-
       {showRunningBanner ? (
         <div className="rounded-md border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 px-3 py-2 text-xs">
           <div className="font-semibold text-white">Test in progress</div>
@@ -304,7 +365,6 @@ function TestsPanel({
           )}
         </div>
       ) : null}
-
       {active ? (
         <TestCard
           test={active}
@@ -312,7 +372,6 @@ function TestsPanel({
           assumption={assumptionById.get(active.assumption_id) ?? null}
         />
       ) : null}
-
       {history.length > 0 ? (
         <details className="text-xs">
           <summary className="cursor-pointer text-[color:var(--color-text-muted)]/80">
@@ -367,27 +426,15 @@ function TestCard({
           {test.target_date ? ` · target ${test.target_date}` : ""}
         </div>
       </div>
-
       {assumption ? (
         <div className="text-[11px] text-[color:var(--color-text-muted)]/80 mb-2">
           Testing: <span className="text-white/90">{assumption.text}</span>
         </div>
       ) : null}
-
       <TestField label="My Big Assumption says" value={test.assumption_says} />
-      <TestField
-        label="So I will (change my behavior this way)"
-        value={test.behavior_change}
-      />
-      <TestField
-        label="And collect the following data"
-        value={test.data_to_collect}
-      />
-      <TestField
-        label="In order to find out whether"
-        value={test.in_order_to_find_out}
-      />
-
+      <TestField label="So I will (change my behavior this way)" value={test.behavior_change} />
+      <TestField label="And collect the following data" value={test.data_to_collect} />
+      <TestField label="In order to find out whether" value={test.in_order_to_find_out} />
       {result ? (
         <div className="mt-2 pt-2 border-t border-[color:var(--color-border)] space-y-1">
           <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
@@ -396,18 +443,9 @@ function TestCard({
               ? ` · ${result.assumption_verdict.replace(/_/g, " ")}`
               : ""}
           </div>
-          <TestField
-            label="So in order to test it I changed my behavior this way"
-            value={result.what_i_did}
-          />
-          <TestField
-            label="This is what I observed happening"
-            value={result.data_collected}
-          />
-          <TestField
-            label="And this is what it tells me about my Big Assumption"
-            value={result.what_it_says_about_assumption}
-          />
+          <TestField label="What I did" value={result.what_i_did} />
+          <TestField label="What I observed" value={result.data_collected} />
+          <TestField label="What it says about my Big Assumption" value={result.what_it_says_about_assumption} />
           {result.next_step ? (
             <div className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
               Next: {result.next_step.replace(/_/g, " ")}
@@ -419,13 +457,7 @@ function TestCard({
   );
 }
 
-function TestField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null;
-}) {
+function TestField({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
     <div className="mb-1">
@@ -436,3 +468,6 @@ function TestField({
     </div>
   );
 }
+
+// Silence unused type imports (kept for future stage checkpoints)
+void (null as unknown as ItcStage);

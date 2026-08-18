@@ -19,9 +19,22 @@ import type { ItcStage } from "./stage";
  */
 
 export type TurnEventType =
-  | "prefetch"
+  // Form-First event types (Section 8 of the rewrite spec)
+  | "entry_added"
+  | "entry_edited"
+  | "rubric_scored"
+  | "coach_reaction_sent"
+  | "chip_tapped"
+  | "suggestion_requested"
+  | "continue_blocked"
+  | "stage_advanced"
+  | "setpiece_delivered"
+  // Kept from prior paths (still emitted by the rebuild)
   | "llm_attempt"
   | "rubric"
+  | "error"
+  // Legacy — remove once no code paths emit them
+  | "prefetch"
   | "action_apply"
   | "action_rejected"
   | "extract"
@@ -29,10 +42,6 @@ export type TurnEventType =
   | "backstop_fire"
   | "dedup_skip"
   | "turn_summary"
-  | "error"
-  // Native-tool path only: recorded when a proposal fails a
-  // depth rubric at proposal time and the coach must recover in the
-  // same turn without ever surfacing the rejection to the coachee.
   | "rubric_rejected_proposal"
   | "same_turn_recovery";
 

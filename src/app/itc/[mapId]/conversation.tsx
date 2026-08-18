@@ -1,20 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { ItcActionProposal, ItcMessage } from "@/lib/itc/maps";
-import { advanceMapStage, sendCoachMessage, type AdvanceGate } from "../actions";
-import { ProposalCard } from "./proposal-cards";
+import { useEffect, useRef, useState, useTransition } from "react";
+import type { ItcMessage } from "@/lib/itc/maps";
+import { sendCoachMessage } from "../actions";
 
+/**
+ * The chat pane under Form-First. Pure conversation with the coach:
+ * user turns, assistant turns, chip-fill affordances beneath any
+ * assistant reply that carried a `coach-chips` footer. Nothing in
+ * this pane writes to the map. The Continue button and per-column
+ * add/edit/remove controls live on the map panel.
+ *
+ * Chip footer format on assistant messages:
+ *
+ *   <prose>
+ *   ```coach-chips
+ *   {"refinement":"...","suggestions":["..","..",".."]}
+ *   ```
+ *
+ * The renderer splits the fenced block off the prose. Tapping a chip
+ * dispatches a browser CustomEvent (`itc-chip-fill`) that the map
+ * panel listens for and uses to fill the current column's input.
+ * Chip → input; input → server action; that's the whole gesture.
+ */
 export function Conversation({
   mapId,
   messages,
-  proposals,
-  advanceGate,
 }: {
   mapId: string;
   messages: ItcMessage[];
-  proposals: ItcActionProposal[];
-  advanceGate: AdvanceGate;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -25,23 +39,11 @@ export function Conversation({
     (m) => m.role === "user" || m.role === "assistant",
   );
 
-  // Group proposals by the assistant message they were created against
-  // so each card renders inline below the message that produced it.
-  const proposalsByMessage = useMemo(() => {
-    const map = new Map<string, ItcActionProposal[]>();
-    for (const p of proposals) {
-      const arr = map.get(p.assistant_message_id) ?? [];
-      arr.push(p);
-      map.set(p.assistant_message_id, arr);
-    }
-    return map;
-  }, [proposals]);
-
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [displayMessages.length, proposals.length, pending]);
+  }, [displayMessages.length, pending]);
 
   function handleSend(fd: FormData) {
     setError(null);
@@ -49,18 +51,6 @@ export function Conversation({
       const res = await sendCoachMessage(fd);
       if (!res.ok) setError(res.reason ?? "Something went wrong.");
       if (textRef.current) textRef.current.value = "";
-    });
-  }
-
-  function handleAdvance() {
-    if (!advanceGate.to) return;
-    setError(null);
-    const fd = new FormData();
-    fd.set("map_id", mapId);
-    fd.set("to", advanceGate.to);
-    startTransition(async () => {
-      const res = await advanceMapStage(fd);
-      if (!res.ok) setError(res.reason ?? "Could not advance.");
     });
   }
 
@@ -75,59 +65,15 @@ export function Conversation({
             Say hello, or tell me what's on your mind about this pillar.
           </li>
         ) : null}
-        {displayMessages.map((m) => {
-          const cards =
-            m.role === "assistant" ? proposalsByMessage.get(m.id) ?? [] : [];
-          return (
-            <li key={m.id} className="flex flex-col">
-              <div
-                className={
-                  m.role === "user"
-                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm"
-                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm whitespace-pre-wrap"
-                }
-              >
-                {m.content}
-              </div>
-              {cards.length > 0 ? (
-                <div className="mr-auto w-full max-w-[95%] space-y-1">
-                  {cards.map((p) => (
-                    <ProposalCard key={p.id} proposal={p} />
-                  ))}
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
+        {displayMessages.map((m) => (
+          <MessageBubble key={m.id} message={m} />
+        ))}
         {pending ? (
           <li className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm">
             <TypingDots />
           </li>
         ) : null}
       </ol>
-
-      {advanceGate.to ? (
-        <div className="mt-3 border-t border-[color:var(--color-border)] pt-3">
-          <button
-            type="button"
-            onClick={handleAdvance}
-            disabled={pending || !advanceGate.enabled}
-            title={
-              advanceGate.enabled
-                ? undefined
-                : advanceGate.reason ?? "Not ready to advance."
-            }
-            className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            {pending ? "…" : advanceGate.label}
-          </button>
-          {!advanceGate.enabled && advanceGate.reason ? (
-            <p className="mt-1 text-[11px] text-[color:var(--color-text-muted)]/80 text-center">
-              {advanceGate.reason}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
 
       <form
         action={handleSend}
@@ -164,6 +110,86 @@ export function Conversation({
         <p className="mt-2 text-xs text-[color:var(--color-danger)]">{error}</p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Assistant messages may include a fenced JSON footer with refinement
+ * and suggestion chips. Parse it once here; render the prose body and
+ * the chips separately.
+ */
+type ChipPayload = {
+  refinement?: string;
+  suggestions?: string[];
+};
+
+function extractChipPayload(content: string): {
+  prose: string;
+  chips: ChipPayload | null;
+} {
+  const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+  const match = content.match(fence);
+  if (!match) return { prose: content, chips: null };
+  const prose = content.slice(0, match.index).trimEnd();
+  try {
+    const parsed = JSON.parse(match[1]) as ChipPayload;
+    return { prose, chips: parsed };
+  } catch {
+    return { prose, chips: null };
+  }
+}
+
+function MessageBubble({ message }: { message: ItcMessage }) {
+  if (message.role === "user") {
+    return (
+      <li className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm">
+        {message.content}
+      </li>
+    );
+  }
+  const { prose, chips } = extractChipPayload(message.content);
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm whitespace-pre-wrap">
+        {prose}
+      </div>
+      {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
+        <div className="mr-auto max-w-[95%] flex flex-wrap gap-1.5 pl-2">
+          {chips.refinement ? (
+            <ChipButton label={`Use: "${chips.refinement}"`} value={chips.refinement} kind="refinement" />
+          ) : null}
+          {chips.suggestions?.map((s, i) => (
+            <ChipButton key={i} label={s} value={s} kind="suggestion" />
+          ))}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function ChipButton({
+  label,
+  value,
+  kind,
+}: {
+  label: string;
+  value: string;
+  kind: "refinement" | "suggestion";
+}) {
+  function handleClick() {
+    window.dispatchEvent(
+      new CustomEvent("itc-chip-fill", { detail: { value, kind } }),
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="rounded-full border border-[color:var(--color-primary)]/60 bg-[color:var(--color-primary)]/10 px-3 py-1 text-[11px] text-white hover:bg-[color:var(--color-primary)]/20"
+      title="Use this in the map input"
+    >
+      {label}
+    </button>
   );
 }
 
