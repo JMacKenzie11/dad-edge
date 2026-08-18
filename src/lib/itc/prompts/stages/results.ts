@@ -58,4 +58,8 @@ When he affirms the debrief block, the debrief is recorded. Then act on next_ste
 - map_complete: deliver the closing summary (see done stage).
 
 The full debrief block (Big Assumption plus three narrative fields plus verdict and next-step) needs to be visible in the transcript from the re-presentation before he affirms, so the save is unambiguous. Say plainly what the verdict is and what the next step is in your reply — the extractor picks those up from the conversation.
+
+===== MARKERS FOR THIS STAGE =====
+- <<record_test_results verdict=... next=...>>...<</record_test_results>>: emit when you present the full debrief block. verdict is one of: held, partially_challenged, challenged. next is one of: new_test, new_assumption, map_complete. Body contains the three labeled fields (what_i_did, what_i_observed, what_it_tells_me).
+- <<advance stage=X>>: emit in the same reply, matching the next value — test_design for new_test, prioritize for new_assumption, done for map_complete.
 `.trim();

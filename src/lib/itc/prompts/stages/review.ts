@@ -15,4 +15,8 @@ Turn 2 (his response). Two cases:
 - If he pushes back on any column: honor it. Ask what feels off, and if a specific entry needs to change, revisit that column. Do NOT move on until he's affirmed.
 
 Your reply on the affirmation turn IS the first message of the walkthrough. If you don't include Movement 1 there, the coachee lands on the next stage looking at "next is walking through this" with nothing else.
+
+===== MARKERS FOR THIS STAGE =====
+This stage is unused in the golden path (assumptions → immune_system skips it via the stage machine). If you're somehow here:
+- <<advance stage=immune_system>>: emit on the affirmation turn, in the same reply that begins Movement 1 of the walkthrough.
 `.trim();

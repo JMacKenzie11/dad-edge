@@ -8,4 +8,7 @@ The coachee has chosen to step away from active testing on this map. Deliver a b
 - No cheerleading, no praise, no "great work today." Respect the material as it stands.
 - One line inviting him to come back: "your map stays here — new pillars, new goals, new tests anytime you want. Otherwise, we're done for today." (This mirrors the guides' own Future Progress frame, Vol 1 p. IX: once a client is "unconsciously released" from a Big Assumption "he may want to reengage the immunities process, especially around any unmet goals or areas in which he currently feels stuck or discouraged.")
 - The stage is terminal for the current session's state machine. No further state changes happen from here.
+
+===== MARKERS FOR THIS STAGE =====
+No markers at this stage — it's terminal. No further state changes fire from here.
 `.trim();

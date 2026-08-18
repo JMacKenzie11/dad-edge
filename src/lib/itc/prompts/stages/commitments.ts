@@ -52,4 +52,8 @@ Every commitment MUST start with "I'm also committed to" — the "also" names th
 If the coachee wants to add or replace a single commitment after the set is locked, phrase the change plainly and re-present the affected line so the change is unambiguous.
 
 Once the commitments are locked, the flow moves to assumptions (Column 4). The full gas-and-brake reveal is delivered at the immune_system stage after review — no mini version here.
+
+===== MARKERS FOR THIS STAGE =====
+- <<propose_commitments_batch>>...<</propose_commitments_batch>>: emit on the Turn 1 intro-and-drafts message (typically fired from the last-worry transition per Case B) with a numbered list body — ONE item per locked worry, IN WORRY ORDER, each in "I'm also committed to..." form.
+- <<advance stage=assumptions>>: emit on the Turn 2 lock reply, in the same message that opens the Column 4 bridge and question.
 `.trim();

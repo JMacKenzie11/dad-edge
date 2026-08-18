@@ -37,4 +37,8 @@ If the coachee skips affirmation and jumps straight to naming a behavior (e.g. a
   1. Explicitly confirm the goal is locked in one line ("Taking that as a yes on the goal — locked.").
   2. Acknowledge his behavior and place it as the first entry on the map ("And 'I bring up things she did in the past' is a sharp column-2 behavior — that's the first one.").
   3. Ask for the next behavior or open the column-2 intro naturally.
+
+===== MARKERS FOR THIS STAGE =====
+- <<propose_goal>>...<</propose_goal>>: emit on the Step 1 propose turn, wrapping the goal text with the stem. The coachee sees a card to accept/edit/reject.
+- <<advance stage=behaviors>>: emit on the Step 2 lock turn (or the implicit-acceptance turn), in the same reply that opens the column-2 intro.
 `.trim();

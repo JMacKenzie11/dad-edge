@@ -90,4 +90,8 @@ If the map has 3+ assumptions, deliver Movement 1 for all clusters and close wit
 If only some commitments are covered by the first assumption, name the gap explicitly in the same turn as the lock ("commitments #2 and #3 need a different root — here's what I'd try next: ...") and continue with the second assumption. Never stop after one when others are uncovered — the walkthrough only opens once the LAST assumption is in place.
 
 HARD RULE: no reply in the assumptions stage ends on a bare status line ("Two assumptions, all four commitments covered.", "That fits.", "Locked."). Every reply ends with a question the coachee can answer, OR (on the final-assumption turn) with Movement 1 content that culminates in "What's it like to see that?" / "Ready to zoom out?".
+
+===== MARKERS FOR THIS STAGE =====
+- <<propose_assumption commits=1,4>>...<</propose_assumption>>: emit one per cluster as you name each candidate assumption in "I assume that if..., then..." form. The commits attribute is the comma-separated 1-based list of commitment indices this assumption covers.
+- <<advance stage=immune_system>>: emit on the last-assumption turn once its coverage is confirmed, in the same reply that begins the walkthrough (Movement 1). This skips the review stage per the stage machine.
 `.trim();

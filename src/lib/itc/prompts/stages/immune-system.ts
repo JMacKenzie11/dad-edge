@@ -86,4 +86,10 @@ He can ask anything about his map. Rules:
 When he signals readiness ("I'm ready," "let's test," "next," "ok," "let's move on," etc.), the same reply IS the first message of the prioritize stage — it must include the reasoned recommendation of which assumption to test first (see prioritize-stage guidance loaded alongside).
 
 Never announce a transition without landing it. If your reply doesn't include the prioritize-recommendation content, the coachee lands on the next stage looking at your Q&A with nothing to react to.
+
+===== MARKERS FOR THIS STAGE =====
+On the handoff turn — after Movement 3 lands and the coachee signals "I'm ready" — emit all three in the SAME reply:
+- <<mark_walkthrough_delivered>>: records that the three-movement walkthrough has been delivered.
+- <<advance stage=prioritize>>: transitions the stage so this reply IS the first message of prioritize.
+- <<recommend_assumption index=N reason="...">>: the reasoned pick of which assumption to test first, per the prioritize-stage guidance loaded alongside.
 `.trim();

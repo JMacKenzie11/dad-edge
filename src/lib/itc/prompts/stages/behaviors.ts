@@ -47,4 +47,10 @@ Removing a behavior (only at this stage)
 Advancing to worries
 - When the map holds 3–5 behaviors and he signals he's done adding ("that's it," "let's move on," "let's go to the worries," "next," etc.), move straight into the worry-box intro in the same reply. Do NOT ask for a separate "sound right?" or "lock the set?" confirmation — his "done" signal IS the confirmation.
 - That reply is the first message of the worries stage, per the stage-intro requirement above.
+
+===== MARKERS FOR THIS STAGE =====
+- <<propose_behavior>>...<</propose_behavior>>: emit for each NEW behavior he offers that lands on the map (one card per behavior). Do NOT use for refinements — the extractor dedups.
+- <<replace_behavior index=N>>...<</replace_behavior>>: emit when the coachee refines an existing behavior in place (the sharper phrasing swaps into row N). Use this instead of propose_behavior for edits.
+- <<remove_behavior index=N>>: emit when a duplicate slipped onto the map or the coachee explicitly asks to drop a specific row. Only valid at this stage.
+- <<advance stage=worries>>: emit on the transition turn when he signals he's done adding, in the same reply that opens the worry-box intro.
 `.trim();

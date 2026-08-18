@@ -17,6 +17,7 @@ import {
   appendMessage,
   clearSelectedAssumption,
   countWorryAttempts,
+  createActionProposal,
   createMap,
   deleteBehavior,
   deleteMap,
@@ -54,6 +55,7 @@ import {
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
 import { extractActions } from "@/lib/itc/extract-actions";
+import { parseCoachMarkers } from "@/lib/itc/marker-parser";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { TurnEventLog } from "@/lib/itc/turn-events";
 import {
@@ -335,17 +337,109 @@ export async function runCoachTurnForMap(
     return { ok: false, reason: `Coach: ${message}` };
   }
 
+  // Parse inline markers from the coach reply. The reply text stored
+  // on the message is the STRIPPED version so the coachee never sees
+  // raw tags. Immediate actions (advance_stage, mark_walkthrough_delivered,
+  // select_assumption) apply here via the existing applyCoachAction
+  // path. Content markers become itc_action_proposals rows tied to
+  // this assistant message; the UI renders each as an inline card the
+  // coachee accepts, edits, or rejects.
+  const parsed_markers = parseCoachMarkers(reply.reply);
+  if (parsed_markers.errors.length > 0) {
+    console.warn(
+      "[itc] marker parser errors: %s",
+      parsed_markers.errors.join("; "),
+    );
+  }
+
   const assistantMessage = await appendMessage(
     map.id,
     "assistant",
-    reply.reply,
+    parsed_markers.strippedText.length > 0
+      ? parsed_markers.strippedText
+      : reply.reply,
     map.current_stage,
   );
 
-  // Extractor pass — the primary path for state changes. Reads the
-  // just-completed turn plus current state and emits every action the
-  // server should apply. Replaces the old regex-backstop + cascade +
-  // reconciler-as-backstop dance with one focused LLM call.
+  // Save content markers as proposal rows. Coachee clicks a card
+  // later; server actions in this file apply them via the same
+  // applyCoachAction path (rubric, dedup, stage guard all still fire).
+  for (const proposal of parsed_markers.proposals) {
+    try {
+      await createActionProposal({
+        mapId: map.id,
+        assistantMessageId: assistantMessage.id,
+        actionType: proposal.type,
+        payload: proposal,
+        source: "marker",
+      });
+      events.record(
+        "action_apply",
+        {
+          action_type: proposal.type,
+          applied: true,
+          via: "marker",
+          proposal_created: true,
+        },
+        { stage: map.current_stage },
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        "[itc] createActionProposal(%s) failed: %s",
+        proposal.type,
+        msg,
+      );
+      events.record(
+        "error",
+        { where: "createActionProposal", action_type: proposal.type, message: msg },
+        { stage: map.current_stage },
+      );
+    }
+  }
+
+  // Apply immediate actions (transitions + select). No user card.
+  for (const action of parsed_markers.immediateActions) {
+    const applyStart = Date.now();
+    try {
+      const mapNow = await getMapById(map.id);
+      let stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+      const allowedStages = ACTION_ALLOWED_STAGES[action.type];
+      if (allowedStages && !allowedStages.includes(stageNow)) {
+        stageNow = await autoCascadeToActionStage(
+          map.id,
+          stageNow,
+          allowedStages[0],
+          events,
+        );
+      }
+      await applyCoachAction(map.id, stageNow, action, events);
+      events.record(
+        "action_apply",
+        { action_type: action.type, applied: true, via: "marker" },
+        { durationMs: Date.now() - applyStart, stage: stageNow },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await appendMessage(
+        map.id,
+        "system",
+        `[action rejected] ${message}`,
+        map.current_stage,
+      );
+      events.record(
+        "action_rejected",
+        { action_type: action.type, error: message, via: "marker" },
+        { durationMs: Date.now() - applyStart, stage: map.current_stage },
+      );
+    }
+  }
+
+  // Extractor pass — the safety net for state changes. Reads the
+  // just-completed turn plus current state and emits any actions the
+  // coach's markers missed. Extractor content actions become
+  // additional proposals (dedup by matching proposal already existing
+  // for this assistant message with same action_type + payload).
   const extractStart = Date.now();
   // Widened from 3 to 6 assistant turns. The extractor needs to see
   // draft turns that may be several turns back on a chatty affirmation
@@ -426,56 +520,100 @@ export async function runCoachTurnForMap(
     { durationMs: extractMs, stage: map.current_stage },
   );
 
-  // Apply each extracted action in order. Stage guards run against
-  // the CURRENT stage after previous actions in the batch — so an
-  // advance_stage earlier in the array lets a subsequent action land
-  // at the new stage. Rejections are non-fatal and land as [action
-  // rejected] system messages the extractor sees on the next turn.
+  // Route each extracted action. Content actions become proposal cards
+  // if the marker parser didn't already create one; immediate actions
+  // (advance_stage, mark_walkthrough_delivered, select_assumption)
+  // apply directly. Dedup: skip if the coach's marker parser already
+  // produced a proposal for the same action_type on this assistant
+  // message — no need for the extractor to duplicate it.
+  const markerProposalTypes = new Set(
+    parsed_markers.proposals.map((p) => p.type),
+  );
+  const markerImmediateTypes = new Set(
+    parsed_markers.immediateActions.map((a) => a.type),
+  );
   let appliedCount = 0;
   for (const action of extraction.actions) {
-    const applyStart = Date.now();
-    try {
-      const mapNow = await getMapById(map.id);
-      let stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+    const isImmediate = IMMEDIATE_ACTION_TYPES.has(action.type);
+    // Skip if the marker parser already handled this action type on this
+    // turn — coach's explicit intent wins over extractor's inference.
+    if (isImmediate && markerImmediateTypes.has(action.type)) continue;
+    if (!isImmediate && markerProposalTypes.has(action.type)) continue;
 
-      // Auto-cascade: if this action needs a stage the map hasn't
-      // reached yet (or is past), walk the stage machine to the
-      // required stage FIRST. Removes reliance on the extractor
-      // getting action ordering right within a batch. If cascade
-      // fails at an intermediate gate (e.g. can't advance to worries
-      // without a selected behavior), the subsequent applyCoachAction
-      // will throw a specific stage-mismatch error and land as an
-      // [action rejected] the extractor sees next turn.
-      const allowedStages = ACTION_ALLOWED_STAGES[action.type];
-      if (allowedStages && !allowedStages.includes(stageNow)) {
-        stageNow = await autoCascadeToActionStage(
+    const applyStart = Date.now();
+    if (isImmediate) {
+      // Apply immediate actions directly. Same path as marker-immediate.
+      try {
+        const mapNow = await getMapById(map.id);
+        let stageNow: ItcStage = mapNow?.current_stage ?? map.current_stage;
+        const allowedStages = ACTION_ALLOWED_STAGES[action.type];
+        if (allowedStages && !allowedStages.includes(stageNow)) {
+          stageNow = await autoCascadeToActionStage(
+            map.id,
+            stageNow,
+            allowedStages[0],
+            events,
+          );
+        }
+        await applyCoachAction(map.id, stageNow, action, events);
+        appliedCount++;
+        events.record(
+          "action_apply",
+          { action_type: action.type, applied: true, via: "extract" },
+          { durationMs: Date.now() - applyStart, stage: stageNow },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await appendMessage(
           map.id,
-          stageNow,
-          allowedStages[0],
-          events,
+          "system",
+          `[action rejected] ${message}`,
+          map.current_stage,
+        );
+        events.record(
+          "action_rejected",
+          { action_type: action.type, error: message, via: "extract" },
+          { durationMs: Date.now() - applyStart, stage: map.current_stage },
         );
       }
-
-      await applyCoachAction(map.id, stageNow, action, events);
-      appliedCount++;
-      events.record(
-        "action_apply",
-        { action_type: action.type, applied: true, via: "extract" },
-        { durationMs: Date.now() - applyStart, stage: stageNow },
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await appendMessage(
-        map.id,
-        "system",
-        `[action rejected] ${message}`,
-        map.current_stage,
-      );
-      events.record(
-        "action_rejected",
-        { action_type: action.type, error: message, via: "extract" },
-        { durationMs: Date.now() - applyStart, stage: map.current_stage },
-      );
+    } else {
+      // Content action — save as proposal for the UI card.
+      try {
+        await createActionProposal({
+          mapId: map.id,
+          assistantMessageId: assistantMessage.id,
+          actionType: action.type,
+          payload: action,
+          source: "extractor",
+        });
+        appliedCount++;
+        events.record(
+          "action_apply",
+          {
+            action_type: action.type,
+            applied: true,
+            via: "extract",
+            proposal_created: true,
+          },
+          { durationMs: Date.now() - applyStart, stage: map.current_stage },
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          "[itc] createActionProposal(%s) from extractor failed: %s",
+          action.type,
+          msg,
+        );
+        events.record(
+          "error",
+          {
+            where: "createActionProposal-extractor",
+            action_type: action.type,
+            message: msg,
+          },
+          { stage: map.current_stage },
+        );
+      }
     }
   }
 
@@ -741,6 +879,19 @@ const ACTION_ALLOWED_STAGES: Record<CoachAction["type"], ItcStage[] | null> = {
   record_test_results: ["test_running", "results"],
   advance_stage: null,
 };
+
+/**
+ * Actions that apply immediately (no UI card). Content actions that
+ * aren't in this set become itc_action_proposals rows the coachee
+ * accepts/edits/rejects via inline cards. Kept in sync with the same
+ * set inside marker-parser.ts.
+ */
+const IMMEDIATE_ACTION_TYPES = new Set<CoachAction["type"]>([
+  "advance_stage",
+  "mark_walkthrough_delivered",
+  "mark_reveal_delivered",
+  "select_assumption_for_testing",
+]);
 
 /**
  * Walk the stage machine from currentStage toward targetStage, one

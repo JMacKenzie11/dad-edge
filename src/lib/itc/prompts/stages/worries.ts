@@ -90,4 +90,8 @@ Common failure modes to avoid
 
 Shared-root observation
 - If he names a shared root across worries (e.g., "if I don't control the outcome, something Big Time Bad happens" — Vol 1 p. 20 canonical phrase for the catastrophic "then" of an assumption), reflect it back plainly ("that's a Big Assumption we'll come back to") and continue the excavation on THIS behavior. Do not detour into column 4 during column 3. Actually use the observation when you get to assumptions.
+
+===== MARKERS FOR THIS STAGE =====
+- <<propose_worry behavior=N>>...<</propose_worry>>: emit each time you name a worry back in "I worry that..." form, whether the coachee framed it or you framed it after his probe. N is the 1-based index into the SELECTED behaviors list — the behavior this worry pairs with.
+- <<advance stage=commitments>>: emit on the last worry's landing turn (Case B in the same-turn pivot), in the same reply that opens the commitments walkthrough with the drafted <<propose_commitments_batch>>.
 `.trim();
