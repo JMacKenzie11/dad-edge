@@ -360,9 +360,7 @@ export function MapCanvas({
                       "rounded-md border px-3 py-2 " +
                       (a.selected_for_testing
                         ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10"
-                        : a.coach_recommended
-                          ? "border-[color:var(--color-primary)]/40 bg-black/20"
-                          : "border-[color:var(--color-border)] bg-black/20") +
+                        : "border-[color:var(--color-border)] bg-black/20") +
                       (isFresh(a.created_at, renderedAt) ? " itc-fresh-row" : "")
                     }
                   >

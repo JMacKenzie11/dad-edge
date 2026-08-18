@@ -28,9 +28,7 @@ export type ItcAssumption = {
   map_id: string;
   sort_order: number;
   text: string;
-  depth_score: number | null;
   selected_for_testing: boolean;
-  coach_recommended: boolean;
   created_at: string;
 };
 
@@ -56,18 +54,6 @@ export type ItcWorry = {
   map_id: string;
   behavior_id: string;
   text: string;
-  depth_score: number | null;
-  created_at: string;
-};
-
-export type ItcWorryAttempt = {
-  id: string;
-  map_id: string;
-  behavior_id: string;
-  text: string;
-  depth_score: number | null;
-  accepted: boolean;
-  reject_reason: string | null;
   created_at: string;
 };
 
@@ -129,20 +115,6 @@ export type ItcTestResult = {
   next_step: ItcNextStep | null;
   created_at: string;
 };
-
-export async function findInProgressMap(participantId: string): Promise<ItcMap | null> {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("itc_maps")
-    .select("*")
-    .eq("participant_id", participantId)
-    .eq("status", "in_progress")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`findInProgressMap: ${error.message}`);
-  return (data as ItcMap | null) ?? null;
-}
 
 export async function listAllMaps(): Promise<ItcMap[]> {
   const supabase = createSupabaseServiceClient();
@@ -400,67 +372,6 @@ export async function listWorries(mapId: string): Promise<ItcWorry[]> {
   return (data ?? []) as ItcWorry[];
 }
 
-export async function upsertWorry(
-  mapId: string,
-  behaviorId: string,
-  text: string,
-  depthScore: number,
-): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const existing = await supabase
-    .from("itc_worries")
-    .select("id")
-    .eq("map_id", mapId)
-    .eq("behavior_id", behaviorId)
-    .maybeSingle();
-  if (existing.error) throw new Error(`upsertWorry lookup: ${existing.error.message}`);
-
-  const trimmed = text.trim();
-  if (existing.data) {
-    const { error } = await supabase
-      .from("itc_worries")
-      .update({ text: trimmed, depth_score: depthScore })
-      .eq("id", existing.data.id);
-    if (error) throw new Error(`upsertWorry update: ${error.message}`);
-    return;
-  }
-
-  const { error } = await supabase
-    .from("itc_worries")
-    .insert({ map_id: mapId, behavior_id: behaviorId, text: trimmed, depth_score: depthScore });
-  if (error) throw new Error(`upsertWorry insert: ${error.message}`);
-}
-
-export async function logWorryAttempt(input: {
-  mapId: string;
-  behaviorId: string;
-  text: string;
-  depthScore: number | null;
-  accepted: boolean;
-  rejectReason: string | null;
-}): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const { error } = await supabase.from("itc_worry_attempts").insert({
-    map_id: input.mapId,
-    behavior_id: input.behaviorId,
-    text: input.text,
-    depth_score: input.depthScore,
-    accepted: input.accepted,
-    reject_reason: input.rejectReason,
-  });
-  if (error) throw new Error(`logWorryAttempt: ${error.message}`);
-}
-
-export async function countWorryAttempts(behaviorId: string): Promise<number> {
-  const supabase = createSupabaseServiceClient();
-  const { count, error } = await supabase
-    .from("itc_worry_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("behavior_id", behaviorId);
-  if (error) throw new Error(`countWorryAttempts: ${error.message}`);
-  return count ?? 0;
-}
-
 export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -539,7 +450,6 @@ export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {
 export async function addAssumption(
   mapId: string,
   text: string,
-  depthScore: number,
 ): Promise<{ row: ItcAssumption; deduped: boolean }> {
   const supabase = createSupabaseServiceClient();
   const existing = await listAssumptions(mapId);
@@ -560,7 +470,6 @@ export async function addAssumption(
     .insert({
       map_id: mapId,
       text: text.trim(),
-      depth_score: depthScore,
       sort_order: existing.length,
     })
     .select("*")
@@ -613,7 +522,7 @@ export async function setAssumptionSelected(
   // Clear all selections, then set the target. One-at-a-time enforcement.
   const clear = await supabase
     .from("itc_assumptions")
-    .update({ selected_for_testing: false, coach_recommended: false })
+    .update({ selected_for_testing: false })
     .eq("map_id", mapId);
   if (clear.error) throw new Error(`setAssumptionSelected clear: ${clear.error.message}`);
   const { error } = await supabase
@@ -622,24 +531,6 @@ export async function setAssumptionSelected(
     .eq("id", assumptionId)
     .eq("map_id", mapId);
   if (error) throw new Error(`setAssumptionSelected: ${error.message}`);
-}
-
-export async function setAssumptionRecommended(
-  assumptionId: string,
-  mapId: string,
-): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const clear = await supabase
-    .from("itc_assumptions")
-    .update({ coach_recommended: false })
-    .eq("map_id", mapId);
-  if (clear.error) throw new Error(`setAssumptionRecommended clear: ${clear.error.message}`);
-  const { error } = await supabase
-    .from("itc_assumptions")
-    .update({ coach_recommended: true })
-    .eq("id", assumptionId)
-    .eq("map_id", mapId);
-  if (error) throw new Error(`setAssumptionRecommended: ${error.message}`);
 }
 
 export async function listTests(mapId: string): Promise<ItcTest[]> {
@@ -819,7 +710,7 @@ export async function clearSelectedAssumption(mapId: string): Promise<void> {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("itc_assumptions")
-    .update({ selected_for_testing: false, coach_recommended: false })
+    .update({ selected_for_testing: false })
     .eq("map_id", mapId);
   if (error) throw new Error(`clearSelectedAssumption: ${error.message}`);
 }

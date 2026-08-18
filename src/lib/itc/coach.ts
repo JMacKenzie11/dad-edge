@@ -68,14 +68,12 @@ type MapContextInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
-  worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  worries: { behavior_id: string; text: string }[];
   commitments: { id: string; worry_id: string; text: string }[];
   assumptions: {
     id: string;
     text: string;
-    depth_score: number | null;
     selected_for_testing: boolean;
-    coach_recommended: boolean;
     linked_commitment_ids: string[];
   }[];
   walkthroughDelivered: boolean;
@@ -184,8 +182,6 @@ export type ReactionInput = MapContextInput & {
   justAdded: {
     kind: "behavior" | "worry" | "commitment" | "assumption" | "goal";
     text: string;
-    depthScore?: number | null;
-    attempts?: number;
     behaviorText?: string; // for worries — the paired behavior
   };
 };
@@ -243,14 +239,11 @@ export async function generateCoachReaction(
 }
 
 function buildReactionPrompt(input: ReactionInput): string {
-  const { kind, text, depthScore, attempts, behaviorText } = input.justAdded;
+  const { kind, text, behaviorText } = input.justAdded;
   const parts: string[] = [];
   parts.push(
     `[system: the coachee just added a ${kind} to the map: "${text}".` +
       (behaviorText ? ` (paired to behavior: "${behaviorText}")` : "") +
-      (typeof depthScore === "number"
-        ? ` internal depth score: ${depthScore}/3, attempts: ${attempts ?? 1}.`
-        : "") +
       "]",
   );
   parts.push(

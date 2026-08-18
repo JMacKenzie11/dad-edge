@@ -5,18 +5,18 @@ import type { ItcMessage } from "@/lib/itc/maps";
 import { postThreadReply } from "../actions";
 
 /**
- * Inline coaching thread anchored to a specific map entry. Renders
- * the coach's reaction messages + any back-and-forth about this
- * entry. Reply input is always visible under the latest coach
- * message; no click-to-reveal step.
+ * Inline coaching thread anchored to a specific map entry. Always
+ * visible when there are messages; reply input is always visible
+ * under the latest coach message.
  *
- * Collapse discipline: threads auto-collapse to a compact badge
- * when the entry is "settled" — the last coach message on this
- * entry carries no refinement / suggestion chips, which the coach
- * prompt uses to signal approval. Tap the badge to reopen.
+ * No auto-collapse: prior versions tried to infer "coach approved"
+ * from the absence of chip payload, but Case 1 pushback ALSO has
+ * no chips, so the badge misfired on rejections. Under Form-First
+ * the user is the decider — thread stays visible so the coach's
+ * prose can do its job.
  *
  * One-active-thread rule: focusing this thread's reply broadcasts
- * `itc-thread-focus`; other threads listen and collapse their own
+ * `itc-thread-focus`; other threads listen and blur their own
  * inputs when a sibling takes focus.
  */
 export function EntryThread({
@@ -44,18 +44,7 @@ export function EntryThread({
   const [pending, startTransition] = useTransition();
   const [replyText, setReplyText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [manuallyReopened, setManuallyReopened] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Approval detection: the last coach message on this thread carries
-  // no chips → the coach's Case-3 signal that the entry is sharp and
-  // doesn't need honing. Collapse the thread until the user
-  // manually reopens or a new coach message with chips arrives.
-  const lastCoach = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant");
-  const approved = lastCoach ? !messageHasChips(lastCoach.content) : false;
-  const shouldCollapse = approved && !manuallyReopened && messages.length > 0;
 
   useEffect(() => {
     function onOtherFocus(ev: Event) {
@@ -89,25 +78,7 @@ export function EntryThread({
     });
   }
 
-  // Nothing yet — no reaction has fired. Render nothing.
   if (messages.length === 0) return null;
-
-  // Collapsed state: the coach approved and there's no active
-  // back-and-forth. Show a compact badge that expands on tap.
-  if (shouldCollapse) {
-    return (
-      <div className="pl-3 pt-1">
-        <button
-          type="button"
-          onClick={() => setManuallyReopened(true)}
-          className="text-[11px] text-[color:var(--color-text-muted)] hover:text-white"
-          title="Reopen the coach thread"
-        >
-          ✓ Coach approved · {messages.length} {messages.length === 1 ? "note" : "notes"}
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="pl-3 pt-1 space-y-1.5">
@@ -173,24 +144,6 @@ export function EntryThread({
       </div>
     </div>
   );
-}
-
-function messageHasChips(content: string): boolean {
-  const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
-  const match = content.match(fence);
-  if (!match) return false;
-  try {
-    const chips = JSON.parse(match[1]) as {
-      refinement?: string;
-      suggestions?: string[];
-    };
-    return (
-      Boolean(chips.refinement && chips.refinement.trim().length > 0) ||
-      Boolean(chips.suggestions && chips.suggestions.length > 0)
-    );
-  } catch {
-    return false;
-  }
 }
 
 type ChipPayload = {

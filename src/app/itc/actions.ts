@@ -19,7 +19,6 @@ import {
   createMap,
   deleteBehavior,
   deleteMap,
-  findInProgressMap,
   getActiveTest,
   getMapById,
   getMapForParticipant,
@@ -41,7 +40,6 @@ import {
   GOAL_STEM,
   ITC_STAGES,
   STAGE_LABELS,
-  canTransitionTo,
   hasGoalStem,
   type ItcStage,
 } from "@/lib/itc/stage";
@@ -147,7 +145,6 @@ async function loadCoachContext(mapId: string) {
       worries: worries.map((w) => ({
         behavior_id: w.behavior_id,
         text: w.text,
-        depth_score: w.depth_score,
       })),
       commitments: commitments.map((c) => ({
         id: c.id,
@@ -157,9 +154,7 @@ async function loadCoachContext(mapId: string) {
       assumptions: assumptions.map((a) => ({
         id: a.id,
         text: a.text,
-        depth_score: a.depth_score,
         selected_for_testing: a.selected_for_testing,
-        coach_recommended: a.coach_recommended,
         linked_commitment_ids: linksByAssumption.get(a.id) ?? [],
       })),
       walkthroughDelivered: map.walkthrough_delivered,
@@ -973,9 +968,8 @@ async function computeAdvanceGate(
         listWorries(map.id),
         listCommitments(map.id),
       ]);
-      const locked = ws.filter((w) => w.depth_score !== null);
       const covered = new Set(cs.map((c) => c.worry_id));
-      const missing = locked.filter((w) => !covered.has(w.id));
+      const missing = ws.filter((w) => !covered.has(w.id));
       if (missing.length > 0) {
         return {
           from,
@@ -1139,9 +1133,3 @@ const STAGE_INTROS: Partial<Record<ItcStage, (goal: string | null) => string>> =
   done: (_goal) =>
     `Your map stays here. Come back anytime you want to design another test, revisit an assumption, or work on a different pillar.`,
 };
-
-// -------------------------------------------------------------------------
-// Silence unused-import warnings for helpers not yet wired in Checkpoint A
-// -------------------------------------------------------------------------
-void findInProgressMap;
-void canTransitionTo;

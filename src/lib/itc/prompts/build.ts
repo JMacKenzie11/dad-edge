@@ -51,14 +51,12 @@ type BuildInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
-  worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  worries: { behavior_id: string; text: string }[];
   commitments: { id: string; worry_id: string; text: string }[];
   assumptions: {
     id: string;
     text: string;
-    depth_score: number | null;
     selected_for_testing: boolean;
-    coach_recommended: boolean;
     linked_commitment_ids: string[];
   }[];
   walkthroughDelivered: boolean;
@@ -136,9 +134,7 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
     ? selectedBehaviors
         .map((b, i) => {
           const w = worriesByBehavior.get(b.id);
-          const status = w
-            ? `[locked, depth ${w.depth_score ?? "?"}/3] "${w.text}"`
-            : "[not yet]";
+          const status = w ? `"${w.text}"` : "[not yet]";
           return `  ${i + 1}. ${b.text} → ${status}`;
         })
         .join("\n")
@@ -148,10 +144,9 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
     ? `\n- Recent server feedback on your actions (respond to this, do not repeat the same proposal):\n${input.recentActionFeedback.map((f, i) => `  ${i + 1}. ${f}`).join("\n")}`
     : "";
 
-  const lockedWorries = input.worries.filter((w) => w.depth_score !== null);
-  const worryIndexList = lockedWorries.length
-    ? lockedWorries.map((w, i) => `  ${i + 1}. "${w.text}"`).join("\n")
-    : "  (none locked yet)";
+  const worryIndexList = input.worries.length
+    ? input.worries.map((w, i) => `  ${i + 1}. "${w.text}"`).join("\n")
+    : "  (none yet)";
 
   const commitmentList = input.commitments.length
     ? input.commitments.map((c, i) => `  ${i + 1}. "${c.text}"`).join("\n")
@@ -160,14 +155,8 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
   const assumptionList = input.assumptions.length
     ? input.assumptions
         .map((a, i) => {
-          const flags = [
-            a.selected_for_testing ? "SELECTED" : null,
-            a.coach_recommended ? "recommended" : null,
-            a.depth_score !== null ? `depth ${a.depth_score}/3` : null,
-          ]
-            .filter(Boolean)
-            .join(", ");
-          return `  ${i + 1}. "${a.text}"${flags ? ` [${flags}]` : ""}`;
+          const flag = a.selected_for_testing ? " [SELECTED]" : "";
+          return `  ${i + 1}. "${a.text}"${flag}`;
         })
         .join("\n")
     : "  (none yet)";
@@ -222,7 +211,7 @@ Current context
 ${behaviorList}
 - Worry-box pairings (SELECTED behaviors only — use these 1-based indices for propose_worry.behavior_index):
 ${worryList}
-- Locked worries in order (use these 1-based indices for propose_commitment.worry_index):
+- Worries in order (use these 1-based indices for propose_commitment.worry_index):
 ${worryIndexList}
 - Commitments (use these 1-based indices for propose_assumption.commitment_indices):
 ${commitmentList}

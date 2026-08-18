@@ -118,13 +118,7 @@ export default async function ItcAdminMapPage({
             </div>
             <ul className="list-decimal ml-4">
               {worries.map((w) => (
-                <li key={w.id}>
-                  {w.text}
-                  <span className="text-[color:var(--color-muted)]">
-                    {" "}
-                    (depth {w.depth_score ?? "?"})
-                  </span>
-                </li>
+                <li key={w.id}>{w.text}</li>
               ))}
             </ul>
           </div>
