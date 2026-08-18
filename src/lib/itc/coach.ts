@@ -223,7 +223,15 @@ export type CoachReply = {
  * ship the garbage to the coachee.
  */
 export function looksLikeStructuredOutputLeakage(text: string): boolean {
-  const trimmed = text.trim();
+  // Strip inline marker tags before scanning — the coach LEGITIMATELY
+  // emits <<propose_goal>>...<</propose_goal>>, <<advance stage=...>>,
+  // etc., and every "action_name" that appears in the schema regex
+  // below is also a valid marker tag name. Without this preprocess,
+  // any well-formed marker reply trips the "unquoted schema token"
+  // check and falls through to the fallback ("Give me one more sec…").
+  // Mirrors the strip in marker-parser.ts.
+  const stripped = text.replace(/<<\/?[^>]*>>/g, "");
+  const trimmed = stripped.trim();
   // Special / control tokens leaking from the tokenizer. Observed on
   // 2026-08-13: reply ended with "Want a fifth, or is that the set?
   // <|control11|>{" — the |...| angle-bracket token is a raw model
@@ -596,6 +604,6 @@ export async function runItcCoachTurn(input: RunCoachInput): Promise<CoachReply>
     lastError instanceof Error ? lastError.message : String(lastError),
   );
   return {
-    reply: "Give me one more sec — mind repeating that?",
+    reply: "Give me one more sec. Mind repeating that?",
   };
 }
