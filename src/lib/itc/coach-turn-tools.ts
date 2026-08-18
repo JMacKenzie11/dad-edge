@@ -76,6 +76,15 @@ function forcedToolChoiceFor(
   ) {
     return null;
   }
+  // Inner-state openers. If the message starts with a self-reported
+  // feeling / thought / desire, it's NOT a behavior — the behaviors
+  // stage prompt says to convert those into behaviors by asking
+  // "when you're X, what do you actually do?" Forcing propose_behavior
+  // here made the coach hallucinate (it grabbed the previous
+  // behavior's text because it had nothing real to propose).
+  const innerStateOpener =
+    /^\s*(I|I'm|I've|I'd|I'll)\s+(feel|felt|feeling|think|thought|believe|believed|want|wanted|need|needed|worry|worried|wonder|wondered|hope|hoped|wish|wished|know|knew|understand|understood|remember|remembered|imagine|imagined|hate|hated|love|loved|assume|assumed|am|was|were|get|got|felt like|kind of|sort of)\b/i;
+  if (innerStateOpener.test(trimmed)) return null;
   // First-person pattern check. Covers "I ...", "I'm ...", "Yeah I ...",
   // "When I ...", "Well when I ...", etc.
   const firstPerson = /\b(I|I'm|I've|I'll|I'd)\s+\w/i.test(trimmed);
