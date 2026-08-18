@@ -7,18 +7,25 @@ import {
   listAssumptions,
   listBehaviors,
   listCommitments,
-  listMessagesForStage,
+  listMessages,
   listTestResults,
   listTests,
   listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { getAdvanceGate } from "../actions";
-import { Conversation } from "./conversation";
-import { MapPanel } from "./map-panel";
+import { MapCanvas } from "./map-canvas";
 import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
 
+/**
+ * Full-width single-column ITC canvas. Layout Amendment: the two-
+ * pane chat + map layout is gone. Coach output renders inline in
+ * four surfaces per §1: stage note (pinned at top of active
+ * section), entry threads (beneath each entry row), focus mode
+ * (set pieces, future checkpoint), and the coach dock (bottom-
+ * right floating drawer).
+ */
 export default async function ItcMapPage({
   params,
 }: {
@@ -40,7 +47,7 @@ export default async function ItcMapPage({
     testResults,
     advanceGate,
   ] = await Promise.all([
-    listMessagesForStage(map.id, map.current_stage),
+    listMessages(map.id),
     listBehaviors(map.id),
     listWorries(map.id),
     listCommitments(map.id),
@@ -52,12 +59,12 @@ export default async function ItcMapPage({
   ]);
 
   return (
-    <main className="min-h-screen md:h-screen flex flex-col md:overflow-hidden">
+    <main className="min-h-screen flex flex-col">
       <header className="border-b border-[color:var(--color-border)] px-4 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/itc"
-            className="text-xs text-[color:var(--color-muted)] hover:text-white"
+            className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
           >
             ← Maps
           </Link>
@@ -66,7 +73,7 @@ export default async function ItcMapPage({
           {isItcAdmin(participant.email) ? (
             <Link
               href="/itc/admin"
-              className="text-xs text-[color:var(--color-muted)] hover:text-white"
+              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
             >
               Admin
             </Link>
@@ -75,7 +82,7 @@ export default async function ItcMapPage({
           <form action="/itc/logout" method="POST">
             <button
               type="submit"
-              className="text-xs text-[color:var(--color-muted)] hover:text-white"
+              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
             >
               Sign out
             </button>
@@ -87,23 +94,19 @@ export default async function ItcMapPage({
         <StageProgress current={map.current_stage} />
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:min-h-0">
-        <section className="border-b md:border-b-0 md:border-r border-[color:var(--color-border)] p-4 min-h-[420px] md:min-h-0 md:overflow-hidden flex flex-col">
-          <Conversation mapId={map.id} messages={messages} />
-        </section>
-        <section className="p-4 md:min-h-0 md:overflow-y-auto">
-          <MapPanel
-            map={map}
-            behaviors={behaviors}
-            worries={worries}
-            commitments={commitments}
-            assumptions={assumptions}
-            assumptionLinks={assumptionLinks}
-            tests={tests}
-            testResults={testResults}
-            advanceGate={advanceGate}
-          />
-        </section>
+      <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-6">
+        <MapCanvas
+          map={map}
+          behaviors={behaviors}
+          worries={worries}
+          commitments={commitments}
+          assumptions={assumptions}
+          assumptionLinks={assumptionLinks}
+          tests={tests}
+          testResults={testResults}
+          messages={messages}
+          advanceGate={advanceGate}
+        />
       </div>
     </main>
   );

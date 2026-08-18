@@ -29,6 +29,11 @@ export type TurnEventType =
   | "continue_blocked"
   | "stage_advanced"
   | "setpiece_delivered"
+  // Layout amendment event types
+  | "thread_reply"
+  | "dock_message"
+  | "focus_entered"
+  | "focus_exited"
   // Kept from prior paths (still emitted by the rebuild)
   | "llm_attempt"
   | "rubric"

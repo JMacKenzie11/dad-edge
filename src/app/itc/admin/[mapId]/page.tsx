@@ -12,7 +12,6 @@ import {
 } from "@/lib/itc/maps";
 import { getParticipantById } from "@/lib/itc/participant";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
-import { MapPanel } from "../../[mapId]/map-panel";
 import { StageProgress } from "../../[mapId]/stage-progress";
 
 export default async function ItcAdminMapPage({
@@ -91,15 +90,75 @@ export default async function ItcAdminMapPage({
             ))}
           </ol>
         </section>
-        <section className="p-4 md:min-h-0 md:overflow-y-auto">
-          <MapPanel
-            map={map}
-            behaviors={behaviors}
-            worries={worries}
-            commitments={commitments}
-            assumptions={assumptions}
-            assumptionLinks={assumptionLinks}
-          />
+        <section className="p-4 md:min-h-0 md:overflow-y-auto text-xs space-y-3">
+          {/* Full admin view (linear + threaded) rebuilds in Layout
+              Amendment Checkpoint D. For now: raw state dump so
+              admins can inspect the map behind the transcript. */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+              Goal
+            </div>
+            <div>{map.improvement_goal ?? "(not set)"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+              Behaviors ({behaviors.filter((b) => b.selected).length})
+            </div>
+            <ul className="list-decimal ml-4">
+              {behaviors
+                .filter((b) => b.selected)
+                .map((b) => (
+                  <li key={b.id}>{b.text}</li>
+                ))}
+            </ul>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+              Worries ({worries.length})
+            </div>
+            <ul className="list-decimal ml-4">
+              {worries.map((w) => (
+                <li key={w.id}>
+                  {w.text}
+                  <span className="text-[color:var(--color-muted)]">
+                    {" "}
+                    (depth {w.depth_score ?? "?"})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+              Commitments ({commitments.length})
+            </div>
+            <ul className="list-decimal ml-4">
+              {commitments.map((c) => (
+                <li key={c.id}>{c.text}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+              Assumptions ({assumptions.length})
+            </div>
+            <ul className="list-decimal ml-4">
+              {assumptions.map((a) => {
+                const links = assumptionLinks
+                  .filter((l) => l.assumption_id === a.id)
+                  .map((l) => l.commitment_id);
+                return (
+                  <li key={a.id}>
+                    {a.text}
+                    <span className="text-[color:var(--color-muted)]">
+                      {" "}
+                      (links {links.length})
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </section>
       </div>
     </main>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
   ItcBehavior,
   ItcCommitment,
   ItcMap,
+  ItcMessage,
   ItcTest,
   ItcTestResult,
   ItcWorry,
@@ -14,8 +15,10 @@ import type {
 import type { ItcStage } from "@/lib/itc/stage";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
-import { GoalRow } from "./goal-row";
 import { BehaviorsRow } from "./behaviors-row";
+import { CoachDock } from "./coach-dock";
+import { EntryThread } from "./entry-thread";
+import { GoalRow } from "./goal-row";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   data_mining: "Data mining",
@@ -32,35 +35,67 @@ function isFresh(iso: string | null | undefined, nowMs: number): boolean {
 }
 
 /**
- * The live map, laid out as horizontal rows. Under Form-First, every
- * add/edit/remove happens through the map panel — the coach never
- * writes state. The row that matches the current stage is "active"
- * and shows its own add/edit affordances. The Continue button at the
- * bottom advances the stage when preconditions are met.
+ * Full-width single-column canvas per Layout Amendment §1. Rows are
+ * stacked; the active section shows its stage note pinned at top,
+ * its input controls, its entry threads, and the Continue button
+ * that advances to the next section.
  */
-export function MapPanel({
+export function MapCanvas({
   map,
   behaviors,
   worries,
-  commitments = [],
-  assumptions = [],
-  assumptionLinks = [],
-  tests = [],
-  testResults = [],
+  commitments,
+  assumptions,
+  assumptionLinks,
+  tests,
+  testResults,
+  messages,
   advanceGate,
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
   worries: ItcWorry[];
-  commitments?: ItcCommitment[];
-  assumptions?: ItcAssumption[];
-  assumptionLinks?: ItcAssumptionCommitment[];
-  tests?: ItcTest[];
-  testResults?: ItcTestResult[];
-  advanceGate?: AdvanceGate;
+  commitments: ItcCommitment[];
+  assumptions: ItcAssumption[];
+  assumptionLinks: ItcAssumptionCommitment[];
+  tests: ItcTest[];
+  testResults: ItcTestResult[];
+  messages: ItcMessage[];
+  advanceGate: AdvanceGate;
 }) {
   const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
+
+  // Group messages by surface + anchor for fast per-entry lookup.
+  const stageNotes = useMemo(
+    () =>
+      messages.filter(
+        (m) =>
+          m.surface === "stage_note" &&
+          m.stage_at_creation === map.current_stage,
+      ),
+    [messages, map.current_stage],
+  );
+  const dockMessages = useMemo(
+    () => messages.filter((m) => m.surface === "dock"),
+    [messages],
+  );
+  const threadsByAnchor = useMemo(() => {
+    const grouped = new Map<string, ItcMessage[]>();
+    for (const m of messages) {
+      if (m.surface !== "entry_thread") continue;
+      if (!m.entry_ref_table || !m.entry_ref_id) continue;
+      const key = `${m.entry_ref_table}:${m.entry_ref_id}`;
+      const arr = grouped.get(key) ?? [];
+      arr.push(m);
+      grouped.set(key, arr);
+    }
+    return grouped;
+  }, [messages]);
+
+  const threadFor = (table: string, id: string) =>
+    threadsByAnchor.get(`${table}:${id}`) ?? [];
+
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
   const worryById = new Map(worries.map((w) => [w.id, w]));
@@ -83,7 +118,10 @@ export function MapPanel({
           </div>
           <div className="text-sm">
             Pillar:{" "}
-            <span className="font-semibold" style={{ color: pillar.colorVar }}>
+            <span
+              className="font-semibold"
+              style={{ color: pillar.colorVar }}
+            >
               {pillar.label}
             </span>
           </div>
@@ -91,32 +129,85 @@ export function MapPanel({
       </div>
 
       <div className="space-y-2">
-        <Row title="1. Improvement goal" active={map.current_stage === "goal"}>
+        <Section
+          title="1. Improvement goal"
+          active={map.current_stage === "goal"}
+          stageNotes={map.current_stage === "goal" ? stageNotes : []}
+        >
           <GoalRow
             mapId={map.id}
             goalText={map.improvement_goal}
             isActive={map.current_stage === "goal"}
           />
-        </Row>
+          {map.improvement_goal ? (
+            <EntryThread
+              mapId={map.id}
+              entryRefTable="itc_maps"
+              entryRefId={map.id}
+              entryText={map.improvement_goal}
+              entryKind="goal"
+              messages={threadFor("itc_maps", map.id).filter(
+                (m) => m.stage_at_creation === "goal",
+              )}
+              initiallyExpanded={map.current_stage === "goal"}
+            />
+          ) : null}
+        </Section>
 
         {advanceGate && map.current_stage === "goal" ? (
           <ContinueBar mapId={map.id} gate={advanceGate} />
         ) : null}
 
-        <Row title="2. Doing / not-doing" active={map.current_stage === "behaviors"}>
+        <Section
+          title="2. Doing / not-doing"
+          active={map.current_stage === "behaviors"}
+          stageNotes={map.current_stage === "behaviors" ? stageNotes : []}
+        >
           <BehaviorsRow
             mapId={map.id}
             behaviors={behaviors}
             isActive={map.current_stage === "behaviors"}
             nowMs={renderedAt}
           />
-        </Row>
+          {/* Behavior-level threads render inside BehaviorsRow via
+              per-item props. To keep the row component focused, we
+              render them here as a follow-up list keyed by behavior
+              id. */}
+          {selectedBehaviors.length > 0 ? (
+            <div className="pl-3 mt-1 space-y-2">
+              {selectedBehaviors.map((b, i) => {
+                const thread = threadFor("itc_behaviors", b.id);
+                if (thread.length === 0) return null;
+                return (
+                  <div key={b.id}>
+                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                      Coach on #{i + 1}
+                    </div>
+                    <EntryThread
+                      mapId={map.id}
+                      entryRefTable="itc_behaviors"
+                      entryRefId={b.id}
+                      entryText={b.text}
+                      entryKind="behavior"
+                      messages={thread}
+                      initiallyExpanded={map.current_stage === "behaviors"}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </Section>
 
         {advanceGate && map.current_stage === "behaviors" ? (
           <ContinueBar mapId={map.id} gate={advanceGate} />
         ) : null}
 
-        <Row title="3. Worry box" active={map.current_stage === "worries"}>
+        <Section
+          title="3. Worry box"
+          active={map.current_stage === "worries"}
+          stageNotes={map.current_stage === "worries" ? stageNotes : []}
+        >
           {selectedBehaviors.length === 0 ? (
             <Placeholder>Fills in after behaviors.</Placeholder>
           ) : (
@@ -144,7 +235,9 @@ export function MapPanel({
                         →
                       </span>
                       {worry ? (
-                        <span className="flex-1 min-w-[10rem]">{worry.text}</span>
+                        <span className="flex-1 min-w-[10rem]">
+                          {worry.text}
+                        </span>
                       ) : (
                         <span className="italic text-[color:var(--color-text-muted)]/70">
                           not yet
@@ -156,13 +249,17 @@ export function MapPanel({
               })}
             </ul>
           )}
-        </Row>
+        </Section>
 
         {advanceGate && map.current_stage === "worries" ? (
           <ContinueBar mapId={map.id} gate={advanceGate} />
         ) : null}
 
-        <Row title="4. Competing commitments" active={map.current_stage === "commitments"}>
+        <Section
+          title="4. Competing commitments"
+          active={map.current_stage === "commitments"}
+          stageNotes={map.current_stage === "commitments" ? stageNotes : []}
+        >
           {commitments.length === 0 ? (
             <Placeholder>
               My vows to make sure my worries never come true.
@@ -195,13 +292,17 @@ export function MapPanel({
               })}
             </ul>
           )}
-        </Row>
+        </Section>
 
         {advanceGate && map.current_stage === "commitments" ? (
           <ContinueBar mapId={map.id} gate={advanceGate} />
         ) : null}
 
-        <Row title="5. Big Assumptions" active={map.current_stage === "assumptions"}>
+        <Section
+          title="5. Big Assumptions"
+          active={map.current_stage === "assumptions"}
+          stageNotes={map.current_stage === "assumptions" ? stageNotes : []}
+        >
           {assumptions.length === 0 ? (
             <Placeholder>Comes together from the commitments.</Placeholder>
           ) : (
@@ -237,7 +338,7 @@ export function MapPanel({
               })}
             </ul>
           )}
-        </Row>
+        </Section>
       </div>
 
       {advanceGate &&
@@ -259,18 +360,22 @@ export function MapPanel({
           stage={map.current_stage}
         />
       ) : null}
+
+      <CoachDock mapId={map.id} messages={dockMessages} />
     </div>
   );
 }
 
-function Row({
+function Section({
   title,
   children,
   active = false,
+  stageNotes,
 }: {
   title: string;
   children: React.ReactNode;
   active?: boolean;
+  stageNotes: ItcMessage[];
 }) {
   return (
     <section
@@ -291,8 +396,61 @@ function Row({
       >
         {title}
       </h3>
+      {active && stageNotes.length > 0 ? (
+        <div className="mb-3 space-y-1.5">
+          {stageNotes.map((m) => (
+            <StageNote key={m.id} content={m.content} />
+          ))}
+        </div>
+      ) : null}
       {children}
     </section>
+  );
+}
+
+function StageNote({ content }: { content: string }) {
+  // Stage notes may carry chips too (suggestions render as stage_note).
+  const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+  const match = content.match(fence);
+  const prose = match ? content.slice(0, match.index).trimEnd() : content;
+  let chips: { refinement?: string; suggestions?: string[] } | null = null;
+  if (match) {
+    try {
+      chips = JSON.parse(match[1]);
+    } catch {
+      chips = null;
+    }
+  }
+  return (
+    <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-3 py-2 text-sm whitespace-pre-wrap">
+      {prose}
+      {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {chips.refinement ? <ChipButton value={chips.refinement} /> : null}
+          {chips.suggestions?.map((s, i) => (
+            <ChipButton key={i} value={s} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ChipButton({ value }: { value: string }) {
+  function handleClick() {
+    window.dispatchEvent(
+      new CustomEvent("itc-chip-fill", { detail: { value } }),
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-2.5 py-0.5 text-[11px] text-white hover:bg-[color:var(--color-primary)]/20"
+      title="Use this in the input"
+    >
+      {value}
+    </button>
   );
 }
 
@@ -350,8 +508,6 @@ function ContinueBar({
   );
 }
 
-// ---- Tests panel (unchanged from prior — used at test_design/running/results stages) ----
-
 function TestsPanel({
   tests,
   results,
@@ -361,7 +517,7 @@ function TestsPanel({
   tests: ItcTest[];
   results: ItcTestResult[];
   assumptions: ItcAssumption[];
-  stage: ItcMap["current_stage"];
+  stage: ItcStage;
 }) {
   const resultsByTest = new Map(results.map((r) => [r.test_id, r]));
   const assumptionById = new Map(assumptions.map((a) => [a.id, a]));
@@ -493,6 +649,3 @@ function TestField({ label, value }: { label: string; value: string | null }) {
     </div>
   );
 }
-
-// Silence unused type imports (kept for future stage checkpoints)
-void (null as unknown as ItcStage);

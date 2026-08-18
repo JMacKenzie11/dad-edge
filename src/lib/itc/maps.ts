@@ -71,12 +71,21 @@ export type ItcWorryAttempt = {
   created_at: string;
 };
 
+export type ItcMessageSurface =
+  | "stage_note"
+  | "entry_thread"
+  | "focus"
+  | "dock";
+
 export type ItcMessage = {
   id: string;
   map_id: string;
   role: "user" | "assistant" | "system";
   content: string;
   stage_at_creation: ItcStage;
+  surface: ItcMessageSurface | null;
+  entry_ref_table: string | null;
+  entry_ref_id: string | null;
   created_at: string;
 };
 
@@ -858,15 +867,72 @@ export async function appendMessage(
   role: "user" | "assistant" | "system",
   content: string,
   stage: ItcStage,
+  opts: {
+    surface?: ItcMessageSurface;
+    entryRefTable?: string;
+    entryRefId?: string;
+  } = {},
 ): Promise<ItcMessage> {
   const supabase = createSupabaseServiceClient();
+  const row: Record<string, unknown> = {
+    map_id: mapId,
+    role,
+    content,
+    stage_at_creation: stage,
+  };
+  if (opts.surface) row.surface = opts.surface;
+  if (opts.entryRefTable) row.entry_ref_table = opts.entryRefTable;
+  if (opts.entryRefId) row.entry_ref_id = opts.entryRefId;
   const { data, error } = await supabase
     .from("itc_messages")
-    .insert({ map_id: mapId, role, content, stage_at_creation: stage })
+    .insert(row)
     .select("*")
     .single();
   if (error || !data) throw new Error(`appendMessage: ${error?.message ?? "no row"}`);
   return data as ItcMessage;
+}
+
+/**
+ * Messages anchored to a specific entry — the thread beneath a
+ * behavior, worry, commitment, assumption, etc. Returns in
+ * created_at order.
+ */
+export async function listThreadMessages(
+  mapId: string,
+  entryRefTable: string,
+  entryRefId: string,
+): Promise<ItcMessage[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_messages")
+    .select("*")
+    .eq("map_id", mapId)
+    .eq("entry_ref_table", entryRefTable)
+    .eq("entry_ref_id", entryRefId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listThreadMessages: ${error.message}`);
+  return (data ?? []) as ItcMessage[];
+}
+
+/**
+ * Messages on a specific surface for the current stage. Used to
+ * fetch just the stage-note messages, or just dock messages, etc.
+ */
+export async function listMessagesForSurface(
+  mapId: string,
+  stage: ItcStage,
+  surface: ItcMessageSurface,
+): Promise<ItcMessage[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_messages")
+    .select("*")
+    .eq("map_id", mapId)
+    .eq("stage_at_creation", stage)
+    .eq("surface", surface)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listMessagesForSurface: ${error.message}`);
+  return (data ?? []) as ItcMessage[];
 }
 
 /** Retag an already-appended message with a new stage. Used after

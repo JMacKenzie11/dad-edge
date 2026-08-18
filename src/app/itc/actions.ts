@@ -203,10 +203,15 @@ async function loadCoachContext(mapId: string) {
 async function fireCoachReaction(
   mapId: string,
   justAdded: ReactionInput["justAdded"],
+  anchor: { table: string; id: string },
 ): Promise<void> {
   const events = new TurnEventLog(mapId, 0);
   try {
     const { context, history } = await loadCoachContext(mapId);
+    // Recent chat context for the reaction should include the
+    // existing thread messages on this entry PLUS any dock messages,
+    // so the coach can pick up mid-conversation. Simpler: use the
+    // last ~6 messages regardless of surface, in time order.
     const recentChat = history.slice(-6);
     const reaction = await generateCoachReaction({
       ...context,
@@ -214,7 +219,13 @@ async function fireCoachReaction(
       justAdded,
     });
     if (!reaction.reply.trim()) return;
-    const stored = await persistReaction(mapId, context.stage, reaction);
+    const stored = await persistReaction(
+      mapId,
+      context.stage,
+      reaction,
+      "entry_thread",
+      anchor,
+    );
     events.record(
       "coach_reaction_sent",
       {
@@ -223,6 +234,8 @@ async function fireCoachReaction(
         has_refinement: Boolean(reaction.refinement),
         suggestion_count: reaction.suggestions?.length ?? 0,
         message_id: stored,
+        anchor_table: anchor.table,
+        anchor_id: anchor.id,
       },
       { durationMs: reaction.durationMs, stage: context.stage },
     );
@@ -263,6 +276,8 @@ async function persistReaction(
   mapId: string,
   stage: ItcStage,
   reaction: ReactionOutput,
+  surface: "entry_thread" | "stage_note" | "dock" | "focus",
+  anchor: { table: string; id: string } | null,
 ): Promise<string> {
   const parts: string[] = [reaction.reply];
   if (reaction.refinement || (reaction.suggestions && reaction.suggestions.length > 0)) {
@@ -281,6 +296,11 @@ async function persistReaction(
     "assistant",
     parts.join("\n\n"),
     stage,
+    {
+      surface,
+      entryRefTable: anchor?.table,
+      entryRefId: anchor?.id,
+    },
   );
   return msg.id;
 }
@@ -313,8 +333,13 @@ export async function startMap(formData: FormData): Promise<void> {
   await appendMessage(
     map.id,
     "assistant",
-    `You've picked ${pillar.label}. Column 1 is one goal that starts "${GOAL_STEM}...". Type it into the input on the right, or tell me what's on your mind and we'll shape it together.`,
+    `You've picked ${pillar.label}. Column 1 is one goal that starts "${GOAL_STEM}...". Type it into the goal input above, or ask the coach anything about what you want to work on.`,
     "goal",
+    {
+      surface: "stage_note",
+      entryRefTable: "itc_maps",
+      entryRefId: map.id,
+    },
   );
   redirect(`/itc/${map.id}`);
 }
@@ -340,7 +365,13 @@ const chatSchema = z.object({
   text: z.string().min(1).max(4000),
 });
 
-export async function sendCoachMessage(formData: FormData): Promise<ActionResult> {
+/**
+ * The coach dock: an "Ask the coach" drawer for open questions not
+ * tied to any specific map entry. User message + coach reply both
+ * persist with surface="dock" so they render in the drawer only,
+ * never in the main canvas. Nothing said here writes state.
+ */
+export async function sendDockMessage(formData: FormData): Promise<ActionResult> {
   const participant = await requireItcParticipant();
   const parsed = chatSchema.safeParse({
     map_id: formData.get("map_id"),
@@ -350,13 +381,20 @@ export async function sendCoachMessage(formData: FormData): Promise<ActionResult
   const map = await getMapForParticipant(parsed.data.map_id, participant.id);
   if (!map) return { ok: false, reason: "Map not found." };
 
-  // Persist the user turn before generating so if the LLM call
-  // fails, we still have his message on the record.
-  await appendMessage(map.id, "user", parsed.data.text, map.current_stage);
+  await appendMessage(map.id, "user", parsed.data.text, map.current_stage, {
+    surface: "dock",
+  });
 
   const events = new TurnEventLog(map.id, 0);
+  events.record(
+    "dock_message",
+    { direction: "user", text: parsed.data.text },
+    { stage: map.current_stage },
+  );
   try {
     const { context, history } = await loadCoachContext(map.id);
+    // Coach chat sees the full transcript so it can answer with
+    // awareness of both dock and thread activity.
     const priorHistory = history.slice(0, -1);
     const chat = await generateCoachChat({
       ...context,
@@ -364,29 +402,107 @@ export async function sendCoachMessage(formData: FormData): Promise<ActionResult
       userMessage: parsed.data.text,
     });
     if (chat.reply.trim().length > 0) {
-      await appendMessage(map.id, "assistant", chat.reply, map.current_stage);
+      await appendMessage(map.id, "assistant", chat.reply, map.current_stage, {
+        surface: "dock",
+      });
+      events.record(
+        "dock_message",
+        { direction: "coach", text: chat.reply },
+        { durationMs: chat.durationMs, stage: map.current_stage },
+      );
     }
     events.record(
       "llm_attempt",
-      { kind: "chat", outcome: chat.reply.trim().length > 0 ? "ok" : "empty" },
+      { kind: "dock", outcome: chat.reply.trim().length > 0 ? "ok" : "empty" },
       { durationMs: chat.durationMs, stage: map.current_stage },
     );
     await events.flush();
   } catch (err) {
     console.warn(
-      "[itc sendCoachMessage] coach failure: %s",
+      "[itc sendDockMessage] coach failure: %s",
       err instanceof Error ? err.message : String(err),
     );
-    // Non-fatal — the user's message is on the record, the coach
-    // just didn't reply. Chat isn't state; nothing is broken.
     events.record("error", {
-      where: "sendCoachMessage",
+      where: "sendDockMessage",
       message: err instanceof Error ? err.message : String(err),
     });
     await events.flush();
   }
 
   safeRevalidate(`/itc/${map.id}`);
+  return { ok: true };
+}
+
+/**
+ * Reply within an entry's thread. The user's reply lands anchored
+ * to the entry; the coach's response fires from the reaction
+ * pipeline with the entry pinned in context so back-and-forth about
+ * an entry happens on the entry.
+ */
+const threadReplySchema = z.object({
+  map_id: z.string().uuid(),
+  entry_ref_table: z.enum([
+    "itc_maps",
+    "itc_behaviors",
+    "itc_worries",
+    "itc_commitments",
+    "itc_assumptions",
+    "itc_tests",
+  ]),
+  entry_ref_id: z.string().uuid(),
+  entry_text: z.string().max(1000),
+  entry_kind: z.enum(["goal", "behavior", "worry", "commitment", "assumption"]),
+  text: z.string().min(1).max(4000),
+});
+
+export async function postThreadReply(formData: FormData): Promise<ActionResult> {
+  const parsed = threadReplySchema.safeParse({
+    map_id: formData.get("map_id"),
+    entry_ref_table: formData.get("entry_ref_table"),
+    entry_ref_id: formData.get("entry_ref_id"),
+    entry_text: formData.get("entry_text"),
+    entry_kind: formData.get("entry_kind"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid reply input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  await appendMessage(
+    loaded.map.id,
+    "user",
+    parsed.data.text,
+    loaded.map.current_stage,
+    {
+      surface: "entry_thread",
+      entryRefTable: parsed.data.entry_ref_table,
+      entryRefId: parsed.data.entry_ref_id,
+    },
+  );
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    "thread_reply",
+    {
+      entry_kind: parsed.data.entry_kind,
+      entry_id: parsed.data.entry_ref_id,
+    },
+    { stage: loaded.map.current_stage },
+  );
+  await events.flush();
+
+  // Reuse the reaction pipeline — pass the entry as `justAdded` so
+  // the coach's prompt is anchored to that specific entry.
+  await awaitReactionOrSwallow(() =>
+    fireCoachReaction(
+      loaded.map.id,
+      {
+        kind: parsed.data.entry_kind,
+        text: parsed.data.entry_text,
+      },
+      { table: parsed.data.entry_ref_table, id: parsed.data.entry_ref_id },
+    ),
+  );
+  safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
 
@@ -423,11 +539,15 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
     stage: loaded.map.current_stage,
   });
   await events.flush();
+  // Goal has no separate entry row — it's a column on itc_maps.
+  // Anchor the coach reaction to the map itself so the entry thread
+  // renders in the goal section.
   await awaitReactionOrSwallow(() =>
-    fireCoachReaction(loaded.map.id, {
-      kind: "goal",
-      text: withStem,
-    }),
+    fireCoachReaction(
+      loaded.map.id,
+      { kind: "goal", text: withStem },
+      { table: "itc_maps", id: loaded.map.id },
+    ),
   );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -459,6 +579,7 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
         "The map already has 5 behaviors. Refine or remove one before adding another.",
     };
   }
+  let behaviorId: string;
   try {
     const result = await insertBehaviorRow(
       loaded.map.id,
@@ -472,6 +593,7 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
           "That behavior is already on the map. Refine an existing one if the phrasing is sharper.",
       };
     }
+    behaviorId = result.row.id;
   } catch (err) {
     return {
       ok: false,
@@ -481,15 +603,20 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
   const events = new TurnEventLog(loaded.map.id, 0);
   events.record(
     "entry_added",
-    { kind: "behavior", text: parsed.data.text.trim() },
+    {
+      kind: "behavior",
+      text: parsed.data.text.trim(),
+      entry_id: behaviorId,
+    },
     { stage: loaded.map.current_stage },
   );
   await events.flush();
   await awaitReactionOrSwallow(() =>
-    fireCoachReaction(loaded.map.id, {
-      kind: "behavior",
-      text: parsed.data.text.trim(),
-    }),
+    fireCoachReaction(
+      loaded.map.id,
+      { kind: "behavior", text: parsed.data.text.trim() },
+      { table: "itc_behaviors", id: behaviorId },
+    ),
   );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -531,10 +658,11 @@ export async function updateBehavior(
   );
   await events.flush();
   await awaitReactionOrSwallow(() =>
-    fireCoachReaction(loaded.map.id, {
-      kind: "behavior",
-      text: parsed.data.text.trim(),
-    }),
+    fireCoachReaction(
+      loaded.map.id,
+      { kind: "behavior", text: parsed.data.text.trim() },
+      { table: "itc_behaviors", id: target.id },
+    ),
   );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -614,11 +742,20 @@ export async function requestSuggestions(
       contextText: parsed.data.context_text,
     });
     if (result.suggestions.length > 0) {
-      await persistReaction(loaded.map.id, context.stage, {
-        reply: scrubReply(result.reply),
-        suggestions: result.suggestions,
-        durationMs: result.durationMs,
-      });
+      // Suggestions land as a section-level thread pinned under the
+      // stage note. Anchor to the map row so it renders at the top
+      // of the active section beside the stage-note framing.
+      await persistReaction(
+        loaded.map.id,
+        context.stage,
+        {
+          reply: scrubReply(result.reply),
+          suggestions: result.suggestions,
+          durationMs: result.durationMs,
+        },
+        "stage_note",
+        { table: "itc_maps", id: loaded.map.id },
+      );
     }
     events.record(
       "llm_attempt",
@@ -954,11 +1091,19 @@ async function seedStageIntroIfNeeded(
   goalText: string | null,
 ): Promise<void> {
   const existing = await listMessagesForStage(mapId, stage);
-  if (existing.some((m) => m.role === "assistant")) return;
+  if (
+    existing.some((m) => m.role === "assistant" && m.surface === "stage_note")
+  ) {
+    return;
+  }
   const intro = STAGE_INTROS[stage]?.(goalText);
   if (!intro) return;
   try {
-    await appendMessage(mapId, "assistant", intro, stage);
+    await appendMessage(mapId, "assistant", intro, stage, {
+      surface: "stage_note",
+      entryRefTable: "itc_maps",
+      entryRefId: mapId,
+    });
   } catch (err) {
     console.warn(
       "[itc] seedStageIntroIfNeeded(%s) failed: %s",
