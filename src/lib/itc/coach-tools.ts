@@ -30,6 +30,7 @@ import { z } from "zod";
 import type { CoachAction } from "./coach";
 import {
   advanceStage,
+  appendMessage,
   clearSelectedAssumption,
   countWorryAttempts,
   listBehaviors,
@@ -521,11 +522,26 @@ export function buildCoachTools(scope: TurnScope) {
             },
             { stage: from },
           );
+          // Persist a corrective system note so the coach's NEXT turn
+          // (not just the same-turn recovery) sees the specific
+          // invariant that blocked and can address it without
+          // guessing. recentActionFeedback in the context builder
+          // picks up messages starting with [action rejected].
+          try {
+            await appendMessage(
+              scope.mapId,
+              "system",
+              `[action rejected] advance_stage ${from} → ${to}: ${message}`,
+              from,
+            );
+          } catch {
+            // non-fatal
+          }
           return {
             status: "rejected",
             reason: message,
             instruction:
-              "Address the invariant failure named above (usually a missing entry or unpaired row) before attempting to advance again.",
+              "Address the invariant failure named above (usually a missing entry or unpaired row) before attempting to advance again. Do NOT retry advance_stage this turn.",
           };
         }
       },

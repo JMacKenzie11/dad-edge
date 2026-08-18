@@ -1702,9 +1702,39 @@ export async function saveGoal(
       reason: err instanceof Error ? err.message : "Could not save goal.",
     };
   }
+  // Panel-entry parity: log the user's map-panel action as a system
+  // message so the coach's next turn sees the fresh state and can
+  // acknowledge it naturally instead of asking about a goal that was
+  // just saved.
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee saved goal via map: "${withStem}"]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
+}
+
+/**
+ * Fire-and-log helper — appends a system message noting a user-driven
+ * map-panel action so the coach's next turn has fresh context. Errors
+ * are non-fatal (best-effort audit trail; the state change itself
+ * already succeeded).
+ */
+async function appendPanelEntryNote(
+  mapId: string,
+  stage: ItcStage,
+  note: string,
+): Promise<void> {
+  try {
+    await appendMessage(mapId, "system", note, stage);
+  } catch (err) {
+    console.warn(
+      "[itc] appendPanelEntryNote failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -1752,6 +1782,11 @@ export async function addBehavior(
       reason: err instanceof Error ? err.message : "Could not add behavior.",
     };
   }
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee added behavior via map: "${parsed.data.text.trim()}"]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
@@ -1789,6 +1824,13 @@ export async function refineBehavior(
       reason: err instanceof Error ? err.message : "Could not refine.",
     };
   }
+  // Compute 1-based index at time of edit for the coach's context.
+  const behaviorIndex = existing.findIndex((b) => b.id === target.id) + 1;
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee refined behavior #${behaviorIndex} via map to: "${parsed.data.text.trim()}"]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
@@ -1816,6 +1858,7 @@ export async function removeBehavior(
   const target = existing.find((b) => b.id === parsed.data.behavior_id);
   if (!target) return { ok: false, reason: "Behavior not on this map." };
 
+  const behaviorIndex = existing.findIndex((b) => b.id === target.id) + 1;
   try {
     await deleteBehaviorRow(target.id, map.id);
   } catch (err) {
@@ -1824,6 +1867,11 @@ export async function removeBehavior(
       reason: err instanceof Error ? err.message : "Could not remove.",
     };
   }
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee removed behavior #${behaviorIndex} via map: "${target.text}"]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
@@ -1869,7 +1917,13 @@ export async function advanceMapStage(formData: FormData): Promise<SendMessageRe
     if (bs.length === 0) return { ok: false, reason: "Add at least one behavior first." };
   }
 
-  await advanceStage(map.id, map.current_stage, target);
+  const from = map.current_stage;
+  await advanceStage(map.id, from, target);
+  await appendPanelEntryNote(
+    map.id,
+    target,
+    `[coachee advanced map via button: ${from} → ${target}]`,
+  );
   await seedStageIntroIfNeeded(map.id, target, map.improvement_goal);
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
@@ -2011,6 +2065,11 @@ export async function acceptProposal(
     // retry. Surface the error so the UI can show it.
     return { ok: false, reason: message };
   }
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee accepted ${proposal.action_type} proposal]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
@@ -2090,6 +2149,11 @@ export async function editAndAcceptProposal(
     const message = err instanceof Error ? err.message : "Could not apply edit.";
     return { ok: false, reason: message };
   }
+  await appendPanelEntryNote(
+    map.id,
+    map.current_stage,
+    `[coachee edited and accepted ${proposal.action_type} proposal]`,
+  );
 
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
