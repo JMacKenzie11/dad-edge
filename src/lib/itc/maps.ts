@@ -121,31 +121,6 @@ export type ItcTestResult = {
   created_at: string;
 };
 
-export type ItcActionProposalStatus =
-  | "pending"
-  | "locked"
-  | "edited_locked"
-  | "rejected"
-  | "stale";
-
-export type ItcActionProposalSource = "marker" | "extractor";
-
-export type ItcActionProposal = {
-  id: string;
-  map_id: string;
-  assistant_message_id: string;
-  action_type: string;
-  // Freeform — the CoachAction payload variant that matches action_type.
-  // Typed as unknown at the DB boundary; callers narrow via schema.
-  payload: unknown;
-  edited_payload: unknown | null;
-  status: ItcActionProposalStatus;
-  source: ItcActionProposalSource;
-  reject_reason: string | null;
-  created_at: string;
-  resolved_at: string | null;
-};
-
 export async function findInProgressMap(participantId: string): Promise<ItcMap | null> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -824,80 +799,6 @@ export async function recordTestResult(input: {
   // Flip status so the UI + coach context know results are on the record.
   await markTestRun(input.testId);
   return data as ItcTestResult;
-}
-
-// ==========================================================================
-// Action proposals — cards the coachee accepts/edits/rejects inline
-// ==========================================================================
-
-export async function createActionProposal(input: {
-  mapId: string;
-  assistantMessageId: string;
-  actionType: string;
-  payload: unknown;
-  source: ItcActionProposalSource;
-}): Promise<ItcActionProposal> {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("itc_action_proposals")
-    .insert({
-      map_id: input.mapId,
-      assistant_message_id: input.assistantMessageId,
-      action_type: input.actionType,
-      payload: input.payload,
-      source: input.source,
-    })
-    .select("*")
-    .single();
-  if (error || !data)
-    throw new Error(`createActionProposal: ${error?.message ?? "no row"}`);
-  return data as ItcActionProposal;
-}
-
-export async function listActionProposalsForMap(
-  mapId: string,
-): Promise<ItcActionProposal[]> {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("itc_action_proposals")
-    .select("*")
-    .eq("map_id", mapId)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(`listActionProposalsForMap: ${error.message}`);
-  return (data ?? []) as ItcActionProposal[];
-}
-
-export async function getActionProposal(
-  proposalId: string,
-): Promise<ItcActionProposal | null> {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("itc_action_proposals")
-    .select("*")
-    .eq("id", proposalId)
-    .maybeSingle();
-  if (error) throw new Error(`getActionProposal: ${error.message}`);
-  return (data as ItcActionProposal | null) ?? null;
-}
-
-export async function updateActionProposalStatus(input: {
-  proposalId: string;
-  status: ItcActionProposalStatus;
-  editedPayload?: unknown;
-  rejectReason?: string;
-}): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const patch: Record<string, unknown> = {
-    status: input.status,
-    resolved_at: new Date().toISOString(),
-  };
-  if (input.editedPayload !== undefined) patch.edited_payload = input.editedPayload;
-  if (input.rejectReason !== undefined) patch.reject_reason = input.rejectReason;
-  const { error } = await supabase
-    .from("itc_action_proposals")
-    .update(patch)
-    .eq("id", input.proposalId);
-  if (error) throw new Error(`updateActionProposalStatus: ${error.message}`);
 }
 
 /**
