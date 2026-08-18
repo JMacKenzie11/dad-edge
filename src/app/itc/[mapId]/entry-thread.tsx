@@ -7,21 +7,17 @@ import { postThreadReply } from "../actions";
 /**
  * Inline coaching thread anchored to a specific map entry. Renders
  * the coach's reaction messages + any back-and-forth about this
- * entry. Includes a compact reply field so the man can keep the
- * conversation on the entry without leaving the section.
+ * entry. Reply input is always visible under the latest coach
+ * message; no click-to-reveal step.
  *
- * Chips (refinement / suggestions) parse out of coach messages and
- * dispatch `itc-chip-fill` events so tapping fills the entry's
- * inline edit field or the section's Add input.
+ * Collapse discipline: threads auto-collapse to a compact badge
+ * when the entry is "settled" — the last coach message on this
+ * entry carries no refinement / suggestion chips, which the coach
+ * prompt uses to signal approval. Tap the badge to reopen.
  *
- * Collapse discipline (Amendment §2): threads auto-collapse when
- * the entry is resolved. For MVP: threads default expanded when
- * there's at least one unread message, otherwise collapsed to a
- * comment-count badge that reopens on tap.
- *
- * One-active-thread rule: opening this thread's reply field
- * broadcasts a `itc-thread-focus` event that other threads listen
- * for and use to close their own reply fields.
+ * One-active-thread rule: focusing this thread's reply broadcasts
+ * `itc-thread-focus`; other threads listen and collapse their own
+ * inputs when a sibling takes focus.
  */
 export function EntryThread({
   mapId,
@@ -30,7 +26,6 @@ export function EntryThread({
   entryText,
   entryKind,
   messages,
-  initiallyExpanded = true,
 }: {
   mapId: string;
   entryRefTable:
@@ -44,40 +39,35 @@ export function EntryThread({
   entryText: string;
   entryKind: "goal" | "behavior" | "worry" | "commitment" | "assumption";
   messages: ItcMessage[];
-  initiallyExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(
-    initiallyExpanded && messages.length > 0,
-  );
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusKey = `${entryRefTable}:${entryRefId}`;
+  const [pending, startTransition] = useTransition();
+  const [replyText, setReplyText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [manuallyReopened, setManuallyReopened] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Broadcast focus so other threads collapse their reply fields.
+  // Approval detection: the last coach message on this thread carries
+  // no chips → the coach's Case-3 signal that the entry is sharp and
+  // doesn't need honing. Collapse the thread until the user
+  // manually reopens or a new coach message with chips arrives.
+  const lastCoach = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant");
+  const approved = lastCoach ? !messageHasChips(lastCoach.content) : false;
+  const shouldCollapse = approved && !manuallyReopened && messages.length > 0;
+
   useEffect(() => {
     function onOtherFocus(ev: Event) {
       const e = ev as CustomEvent<{ key: string }>;
       if (!e.detail?.key) return;
-      if (e.detail.key !== focusKey) {
-        setReplyOpen(false);
-        setReplyText("");
+      if (e.detail.key !== focusKey && document.activeElement === inputRef.current) {
+        inputRef.current?.blur();
       }
     }
     window.addEventListener("itc-thread-focus", onOtherFocus as EventListener);
     return () => window.removeEventListener("itc-thread-focus", onOtherFocus as EventListener);
   }, [focusKey]);
-
-  function openReply() {
-    window.dispatchEvent(
-      new CustomEvent("itc-thread-focus", { detail: { key: focusKey } }),
-    );
-    setReplyOpen(true);
-    setExpanded(true);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }
 
   function submitReply() {
     setError(null);
@@ -95,69 +85,64 @@ export function EntryThread({
       if (!res.ok) setError(res.reason ?? "Could not send.");
       else {
         setReplyText("");
-        setReplyOpen(false);
       }
     });
   }
 
-  if (messages.length === 0 && !replyOpen) {
-    return (
-      <div className="pl-5 pt-1">
-        <button
-          type="button"
-          onClick={openReply}
-          className="text-[10px] text-[color:var(--color-text-muted)]/70 hover:text-[color:var(--color-text-muted)]"
-        >
-          Ask the coach about this
-        </button>
-      </div>
-    );
-  }
+  // Nothing yet — no reaction has fired. Render nothing.
+  if (messages.length === 0) return null;
 
-  if (!expanded) {
+  // Collapsed state: the coach approved and there's no active
+  // back-and-forth. Show a compact badge that expands on tap.
+  if (shouldCollapse) {
     return (
-      <div className="pl-5 pt-1">
+      <div className="pl-3 pt-1">
         <button
           type="button"
-          onClick={() => setExpanded(true)}
-          className="text-[10px] text-[color:var(--color-text-muted)]/70 hover:text-[color:var(--color-text-muted)]"
+          onClick={() => setManuallyReopened(true)}
+          className="text-[11px] text-[color:var(--color-text-muted)] hover:text-white"
+          title="Reopen the coach thread"
         >
-          Coach thread ({messages.length})
+          ✓ Coach approved · {messages.length} {messages.length === 1 ? "note" : "notes"}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="pl-5 pt-1 space-y-1.5">
+    <div className="pl-3 pt-1 space-y-1.5">
       {messages.map((m) => (
         <ThreadMessage key={m.id} message={m} />
       ))}
-      {replyOpen ? (
-        <div className="space-y-1.5">
-          <textarea
-            ref={inputRef}
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            rows={2}
-            disabled={pending}
-            placeholder="Reply to the coach about this…"
-            onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                if (pending) return;
-                submitReply();
-              } else if (e.key === "Escape") {
-                setReplyOpen(false);
-                setReplyText("");
-              }
-            }}
-            className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm"
-          />
+      <div className="space-y-1.5">
+        <textarea
+          ref={inputRef}
+          value={replyText}
+          onChange={(e) => setReplyText(e.target.value)}
+          onFocus={() => {
+            window.dispatchEvent(
+              new CustomEvent("itc-thread-focus", {
+                detail: { key: focusKey },
+              }),
+            );
+          }}
+          rows={2}
+          disabled={pending}
+          placeholder="Reply to the coach…"
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
+              if (pending) return;
+              submitReply();
+            }
+          }}
+          className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm focus:outline-none focus:border-[color:var(--color-primary)]/60"
+        />
+        {replyText.trim().length > 0 ? (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -170,33 +155,42 @@ export function EntryThread({
             <button
               type="button"
               onClick={() => {
-                setReplyOpen(false);
                 setReplyText("");
                 setError(null);
               }}
               disabled={pending}
-              className="rounded-md border border-[color:var(--color-border)] px-3 py-1 text-xs disabled:opacity-50"
+              className="text-[11px] text-[color:var(--color-text-muted)] hover:text-white"
             >
               Cancel
             </button>
           </div>
-          {error ? (
-            <p className="text-[11px] text-[color:var(--color-danger)]">
-              {error}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={openReply}
-          className="text-[10px] text-[color:var(--color-text-muted)]/70 hover:text-[color:var(--color-text-muted)]"
-        >
-          Reply
-        </button>
-      )}
+        ) : null}
+        {error ? (
+          <p className="text-[11px] text-[color:var(--color-danger)]">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+function messageHasChips(content: string): boolean {
+  const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+  const match = content.match(fence);
+  if (!match) return false;
+  try {
+    const chips = JSON.parse(match[1]) as {
+      refinement?: string;
+      suggestions?: string[];
+    };
+    return (
+      Boolean(chips.refinement && chips.refinement.trim().length > 0) ||
+      Boolean(chips.suggestions && chips.suggestions.length > 0)
+    );
+  } catch {
+    return false;
+  }
 }
 
 type ChipPayload = {

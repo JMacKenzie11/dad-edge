@@ -180,7 +180,6 @@ export function MapCanvas({
               messages={threadFor("itc_maps", map.id).filter(
                 (m) => m.stage_at_creation === "goal",
               )}
-              initiallyExpanded={map.current_stage === "goal"}
             />
           ) : null}
         </Section>
@@ -224,7 +223,6 @@ export function MapCanvas({
                       entryText={b.text}
                       entryKind="behavior"
                       messages={thread}
-                      initiallyExpanded={map.current_stage === "behaviors"}
                     />
                   </div>
                 );
@@ -537,6 +535,11 @@ function ContinueBar({
   }
   return (
     <div className="pt-1">
+      {gate.enabled ? (
+        <p className="mb-1 text-[11px] text-[color:var(--color-text-muted)] text-center">
+          Ready when you are. Hit {gate.label} to lock this in and move on.
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={submit}
