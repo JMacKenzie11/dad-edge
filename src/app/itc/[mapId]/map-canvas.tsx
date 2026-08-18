@@ -67,6 +67,18 @@ export function MapCanvas({
   const pillar = PILLAR_BY_CODE[map.pillar_code];
 
   // Group messages by surface + anchor for fast per-entry lookup.
+  //
+  // Compatibility fallback: the layout amendment introduced `surface`
+  // and `entry_ref_*` columns on itc_messages via migration. Until
+  // that migration lands on the hosted DB, inserts drop those
+  // columns silently and messages come back with them null. To keep
+  // the coach visible during rollout:
+  //   - null-surface assistant messages on the current stage render
+  //     as stage-note-adjacent "coach notes" in the active section
+  //     via unattachedFor().
+  //   - dock messages still filter to surface==="dock" only (safe:
+  //     if the column is missing they're invisible until migration,
+  //     but the dock drawer just shows empty).
   const stageNotes = useMemo(
     () =>
       messages.filter(
@@ -92,9 +104,25 @@ export function MapCanvas({
     }
     return grouped;
   }, [messages]);
+  // Assistant messages with NO surface set — pre-migration inserts
+  // and any client-side downgraded writes. Grouped by stage so we
+  // can render them in the correct active section's fallback slot.
+  const unattachedByStage = useMemo(() => {
+    const grouped = new Map<ItcStage, ItcMessage[]>();
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      if (m.surface != null) continue;
+      const arr = grouped.get(m.stage_at_creation) ?? [];
+      arr.push(m);
+      grouped.set(m.stage_at_creation, arr);
+    }
+    return grouped;
+  }, [messages]);
 
   const threadFor = (table: string, id: string) =>
     threadsByAnchor.get(`${table}:${id}`) ?? [];
+  const unattachedForCurrentStage =
+    unattachedByStage.get(map.current_stage) ?? [];
 
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
@@ -133,6 +161,9 @@ export function MapCanvas({
           title="1. Improvement goal"
           active={map.current_stage === "goal"}
           stageNotes={map.current_stage === "goal" ? stageNotes : []}
+          unattachedCoachNotes={
+            map.current_stage === "goal" ? unattachedForCurrentStage : []
+          }
         >
           <GoalRow
             mapId={map.id}
@@ -162,6 +193,9 @@ export function MapCanvas({
           title="2. Doing / not-doing"
           active={map.current_stage === "behaviors"}
           stageNotes={map.current_stage === "behaviors" ? stageNotes : []}
+          unattachedCoachNotes={
+            map.current_stage === "behaviors" ? unattachedForCurrentStage : []
+          }
         >
           <BehaviorsRow
             mapId={map.id}
@@ -207,6 +241,9 @@ export function MapCanvas({
           title="3. Worry box"
           active={map.current_stage === "worries"}
           stageNotes={map.current_stage === "worries" ? stageNotes : []}
+          unattachedCoachNotes={
+            map.current_stage === "worries" ? unattachedForCurrentStage : []
+          }
         >
           {selectedBehaviors.length === 0 ? (
             <Placeholder>Fills in after behaviors.</Placeholder>
@@ -259,6 +296,9 @@ export function MapCanvas({
           title="4. Competing commitments"
           active={map.current_stage === "commitments"}
           stageNotes={map.current_stage === "commitments" ? stageNotes : []}
+          unattachedCoachNotes={
+            map.current_stage === "commitments" ? unattachedForCurrentStage : []
+          }
         >
           {commitments.length === 0 ? (
             <Placeholder>
@@ -302,6 +342,9 @@ export function MapCanvas({
           title="5. Big Assumptions"
           active={map.current_stage === "assumptions"}
           stageNotes={map.current_stage === "assumptions" ? stageNotes : []}
+          unattachedCoachNotes={
+            map.current_stage === "assumptions" ? unattachedForCurrentStage : []
+          }
         >
           {assumptions.length === 0 ? (
             <Placeholder>Comes together from the commitments.</Placeholder>
@@ -371,12 +414,21 @@ function Section({
   children,
   active = false,
   stageNotes,
+  unattachedCoachNotes = [],
 }: {
   title: string;
   children: React.ReactNode;
   active?: boolean;
   stageNotes: ItcMessage[];
+  /** Fallback: assistant messages on this stage with no surface set.
+   *  Rendered as stage-note-styled coach notes so the coach's reply
+   *  is visible even when the migration adding surface/entry_ref
+   *  hasn't been applied yet. Only shown on the active section. */
+  unattachedCoachNotes?: ItcMessage[];
 }) {
+  const notesToShow = active
+    ? [...stageNotes, ...unattachedCoachNotes]
+    : stageNotes;
   return (
     <section
       className={
@@ -396,9 +448,9 @@ function Section({
       >
         {title}
       </h3>
-      {active && stageNotes.length > 0 ? (
+      {active && notesToShow.length > 0 ? (
         <div className="mb-3 space-y-1.5">
-          {stageNotes.map((m) => (
+          {notesToShow.map((m) => (
             <StageNote key={m.id} content={m.content} />
           ))}
         </div>
