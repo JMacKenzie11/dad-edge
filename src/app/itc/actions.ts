@@ -1,6 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+/**
+ * revalidatePath throws when called outside a Next.js request context
+ * (e.g. from the persona test harness or a nightly cron). We never
+ * want revalidation failure to fail the underlying state change,
+ * which already succeeded. Wrap every call in a swallow.
+ */
+function safeRevalidate(pathToRevalidate: string): void {
+  try {
+    revalidatePath(pathToRevalidate);
+  } catch {
+    // no-op — outside request context (test harness, cron), no cache
+    // to invalidate
+  }
+}
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
@@ -68,6 +83,7 @@ import {
   COMMITMENT_STEM,
   GOAL_STEM,
   ITC_STAGES,
+  STAGE_LABELS,
   WORRY_STEM,
   ensureStem,
   hasGoalStem,
@@ -102,7 +118,7 @@ export async function startMap(formData: FormData): Promise<void> {
   await appendMessage(
     map.id,
     "assistant",
-    `Alright. You've picked ${pillar.label} as the pillar. The map begins with one goal that starts "${GOAL_STEM}...". If you already know your goal, type it into the Column 1 input on the right and hit Save goal. If you want help getting to one, tell me what's on your mind here and I'll help you shape it.`,
+    `You've picked ${pillar.label}. Column 1 is one goal that starts "${GOAL_STEM}...". Tell me how you'd finish it. If you're not sure, tell me what's on your mind and we'll shape it together.`,
     "goal",
   );
   redirect(`/itc/${map.id}`);
@@ -434,7 +450,7 @@ export async function runCoachTurnForMap(
     await events.flush();
 
     try {
-      revalidatePath(`/itc/${map.id}`);
+      safeRevalidate(`/itc/${map.id}`);
     } catch {
       // no-op outside request context
     }
@@ -686,7 +702,7 @@ export async function runCoachTurnForMap(
     );
     await events.flush();
     try {
-      revalidatePath(`/itc/${map.id}`);
+      safeRevalidate(`/itc/${map.id}`);
     } catch {
       // no-op
     }
@@ -913,7 +929,7 @@ export async function runCoachTurnForMap(
   await events.flush();
 
   try {
-    revalidatePath(`/itc/${map.id}`);
+    safeRevalidate(`/itc/${map.id}`);
   } catch {
     // no-op — outside a request context, no cache to invalidate
   }
@@ -1712,7 +1728,7 @@ export async function saveGoal(
     `[coachee saved goal via map: "${withStem}"]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -1788,7 +1804,7 @@ export async function addBehavior(
     `[coachee added behavior via map: "${parsed.data.text.trim()}"]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -1832,7 +1848,7 @@ export async function refineBehavior(
     `[coachee refined behavior #${behaviorIndex} via map to: "${parsed.data.text.trim()}"]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -1873,7 +1889,7 @@ export async function removeBehavior(
     `[coachee removed behavior #${behaviorIndex} via map: "${target.text}"]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -1925,8 +1941,217 @@ export async function advanceMapStage(formData: FormData): Promise<SendMessageRe
     `[coachee advanced map via button: ${from} → ${target}]`,
   );
   await seedStageIntroIfNeeded(map.id, target, map.improvement_goal);
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
+}
+
+/**
+ * Which stage the Continue button on the chat pane targets, plus
+ * whether it's tappable and (if not) the reason. Called on every
+ * render of the conversation. Deterministic — matches the
+ * server-side invariants in advanceStage() so a button-tap can never
+ * lie about the map's readiness.
+ */
+export type AdvanceGate = {
+  from: ItcStage;
+  to: ItcStage | null;
+  label: string | null;
+  enabled: boolean;
+  reason: string | null;
+};
+
+export async function getAdvanceGate(mapId: string): Promise<AdvanceGate> {
+  const participant = await requireItcParticipant();
+  const map = await getMapForParticipant(mapId, participant.id);
+  if (!map) {
+    return {
+      from: "goal",
+      to: null,
+      label: null,
+      enabled: false,
+      reason: "Map not found.",
+    };
+  }
+  const from = map.current_stage;
+  if (from === "done") {
+    return {
+      from,
+      to: null,
+      label: null,
+      enabled: false,
+      reason: "Map complete.",
+    };
+  }
+  // Assumptions skips review; the review stage exists as a name only
+  // (see stage.ts canTransitionTo). All other stages advance +1.
+  const to: ItcStage =
+    from === "assumptions"
+      ? "immune_system"
+      : (ITC_STAGES[ITC_STAGES.indexOf(from) + 1] as ItcStage);
+  const label = `Continue to ${STAGE_LABELS[to]}`;
+
+  // Preconditions — same set the server-side advanceStage guard
+  // enforces, evaluated up front so the button reflects readiness.
+  switch (from) {
+    case "goal": {
+      if (!map.improvement_goal) {
+        return { from, to, label, enabled: false, reason: "Save the goal first." };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "behaviors": {
+      const bs = await listBehaviors(map.id);
+      const selected = bs.filter((b) => b.selected);
+      if (selected.length === 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Add at least one behavior first.",
+        };
+      }
+      if (selected.length > 5) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `Consolidate to 5 or fewer behaviors first (${selected.length} on the map).`,
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "worries": {
+      const [bs, ws] = await Promise.all([
+        listBehaviors(map.id),
+        listWorries(map.id),
+      ]);
+      const selected = bs.filter((b) => b.selected);
+      const withWorry = new Set(ws.map((w) => w.behavior_id));
+      const missing = selected.filter((b) => !withWorry.has(b.id));
+      if (missing.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${missing.length} behavior${missing.length === 1 ? "" : "s"} still need a worry.`,
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "commitments": {
+      const [ws, cs] = await Promise.all([
+        listWorries(map.id),
+        listCommitments(map.id),
+      ]);
+      const locked = ws.filter((w) => w.depth_score !== null);
+      const covered = new Set(cs.map((c) => c.worry_id));
+      const missing = locked.filter((w) => !covered.has(w.id));
+      if (missing.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${missing.length} worr${missing.length === 1 ? "y" : "ies"} still need a commitment.`,
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "assumptions": {
+      const [assumptions, cs, links] = await Promise.all([
+        listAssumptions(map.id),
+        listCommitments(map.id),
+        listAssumptionLinks(map.id),
+      ]);
+      if (assumptions.length === 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Add at least one Big Assumption first.",
+        };
+      }
+      const covered = new Set(links.map((l) => l.commitment_id));
+      const uncovered = cs.filter((c) => !covered.has(c.id));
+      if (uncovered.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${uncovered.length} commitment${uncovered.length === 1 ? "" : "s"} still need an assumption.`,
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "review":
+    case "immune_system": {
+      if (from === "immune_system" && !map.walkthrough_delivered) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Deliver the walkthrough first.",
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "prioritize": {
+      const assumptions = await listAssumptions(map.id);
+      const picked = assumptions.find((a) => a.selected_for_testing);
+      if (!picked) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Pick an assumption to test first.",
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "test_design": {
+      const t = await getActiveTest(map.id);
+      if (!t) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Save a test design first.",
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "test_running": {
+      // Manual — coachee taps Continue when they've run the test and
+      // are ready to process results. No hard precondition.
+      return { from, to, label, enabled: true, reason: null };
+    }
+    case "results": {
+      const t = await getActiveTest(map.id);
+      const results = await listTestResults(map.id);
+      const hasResult = results.some((r) => r.test_id === t?.id);
+      if (!hasResult) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: "Record the results first.",
+        };
+      }
+      return { from, to, label, enabled: true, reason: null };
+    }
+    default: {
+      return { from, to, label, enabled: true, reason: null };
+    }
+  }
 }
 
 /**
@@ -1963,17 +2188,17 @@ const STAGE_INTROS: Partial<Record<ItcStage, (goal: string | null) => string>> =
   behaviors: (goal) =>
     `Column 2 is what you actually do, or fail to do, in the moment that works against ${
       goal ? `"${goal}"` : "your goal"
-    }. Not why. Not what you should do instead. Just the specific behavior. First one that comes to mind? Type it into the Add a behavior input on Column 2, or tell me here if you want help shaping it.`,
+    }. Not why. Not what you should do instead. Just the specific behavior. What's the first one that comes to mind?`,
   worries: (_goal) =>
-    `Column 3 is the worry box. For each behavior on Column 2, we name the fear underneath. If you stopped doing that behavior (or started the opposite), what part of you is afraid of what would happen next? Pick a behavior to start on, and tell me here.`,
+    `Column 3 is the worry box. For each behavior on Column 2, we name the fear underneath. If you stopped doing that behavior (or started the opposite), what part of you is afraid of what would happen next? Which behavior do you want to start on?`,
   commitments: (_goal) =>
-    `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping. If your worry is "she'd lose respect for me," your hidden commitment is "I'm also committed to never being seen as diminished by her." One per worry. Tell me here to work through them.`,
+    `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping. If your worry is "she'd lose respect for me," your hidden commitment is "I'm also committed to never being seen as diminished by her." One per worry. Ready to work through them?`,
   assumptions: (_goal) =>
-    `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment? These are the beliefs that hold the whole system together. Tell me here.`,
+    `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment? These are the beliefs that hold the whole system together. Ready?`,
   review: (_goal) =>
-    `Before we test anything, take a beat and look at the whole map on the right. What jumps out? Anything you'd sharpen or reword? Tell me here.`,
+    `Before we test anything, take a beat and look at the whole map. What jumps out? Anything you'd sharpen or reword?`,
   immune_system: (_goal) =>
-    `Now the walkthrough. I'm going to show you how the columns interlock — how the behaviors, the worries, the hidden commitments, and the Big Assumptions all protect the same thing. Ready?`,
+    `Now the walkthrough. I'm going to show you how the columns interlock, how the behaviors, the worries, the hidden commitments, and the Big Assumptions all protect the same thing. Ready?`,
   prioritize: (_goal) =>
     `You've mapped the whole immune system. Now: which Big Assumption do you want to test first? The best one to start on is usually the one that, if it turned out not to hold, would loosen the most of the system. Tell me here.`,
   test_design: (_goal) =>
@@ -2071,7 +2296,7 @@ export async function acceptProposal(
     `[coachee accepted ${proposal.action_type} proposal]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -2155,7 +2380,7 @@ export async function editAndAcceptProposal(
     `[coachee edited and accepted ${proposal.action_type} proposal]`,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }
 
@@ -2199,6 +2424,6 @@ export async function rejectProposal(
     map.current_stage,
   );
 
-  revalidatePath(`/itc/${map.id}`);
+  safeRevalidate(`/itc/${map.id}`);
   return { ok: true };
 }

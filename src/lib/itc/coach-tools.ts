@@ -29,15 +29,11 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { CoachAction } from "./coach";
 import {
-  advanceStage,
-  appendMessage,
-  clearSelectedAssumption,
   countWorryAttempts,
   listBehaviors,
   listCommitments,
   listWorries,
   logWorryAttempt,
-  markMapComplete,
   markRevealDelivered,
   markWalkthroughDelivered,
 } from "./maps";
@@ -455,97 +451,13 @@ export function buildCoachTools(scope: TurnScope) {
 
     // ================================================================
     // Immediate tools — apply server-side, no card
+    //
+    // Stage advances are user-initiated via the Continue button in the
+    // chat pane, not coach-initiated. The coach does not have an
+    // advance_stage tool. This keeps the LLM out of the stage-
+    // transition inference loop entirely; every advance is one
+    // deterministic user click, gated by server-side invariants.
     // ================================================================
-
-    advance_stage: tool({
-      description:
-        'Advance the map to a specific stage. Server checks invariants (behaviors have worries paired, walkthrough delivered, etc.); an invariant failure returns the specific reason so your next turn addresses it.',
-      inputSchema: z.object({
-        to: z.enum([
-          "goal",
-          "behaviors",
-          "worries",
-          "commitments",
-          "assumptions",
-          "review",
-          "immune_system",
-          "prioritize",
-          "test_design",
-          "test_running",
-          "results",
-          "done",
-        ]),
-      }),
-      execute: async ({ to }): Promise<ToolResult> => {
-        const from = scope.currentStage;
-        try {
-          await advanceStage(scope.mapId, from, to as ItcStage);
-          if (to === "done") {
-            try {
-              await markMapComplete(scope.mapId);
-            } catch {
-              // non-fatal
-            }
-          }
-          if (from === "results" && to === "prioritize") {
-            try {
-              await clearSelectedAssumption(scope.mapId);
-            } catch {
-              // non-fatal
-            }
-          }
-          scope.currentStage = to as ItcStage;
-          scope.events.record(
-            "action_apply",
-            {
-              action_type: "advance_stage",
-              via: "tool",
-              from,
-              to,
-            },
-            { stage: to as ItcStage },
-          );
-          return {
-            status: "applied",
-            note: `map advanced ${from} -> ${to}`,
-          };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          scope.events.record(
-            "action_rejected",
-            {
-              action_type: "advance_stage",
-              via: "tool",
-              from,
-              to,
-              error: message,
-            },
-            { stage: from },
-          );
-          // Persist a corrective system note so the coach's NEXT turn
-          // (not just the same-turn recovery) sees the specific
-          // invariant that blocked and can address it without
-          // guessing. recentActionFeedback in the context builder
-          // picks up messages starting with [action rejected].
-          try {
-            await appendMessage(
-              scope.mapId,
-              "system",
-              `[action rejected] advance_stage ${from} → ${to}: ${message}`,
-              from,
-            );
-          } catch {
-            // non-fatal
-          }
-          return {
-            status: "rejected",
-            reason: message,
-            instruction:
-              "Address the invariant failure named above (usually a missing entry or unpaired row) before attempting to advance again. Do NOT retry advance_stage this turn.",
-          };
-        }
-      },
-    }),
 
     mark_walkthrough_delivered: tool({
       description:

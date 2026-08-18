@@ -8,10 +8,9 @@ import type {
   ItcTestResult,
   ItcWorry,
 } from "@/lib/itc/maps";
-import type { ItcStage } from "@/lib/itc/stage";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
-import { BehaviorsColumn } from "./behaviors-column";
-import { GoalColumn } from "./goal-column";
+import { GoalRow } from "./goal-row";
+import { BehaviorsRow } from "./behaviors-row";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   data_mining: "Data mining",
@@ -34,10 +33,11 @@ function isFresh(iso: string | null | undefined, nowMs: number): boolean {
 }
 
 /**
- * The live map. Renders the four numbered columns plus the worry box that
- * sits between behaviors and hidden commitments — the classic ITC bridge:
- * each behavior generates a worry (if I stop doing X, I'm afraid Y), and
- * each worry surfaces a hidden competing commitment.
+ * The live map, laid out as horizontal rows (one per column of the ITC
+ * framework). Rows use the full pane width so text reads without ugly
+ * one-word-per-line wrapping. Add/refine/remove is card-driven from
+ * chat; the map itself is read-only visualization with per-row edit
+ * and delete affordances for quick fixes.
  */
 export function MapPanel({
   map,
@@ -48,7 +48,6 @@ export function MapPanel({
   assumptionLinks = [],
   tests = [],
   testResults = [],
-  goalDraftFromChat = null,
 }: {
   map: ItcMap;
   behaviors: ItcBehavior[];
@@ -58,7 +57,6 @@ export function MapPanel({
   assumptionLinks?: ItcAssumptionCommitment[];
   tests?: ItcTest[];
   testResults?: ItcTestResult[];
-  goalDraftFromChat?: string | null;
 }) {
   const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
@@ -79,7 +77,7 @@ export function MapPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
             Immunity Map
           </div>
           <div className="text-sm">
@@ -94,77 +92,64 @@ export function MapPanel({
         </div>
       </div>
 
-      <div
-        className="grid gap-2 max-md:!grid-cols-1"
-        style={{
-          gridTemplateColumns: columnWeightsForStage(map.current_stage)
-            .map((w) => `minmax(0, ${w}fr)`)
-            .join(" "),
-        }}
-      >
-        <Column
-          title="1. Improvement goal"
-          active={activeColumnForStage(map.current_stage) === 1}
-        >
-          <GoalColumn
-            mapId={map.id}
-            currentStage={map.current_stage}
-            goalText={map.improvement_goal}
-            draftFromChat={goalDraftFromChat}
-          />
-        </Column>
+      <div className="space-y-2">
+        <Row title="1. Improvement goal">
+          <GoalRow mapId={map.id} goalText={map.improvement_goal} />
+        </Row>
 
-        <Column
-          title="2. Doing / not-doing"
-          active={activeColumnForStage(map.current_stage) === 2}
-        >
-          <BehaviorsColumn
-            mapId={map.id}
-            currentStage={map.current_stage}
-            behaviors={behaviors}
-          />
-        </Column>
+        <Row title="2. Doing / not-doing">
+          <BehaviorsRow mapId={map.id} behaviors={behaviors} nowMs={renderedAt} />
+        </Row>
 
-        <Column
-          title="3. Worry box"
-          active={activeColumnForStage(map.current_stage) === 3}
-        >
+        <Row title="3. Worry box">
           {selectedBehaviors.length === 0 ? (
             <Placeholder>Fills in after behaviors.</Placeholder>
           ) : (
             <ul className="space-y-1.5 text-sm">
-              {selectedBehaviors.map((b) => {
+              {selectedBehaviors.map((b, i) => {
                 const worry = worriesByBehavior.get(b.id);
                 return (
                   <li
                     key={b.id}
                     className={
-                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
+                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
                       (worry && isFresh(worry.created_at, renderedAt)
-                        ? " itc-fresh-row"
+                        ? "itc-fresh-row"
                         : "")
                     }
                   >
-                    {worry ? (
-                      worry.text
-                    ) : (
-                      <span className="italic text-[color:var(--color-muted)]/70">
-                        Paired to: {b.text}
+                    <div className="flex flex-wrap gap-2 items-baseline">
+                      <span className="text-[11px] text-[color:var(--color-text-muted)] shrink-0">
+                        {i + 1}.
                       </span>
-                    )}
+                      <span className="text-[color:var(--color-text-muted)]/80 min-w-[10rem]">
+                        {b.text}
+                      </span>
+                      <span className="text-[color:var(--color-text-muted)]/50 shrink-0">
+                        →
+                      </span>
+                      {worry ? (
+                        <span className="flex-1 min-w-[10rem]">
+                          {worry.text}
+                        </span>
+                      ) : (
+                        <span className="italic text-[color:var(--color-text-muted)]/70">
+                          not yet
+                        </span>
+                      )}
+                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
-        </Column>
+        </Row>
 
-        <Column
-          title="4. Competing commitments"
-          active={activeColumnForStage(map.current_stage) === 4}
-        >
+        <Row title="4. Competing commitments">
           {commitments.length === 0 ? (
-            <Placeholder>My vows to make sure my worries never come true.</Placeholder>
+            <Placeholder>
+              My vows to make sure my worries never come true.
+            </Placeholder>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {commitments.map((c, i) => {
@@ -173,16 +158,18 @@ export function MapPanel({
                   <li
                     key={c.id}
                     className={
-                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1.5" +
-                      (isFresh(c.created_at, renderedAt) ? " itc-fresh-row" : "")
+                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
+                      (isFresh(c.created_at, renderedAt) ? "itc-fresh-row" : "")
                     }
                   >
-                    <span className="text-[color:var(--color-muted)] text-[11px]">
-                      {i + 1}.
-                    </span>{" "}
-                    {c.text}
+                    <div className="flex flex-wrap gap-2 items-baseline">
+                      <span className="text-[11px] text-[color:var(--color-text-muted)] shrink-0">
+                        {i + 1}.
+                      </span>
+                      <span className="flex-1 min-w-[12rem]">{c.text}</span>
+                    </div>
                     {w ? (
-                      <div className="text-[10px] text-[color:var(--color-muted)]/70 mt-1">
+                      <div className="text-[10px] text-[color:var(--color-text-muted)]/70 mt-1 pl-5">
                         ↑ worry: {w.text}
                       </div>
                     ) : null}
@@ -191,12 +178,9 @@ export function MapPanel({
               })}
             </ul>
           )}
-        </Column>
+        </Row>
 
-        <Column
-          title="5. Big Assumptions"
-          active={activeColumnForStage(map.current_stage) === 5}
-        >
+        <Row title="5. Big Assumptions">
           {assumptions.length === 0 ? (
             <Placeholder>Comes together from the commitments.</Placeholder>
           ) : (
@@ -210,7 +194,7 @@ export function MapPanel({
                   <li
                     key={a.id}
                     className={
-                      "rounded-md border px-2 py-1.5 " +
+                      "rounded-md border px-3 py-2 " +
                       (a.selected_for_testing
                         ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10"
                         : a.coach_recommended
@@ -219,18 +203,20 @@ export function MapPanel({
                       (isFresh(a.created_at, renderedAt) ? " itc-fresh-row" : "")
                     }
                   >
-                    {a.text}
-                    {linkedIndices.length > 0 ? (
-                      <div className="text-[10px] text-[color:var(--color-muted)]/70 mt-1">
-                        underwrites commitments {linkedIndices.join(", ")}
-                      </div>
-                    ) : null}
+                    <div className="flex flex-wrap gap-2 items-baseline">
+                      <span className="flex-1 min-w-[12rem]">{a.text}</span>
+                      {linkedIndices.length > 0 ? (
+                        <span className="text-[10px] text-[color:var(--color-text-muted)]/70 shrink-0">
+                          underwrites {linkedIndices.join(", ")}
+                        </span>
+                      ) : null}
+                    </div>
                     {a.selected_for_testing ? (
                       <div className="text-[10px] text-[color:var(--color-primary)] mt-1">
                         Selected for testing
                       </div>
                     ) : a.coach_recommended ? (
-                      <div className="text-[10px] text-[color:var(--color-muted)] mt-1">
+                      <div className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
                         Coach recommends
                       </div>
                     ) : null}
@@ -239,7 +225,7 @@ export function MapPanel({
               })}
             </ul>
           )}
-        </Column>
+        </Row>
       </div>
 
       {tests.length > 0 ? (
@@ -251,6 +237,31 @@ export function MapPanel({
         />
       ) : null}
     </div>
+  );
+}
+
+function Row({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3">
+      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)] mb-2">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function Placeholder({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs italic text-[color:var(--color-text-muted)]/70">
+      {children}
+    </p>
   );
 }
 
@@ -275,21 +286,19 @@ function TestsPanel({
 
   return (
     <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3 space-y-3">
-      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
         Test on the map
       </h3>
 
       {showRunningBanner ? (
         <div className="rounded-md border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 px-3 py-2 text-xs">
-          <div className="font-semibold text-white">
-            Test in progress
-          </div>
+          <div className="font-semibold text-white">Test in progress</div>
           {active.target_date ? (
-            <div className="text-[color:var(--color-muted)] mt-0.5">
+            <div className="text-[color:var(--color-text-muted)] mt-0.5">
               Come back after {active.target_date} with observations.
             </div>
           ) : (
-            <div className="text-[color:var(--color-muted)] mt-0.5">
+            <div className="text-[color:var(--color-text-muted)] mt-0.5">
               Come back with observations whenever you're ready.
             </div>
           )}
@@ -306,7 +315,7 @@ function TestsPanel({
 
       {history.length > 0 ? (
         <details className="text-xs">
-          <summary className="cursor-pointer text-[color:var(--color-muted)]/80">
+          <summary className="cursor-pointer text-[color:var(--color-text-muted)]/80">
             Prior tests ({history.length})
           </summary>
           <div className="mt-2 space-y-2">
@@ -350,17 +359,17 @@ function TestCard({
       }
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+        <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
           {TEST_TYPE_LABELS[test.test_type]}
         </div>
-        <div className="text-[10px] text-[color:var(--color-muted)]/80">
+        <div className="text-[10px] text-[color:var(--color-text-muted)]/80">
           {test.status}
           {test.target_date ? ` · target ${test.target_date}` : ""}
         </div>
       </div>
 
       {assumption ? (
-        <div className="text-[11px] text-[color:var(--color-muted)]/80 mb-2">
+        <div className="text-[11px] text-[color:var(--color-text-muted)]/80 mb-2">
           Testing: <span className="text-white/90">{assumption.text}</span>
         </div>
       ) : null}
@@ -381,7 +390,7 @@ function TestCard({
 
       {result ? (
         <div className="mt-2 pt-2 border-t border-[color:var(--color-border)] space-y-1">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)]">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
             Results
             {result.assumption_verdict
               ? ` · ${result.assumption_verdict.replace(/_/g, " ")}`
@@ -400,7 +409,7 @@ function TestCard({
             value={result.what_it_says_about_assumption}
           />
           {result.next_step ? (
-            <div className="text-[10px] text-[color:var(--color-muted)] mt-1">
+            <div className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
               Next: {result.next_step.replace(/_/g, " ")}
             </div>
           ) : null}
@@ -420,85 +429,10 @@ function TestField({
   if (!value) return null;
   return (
     <div className="mb-1">
-      <span className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]/80">
+      <span className="text-[10px] uppercase tracking-wide text-[color:var(--color-text-muted)]/80">
         {label}:
       </span>{" "}
       <span className="text-sm">{value}</span>
     </div>
-  );
-}
-
-function Column({
-  title,
-  children,
-  active = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  active?: boolean;
-}) {
-  return (
-    <section
-      className={
-        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-3 min-h-[160px] transition-colors " +
-        (active
-          ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
-          : "border-[color:var(--color-border)]")
-      }
-    >
-      <h3
-        className={
-          "text-[11px] uppercase tracking-wide mb-2 " +
-          (active
-            ? "text-[color:var(--color-primary)] font-semibold"
-            : "text-[color:var(--color-muted)]")
-        }
-      >
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-/**
- * Which physical column (1-5) is the "active" one for a given stage.
- * The active column expands via columnWeightsForStage; the others
- * compress to summary width. Stages that don't map to a single
- * column (review, walkthrough, test_*, done) return null so all
- * columns render at equal weight.
- */
-function activeColumnForStage(stage: ItcStage): number | null {
-  switch (stage) {
-    case "goal":
-      return 1;
-    case "behaviors":
-      return 2;
-    case "worries":
-      return 3;
-    case "commitments":
-      return 4;
-    case "assumptions":
-    case "prioritize":
-      return 5;
-    default:
-      return null;
-  }
-}
-
-/**
- * fr weights for the 5-column grid. Active column gets a wide slot;
- * the other columns collapse to narrow summary strips. When no active
- * column (review / walkthrough / test / done), all get equal weight.
- */
-function columnWeightsForStage(stage: ItcStage): number[] {
-  const active = activeColumnForStage(stage);
-  if (active === null) return [1, 1, 1, 1, 1];
-  return [1, 2, 3, 4, 5].map((n) => (n === active ? 4 : 1));
-}
-
-function Placeholder({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs italic text-[color:var(--color-muted)]/70">{children}</p>
   );
 }

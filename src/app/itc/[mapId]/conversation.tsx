@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ItcActionProposal, ItcMessage } from "@/lib/itc/maps";
-import { sendCoachMessage } from "../actions";
+import { advanceMapStage, sendCoachMessage, type AdvanceGate } from "../actions";
 import { ProposalCard } from "./proposal-cards";
 
 export function Conversation({
   mapId,
   messages,
   proposals,
+  advanceGate,
 }: {
   mapId: string;
   messages: ItcMessage[];
   proposals: ItcActionProposal[];
+  advanceGate: AdvanceGate;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +25,8 @@ export function Conversation({
     (m) => m.role === "user" || m.role === "assistant",
   );
 
-  // Group proposals by the assistant message they were created against so
-  // each card renders inline below the message that produced it. Rendered
-  // in creation order so a batch of proposals on one message keeps its
-  // authored ordering.
+  // Group proposals by the assistant message they were created against
+  // so each card renders inline below the message that produced it.
   const proposalsByMessage = useMemo(() => {
     const map = new Map<string, ItcActionProposal[]>();
     for (const p of proposals) {
@@ -37,9 +37,6 @@ export function Conversation({
     return map;
   }, [proposals]);
 
-  // Keep the latest turn in view whenever the transcript grows or the
-  // typing indicator flips. Scrolls the inner overflow container (not
-  // the window) so the map pane on the right stays put.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -55,6 +52,18 @@ export function Conversation({
     });
   }
 
+  function handleAdvance() {
+    if (!advanceGate.to) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("to", advanceGate.to);
+    startTransition(async () => {
+      const res = await advanceMapStage(fd);
+      if (!res.ok) setError(res.reason ?? "Could not advance.");
+    });
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <ol
@@ -62,7 +71,7 @@ export function Conversation({
         className="flex-1 overflow-y-auto space-y-3 pr-1 scroll-smooth"
       >
         {displayMessages.length === 0 ? (
-          <li className="text-sm italic text-[color:var(--color-muted)]">
+          <li className="text-sm italic text-[color:var(--color-text-muted)]">
             Say hello, or tell me what's on your mind about this pillar.
           </li>
         ) : null}
@@ -96,6 +105,29 @@ export function Conversation({
           </li>
         ) : null}
       </ol>
+
+      {advanceGate.to ? (
+        <div className="mt-3 border-t border-[color:var(--color-border)] pt-3">
+          <button
+            type="button"
+            onClick={handleAdvance}
+            disabled={pending || !advanceGate.enabled}
+            title={
+              advanceGate.enabled
+                ? undefined
+                : advanceGate.reason ?? "Not ready to advance."
+            }
+            className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {pending ? "…" : advanceGate.label}
+          </button>
+          {!advanceGate.enabled && advanceGate.reason ? (
+            <p className="mt-1 text-[11px] text-[color:var(--color-text-muted)]/80 text-center">
+              {advanceGate.reason}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <form
         action={handleSend}
@@ -138,7 +170,7 @@ export function Conversation({
 function TypingDots() {
   return (
     <span
-      className="inline-flex items-center gap-1 text-[color:var(--color-muted)]"
+      className="inline-flex items-center gap-1 text-[color:var(--color-text-muted)]"
       aria-label="Coach is thinking"
     >
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
@@ -147,4 +179,3 @@ function TypingDots() {
     </span>
   );
 }
-
