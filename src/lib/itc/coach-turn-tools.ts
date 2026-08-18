@@ -25,6 +25,99 @@ import type { ItcStage } from "./stage";
 import type { TurnEventLog } from "./turn-events";
 import type { PillarCode } from "@/lib/pillars";
 
+/**
+ * Cut the coach's visible reply at the first premature-advance
+ * signal. Premature advance = coach claiming to lock a proposal it
+ * just fired (the coachee taps to lock, not the coach) or opening
+ * the exposition for a later stage before the coachee has advanced.
+ *
+ * Called ONLY when a content proposal was queued in the same turn.
+ * If no proposal was queued the coach is legitimately talking about
+ * the current stage's substance and shouldn't be truncated.
+ *
+ * Regex-based, deterministic, stage-aware. If nothing matches, the
+ * original reply is returned unchanged. If a match hits, everything
+ * from the match onward is dropped and any trailing whitespace is
+ * trimmed. The last remaining sentence gets a period if it doesn't
+ * already end with one.
+ */
+function stripPrematureAdvance(reply: string, stage: ItcStage): string {
+  // Signals that mean "the coach jumped ahead." Ordered so the
+  // most-specific patterns fire first.
+  //
+  // "Locked" / "Locked." at a paragraph or sentence start is the
+  // coach claiming acceptance the coachee hasn't given. "Column N"
+  // where N > current stage's column is exposition for a later
+  // stage. Stage-specific triggers (worry box, hidden commitment,
+  // etc.) catch the next-stage exposition even when the coach
+  // doesn't say "Column N".
+  const currentColumn = stageColumnNumber(stage);
+  const patterns: RegExp[] = [
+    // "Locked" or "Locked." at start of a sentence or paragraph.
+    // Covers "\nLocked." and ". Locked." positions.
+    /(^|[.!?]\s+|\n)Locked\b[^.!?\n]*[.!?]?/i,
+  ];
+  // "Column N" for any N greater than the current stage's column.
+  for (let n = currentColumn + 1; n <= 5; n++) {
+    patterns.push(
+      new RegExp(`(^|\\n|[.!?]\\s+)[^.!?\\n]*\\bColumn\\s+${n}\\b`, "i"),
+    );
+  }
+  // Stage-specific next-stage exposition triggers.
+  const nextStageTriggers: Partial<Record<ItcStage, RegExp[]>> = {
+    goal: [
+      /(^|\n|[.!?]\s+)[^.!?\n]*\b(the behaviors|what you actually do|what you do or fail to do|First one that comes to mind)/i,
+    ],
+    behaviors: [
+      /(^|\n|[.!?]\s+)[^.!?\n]*\b(worry box|the fear underneath|worries stage)/i,
+    ],
+    worries: [
+      /(^|\n|[.!?]\s+)[^.!?\n]*\b(hidden commitment|competing commitment|the commitment column)/i,
+    ],
+    commitments: [
+      /(^|\n|[.!?]\s+)[^.!?\n]*\b(Big Assumption|the assumption column)/i,
+    ],
+    assumptions: [
+      /(^|\n|[.!?]\s+)[^.!?\n]*\b(immune system walkthrough|the walkthrough)/i,
+    ],
+  };
+  for (const p of nextStageTriggers[stage] ?? []) patterns.push(p);
+
+  let cutAt = -1;
+  for (const p of patterns) {
+    const m = p.exec(reply);
+    if (m && (cutAt === -1 || m.index < cutAt)) cutAt = m.index;
+  }
+  if (cutAt === -1) return reply;
+
+  const kept = reply.slice(0, cutAt).replace(/\s+$/, "");
+  if (kept.length === 0) return reply; // don't strip everything
+  // Ensure the last kept sentence ends with punctuation so the coachee
+  // doesn't read a truncated fragment.
+  if (!/[.!?]$/.test(kept)) return kept + ".";
+  return kept;
+}
+
+function stageColumnNumber(stage: ItcStage): number {
+  switch (stage) {
+    case "goal":
+      return 1;
+    case "behaviors":
+      return 2;
+    case "worries":
+      return 3;
+    case "commitments":
+      return 4;
+    case "assumptions":
+    case "review":
+    case "immune_system":
+    case "prioritize":
+      return 5;
+    default:
+      return 6;
+  }
+}
+
 function promptCachingEnabled(): boolean {
   const raw = process.env.ITC_PROMPT_CACHE;
   if (!raw) return false;
@@ -237,10 +330,20 @@ export async function runItcCoachTurnWithTools(
   // clause flow; earlier attempts with ". " produced sentence
   // fragments starting with a lowercase word). Strip any leftover bare
   // em dashes to a comma.
-  const reply = rawReply
+  const dashStripped = rawReply
     .replace(/\s+[—–]\s+/g, ", ")
     .replace(/[—–]/g, ",")
     .replace(/\s+--\s+/g, ", ");
+
+  // Premature-advance guard. When a content proposal is queued in
+  // this turn, the coach must not preemptively open the next stage
+  // or claim the card is "locked" (nothing is locked until the
+  // coachee taps Add to map + Continue). The prompt states this as
+  // a hard rule; the model ignores it. Deterministic strip cuts the
+  // reply at the first premature-advance signal.
+  const reply = scope.pendingProposals.length > 0
+    ? stripPrematureAdvance(dashStripped, scope.currentStage)
+    : dashStripped;
 
   input.events.record(
     "llm_attempt",
