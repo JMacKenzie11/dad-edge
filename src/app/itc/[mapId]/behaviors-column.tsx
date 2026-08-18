@@ -254,35 +254,33 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-start gap-1.5">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={2}
-          disabled={pending}
-          placeholder="Add a behavior…"
-          onKeyDown={(e) => {
-            if (
-              e.key === "Enter" &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing
-            ) {
-              e.preventDefault();
-              if (pending) return;
-              submit();
-            }
-          }}
-          className="flex-1 resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm"
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          {pending ? "…" : "Add"}
-        </button>
-      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={2}
+        disabled={pending}
+        placeholder="Add a behavior…"
+        onKeyDown={(e) => {
+          if (
+            e.key === "Enter" &&
+            !e.shiftKey &&
+            !e.nativeEvent.isComposing
+          ) {
+            e.preventDefault();
+            if (pending) return;
+            submit();
+          }
+        }}
+        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm"
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={pending}
+        className="w-full rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+      >
+        {pending ? "…" : "Add"}
+      </button>
       {error ? (
         <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p>
       ) : null}

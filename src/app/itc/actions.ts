@@ -35,6 +35,7 @@ import {
   listBehaviors,
   listCommitments,
   listMessages,
+  listMessagesForStage,
   listTestResults,
   listTests,
   listWorries,
@@ -1671,9 +1672,67 @@ export async function advanceMapStage(formData: FormData): Promise<SendMessageRe
   }
 
   await advanceStage(map.id, map.current_stage, target);
+  await seedStageIntroIfNeeded(map.id, target, map.improvement_goal);
   revalidatePath(`/itc/${map.id}`);
   return { ok: true };
 }
+
+/**
+ * Seed a canned coach intro message when the map first lands on a
+ * stage that has no assistant messages yet. Advancing via the UI
+ * button doesn't fire a coach turn, so without this the coachee
+ * lands on an empty chat pane with no idea what the new column is
+ * for or how to fill it. Runs once per stage per map — subsequent
+ * revisits (e.g. backward + forward again) skip because messages
+ * already exist for that stage.
+ */
+async function seedStageIntroIfNeeded(
+  mapId: string,
+  stage: ItcStage,
+  goalText: string | null,
+): Promise<void> {
+  const existing = await listMessagesForStage(mapId, stage);
+  const hasAssistantIntro = existing.some((m) => m.role === "assistant");
+  if (hasAssistantIntro) return;
+  const intro = STAGE_INTROS[stage]?.(goalText);
+  if (!intro) return;
+  try {
+    await appendMessage(mapId, "assistant", intro, stage);
+  } catch (err) {
+    console.warn(
+      "[itc] seedStageIntroIfNeeded(%s) failed: %s",
+      stage,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+const STAGE_INTROS: Partial<Record<ItcStage, (goal: string | null) => string>> = {
+  behaviors: (goal) =>
+    `Column 2 is what you actually do, or fail to do, in the moment that works against ${
+      goal ? `"${goal}"` : "your goal"
+    }. Not why. Not what you should do instead. Just the specific behavior. First one that comes to mind? Type it into the Add a behavior input on Column 2, or tell me here if you want help shaping it.`,
+  worries: (_goal) =>
+    `Column 3 is the worry box. For each behavior on Column 2, we name the fear underneath. If you stopped doing that behavior (or started the opposite), what part of you is afraid of what would happen next? Pick a behavior to start on, and tell me here.`,
+  commitments: (_goal) =>
+    `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping. If your worry is "she'd lose respect for me," your hidden commitment is "I'm also committed to never being seen as diminished by her." One per worry. Tell me here to work through them.`,
+  assumptions: (_goal) =>
+    `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment? These are the beliefs that hold the whole system together. Tell me here.`,
+  review: (_goal) =>
+    `Before we test anything, take a beat and look at the whole map on the right. What jumps out? Anything you'd sharpen or reword? Tell me here.`,
+  immune_system: (_goal) =>
+    `Now the walkthrough. I'm going to show you how the columns interlock — how the behaviors, the worries, the hidden commitments, and the Big Assumptions all protect the same thing. Ready?`,
+  prioritize: (_goal) =>
+    `You've mapped the whole immune system. Now: which Big Assumption do you want to test first? The best one to start on is usually the one that, if it turned out not to hold, would loosen the most of the system. Tell me here.`,
+  test_design: (_goal) =>
+    `Design a test for the assumption you picked. It has four parts: what the assumption says, what you'll do differently, what data you'll collect, and what you'll find out. Tell me here and I'll help you shape it.`,
+  test_running: (_goal) =>
+    `Test is designed. Go run it. Come back with what you observed, and we'll process what it tells you about the assumption.`,
+  results: (_goal) =>
+    `You ran the test. Tell me what you did, what you observed, and what you make of it — I'll help you decide whether the assumption held, partially held, or got challenged, and what to do next.`,
+  done: (_goal) =>
+    `Your map stays here. Come back anytime you want to design another test, revisit an assumption, or work on a different pillar.`,
+};
 
 // ==========================================================================
 // Server actions for action-proposal cards (accept / edit / reject).
