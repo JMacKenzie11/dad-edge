@@ -29,7 +29,12 @@ export type TurnEventType =
   | "backstop_fire"
   | "dedup_skip"
   | "turn_summary"
-  | "error";
+  | "error"
+  // Native-tool path only: recorded when a proposal fails a
+  // depth rubric at proposal time and the coach must recover in the
+  // same turn without ever surfacing the rejection to the coachee.
+  | "rubric_rejected_proposal"
+  | "same_turn_recovery";
 
 type TurnEventRow = {
   map_id: string;

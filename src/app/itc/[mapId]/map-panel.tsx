@@ -8,6 +8,7 @@ import type {
   ItcTestResult,
   ItcWorry,
 } from "@/lib/itc/maps";
+import type { ItcStage } from "@/lib/itc/stage";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { BehaviorsColumn } from "./behaviors-column";
 import { GoalColumn } from "./goal-column";
@@ -93,8 +94,18 @@ export function MapPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-        <Column title="1. Improvement goal">
+      <div
+        className="grid gap-2 max-md:!grid-cols-1"
+        style={{
+          gridTemplateColumns: columnWeightsForStage(map.current_stage)
+            .map((w) => `minmax(0, ${w}fr)`)
+            .join(" "),
+        }}
+      >
+        <Column
+          title="1. Improvement goal"
+          active={activeColumnForStage(map.current_stage) === 1}
+        >
           <GoalColumn
             mapId={map.id}
             currentStage={map.current_stage}
@@ -103,7 +114,10 @@ export function MapPanel({
           />
         </Column>
 
-        <Column title="2. Doing / not-doing">
+        <Column
+          title="2. Doing / not-doing"
+          active={activeColumnForStage(map.current_stage) === 2}
+        >
           <BehaviorsColumn
             mapId={map.id}
             currentStage={map.current_stage}
@@ -111,7 +125,10 @@ export function MapPanel({
           />
         </Column>
 
-        <Column title="3. Worry box">
+        <Column
+          title="3. Worry box"
+          active={activeColumnForStage(map.current_stage) === 3}
+        >
           {selectedBehaviors.length === 0 ? (
             <Placeholder>Fills in after behaviors.</Placeholder>
           ) : (
@@ -142,7 +159,10 @@ export function MapPanel({
           )}
         </Column>
 
-        <Column title="4. Competing commitments">
+        <Column
+          title="4. Competing commitments"
+          active={activeColumnForStage(map.current_stage) === 4}
+        >
           {commitments.length === 0 ? (
             <Placeholder>My vows to make sure my worries never come true.</Placeholder>
           ) : (
@@ -173,7 +193,10 @@ export function MapPanel({
           )}
         </Column>
 
-        <Column title="5. Big Assumptions">
+        <Column
+          title="5. Big Assumptions"
+          active={activeColumnForStage(map.current_stage) === 5}
+        >
           {assumptions.length === 0 ? (
             <Placeholder>Comes together from the commitments.</Placeholder>
           ) : (
@@ -405,15 +428,73 @@ function TestField({
   );
 }
 
-function Column({ title, children }: { title: string; children: React.ReactNode }) {
+function Column({
+  title,
+  children,
+  active = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  active?: boolean;
+}) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3 min-h-[160px]">
-      <h3 className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted)] mb-2">
+    <section
+      className={
+        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-3 min-h-[160px] transition-colors " +
+        (active
+          ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
+          : "border-[color:var(--color-border)]")
+      }
+    >
+      <h3
+        className={
+          "text-[11px] uppercase tracking-wide mb-2 " +
+          (active
+            ? "text-[color:var(--color-primary)] font-semibold"
+            : "text-[color:var(--color-muted)]")
+        }
+      >
         {title}
       </h3>
       {children}
     </section>
   );
+}
+
+/**
+ * Which physical column (1-5) is the "active" one for a given stage.
+ * The active column expands via columnWeightsForStage; the others
+ * compress to summary width. Stages that don't map to a single
+ * column (review, walkthrough, test_*, done) return null so all
+ * columns render at equal weight.
+ */
+function activeColumnForStage(stage: ItcStage): number | null {
+  switch (stage) {
+    case "goal":
+      return 1;
+    case "behaviors":
+      return 2;
+    case "worries":
+      return 3;
+    case "commitments":
+      return 4;
+    case "assumptions":
+    case "prioritize":
+      return 5;
+    default:
+      return null;
+  }
+}
+
+/**
+ * fr weights for the 5-column grid. Active column gets a wide slot;
+ * the other columns collapse to narrow summary strips. When no active
+ * column (review / walkthrough / test / done), all get equal weight.
+ */
+function columnWeightsForStage(stage: ItcStage): number[] {
+  const active = activeColumnForStage(stage);
+  if (active === null) return [1, 1, 1, 1, 1];
+  return [1, 2, 3, 4, 5].map((n) => (n === active ? 4 : 1));
 }
 
 function Placeholder({ children }: { children: React.ReactNode }) {

@@ -1,0 +1,264 @@
+/**
+ * Native tool-use coach turn.
+ *
+ * Runs a single coach turn using Anthropic's native tool use through
+ * the AI SDK. The coach writes prose to the coachee and, in the same
+ * response, fires zero or more tool calls carrying schema-validated
+ * action payloads. Content actions queue into scope.pendingProposals
+ * for the caller to persist as itc_action_proposals cards; immediate
+ * actions apply server-side during the call.
+ *
+ * Multi-step: `stopWhen: stepCountIs(2)` gives the model one
+ * opportunity to react to a rubric rejection in the same turn. The
+ * recovery step must end on an excavation question and cannot re-fire
+ * a proposal (enforced by capReached() inside every tool executor —
+ * see coach-tools.ts).
+ */
+
+import { generateText, stepCountIs } from "ai";
+import type { SystemModelMessage } from "@ai-sdk/provider-utils";
+import { mainModel } from "@/lib/model-config";
+import { PILLAR_BY_CODE } from "@/lib/pillars";
+import { buildCoachTools, type PendingProposal, type TurnScope } from "./coach-tools";
+import { buildItcCoachSystemSplit } from "./prompts";
+import type { ItcStage } from "./stage";
+import type { TurnEventLog } from "./turn-events";
+import type { PillarCode } from "@/lib/pillars";
+
+function promptCachingEnabled(): boolean {
+  const raw = process.env.ITC_PROMPT_CACHE;
+  if (!raw) return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+/**
+ * Static addendum spliced onto the coach's system prompt when running
+ * the tool-use path. Explains the tool contract, the rubric-rejection
+ * recovery rule, and the "never surface plumbing to the coachee" rule.
+ * Kept small — the bulk of coaching guidance still lives in the
+ * per-stage prompts.
+ */
+const TOOLS_ADDENDUM = `
+===== YOU HAVE TOOLS (native tool use) =====
+
+You produce two kinds of output in a single response:
+  1. Prose content blocks — plain text the coachee reads verbatim.
+  2. Tool calls — schema-validated actions that either become cards
+     the coachee accepts/edits/rejects, or apply immediately server-side.
+
+The prose is the coaching. The tool call is the state change carrying
+the exact same content the prose refers to. When you draft a worry, a
+behavior, a commitment, or an assumption in prose, fire the matching
+propose_X tool with that exact text in the same response. The card
+renders under your message. One tap for the coachee to accept.
+
+Tools available:
+  Content (become cards):
+    propose_goal, propose_behavior, propose_behavior_replacement,
+    remove_behavior, propose_worry, propose_commitments_batch,
+    propose_assumption, recommend_assumption, select_assumption,
+    save_test_design, record_test_results
+  Immediate (apply server-side, no card):
+    advance_stage, mark_walkthrough_delivered, mark_reveal_delivered
+
+Rules about tool use:
+- NEVER reference tools, cards, rubrics, validation, JSON, schemas,
+  or any part of this machinery in visible prose. The coachee reads
+  ONLY the natural coaching text. If a tool result comes back
+  rejected, that message is for your eyes only.
+- When you propose content, your prose says the content naturally
+  ("Sharper would be: 'I lie or make excuses to get out of admitting
+  she's right.' Does that land?"). The tool carries the same text.
+  Do NOT tell the coachee to "click accept" or "the card below" or
+  reference the UI in any way — the card sits there and speaks for
+  itself.
+- If a rubric rejects a proposal (worries and assumptions have depth
+  rubrics), you get one recovery step in the same turn. That step
+  must be prose only, ending in exactly one excavation question that
+  helps HIM name what's underneath. Do NOT re-propose a deeper
+  version — his answer supplies the depth. You may not fire another
+  proposal tool in the same turn after any rejection; the cap is one
+  rejection per turn.
+- advance_stage runs invariant checks (behaviors need worries paired,
+  walkthrough delivered before prioritize, etc.). If it comes back
+  rejected, the failure reason names exactly what's missing — address
+  it next turn, do not retry blindly.
+
+Speak to the coachee naturally. The machinery is invisible.
+`.trim();
+
+function toCoachSystem(
+  staticPart: string,
+  dynamic: string,
+): string | SystemModelMessage[] {
+  if (!promptCachingEnabled()) {
+    return `${staticPart}\n\n${dynamic}`;
+  }
+  return [
+    {
+      role: "system",
+      content: staticPart,
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    },
+    { role: "system", content: dynamic },
+  ];
+}
+
+type ChatTurn = { role: "user" | "assistant"; content: string };
+
+export type ToolTurnInput = {
+  pillar: PillarCode;
+  stage: ItcStage;
+  improvementGoal: string | null;
+  mapId: string;
+  behaviors: { id: string; text: string; selected: boolean }[];
+  worries: { behavior_id: string; text: string; depth_score: number | null }[];
+  commitments: { id: string; worry_id: string; text: string }[];
+  assumptions: {
+    id: string;
+    text: string;
+    depth_score: number | null;
+    selected_for_testing: boolean;
+    coach_recommended: boolean;
+    linked_commitment_ids: string[];
+  }[];
+  walkthroughDelivered: boolean;
+  tests: {
+    id: string;
+    assumption_id: string;
+    test_type: string;
+    assumption_says: string | null;
+    behavior_change: string | null;
+    data_to_collect: string | null;
+    in_order_to_find_out: string | null;
+    target_date: string | null;
+    status: string;
+  }[];
+  testResults: {
+    test_id: string;
+    ran_on: string | null;
+    what_i_did: string | null;
+    data_collected: string | null;
+    what_it_says_about_assumption: string | null;
+    assumption_verdict: string | null;
+    next_step: string | null;
+  }[];
+  mapStatus: string;
+  recentActionFeedback: string[];
+  history: ChatTurn[];
+  userMessage: string;
+  events: TurnEventLog;
+};
+
+export type ToolTurnResult = {
+  reply: string;
+  pendingProposals: PendingProposal[];
+  stageAfter: ItcStage;
+  hadRubricRejection: boolean;
+  stepTexts: string[];
+  toolCallCount: number;
+};
+
+export async function runItcCoachTurnWithTools(
+  input: ToolTurnInput,
+): Promise<ToolTurnResult> {
+  const pillar = PILLAR_BY_CODE[input.pillar];
+  const built = buildItcCoachSystemSplit({
+    pillarLabel: pillar.label,
+    stage: input.stage,
+    improvementGoal: input.improvementGoal,
+    behaviors: input.behaviors,
+    worries: input.worries,
+    commitments: input.commitments,
+    assumptions: input.assumptions,
+    walkthroughDelivered: input.walkthroughDelivered,
+    tests: input.tests,
+    testResults: input.testResults,
+    mapStatus: input.mapStatus,
+    recentActionFeedback: input.recentActionFeedback,
+  });
+  const staticWithTools = `${built.static}\n\n${TOOLS_ADDENDUM}`;
+  const system = toCoachSystem(staticWithTools, built.dynamic);
+
+  const messages = [
+    ...input.history,
+    { role: "user" as const, content: input.userMessage },
+  ];
+
+  const scope: TurnScope = {
+    mapId: input.mapId,
+    currentStage: input.stage,
+    goalText: input.improvementGoal,
+    rejectionsCount: { current: 0 },
+    maxRejections: 1,
+    pendingProposals: [],
+    events: input.events,
+  };
+
+  const tools = buildCoachTools(scope);
+
+  const attemptStart = Date.now();
+  const result = await generateText({
+    model: mainModel(),
+    system,
+    messages,
+    tools,
+    // Give the coach one recovery step after a rubric rejection. Cap
+    // at 2 total steps so ping-pong is impossible (the second-step
+    // rubric-cap enforcement in coach-tools.ts is defense-in-depth).
+    stopWhen: stepCountIs(2),
+    maxOutputTokens: 4096,
+  });
+  const llmMs = Date.now() - attemptStart;
+
+  // Collect prose from each step. Anthropic returns text blocks
+  // interleaved with tool_use blocks per step; the SDK exposes each
+  // step's `.text` as the concatenated text of that step's text blocks.
+  const stepTexts = result.steps.map((s) => s.text.trim()).filter(Boolean);
+
+  const hadRubricRejection = scope.rejectionsCount.current > 0;
+
+  // Visible reply policy:
+  // - On rubric rejection: show ONLY the final step's text (the
+  //   recovery question). Any prose from the failed first attempt
+  //   would confuse the coachee.
+  // - No rejection: concatenate step texts. In practice step 2 is
+  //   often empty (model already said its piece in step 1); if the
+  //   model does add a follow-up, it's usually a short acknowledgment.
+  const rawReply = hadRubricRejection
+    ? (stepTexts[stepTexts.length - 1] ?? "")
+    : stepTexts.join("\n\n");
+  // Belt-and-suspenders em-dash strip. Preamble bans them but the model
+  // still ships them. Replace " — " with ", " (comma joiner preserves
+  // clause flow; earlier attempts with ". " produced sentence
+  // fragments starting with a lowercase word). Strip any leftover bare
+  // em dashes to a comma.
+  const reply = rawReply
+    .replace(/\s+[—–]\s+/g, ", ")
+    .replace(/[—–]/g, ",")
+    .replace(/\s+--\s+/g, ", ");
+
+  input.events.record(
+    "llm_attempt",
+    {
+      kind: "tools",
+      steps: result.steps.length,
+      tool_calls: result.toolCalls.length,
+      queued_proposals: scope.pendingProposals.length,
+      had_rubric_rejection: hadRubricRejection,
+    },
+    { durationMs: llmMs, stage: scope.currentStage },
+  );
+
+  return {
+    reply,
+    pendingProposals: scope.pendingProposals,
+    stageAfter: scope.currentStage,
+    hadRubricRejection,
+    stepTexts,
+    toolCallCount: result.toolCalls.length,
+  };
+}

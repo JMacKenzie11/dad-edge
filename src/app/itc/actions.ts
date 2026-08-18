@@ -60,6 +60,7 @@ import {
 } from "@/lib/itc/rubric";
 import { extractActions } from "@/lib/itc/extract-actions";
 import { parseCoachMarkers } from "@/lib/itc/marker-parser";
+import { runItcCoachTurnWithTools } from "@/lib/itc/coach-turn-tools";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { TurnEventLog } from "@/lib/itc/turn-events";
 import {
@@ -157,6 +158,18 @@ export async function sendCoachMessage(formData: FormData): Promise<SendMessageR
  * Loads the map fresh so callers can pass just the id. Returns the
  * same SendMessageResult shape sendCoachMessage returns.
  */
+/**
+ * Which coach pipeline to run. "tools" = native tool use path (new,
+ * default). "legacy" = the older marker+extractor pipeline. Delete
+ * the legacy branch once Checkpoint D passes (see DECISIONS.md).
+ */
+function itcPipelineMode(): "tools" | "legacy" {
+  const raw = process.env.ITC_PIPELINE;
+  if (!raw) return "tools";
+  const v = raw.trim().toLowerCase();
+  return v === "legacy" ? "legacy" : "tools";
+}
+
 export async function runCoachTurnForMap(
   mapId: string,
   text: string,
@@ -248,6 +261,191 @@ export async function runCoachTurnForMap(
   const priorAssistantContent = [...priorHistory]
     .reverse()
     .find((m) => m.role === "assistant")?.content ?? null;
+
+  // ------------------------------------------------------------------
+  // Native tool-use path. On rollout it's the default; ITC_PIPELINE=
+  // legacy falls back to the older marker+extractor path below.
+  // ------------------------------------------------------------------
+  if (itcPipelineMode() === "tools") {
+    const toolTurnStart = Date.now();
+    let tt: Awaited<ReturnType<typeof runItcCoachTurnWithTools>>;
+    try {
+      tt = await runItcCoachTurnWithTools({
+        pillar: map.pillar_code,
+        stage: map.current_stage,
+        improvementGoal: map.improvement_goal,
+        mapId: map.id,
+        behaviors,
+        worries,
+        commitments: commitments.map((c) => ({
+          id: c.id,
+          worry_id: c.worry_id,
+          text: c.text,
+        })),
+        assumptions: assumptionsForCoach,
+        walkthroughDelivered: map.walkthrough_delivered,
+        tests: tests.map((t) => ({
+          id: t.id,
+          assumption_id: t.assumption_id,
+          test_type: t.test_type,
+          assumption_says: t.assumption_says,
+          behavior_change: t.behavior_change,
+          data_to_collect: t.data_to_collect,
+          in_order_to_find_out: t.in_order_to_find_out,
+          target_date: t.target_date,
+          status: t.status,
+        })),
+        testResults: testResults.map((r) => ({
+          test_id: r.test_id,
+          ran_on: r.ran_on,
+          what_i_did: r.what_i_did,
+          data_collected: r.data_collected,
+          what_it_says_about_assumption: r.what_it_says_about_assumption,
+          assumption_verdict: r.assumption_verdict,
+          next_step: r.next_step,
+        })),
+        mapStatus: map.status,
+        recentActionFeedback,
+        history: priorHistory,
+        userMessage: parsed.data.text,
+        events,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Coach unavailable.";
+      await appendMessage(
+        map.id,
+        "system",
+        `[coach error] ${message} (mode=tools model=${process.env.ANTHROPIC_MODEL ?? "(unset)"})`,
+        map.current_stage,
+      );
+      events.record(
+        "error",
+        { where: "coach-tools", message },
+        { stage: map.current_stage },
+      );
+      events.record(
+        "turn_summary",
+        {
+          prefetch_ms: prefetchMs,
+          total_ms: Date.now() - turnStart,
+          stage_from: map.current_stage,
+          stage_to: map.current_stage,
+          outcome: "coach-error",
+          pipeline: "tools",
+        },
+        { durationMs: Date.now() - turnStart, stage: map.current_stage },
+      );
+      await events.flush();
+      return { ok: false, reason: `Coach: ${message}` };
+    }
+
+    // Persist the visible reply as the assistant message. The
+    // pending proposals hang off THIS message id so cards render
+    // beneath it in the chat pane. Stage stored is the map's stage
+    // BEFORE any immediate advance_stage tool call so the message
+    // lives with the turn that produced it — we retag below if the
+    // final stage differs.
+    const assistantMessage = await appendMessage(
+      map.id,
+      "assistant",
+      tt.reply.length > 0 ? tt.reply : "(no reply)",
+      map.current_stage,
+    );
+
+    // Persist queued content proposals as cards.
+    for (const p of tt.pendingProposals) {
+      try {
+        await createActionProposal({
+          mapId: map.id,
+          assistantMessageId: assistantMessage.id,
+          actionType: p.action_type,
+          payload: p.payload,
+          source: "marker",
+        });
+      } catch (err) {
+        console.warn(
+          "[itc] createActionProposal(%s) failed: %s",
+          p.action_type,
+          err instanceof Error ? err.message : String(err),
+        );
+        events.record(
+          "error",
+          {
+            where: "createActionProposal-tools",
+            action_type: p.action_type,
+            message: err instanceof Error ? err.message : String(err),
+          },
+          { stage: map.current_stage },
+        );
+      }
+    }
+
+    // Rubric rejection → same-turn recovery event. Records both the
+    // recovery prose and whether it ended on a question, so we can
+    // audit real sessions for whether excavation questions land.
+    if (tt.hadRubricRejection) {
+      const endsWithQuestion = /\?\s*$/.test(tt.reply.trim());
+      events.record(
+        "same_turn_recovery",
+        {
+          recovery_prose: tt.reply,
+          ends_with_question: endsWithQuestion,
+          step_texts: tt.stepTexts,
+        },
+        { stage: tt.stageAfter },
+      );
+    }
+
+    // Retag the assistant message if immediate tool calls advanced
+    // the stage during this turn.
+    if (tt.stageAfter !== map.current_stage) {
+      try {
+        await retagMessageStage(assistantMessage.id, tt.stageAfter);
+      } catch {
+        // non-fatal
+      }
+    }
+
+    const totalMs = Date.now() - turnStart;
+    console.warn(
+      "[itc timing] turn map=%s stage=%s%s pipeline=tools cards=%d rejections=%d total=%dms",
+      map.id,
+      map.current_stage,
+      tt.stageAfter !== map.current_stage ? `->${tt.stageAfter}` : "",
+      tt.pendingProposals.length,
+      tt.hadRubricRejection ? 1 : 0,
+      totalMs,
+    );
+    events.record(
+      "turn_summary",
+      {
+        prefetch_ms: prefetchMs,
+        llm_ms: Date.now() - toolTurnStart,
+        total_ms: totalMs,
+        stage_from: map.current_stage,
+        stage_to: tt.stageAfter,
+        pipeline: "tools",
+        cards_queued: tt.pendingProposals.length,
+        had_rubric_rejection: tt.hadRubricRejection,
+        tool_call_count: tt.toolCallCount,
+      },
+      { durationMs: totalMs, stage: tt.stageAfter },
+    );
+    await events.flush();
+
+    try {
+      revalidatePath(`/itc/${map.id}`);
+    } catch {
+      // no-op outside request context
+    }
+    return { ok: true };
+  }
+
+  // ------------------------------------------------------------------
+  // Legacy marker + extractor path (fallback via ITC_PIPELINE=legacy).
+  // Kept intact through Checkpoint D so we can bounce back if the
+  // tools path hits an unforeseen edge; delete after D.
+  // ------------------------------------------------------------------
 
   let reply;
   const llmStart = Date.now();
