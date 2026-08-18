@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
@@ -66,32 +65,30 @@ function safeRevalidate(path: string): void {
 }
 
 /**
- * Fire the fn after the current response is sent (Next.js `after()`)
- * when we're inside a request scope; otherwise run it as an
- * unawaited promise. Coach reactions are async best-effort, so
- * losing one on process teardown is acceptable — the entry landed,
- * which is the load-bearing guarantee.
+ * Await the coach reaction inline so it lands in the database before
+ * the server action returns. The client's auto-revalidate after a
+ * form submit refetches messages + gets the reaction in the same
+ * round trip.
+ *
+ * We originally used Next.js `after()` to defer this behind the
+ * response, avoiding UI latency. But async landing meant the client
+ * never re-rendered to see the reaction — it was in the DB, invisible
+ * to the browser until a manual refresh. Reliability of the coach
+ * reply beats the ~2-3s of extra latency on Add clicks.
+ *
+ * If the reaction itself throws, we swallow. The entry already
+ * landed — a coach-service outage is not a form failure.
  */
-function fireInBackground(fn: () => Promise<unknown>): void {
+async function awaitReactionOrSwallow(
+  fn: () => Promise<unknown>,
+): Promise<void> {
   try {
-    after(() => {
-      void fn().catch((err) => {
-        console.warn(
-          "[itc] background fn failed: %s",
-          err instanceof Error ? err.message : String(err),
-        );
-      });
-    });
-  } catch {
-    // Outside request context (test harness / cron). Fall back to
-    // unawaited promise. Its result may or may not persist depending
-    // on the caller's lifecycle.
-    void fn().catch((err) => {
-      console.warn(
-        "[itc] background fn (fallback) failed: %s",
-        err instanceof Error ? err.message : String(err),
-      );
-    });
+    await fn();
+  } catch (err) {
+    console.warn(
+      "[itc] coach reaction failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
   }
 }
 
@@ -426,7 +423,7 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
     stage: loaded.map.current_stage,
   });
   await events.flush();
-  fireInBackground(() =>
+  await awaitReactionOrSwallow(() =>
     fireCoachReaction(loaded.map.id, {
       kind: "goal",
       text: withStem,
@@ -488,7 +485,7 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
     { stage: loaded.map.current_stage },
   );
   await events.flush();
-  fireInBackground(() =>
+  await awaitReactionOrSwallow(() =>
     fireCoachReaction(loaded.map.id, {
       kind: "behavior",
       text: parsed.data.text.trim(),
@@ -533,7 +530,7 @@ export async function updateBehavior(
     { stage: loaded.map.current_stage },
   );
   await events.flush();
-  fireInBackground(() =>
+  await awaitReactionOrSwallow(() =>
     fireCoachReaction(loaded.map.id, {
       kind: "behavior",
       text: parsed.data.text.trim(),
