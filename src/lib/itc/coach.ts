@@ -254,16 +254,26 @@ function buildReactionPrompt(input: ReactionInput): string {
       "]",
   );
   parts.push(
-    "React briefly in your coaching voice. If the entry is sharp, name why it's a real column entry in one line and STOP. If it needs sharpening, say what would tighten it and offer a specific sharper phrasing as the `refinement` field.",
+    "Evaluate the entry against the column's full criteria, including whether it belongs on the BRAVEMAN pillar he chose. Three cases:",
   );
   parts.push(
-    "HARD RULES for this reaction:\n" +
-      "- Do NOT mention the next column, the next stage, moving on, being ready for the next step, or anything that suggests forward motion. The coachee decides when to move to the next column by tapping a Continue button in the UI. Your job is done when you've reacted to this entry.\n" +
+    "CASE 1: Fundamental mismatch (wrong pillar, wrong column, not a valid entry type at all). Push back plainly. Name what's off in one to two sentences (\"jumping jacks is a fitness behavior, not a goal about your marriage. what would you actually want to be better at with your wife?\"). Do NOT offer a refinement chip. Do NOT offer suggestions — ask the question that gets him to the real entry.",
+  );
+  parts.push(
+    "CASE 2: Right shape but needs sharpening (right pillar, right column, but phrasing is vague, or implicates other people, or doesn't meet a specific criterion). Name what's off in one line and offer a specific sharper phrasing in the `refinement` field. He can tap the chip to fill his input.",
+  );
+  parts.push(
+    "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
+  );
+  parts.push(
+    "HARD RULES for every case:\n" +
+      "- Do NOT mention the next column, the next stage, moving on, being ready for the next step, or anything that suggests forward motion. The coachee decides when to advance by tapping the Continue button. Your job is done when you've reacted to this entry.\n" +
       "- Do NOT ask 'ready to move on?', 'ready for the worry box?', 'want to move to X?', or any variant. He'll advance himself when he sees the button.\n" +
       "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
       "- The rubric and scores are for you; never reference them in prose.\n" +
-      "- Suggestions are optional; include 3-5 in the `suggestions` field only if the entry could use several angles or he might want variety.\n" +
-      "- Refinement is optional; only include if the entry needs sharpening. If it's already sharp, leave the refinement field out.",
+      "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain read against the criteria.\n" +
+      "- Suggestions are optional; include 3-5 in the `suggestions` field only when he'd benefit from options he can tap into the input.\n" +
+      "- Refinement is optional; only include for case 2. Not for case 1 (mismatch) or case 3 (sharp).",
   );
   return parts.join("\n\n");
 }
