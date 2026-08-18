@@ -30,8 +30,25 @@ function requireEnv(name: string, description: string): string {
   return raw.trim();
 }
 
+/**
+ * Test seam: the persona harness in tests/itc-sessions installs
+ * record/replay wrappers here so all LLM calls during a persona run
+ * go through its middleware. Production code never touches these.
+ * Reset to null after each test via afterEach.
+ */
+let mainModelOverride: LanguageModel | null = null;
+let utilityModelOverride: LanguageModel | null = null;
+
+export function setMainModelOverride(m: LanguageModel | null): void {
+  mainModelOverride = m;
+}
+export function setUtilityModelOverride(m: LanguageModel | null): void {
+  utilityModelOverride = m;
+}
+
 /** Main conversational tier — coach turns, non-ITC coach send-message. */
 export function mainModel(): LanguageModel {
+  if (mainModelOverride) return mainModelOverride;
   return anthropic(
     requireEnv("ANTHROPIC_MODEL", "main conversational coach model"),
   );
@@ -39,6 +56,7 @@ export function mainModel(): LanguageModel {
 
 /** Fast/cheap tier — rubrics, reconciliation, judge, safety classifier. */
 export function utilityModel(): LanguageModel {
+  if (utilityModelOverride) return utilityModelOverride;
   return anthropic(
     requireEnv(
       "ANTHROPIC_UTILITY_MODEL",

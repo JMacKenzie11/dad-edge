@@ -3,7 +3,13 @@ import path from "node:path";
 
 export default defineConfig({
   test: {
-    include: ["src/**/__tests__/**/*.test.ts"],
+    include: [
+      "src/**/__tests__/**/*.test.ts",
+      // Persona sessions harness lives here per the ITC State Rebuild
+      // spec Section 6. Records LLM calls in a nightly/manual job and
+      // replays from fixtures on every PR.
+      "tests/itc-sessions/**/*.test.ts",
+    ],
     // Behavior tests hit the Anthropic API — slower than unit tests but
     // still bounded. State-machine tests are fast because they mock the LLM.
     testTimeout: 180_000,

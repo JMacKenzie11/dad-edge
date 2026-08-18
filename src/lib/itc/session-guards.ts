@@ -9,6 +9,21 @@ import { readItcSession } from "./session";
  * consult ITC sessions (see docs/itc-isolation.md).
  */
 export async function requireItcParticipant(): Promise<ItcParticipant> {
+  // Test seam. The persona harness in tests/itc-sessions runs outside
+  // a request context and has no cookie jar. When
+  // ITC_TEST_PARTICIPANT_ID is set, look up the participant directly
+  // and skip the cookie read. Production code paths never set this.
+  const testPid = process.env.ITC_TEST_PARTICIPANT_ID?.trim();
+  if (testPid) {
+    const participant = await getParticipantById(testPid);
+    if (!participant) {
+      throw new Error(
+        `[itc test seam] ITC_TEST_PARTICIPANT_ID=${testPid} does not resolve to a participant row`,
+      );
+    }
+    return participant;
+  }
+
   const session = await readItcSession();
   if (!session) {
     console.warn("[itc] requireItcParticipant: no valid session cookie");
