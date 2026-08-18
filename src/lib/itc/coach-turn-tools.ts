@@ -26,6 +26,79 @@ import type { TurnEventLog } from "./turn-events";
 import type { PillarCode } from "@/lib/pillars";
 
 /**
+ * Canned prose acknowledgment used when a forced-tool run returned
+ * no visible reply text (model spent everything on the tool call).
+ * Reads the queued proposal's content so the card gets a natural
+ * framing line above it.
+ */
+function cannedForcedReply(proposal: PendingProposal): string {
+  const p = proposal.payload as { text?: string };
+  const text = p.text?.trim() ?? "";
+  switch (proposal.action_type) {
+    case "propose_behavior":
+      return text.length > 0
+        ? `Got it. "${text}". What else shows up in that moment?`
+        : "Got it. What else shows up in that moment?";
+    default:
+      return "Got it.";
+  }
+}
+
+/**
+ * When the coachee's last message looks like a candidate entry for
+ * the current content stage, we force the coach's tool choice so it
+ * cannot return prose-only. Deterministic guarantee that the state
+ * change lands as a card the coachee can tap. The prompt has said
+ * "fire the tool" from day one and the model has ignored it too
+ * often; this is the belt.
+ *
+ * Detection is intentionally simple and additive: a message is a
+ * candidate entry if it (a) doesn't end with a question mark, (b)
+ * doesn't contain a suggestion-asking phrase, and (c) starts with a
+ * first-person pattern OR describes a self-directed action. Anything
+ * else falls through to auto tool choice so the coach can probe or
+ * offer suggestions freely.
+ *
+ * Returns the specific tool name to force, or null to leave the
+ * choice to the model.
+ */
+function forcedToolChoiceFor(
+  stage: ItcStage,
+  userMessage: string,
+): string | null {
+  const trimmed = userMessage.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.endsWith("?")) return null;
+  if (
+    /\b(suggest|suggestion|example|help me|not sure|what should|give me some|give me a few|can you|any ideas|options|what would|what could|any more)\b/i.test(
+      trimmed,
+    )
+  ) {
+    return null;
+  }
+  // First-person pattern check. Covers "I ...", "I'm ...", "Yeah I ...",
+  // "When I ...", "Well when I ...", etc.
+  const firstPerson = /\b(I|I'm|I've|I'll|I'd)\s+\w/i.test(trimmed);
+  if (!firstPerson) return null;
+  // Minimum length: too short and it's probably a filler affirmation.
+  if (trimmed.length < 15) return null;
+
+  switch (stage) {
+    case "behaviors":
+      return "propose_behavior";
+    // Extend to other content stages as we prove the pattern:
+    //   worries → propose_worry (needs behavior_index inference)
+    //   commitments → propose_commitments_batch
+    //   assumptions → propose_assumption (needs commitment_indices)
+    // Not forcing on those stages yet — behavior_index / commitment
+    // indices need a resolver first, otherwise the forced call fires
+    // with wrong indices.
+    default:
+      return null;
+  }
+}
+
+/**
  * Cut the coach's visible reply at the first premature-advance
  * signal. Premature advance = coach claiming to lock a proposal it
  * just fired (the coachee taps to lock, not the coach) or opening
@@ -294,16 +367,25 @@ export async function runItcCoachTurnWithTools(
 
   const tools = buildCoachTools(scope);
 
+  const forcedTool = forcedToolChoiceFor(input.stage, input.userMessage);
+  const toolChoice = forcedTool
+    ? ({ type: "tool" as const, toolName: forcedTool as keyof typeof tools })
+    : undefined;
+  // When we force a tool, cap at ONE step. Otherwise the auto-choice
+  // second step tends to fire ANOTHER content tool (coach invents
+  // extra items). No rubric runs on behaviors, so no recovery step
+  // is needed. Auto-choice runs get the standard 2-step budget so
+  // rubric rejections on worries/assumptions still recover in-turn.
+  const stopCondition = forcedTool ? stepCountIs(1) : stepCountIs(2);
+
   const attemptStart = Date.now();
   const result = await generateText({
     model: mainModel(),
     system,
     messages,
     tools,
-    // Give the coach one recovery step after a rubric rejection. Cap
-    // at 2 total steps so ping-pong is impossible (the second-step
-    // rubric-cap enforcement in coach-tools.ts is defense-in-depth).
-    stopWhen: stepCountIs(2),
+    toolChoice,
+    stopWhen: stopCondition,
     maxOutputTokens: 4096,
   });
   const llmMs = Date.now() - attemptStart;
@@ -341,9 +423,19 @@ export async function runItcCoachTurnWithTools(
   // coachee taps Add to map + Continue). The prompt states this as
   // a hard rule; the model ignores it. Deterministic strip cuts the
   // reply at the first premature-advance signal.
-  const reply = scope.pendingProposals.length > 0
-    ? stripPrematureAdvance(dashStripped, scope.currentStage)
-    : dashStripped;
+  const stripped =
+    scope.pendingProposals.length > 0
+      ? stripPrematureAdvance(dashStripped, scope.currentStage)
+      : dashStripped;
+  // Forced-tool fallback: when we constrained toolChoice to a
+  // specific tool, the model tends to fire the tool and skip prose
+  // entirely. Coachee would see a card with no framing message.
+  // Fill in a plain acknowledgment from the queued proposal's
+  // content so the card has a natural intro.
+  const reply =
+    forcedTool && stripped.trim().length === 0 && scope.pendingProposals.length > 0
+      ? cannedForcedReply(scope.pendingProposals[0])
+      : stripped;
 
   input.events.record(
     "llm_attempt",
