@@ -408,7 +408,7 @@ function Section({
         {title}
       </h3>
       {active && liveIntro ? (
-        <div className="mb-4 rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
+        <div className="mb-4 rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
           {liveIntro}
         </div>
       ) : null}
@@ -444,7 +444,7 @@ function StageNote({
     }
   }
   return (
-    <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
+    <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
       {prose}
       {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) && chipTarget ? (
         <div className="mt-3 flex flex-wrap gap-2">

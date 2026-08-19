@@ -84,7 +84,7 @@ function ThreadMessage({
   const { prose, chips } = extractChipPayload(message.content);
   return (
     <div className="space-y-2">
-      <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/60 bg-[color:var(--color-surface-2)]/60 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+      <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
         {prose}
       </div>
       {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
