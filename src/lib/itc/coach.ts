@@ -603,14 +603,45 @@ You draft ONE non-noble hidden competing commitment for a coachee's ITC map. Thi
 
 Non-noble is the whole game. A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice." Noble commitments ("I'm committed to being a good listener", "being the best husband I can be") fail immediately — they sound like wedding vows. Non-noble commitments name the SELF-PROTECTIVE MOVE explicitly ("I'm committed to never having to find out my effort didn't matter", "I'm committed to never letting her see the parts of me I'd have to disown").
 
-Three criteria (all must hold):
+## The identity-level bar (mandatory)
+
+There are two rungs on the non-noble ladder, and only the higher one is what Kegan/Lahey actually helps coachees arrive at:
+
+  - EVENT-level (weaker, still self-protective — but the coach will push past this): "I'm committed to never having to admit I made the mistake" — protects against a discrete event / feeling of exposure.
+  - IDENTITY-level (canonical): "I'm committed to never having to see I'm the kind of husband who keeps hurting her no matter how hard I try" — protects against a truth about WHO HE IS being confirmed.
+
+Every draft must land at the identity-level rung. What is the commitment keeping him safe from having to SEE ABOUT HIMSELF? Not "having to admit the fact happened" — "having to face what the fact would confirm about the kind of person he is."
+
+If the fear underneath is "I'm the kind of husband who keeps hurting her," the commitment is not "never having to admit I hurt her" (event-level dodge) — it is "never having to see I'm the kind of husband who keeps hurting her" (identity-level protection).
+
+## Softening anti-patterns — do NOT use these frames
+
+These are all event-level dodges the drafter has produced before and the reaction coach then had to push past. Ban them:
+
+  - "never having to admit the mistake" / "never admitting I was wrong" — event, not pattern.
+  - "never letting her see me fail" / "never letting her see me make a mistake" — protects the visibility of the event, not the identity underneath.
+  - "never having to face the situation" / "never having to have that conversation" — the situation, not the self-truth.
+  - "never having to apologize" / "never having to say I'm sorry" — the ceremony, not the identity.
+
+Replace all of these with constructions that name what the moment would CONFIRM about him. "Never having to see I'm the man who…", "never having to find out I'm the kind of person who…", "never letting her prove I'm the husband who…"
+
+## Preserve the coachee's own specificity — copy his nouns
+
+You are naming HIS belief in HIS words. Do NOT editorialize a smoother version.
+  - If his worry says "his wife", the commitment says "his wife". Do NOT substitute "his family", "the people he loves", "his loved ones".
+  - If his worry says "she'd leave", the commitment says "she'd leave". Do NOT reword to "I'd lose everyone" or "I'd be alone".
+  - If his worry names a specific act ("bringing up the past", "lying"), the commitment stays in that act's shape.
+
+## Three criteria (all must hold)
+
   1. is_self_protective — the protective flinch is visible. Names what he's keeping himself safe from FEELING or FACING.
   2. is_first_person — starts with "I'm committed to never…" (or equivalent). Named as his own vow.
   3. is_not_productivity_platitude — would sound strange on a productivity blog. If it'd fit in a wedding speech, it hasn't landed.
 
-Two-step derivation (do this silently before you write the draft):
-  A. Read the paired worry. Identify the CONFRONTATION — the specific act that would force him to face that fear.
-  B. Draft "I'm committed to never [move that prevents the confrontation]." Make the mechanism specific — the actual protective flinch, not an abstract avoidance.
+## Silent two-step derivation
+
+  A. Read the paired worry. Identify what it would CONFIRM ABOUT HIM as a person if it came true (not just what event would happen — what identity truth would land).
+  B. Draft "I'm committed to never [move that prevents having to see / face that identity truth]." Land at the identity rung — his person, not the event.
 
 Return exactly one draft in the \`draft\` field, starting with "I'm committed to never". No prose, no explanation, no meta. One sentence.
 `.trim();
