@@ -66,13 +66,28 @@ export function BehaviorsRow({
           5 on the map. Edit or remove one to add another.
         </p>
       ) : (
-        <AddBehaviorForm mapId={mapId} />
+        <AddBehaviorForm mapId={mapId} initiallyExpanded={selected.length === 0} />
       )}
     </div>
   );
 }
 
-function AddBehaviorForm({ mapId }: { mapId: string }) {
+/**
+ * Progressive disclosure: expands to a form on first render when
+ * the list is empty (no ceremony for the first behavior), otherwise
+ * shows a "+ Add another behavior" button that expands on click.
+ * The explicit click means the user has considered the coach's
+ * reaction on the previous behavior before opening a new input,
+ * eliminating the "two open fields at once" confusion.
+ */
+function AddBehaviorForm({
+  mapId,
+  initiallyExpanded,
+}: {
+  mapId: string;
+  initiallyExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const [pending, startTransition] = useTransition();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,9 +95,19 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
 
   useEffect(() => {
     function onFill(ev: Event) {
-      const e = ev as CustomEvent<{ value: string; target?: string }>;
+      const e = ev as CustomEvent<{
+        value: string;
+        target?: string;
+        entryId?: string;
+      }>;
       if (!e.detail?.value) return;
       if (e.detail.target !== "behavior") return;
+      // Chips carrying an entryId are refinements for a specific
+      // existing behavior — those route to that BehaviorItem's inline
+      // input, not to this Add form. This Add form only accepts
+      // suggestion chips (no entryId).
+      if (e.detail.entryId) return;
+      setExpanded(true);
       setText(e.detail.value);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
@@ -103,7 +128,13 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
     startTransition(async () => {
       const res = await addBehavior(fd);
       if (!res.ok) setError(res.reason ?? "Could not add.");
-      else setText("");
+      else {
+        setText("");
+        // Collapse after a successful add so the next behavior
+        // requires a fresh explicit click — the user has considered
+        // the coach's reaction before opening another input.
+        setExpanded(false);
+      }
     });
   }
 
@@ -116,6 +147,21 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
       const res = await requestSuggestions(fd);
       if (!res.ok) setError(res.reason ?? "Could not fetch suggestions.");
     });
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setExpanded(true);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }}
+        className="w-full rounded-md border border-dashed border-[color:var(--color-border)] px-4 py-3 text-sm text-[color:var(--color-text-muted)] hover:text-white hover:border-[color:var(--color-text-muted)] transition-colors text-left"
+      >
+        + Add another behavior
+      </button>
+    );
   }
 
   return (
@@ -132,6 +178,10 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
             e.preventDefault();
             if (pending) return;
             submit();
+          } else if (e.key === "Escape") {
+            setText("");
+            setError(null);
+            setExpanded(false);
           }
         }}
         className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
@@ -145,6 +195,19 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
         >
           {pending ? "…" : "Add"}
         </button>
+        {text.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setExpanded(false);
+            }}
+            disabled={pending}
+            className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={askForIdeas}
@@ -181,6 +244,7 @@ function BehaviorItem({
   const [focused, setFocused] = useState(false);
   const savedRef = useRef(behavior.text);
   const inflightRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Sync from server on revalidation.
   useEffect(() => {
@@ -189,6 +253,26 @@ function BehaviorItem({
       setDraft(behavior.text);
     }
   }, [behavior.text]);
+
+  // Refinement-chip fill: coach's chip on THIS behavior's thread
+  // dispatches itc-chip-fill with entryId=behavior.id. Only this
+  // BehaviorItem's listener matches; other behaviors' items ignore.
+  useEffect(() => {
+    function onFill(ev: Event) {
+      const e = ev as CustomEvent<{
+        value: string;
+        target?: string;
+        entryId?: string;
+      }>;
+      if (!e.detail?.value) return;
+      if (e.detail.target !== "behavior") return;
+      if (e.detail.entryId !== behavior.id) return;
+      setDraft(e.detail.value);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+    window.addEventListener("itc-chip-fill", onFill as EventListener);
+    return () => window.removeEventListener("itc-chip-fill", onFill as EventListener);
+  }, [behavior.id]);
 
   function commit() {
     setError(null);
@@ -239,7 +323,11 @@ function BehaviorItem({
     >
       {thread.length > 0 ? (
         <div className="mb-2">
-          <EntryThread messages={thread} chipTarget="behavior" />
+          <EntryThread
+            messages={thread}
+            chipTarget="behavior"
+            entryId={behavior.id}
+          />
         </div>
       ) : null}
       <div className="flex items-start gap-3">
@@ -247,6 +335,7 @@ function BehaviorItem({
           {index}.
         </span>
         <textarea
+          ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onFocus={() => setFocused(true)}

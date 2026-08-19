@@ -77,7 +77,11 @@ export function AssumptionsRow({
           Add commitments first.
         </p>
       ) : (
-        <AddAssumptionForm mapId={mapId} commitments={commitments} />
+        <AddAssumptionForm
+          mapId={mapId}
+          commitments={commitments}
+          initiallyExpanded={assumptions.length === 0}
+        />
       )}
     </div>
   );
@@ -86,10 +90,13 @@ export function AssumptionsRow({
 function AddAssumptionForm({
   mapId,
   commitments,
+  initiallyExpanded,
 }: {
   mapId: string;
   commitments: ItcCommitment[];
+  initiallyExpanded: boolean;
 }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const [pending, startTransition] = useTransition();
   const [text, setText] = useState("");
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
@@ -123,8 +130,24 @@ function AddAssumptionForm({
       else {
         setText("");
         setLinkedIds([]);
+        setExpanded(false);
       }
     });
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setExpanded(true);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }}
+        className="w-full rounded-md border border-dashed border-[color:var(--color-border)] px-4 py-3 text-sm text-[color:var(--color-text-muted)] hover:text-white hover:border-[color:var(--color-text-muted)] transition-colors text-left"
+      >
+        + Add another Big Assumption
+      </button>
+    );
   }
 
   return (
@@ -211,6 +234,7 @@ function AssumptionItem({
     links: linkedCommitmentIds.slice().sort(),
   });
   const inflightRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const nextText = assumption.text;
@@ -224,6 +248,24 @@ function AssumptionItem({
       setLinkDraft(linkedCommitmentIds);
     }
   }, [assumption.text, linkedCommitmentIds]);
+
+  useEffect(() => {
+    const assumptionId = assumption.id;
+    function onFill(ev: Event) {
+      const e = ev as CustomEvent<{
+        value: string;
+        target?: string;
+        entryId?: string;
+      }>;
+      if (!e.detail?.value) return;
+      if (e.detail.target !== "assumption") return;
+      if (e.detail.entryId !== assumptionId) return;
+      setDraft(e.detail.value);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+    window.addEventListener("itc-chip-fill", onFill as EventListener);
+    return () => window.removeEventListener("itc-chip-fill", onFill as EventListener);
+  }, [assumption.id]);
 
   function commit() {
     setError(null);
@@ -289,7 +331,11 @@ function AssumptionItem({
     >
       {thread.length > 0 ? (
         <div className="mb-3">
-          <EntryThread messages={thread} chipTarget="assumption" />
+          <EntryThread
+            messages={thread}
+            chipTarget="assumption"
+            entryId={assumption.id}
+          />
         </div>
       ) : null}
       <div className="flex items-start gap-3">
@@ -298,6 +344,7 @@ function AssumptionItem({
         </span>
         <div className="flex-1 space-y-2">
           <textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onFocus={() => setFocused(true)}

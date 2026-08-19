@@ -110,6 +110,25 @@ function CommitmentItem({
     }
   }, [commitment?.text]);
 
+  useEffect(() => {
+    if (!commitment) return;
+    const commitmentId = commitment.id;
+    function onFill(ev: Event) {
+      const e = ev as CustomEvent<{
+        value: string;
+        target?: string;
+        entryId?: string;
+      }>;
+      if (!e.detail?.value) return;
+      if (e.detail.target !== "commitment") return;
+      if (e.detail.entryId !== commitmentId) return;
+      setDraft(e.detail.value);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+    window.addEventListener("itc-chip-fill", onFill as EventListener);
+    return () => window.removeEventListener("itc-chip-fill", onFill as EventListener);
+  }, [commitment?.id]);
+
   function commit() {
     setError(null);
     if (inflightRef.current) return;
@@ -145,9 +164,13 @@ function CommitmentItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
-      {thread.length > 0 ? (
+      {thread.length > 0 && commitment ? (
         <div className="mb-3">
-          <EntryThread messages={thread} chipTarget="commitment" />
+          <EntryThread
+            messages={thread}
+            chipTarget="commitment"
+            entryId={commitment.id}
+          />
         </div>
       ) : null}
       <div className="flex flex-col gap-2">

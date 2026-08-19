@@ -16,9 +16,9 @@ export const STAGE_INTROS: Partial<
   behaviors: ({ goal }) =>
     `Column 2 is what you actually do, or fail to do, in the moment that works against ${
       goal ? `"${goal}"` : "your goal"
-    }. Not why. Not what you should do instead. Just the specific behavior. What's the first one that comes to mind?`,
+    }. Not why. Not what you should do instead. Just the specific behavior. Aim for 3 to 5 — enough to see the pattern, few enough to work. What's the first one that comes to mind?`,
   worries: () =>
-    `Column 3 is the worry box. For each behavior on Column 2, we name the fear underneath. If you stopped doing that behavior (or started the opposite), what part of you is afraid of what would happen next?`,
+    `Column 3 is the worry box. For each Column 2 behavior, name the fear underneath. Not a practical concern like "she'd get upset" or "we'd fall behind" — a first-person felt fear about YOU. Imagine yourself doing the opposite of that behavior in a real moment: what would that expose about who you are, or how you'd be seen? Push until it lands on identity — that's the depth.`,
   commitments: () =>
     `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping.`,
   assumptions: () =>

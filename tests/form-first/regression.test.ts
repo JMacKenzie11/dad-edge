@@ -1162,8 +1162,10 @@ describe("Form-First regression", () => {
         contents[f] = readFileSync(resolve(repoRoot, f), "utf8");
       }
 
-      // Dispatchers include { value, target } in the event detail.
-      const dispatchRe = /new CustomEvent\(\s*["']itc-chip-fill["']\s*,\s*\{\s*detail:\s*\{[^}]*target[^}]*\}/;
+      // Dispatchers include `target` in the event detail. Multiline
+      // regex tolerates ternary/object-shorthand variants.
+      const dispatchRe =
+        /new CustomEvent\(\s*["']itc-chip-fill["'][\s\S]{0,300}?target/;
       expect(
         dispatchRe.test(contents["src/app/itc/[mapId]/entry-thread.tsx"]),
         "entry-thread.tsx dispatch must include target in detail",

@@ -258,6 +258,24 @@ describe("STAGE_INTROS", () => {
     expect(withoutGoal).toContain("your goal");
   });
 
+  it("behaviors intro states the ITC 3-to-5 target", () => {
+    const rendered = STAGE_INTROS["behaviors"]!({ goal: "any goal" });
+    // Accept either "3 to 5" or "3-5" phrasing; both are ITC-aligned.
+    expect(/3\s*(?:to|-)\s*5/.test(rendered)).toBe(true);
+  });
+
+  it("worries intro names identity as the depth bar", () => {
+    const rendered = STAGE_INTROS["worries"]!({ goal: null });
+    // The Kegan/Lahey depth bar for a Column 3 worry is a first-
+    // person felt fear that lands on identity (self-labeling OR
+    // role/relational). The intro must signal that bar so the coachee
+    // doesn't stop at practical concerns.
+    expect(rendered.toLowerCase()).toContain("identity");
+    expect(/felt fear|felt.*about you|fear about you/i.test(rendered)).toBe(true);
+    // Practical-concern anti-pattern should be called out.
+    expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
+  });
+
   it("no intro accidentally hard-codes an entry-shaped quote (no stale-quote reintroduction)", () => {
     // If a future edit puts a specific behavior/worry/commitment text
     // into a stage intro, this test still passes (we don't hard-code

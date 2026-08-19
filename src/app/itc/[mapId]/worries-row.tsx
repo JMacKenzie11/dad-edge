@@ -101,6 +101,27 @@ function WorryItem({
     }
   }, [worry?.text]);
 
+  // Refinement-chip fill: only the WorryItem whose entryId matches
+  // the event's entryId picks up the fill.
+  useEffect(() => {
+    if (!worry) return;
+    const worryId = worry.id;
+    function onFill(ev: Event) {
+      const e = ev as CustomEvent<{
+        value: string;
+        target?: string;
+        entryId?: string;
+      }>;
+      if (!e.detail?.value) return;
+      if (e.detail.target !== "worry") return;
+      if (e.detail.entryId !== worryId) return;
+      setDraft(e.detail.value);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+    window.addEventListener("itc-chip-fill", onFill as EventListener);
+    return () => window.removeEventListener("itc-chip-fill", onFill as EventListener);
+  }, [worry?.id]);
+
   function commit() {
     setError(null);
     if (inflightRef.current) return;
@@ -136,9 +157,13 @@ function WorryItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
-      {thread.length > 0 ? (
+      {thread.length > 0 && worry ? (
         <div className="mb-3">
-          <EntryThread messages={thread} chipTarget="worry" />
+          <EntryThread
+            messages={thread}
+            chipTarget="worry"
+            entryId={worry.id}
+          />
         </div>
       ) : null}
       <div className="flex flex-col gap-2">
