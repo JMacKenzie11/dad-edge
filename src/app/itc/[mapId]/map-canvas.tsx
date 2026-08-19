@@ -96,6 +96,21 @@ export function MapCanvas({
       ),
     [messages, map.current_stage],
   );
+  // The immune-system walkthrough is stored as a stage_note with
+  // stage_at_creation=immune_system when deliverWalkthroughAfterAdvance
+  // fires. It stays visible on the immune_system section indefinitely
+  // (unlike other sections' stage_notes which filter to current_stage),
+  // so the coachee can re-read it later when they're at prioritize or
+  // beyond.
+  const immuneSystemNotes = useMemo(
+    () =>
+      messages.filter(
+        (m) =>
+          m.surface === "stage_note" &&
+          m.stage_at_creation === "immune_system",
+      ),
+    [messages],
+  );
   const dockMessages = useMemo(
     () => messages.filter((m) => m.surface === "dock"),
     [messages],
@@ -328,6 +343,15 @@ export function MapCanvas({
             isLocked={isLocked("assumptions")}
           />
         </Section>
+
+        {stageIndex(map.current_stage) >= stageIndex("immune_system") ? (
+          <Section
+            title="Your immune system"
+            active={map.current_stage === "immune_system"}
+            liveIntro={liveIntroFor("immune_system")}
+            stageNotes={immuneSystemNotes}
+          />
+        ) : null}
       </div>
 
       {advanceGate &&
@@ -365,7 +389,9 @@ function Section({
   chipTarget,
 }: {
   title: string;
-  children: React.ReactNode;
+  /** Optional — the immune-system section has no user input, its
+   *  content IS the walkthrough delivered as a stage_note. */
+  children?: React.ReactNode;
   active?: boolean;
   /** Live-interpolated stage intro rendered above stored stage notes.
    *  Comes from STAGE_INTROS with the current map state so quotes of
