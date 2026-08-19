@@ -28,7 +28,6 @@ import {
   listCommitments,
   listMapsForParticipant,
   listMessages,
-  listMessagesForStage,
   listTestResults,
   listTests,
   listWorries,
@@ -434,73 +433,6 @@ export async function sendDockMessage(formData: FormData): Promise<ActionResult>
  * pipeline with the entry pinned in context so back-and-forth about
  * an entry happens on the entry.
  */
-const threadReplySchema = z.object({
-  map_id: z.string().uuid(),
-  entry_ref_table: z.enum([
-    "itc_maps",
-    "itc_behaviors",
-    "itc_worries",
-    "itc_commitments",
-    "itc_assumptions",
-    "itc_tests",
-  ]),
-  entry_ref_id: z.string().uuid(),
-  entry_text: z.string().max(1000),
-  entry_kind: z.enum(["goal", "behavior", "worry", "commitment", "assumption"]),
-  text: z.string().min(1).max(4000),
-});
-
-export async function postThreadReply(formData: FormData): Promise<ActionResult> {
-  const parsed = threadReplySchema.safeParse({
-    map_id: formData.get("map_id"),
-    entry_ref_table: formData.get("entry_ref_table"),
-    entry_ref_id: formData.get("entry_ref_id"),
-    entry_text: formData.get("entry_text"),
-    entry_kind: formData.get("entry_kind"),
-    text: formData.get("text"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid reply input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-
-  await appendMessage(
-    loaded.map.id,
-    "user",
-    parsed.data.text,
-    loaded.map.current_stage,
-    {
-      surface: "entry_thread",
-      entryRefTable: parsed.data.entry_ref_table,
-      entryRefId: parsed.data.entry_ref_id,
-    },
-  );
-  const events = new TurnEventLog(loaded.map.id, 0);
-  events.record(
-    "thread_reply",
-    {
-      entry_kind: parsed.data.entry_kind,
-      entry_id: parsed.data.entry_ref_id,
-    },
-    { stage: loaded.map.current_stage },
-  );
-  await events.flush();
-
-  // Reuse the reaction pipeline — pass the entry as `justAdded` so
-  // the coach's prompt is anchored to that specific entry.
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      {
-        kind: parsed.data.entry_kind,
-        text: parsed.data.entry_text,
-      },
-      { table: parsed.data.entry_ref_table, id: parsed.data.entry_ref_id },
-    ),
-  );
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
-}
-
 // -------------------------------------------------------------------------
 // Goal (Column 1)
 // -------------------------------------------------------------------------
@@ -521,6 +453,8 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
   const withStem = hasGoalStem(parsed.data.text)
     ? parsed.data.text
     : `${GOAL_STEM} ${parsed.data.text.trim()}`;
+  const priorGoal = loaded.map.improvement_goal;
+  const isEdit = Boolean(priorGoal && priorGoal.trim() !== withStem.trim());
   try {
     await saveImprovementGoal(loaded.map.id, withStem);
   } catch (err) {
@@ -530,9 +464,24 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
     };
   }
   const events = new TurnEventLog(loaded.map.id, 0);
-  events.record("entry_added", { kind: "goal", text: withStem }, {
-    stage: loaded.map.current_stage,
-  });
+  if (isEdit) {
+    events.record(
+      "entry_edited",
+      {
+        kind: "goal",
+        prior_text: priorGoal,
+        text: withStem,
+        stage_at_edit: loaded.map.current_stage,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } else {
+    events.record(
+      "entry_added",
+      { kind: "goal", text: withStem },
+      { stage: loaded.map.current_stage },
+    );
+  }
   await events.flush();
   // Goal has no separate entry row — it's a column on itc_maps.
   // Anchor the coach reaction to the map itself so the entry thread
@@ -637,6 +586,7 @@ export async function updateBehavior(
   const existing = await listBehaviors(loaded.map.id);
   const target = existing.find((b) => b.id === parsed.data.behavior_id);
   if (!target) return { ok: false, reason: "Behavior not on this map." };
+  const priorText = target.text;
   try {
     await updateBehaviorText(target.id, loaded.map.id, parsed.data.text);
   } catch (err) {
@@ -648,7 +598,13 @@ export async function updateBehavior(
   const events = new TurnEventLog(loaded.map.id, 0);
   events.record(
     "entry_edited",
-    { kind: "behavior", text: parsed.data.text.trim() },
+    {
+      kind: "behavior",
+      entry_id: target.id,
+      prior_text: priorText,
+      text: parsed.data.text.trim(),
+      stage_at_edit: loaded.map.current_stage,
+    },
     { stage: loaded.map.current_stage },
   );
   await events.flush();
@@ -831,7 +787,6 @@ export async function advanceToStage(
     `[coachee advanced map via Continue: ${loaded.map.current_stage} → ${target}]`,
     target,
   );
-  await seedStageIntroIfNeeded(loaded.map.id, target, loaded.map.improvement_goal);
   const events = new TurnEventLog(loaded.map.id, 0);
   events.record(
     "stage_advanced",
@@ -1073,63 +1028,9 @@ async function computeAdvanceGate(
   }
 }
 
-/**
- * Seed a canned coach intro message when the map first lands on a
- * stage that has no assistant messages yet. Runs once per stage per
- * map — revisits skip because messages already exist for that stage.
- * References the coachee's goal by exact text when known.
- */
-async function seedStageIntroIfNeeded(
-  mapId: string,
-  stage: ItcStage,
-  goalText: string | null,
-): Promise<void> {
-  const existing = await listMessagesForStage(mapId, stage);
-  if (
-    existing.some((m) => m.role === "assistant" && m.surface === "stage_note")
-  ) {
-    return;
-  }
-  const intro = STAGE_INTROS[stage]?.(goalText);
-  if (!intro) return;
-  try {
-    await appendMessage(mapId, "assistant", intro, stage, {
-      surface: "stage_note",
-      entryRefTable: "itc_maps",
-      entryRefId: mapId,
-    });
-  } catch (err) {
-    console.warn(
-      "[itc] seedStageIntroIfNeeded(%s) failed: %s",
-      stage,
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-const STAGE_INTROS: Partial<Record<ItcStage, (goal: string | null) => string>> = {
-  behaviors: (goal) =>
-    `Column 2 is what you actually do, or fail to do, in the moment that works against ${
-      goal ? `"${goal}"` : "your goal"
-    }. Not why. Not what you should do instead. Just the specific behavior. What's the first one that comes to mind?`,
-  worries: (_goal) =>
-    `Column 3 is the worry box. For each behavior on Column 2, we name the fear underneath. If you stopped doing that behavior (or started the opposite), what part of you is afraid of what would happen next? Which behavior do you want to start on?`,
-  commitments: (_goal) =>
-    `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping. Ready to work through them?`,
-  assumptions: (_goal) =>
-    `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment? Ready?`,
-  review: (_goal) =>
-    `Before we test anything, take a beat and look at the whole map. What jumps out? Anything you'd sharpen or reword?`,
-  immune_system: (_goal) =>
-    `Now the walkthrough. I'm going to show you how the columns interlock, how the behaviors, the worries, the hidden commitments, and the Big Assumptions all protect the same thing. Ready?`,
-  prioritize: (_goal) =>
-    `You've mapped the whole immune system. Now: which Big Assumption do you want to test first? The best one to start on is usually the one that, if it turned out not to hold, would loosen the most of the system.`,
-  test_design: (_goal) =>
-    `Design a test for the assumption you picked. Four fields: what the assumption says, what you'll do differently, what data you'll collect, what you'll find out.`,
-  test_running: (_goal) =>
-    `Test is designed. Go run it. Come back with what you observed.`,
-  results: (_goal) =>
-    `You ran the test. Tell me what you did, what you observed, and what you make of it.`,
-  done: (_goal) =>
-    `Your map stays here. Come back anytime you want to design another test, revisit an assumption, or work on a different pillar.`,
-};
+// Stage intros used to be persisted server-side via seedStageIntroIfNeeded,
+// which baked the goal text into the message content. That produced
+// stale-quote bugs when the goal was later edited. Intros are now
+// client-side static text with live map-state interpolation — see
+// STAGE_INTROS in src/lib/itc/stage-intros.ts and rendered by
+// map-canvas.tsx.

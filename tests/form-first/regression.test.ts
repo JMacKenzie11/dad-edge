@@ -325,6 +325,108 @@ describe("Form-First regression", () => {
     },
     60_000,
   );
+
+  it(
+    "regression a: no reply-thread affordance exists (postThreadReply is not exported)",
+    async () => {
+      // Structural check: the entry-thread reply pipeline was removed
+      // because it invited users to type entry corrections into a chat
+      // reply where the coach reaction misinterpreted them as edits.
+      // Under Form-First the only ways to change the map are: edit the
+      // entry input directly, tap a chip, or ask via the dock. No fourth
+      // affordance may exist.
+      const actions = await import("@/app/itc/actions");
+      expect(
+        (actions as Record<string, unknown>).postThreadReply,
+        "postThreadReply must not be exported — it invited reply-as-edit misuse",
+      ).toBeUndefined();
+    },
+    5_000,
+  );
+
+  it(
+    "regression b: editing the goal from behaviors stage updates the map and no stage_note carries the stale text",
+    async () => {
+      const supabase = createSupabaseServiceClient();
+      const oldGoal =
+        "I'm committed to getting better at jumping jacks";
+      const newGoal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+
+      // Start at goal stage; save the (bad) goal.
+      const gfd1 = new FormData();
+      gfd1.set("map_id", ctx.mapId);
+      gfd1.set("text", oldGoal);
+      // Use hard-fail LLM so we don't wait on live coach and don't
+      // pollute stage_notes with LLM-generated content.
+      const model = makeHardFailModel();
+      setMainModelOverride(model);
+      setUtilityModelOverride(model);
+      expect((await saveGoal(gfd1)).ok).toBe(true);
+
+      // Advance to behaviors via the real action.
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const adv = new FormData();
+      adv.set("map_id", ctx.mapId);
+      adv.set("to", "behaviors");
+      const advRes = await advanceToStage(adv);
+      expect(
+        advRes.ok,
+        `advance to behaviors failed: ${advRes.ok ? "" : advRes.reason}`,
+      ).toBe(true);
+
+      // Edit the goal from the behaviors stage.
+      const gfd2 = new FormData();
+      gfd2.set("map_id", ctx.mapId);
+      gfd2.set("text", newGoal);
+      expect((await saveGoal(gfd2)).ok).toBe(true);
+
+      // DB now holds the new goal.
+      const { data: mapRow } = await supabase
+        .from("itc_maps")
+        .select("improvement_goal, current_stage")
+        .eq("id", ctx.mapId)
+        .single();
+      expect(mapRow?.improvement_goal).toBe(newGoal);
+      expect(mapRow?.current_stage).toBe("behaviors");
+
+      // No persisted stage_note may carry the old goal text (the stale
+      // quote bug). Under Form-First A3 the stage intro is client-side
+      // and interpolates live map state, so no persisted note should
+      // reference the goal at all — but the strong assertion is that
+      // no message content contains the old goal.
+      const { data: msgs } = await supabase
+        .from("itc_messages")
+        .select("content, surface, role")
+        .eq("map_id", ctx.mapId);
+      const stalePersisted = (msgs ?? []).filter(
+        (m) =>
+          typeof m.content === "string" && m.content.includes("jumping jacks"),
+      );
+      expect(
+        stalePersisted.length,
+        `no persisted message may quote the prior goal; found ${stalePersisted.length}`,
+      ).toBe(0);
+
+      // And the entry_edited turn event was recorded with stage_at_edit.
+      const { data: events } = await supabase
+        .from("itc_turn_events")
+        .select("event_type, payload")
+        .eq("map_id", ctx.mapId)
+        .eq("event_type", "entry_edited");
+      const goalEdit = (events ?? []).find(
+        (e) =>
+          typeof e.payload === "object" &&
+          e.payload !== null &&
+          (e.payload as Record<string, unknown>).kind === "goal",
+      );
+      expect(goalEdit, "entry_edited(kind=goal) must be logged").toBeDefined();
+      expect(
+        (goalEdit!.payload as Record<string, unknown>).stage_at_edit,
+      ).toBe("behaviors");
+    },
+    30_000,
+  );
 });
 
 /**

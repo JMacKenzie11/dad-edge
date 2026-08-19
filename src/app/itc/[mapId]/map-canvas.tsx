@@ -13,6 +13,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import type { ItcStage } from "@/lib/itc/stage";
+import { isLegacyCannedIntro, STAGE_INTROS } from "@/lib/itc/stage-intros";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
 import { BehaviorsRow } from "./behaviors-row";
@@ -124,6 +125,11 @@ export function MapCanvas({
   const unattachedForCurrentStage =
     unattachedByStage.get(map.current_stage) ?? [];
 
+  const liveIntroFor = (stage: ItcStage): string | undefined => {
+    if (stage !== map.current_stage) return undefined;
+    return STAGE_INTROS[stage]?.({ goal: map.improvement_goal });
+  };
+
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
   const worryById = new Map(worries.map((w) => [w.id, w]));
@@ -168,15 +174,9 @@ export function MapCanvas({
           <GoalRow
             mapId={map.id}
             goalText={map.improvement_goal}
-            isActive={map.current_stage === "goal"}
           />
           {map.improvement_goal ? (
             <EntryThread
-              mapId={map.id}
-              entryRefTable="itc_maps"
-              entryRefId={map.id}
-              entryText={map.improvement_goal}
-              entryKind="goal"
               messages={threadFor("itc_maps", map.id).filter(
                 (m) => m.stage_at_creation === "goal",
               )}
@@ -191,6 +191,7 @@ export function MapCanvas({
         <Section
           title="2. Doing / not-doing"
           active={map.current_stage === "behaviors"}
+          liveIntro={liveIntroFor("behaviors")}
           stageNotes={map.current_stage === "behaviors" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "behaviors" ? unattachedForCurrentStage : []
@@ -199,7 +200,6 @@ export function MapCanvas({
           <BehaviorsRow
             mapId={map.id}
             behaviors={behaviors}
-            isActive={map.current_stage === "behaviors"}
             nowMs={renderedAt}
           />
           {/* Behavior-level threads render inside BehaviorsRow via
@@ -216,14 +216,7 @@ export function MapCanvas({
                     <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
                       Coach on #{i + 1}
                     </div>
-                    <EntryThread
-                      mapId={map.id}
-                      entryRefTable="itc_behaviors"
-                      entryRefId={b.id}
-                      entryText={b.text}
-                      entryKind="behavior"
-                      messages={thread}
-                    />
+                    <EntryThread messages={thread} />
                   </div>
                 );
               })}
@@ -238,6 +231,7 @@ export function MapCanvas({
         <Section
           title="3. Worry box"
           active={map.current_stage === "worries"}
+          liveIntro={liveIntroFor("worries")}
           stageNotes={map.current_stage === "worries" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "worries" ? unattachedForCurrentStage : []
@@ -293,6 +287,7 @@ export function MapCanvas({
         <Section
           title="4. Competing commitments"
           active={map.current_stage === "commitments"}
+          liveIntro={liveIntroFor("commitments")}
           stageNotes={map.current_stage === "commitments" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "commitments" ? unattachedForCurrentStage : []
@@ -339,6 +334,7 @@ export function MapCanvas({
         <Section
           title="5. Big Assumptions"
           active={map.current_stage === "assumptions"}
+          liveIntro={liveIntroFor("assumptions")}
           stageNotes={map.current_stage === "assumptions" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "assumptions" ? unattachedForCurrentStage : []
@@ -409,12 +405,17 @@ function Section({
   title,
   children,
   active = false,
+  liveIntro,
   stageNotes,
   unattachedCoachNotes = [],
 }: {
   title: string;
   children: React.ReactNode;
   active?: boolean;
+  /** Live-interpolated stage intro rendered above stored stage notes.
+   *  Comes from STAGE_INTROS with the current map state so quotes of
+   *  the goal etc. always reflect present values, not a stale snapshot. */
+  liveIntro?: string;
   stageNotes: ItcMessage[];
   /** Fallback: assistant messages on this stage with no surface set.
    *  Rendered as stage-note-styled coach notes so the coach's reply
@@ -422,9 +423,13 @@ function Section({
    *  hasn't been applied yet. Only shown on the active section. */
   unattachedCoachNotes?: ItcMessage[];
 }) {
+  // Legacy canned intros used to be persisted with a goal snapshot
+  // baked in. Filter them out so the live-interpolated intro is the
+  // only version the user sees.
+  const filteredNotes = stageNotes.filter((m) => !isLegacyCannedIntro(m.content));
   const notesToShow = active
-    ? [...stageNotes, ...unattachedCoachNotes]
-    : stageNotes;
+    ? [...filteredNotes, ...unattachedCoachNotes]
+    : filteredNotes;
   return (
     <section
       className={
@@ -444,6 +449,11 @@ function Section({
       >
         {title}
       </h3>
+      {active && liveIntro ? (
+        <div className="mb-3 rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-3 py-2 text-sm whitespace-pre-wrap">
+          {liveIntro}
+        </div>
+      ) : null}
       {active && notesToShow.length > 0 ? (
         <div className="mb-3 space-y-1.5">
           {notesToShow.map((m) => (

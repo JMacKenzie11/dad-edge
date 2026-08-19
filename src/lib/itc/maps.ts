@@ -841,21 +841,6 @@ export async function retagMessageStage(
   if (error) throw new Error(`retagMessageStage: ${error.message}`);
 }
 
-export async function listMessagesForStage(
-  mapId: string,
-  stage: ItcStage,
-): Promise<ItcMessage[]> {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("itc_messages")
-    .select("*")
-    .eq("map_id", mapId)
-    .eq("stage_at_creation", stage)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(`listMessagesForStage: ${error.message}`);
-  return (data ?? []) as ItcMessage[];
-}
-
 export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage): Promise<void> {
   if (!canTransitionTo(from, to)) {
     throw new Error(`Illegal stage transition ${from} → ${to}.`);

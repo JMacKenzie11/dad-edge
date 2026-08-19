@@ -27,12 +27,10 @@ const MAX_BEHAVIORS = 5;
 export function BehaviorsRow({
   mapId,
   behaviors,
-  isActive,
   nowMs,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
-  isActive: boolean;
   nowMs: number;
 }) {
   const selected = behaviors.filter((b) => b.selected);
@@ -52,20 +50,17 @@ export function BehaviorsRow({
               behavior={b}
               index={i + 1}
               fresh={isFresh(b.created_at, nowMs)}
-              isActive={isActive}
             />
           ))}
         </ul>
       )}
-      {isActive ? (
-        capReached ? (
-          <p className="text-[11px] italic text-[color:var(--color-text-muted)]/80 pt-1">
-            5 on the map. Edit or remove one to add another.
-          </p>
-        ) : (
-          <AddBehaviorForm mapId={mapId} />
-        )
-      ) : null}
+      {capReached ? (
+        <p className="text-[11px] italic text-[color:var(--color-text-muted)]/80 pt-1">
+          5 on the map. Edit or remove one to add another.
+        </p>
+      ) : (
+        <AddBehaviorForm mapId={mapId} />
+      )}
     </div>
   );
 }
@@ -164,13 +159,11 @@ function BehaviorItem({
   behavior,
   index,
   fresh,
-  isActive,
 }: {
   mapId: string;
   behavior: ItcBehavior;
   index: number;
   fresh: boolean;
-  isActive: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState(behavior.text);
@@ -251,29 +244,23 @@ function BehaviorItem({
             }
           }}
           rows={1}
-          disabled={pending || !isActive}
-          readOnly={!isActive}
+          disabled={pending}
           className={
             "flex-1 resize-none rounded-md px-2 py-1 text-sm transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
-              : "bg-transparent border border-transparent " +
-                (isActive
-                  ? "hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text"
-                  : "cursor-default"))
+              : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
           }
         />
-        {isActive ? (
-          <button
-            type="button"
-            onClick={submitRemove}
-            disabled={pending}
-            title="Remove behavior"
-            className="mt-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
-          >
-            Remove
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={submitRemove}
+          disabled={pending}
+          title="Remove behavior"
+          className="mt-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+        >
+          Remove
+        </button>
       </div>
       {pending ? (
         <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)]">
