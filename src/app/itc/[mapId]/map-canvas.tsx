@@ -438,7 +438,7 @@ function Section({
           {liveIntro}
         </div>
       ) : null}
-      {active && notesToShow.length > 0 ? (
+      {notesToShow.length > 0 ? (
         <div className="mb-4 space-y-2">
           {notesToShow.map((m) => (
             <StageNote key={m.id} content={m.content} chipTarget={chipTarget} />
