@@ -972,7 +972,12 @@ export async function generateImmuneSystemWalkthrough(input: {
       ].join("\n"),
       maxOutputTokens: 3000,
     });
-    return scrubReply(text);
+    // Use the light scrub — the full scrubReply's advance-cut would
+    // truncate at the first mention of "big assumptions", "worry box",
+    // "competing commitments", etc., which the walkthrough is
+    // explicitly ABOUT. That's the bug that caused the walkthrough to
+    // appear to "generate nothing" in the UI.
+    return scrubReplyLight(text);
   } catch (err) {
     console.warn(
       "[itc coach] generateImmuneSystemWalkthrough failed: %s",
@@ -1068,6 +1073,49 @@ export function scrubReply(text: string): string {
     .replace(/\s+([.,!?])/g, "$1")
     .replace(/,([A-Za-z])/g, ", $1")
     .replace(/([.!?])\s*\1/g, "$1")
+    .trim();
+  return cleaned;
+}
+
+/**
+ * Dashes + claim-of-action + whitespace cleanup, WITHOUT the
+ * premature-advance cut. Use this for coach output that is
+ * legitimately supposed to name multiple columns / the map's
+ * structure — e.g., the immune-system walkthrough, which explicitly
+ * traces the Column-4-to-Column-1 pathway across every assumption.
+ *
+ * scrubReply's advance-cut is designed to prevent an ENTRY-level coach
+ * reaction from front-running the coachee to the next column. That
+ * guard is exactly wrong for a walkthrough: the walkthrough MUST
+ * discuss "big assumptions", "competing commitments", "worry box",
+ * etc. — those are the map's own labels being read back. Running
+ * scrubReply on walkthrough output truncates it at the first mention
+ * of any column label, leaving a near-empty stage_note that renders
+ * as blank space in the UI (the bug that made the walkthrough appear
+ * to "generate nothing").
+ */
+export function scrubReplyLight(text: string): string {
+  const dashless = text
+    .replace(/\s+[—–]\s+/g, ", ")
+    .replace(/[—–]/g, ",")
+    .replace(/\s+--\s+/g, ", ");
+  const thatsClaimRe =
+    /(^|[.!?]\s+|\n)\s*that'?s\s+(?:been\s+|just\s+)?(?:locked|added|saved|noted|written|jotted|adding|saving|locking|got|down|in|there|on\s+(?:your |the )?map)(?:\s+(?:in|down|now|to\s+(?:your |the )?map|on\s+(?:your |the )?map|it|that))?\s*[.!?]?/gi;
+  const bareClaimRe =
+    /(^|[.!?]\s+|\n)\s*(?:got it,?\s+)?(?:i(?:'|')?ve\s+|i\s+)?(?:just\s+)?(?:locked|added|saved|adding|locking|saving|noted|written|jotted)(?:\s+(?:it|that|those|them|this)(?:\s+(?:in|down|to\s+(?:your |the )?map|on\s+(?:your |the )?map|now))?)?\s*[.!?]?/gi;
+  let cleaned = dashless
+    .replace(thatsClaimRe, (_m, sep) => sep || "")
+    .replace(bareClaimRe, (_m, sep) => sep || "");
+  // Normalize whitespace + comma-space (same as scrubReply) but
+  // preserve paragraph breaks: only collapse runs of horizontal
+  // whitespace, not newlines. The walkthrough uses \n\n between
+  // movements and those must survive to render as paragraph breaks
+  // in the whitespace-pre-wrap UI.
+  cleaned = cleaned
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,!?])/g, "$1")
+    .replace(/,([A-Za-z])/g, ", $1")
+    .replace(/([.!?])[ \t]*\1/g, "$1")
     .trim();
   return cleaned;
 }

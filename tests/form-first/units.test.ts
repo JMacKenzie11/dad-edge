@@ -16,7 +16,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { ensureThenAfterIfClause, scrubReply } from "@/lib/itc/coach";
+import {
+  ensureThenAfterIfClause,
+  scrubReply,
+  scrubReplyLight,
+} from "@/lib/itc/coach";
 import {
   chipTargetForStage,
   type ChipTarget,
@@ -110,6 +114,59 @@ describe("scrubReply", () => {
     expect(scrubReply("Over 2,500 words, roughly.")).toBe(
       "Over 2,500 words, roughly.",
     );
+  });
+});
+
+describe("scrubReplyLight", () => {
+  it("does NOT truncate on column-label mentions (walkthrough must survive)", () => {
+    // scrubReply's advance-cut truncates entry-reaction coach output
+    // at any mention of a column label to prevent front-running. That
+    // guard is exactly wrong for the immune-system walkthrough, which
+    // legitimately names "big assumptions", "worry box", "competing
+    // commitments" as it reads the map back to the coachee. This test
+    // locks the distinction: scrubReplyLight preserves those mentions.
+    const walkthrough =
+      "Every behavior in your Column 2 is doing the same job. Big Assumptions never get tested. Worry box holds the fear. Competing commitments compete with the goal.";
+    const light = scrubReplyLight(walkthrough);
+    // All four column labels must survive.
+    expect(light.toLowerCase()).toContain("column 2");
+    expect(light.toLowerCase()).toContain("big assumptions");
+    expect(light.toLowerCase()).toContain("worry box");
+    expect(light.toLowerCase()).toContain("competing commitments");
+    // Sanity check: full scrubReply DOES truncate the same input
+    // (this is the guard we're specifically stepping around for
+    // walkthroughs — proves the two functions differ on this case).
+    const heavy = scrubReply(walkthrough);
+    expect(heavy.length).toBeLessThan(light.length);
+  });
+
+  it("still strips em dashes to comma-space", () => {
+    expect(scrubReplyLight("This is sharp — I like it.")).toBe(
+      "This is sharp, I like it.",
+    );
+  });
+
+  it("still strips claim-of-action phrases (coach never wrote map state)", () => {
+    // Even in walkthroughs, the coach must not claim to have added or
+    // saved anything — that's the Form-First invariant, orthogonal to
+    // the advance-cut.
+    const out = scrubReplyLight("Nice thinking. I've saved that to your map.");
+    expect(out.toLowerCase()).not.toContain("saved");
+    expect(out.toLowerCase()).not.toContain("i've");
+  });
+
+  it("preserves paragraph breaks (double newlines) between movements", () => {
+    // The walkthrough uses \n\n between Movement 1, 2, 3 so the UI's
+    // whitespace-pre-wrap renders each as its own paragraph. scrubReply
+    // collapsed all whitespace including newlines; scrubReplyLight
+    // must not.
+    const walkthrough =
+      "Movement one lands here.\n\nMovement two lands here.\n\nMovement three lands here.";
+    const light = scrubReplyLight(walkthrough);
+    expect(light).toContain("\n\n");
+    // Should still have exactly two paragraph breaks between three
+    // movements.
+    expect(light.match(/\n\n/g)?.length).toBe(2);
   });
 });
 
