@@ -11,6 +11,7 @@ import {
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
   generateSuggestions,
+  recommendAssumptionToTest,
   scrubReply,
   type ReactionInput,
   type ReactionOutput,
@@ -43,6 +44,7 @@ import {
   markWalkthroughDelivered,
   saveAssumptionDrafts,
   saveImprovementGoal,
+  setAssumptionSelected,
   setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
@@ -1371,6 +1373,13 @@ export async function advanceToStage(
   if (target === "immune_system") {
     await deliverWalkthroughAfterAdvance(loaded.map.id, events);
   }
+  // On entry to the prioritize stage, generate the coach's
+  // Vol 2 p.268-anchored recommendation of which Big Assumption to
+  // test first, persist the prose, and pre-select the recommended
+  // assumption. Coachee can override by clicking a different one.
+  if (target === "prioritize") {
+    await deliverPrioritizeRecommendationAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -1626,6 +1635,165 @@ export async function ensureWalkthroughDelivered(
       reason: err instanceof Error ? err.message : "Could not deliver.",
     };
   }
+}
+
+/**
+ * On advance to the prioritize stage, ask the coach which Big
+ * Assumption to test first (grounded in Vol 2 p.268 criteria), persist
+ * the prose recommendation as a stage_note, and pre-select the
+ * recommended assumption via setAssumptionSelected. The coachee can
+ * override by clicking a different assumption in the UI — the
+ * pre-selection is a starting point, not a verdict.
+ *
+ * Idempotent: no-op if any assumption is already selected_for_testing
+ * (the coachee already made their pick, or a prior advance already
+ * ran the recommendation).
+ */
+export async function deliverPrioritizeRecommendationAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, assumptions, links, commitments] = await Promise.all([
+    getMapById(mapId),
+    listAssumptions(mapId),
+    listAssumptionLinks(mapId),
+    listCommitments(mapId),
+  ]);
+  if (!map) return;
+  if (assumptions.length === 0) return;
+  // Idempotent — don't re-recommend if the coachee already has a
+  // selection on record.
+  if (assumptions.some((a) => a.selected_for_testing)) return;
+
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const linksByAssumption = new Map<string, string[]>();
+  for (const l of links) {
+    const arr = linksByAssumption.get(l.assumption_id) ?? [];
+    arr.push(l.commitment_id);
+    linksByAssumption.set(l.assumption_id, arr);
+  }
+  const assumptionsWithCoverage = assumptions.map((a) => ({
+    text: a.text,
+    commitmentTexts: (linksByAssumption.get(a.id) ?? [])
+      .map((cid) => commitmentById.get(cid)?.text)
+      .filter((t): t is string => Boolean(t)),
+  }));
+
+  const recommendation = await recommendAssumptionToTest({
+    goalText: map.improvement_goal ?? "",
+    assumptionsWithCoverage,
+  });
+  if (!recommendation) {
+    events.record(
+      "error",
+      {
+        where: "deliverPrioritizeRecommendationAfterAdvance",
+        message: "LLM returned null; no pre-selection made",
+      },
+      { stage: "prioritize" },
+    );
+    return;
+  }
+
+  await appendMessage(mapId, "assistant", recommendation.prose, "prioritize", {
+    surface: "stage_note",
+    entryRefTable: "itc_maps",
+    entryRefId: mapId,
+  });
+  // Pre-select the recommended assumption. pickedIndex is 1-based in
+  // the same order as `assumptions` was passed to the helper.
+  const picked = assumptions[recommendation.pickedIndex - 1];
+  if (picked) {
+    await setAssumptionSelected(picked.id, mapId);
+  }
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "prioritize_recommendation",
+      picked_index: recommendation.pickedIndex,
+      prose_length: recommendation.prose.length,
+      assumption_count: assumptions.length,
+    },
+    { stage: "prioritize" },
+  );
+}
+
+/**
+ * Idempotent server action for stuck-user recovery. Called from
+ * page.tsx when the coachee lands on the prioritize stage without a
+ * pre-selected assumption (e.g., they advanced before this pipeline
+ * existed). Same shape as ensureWalkthroughDelivered.
+ */
+export async function ensurePrioritizeRecommendationDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (map.current_stage !== "prioritize") {
+      return { ok: true, delivered: false };
+    }
+    const assumptions = await listAssumptions(mapId);
+    if (assumptions.some((a) => a.selected_for_testing)) {
+      return { ok: true, delivered: false };
+    }
+    const events = new TurnEventLog(mapId, 0);
+    await deliverPrioritizeRecommendationAfterAdvance(mapId, events);
+    await events.flush();
+    const afterAssumptions = await listAssumptions(mapId);
+    return {
+      ok: true,
+      delivered: afterAssumptions.some((a) => a.selected_for_testing),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
+}
+
+/**
+ * Coachee-triggered override of the coach's pick. Called from the
+ * prioritize section UI when the user clicks a different assumption
+ * than the coach recommended. Clears any existing selection and sets
+ * the new one — one-at-a-time enforcement is in setAssumptionSelected.
+ */
+const selectAssumptionSchema = z.object({
+  map_id: z.string().uuid(),
+  assumption_id: z.string().uuid(),
+});
+export async function selectAssumptionForTesting(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = selectAssumptionSchema.safeParse({
+    map_id: formData.get("map_id"),
+    assumption_id: formData.get("assumption_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid selection." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await setAssumptionSelected(parsed.data.assumption_id, loaded.map.id);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not select.",
+    };
+  }
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    "entry_edited",
+    {
+      kind: "assumption",
+      entry_id: parsed.data.assumption_id,
+      selected_for_testing: true,
+    },
+    { stage: loaded.map.current_stage },
+  );
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
 }
 
 /**

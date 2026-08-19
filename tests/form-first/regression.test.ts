@@ -2301,6 +2301,237 @@ describe("Form-First regression", () => {
     },
     300_000,
   );
+
+  it(
+    "regression t: advance to prioritize delivers the coach's assumption recommendation and pre-selects it",
+    async () => {
+      // Checkpoint C-δ: on advance into prioritize, the server should
+      // (a) call recommendAssumptionToTest for a Kegan-voice pick
+      //     with Vol 2 p.268-anchored reasoning,
+      // (b) persist the prose as a stage_note anchored to prioritize,
+      // (c) pre-select the recommended assumption via
+      //     setAssumptionSelected so the Continue-to-Test gate opens
+      //     without requiring the user to click first.
+      // Coachee can still override by clicking a different assumption
+      // in the UI. This regression locks the delivery + pre-selection.
+      const supabase = createSupabaseServiceClient();
+
+      const probe = await supabase
+        .from("itc_assumption_drafts")
+        .select("id")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression t] skipping: schema missing — apply migrations 20260819000001 + 20260819000002. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      for (const b of bs ?? []) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error).toBeNull();
+      }
+
+      const advC = new FormData();
+      advC.set("map_id", ctx.mapId);
+      advC.set("to", "commitments");
+      expect((await advanceToStage(advC)).ok).toBe(true);
+
+      const { data: ws } = await supabase
+        .from("itc_worries")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      for (const w of ws ?? []) {
+        const { error } = await supabase.from("itc_commitments").insert({
+          map_id: ctx.mapId,
+          worry_id: w.id,
+          text: "I'm committed to never having to see I'm the husband who keeps failing her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error).toBeNull();
+      }
+
+      const advA = new FormData();
+      advA.set("map_id", ctx.mapId);
+      advA.set("to", "assumptions");
+      expect((await advanceToStage(advA)).ok).toBe(true);
+
+      // Seed 2 deep assumptions with commitment coverage so the picker
+      // has something meaningful to pick between.
+      const { data: cs } = await supabase
+        .from("itc_commitments")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      const assumptionTexts = [
+        "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.",
+        "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her.",
+      ];
+      const seededAssumptionIds: string[] = [];
+      for (let i = 0; i < assumptionTexts.length; i++) {
+        const { data: aRow, error } = await supabase
+          .from("itc_assumptions")
+          .insert({
+            map_id: ctx.mapId,
+            text: assumptionTexts[i],
+            depth_score: 3,
+            attempts: 1,
+            sort_order: i,
+          })
+          .select("id")
+          .single();
+        expect(error).toBeNull();
+        expect(aRow?.id).toBeTruthy();
+        seededAssumptionIds.push(aRow!.id as string);
+      }
+      // Link first assumption to commitments 1 & 2, second to
+      // commitment 3 (typical shared-root + separate-root pattern).
+      for (let i = 0; i < (cs?.length ?? 0); i++) {
+        const commitmentId = cs![i].id as string;
+        const assumptionId =
+          i < 2 ? seededAssumptionIds[0] : seededAssumptionIds[1];
+        const { error } = await supabase
+          .from("itc_assumption_commitments")
+          .insert({
+            assumption_id: assumptionId,
+            commitment_id: commitmentId,
+          });
+        expect(error).toBeNull();
+      }
+
+      // Advance to immune_system (fires walkthrough — we don't check
+      // its content here, regression s covers that).
+      const advI = new FormData();
+      advI.set("map_id", ctx.mapId);
+      advI.set("to", "immune_system");
+      expect((await advanceToStage(advI)).ok).toBe(true);
+
+      // Baseline: no assumption selected before advancing to prioritize.
+      const { data: assumptionsBefore } = await supabase
+        .from("itc_assumptions")
+        .select("id, selected_for_testing")
+        .eq("map_id", ctx.mapId);
+      expect(
+        (assumptionsBefore ?? []).some((a) => a.selected_for_testing),
+      ).toBe(false);
+
+      // Advance to prioritize — this triggers the recommendation.
+      const advP = new FormData();
+      advP.set("map_id", ctx.mapId);
+      advP.set("to", "prioritize");
+      const advPRes = await advanceToStage(advP);
+      expect(
+        advPRes.ok,
+        `advance to prioritize: ${advPRes.ok ? "" : advPRes.reason}`,
+      ).toBe(true);
+
+      // A prioritize stage_note must be persisted, anchored to itc_maps.
+      const { data: notes } = await supabase
+        .from("itc_messages")
+        .select("content, surface, entry_ref_table")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "stage_note")
+        .eq("stage_at_creation", "prioritize");
+      expect(
+        (notes?.length ?? 0) >= 1,
+        `at least one prioritize stage_note must exist; got ${notes?.length ?? 0}`,
+      ).toBe(true);
+      const prose = (notes ?? [])
+        .map((n) => n.content as string)
+        .join("\n");
+      // Must reference the coachee's improvement goal or the picked
+      // assumption's text (grounded in HIS map, not generic ITC theory).
+      expect(
+        assumptionTexts.some((t) =>
+          prose.includes(t.slice(0, 40)),
+        ) || prose.toLowerCase().includes("being present"),
+        `recommendation prose must reference his actual assumption text or goal; got: ${prose}`,
+      ).toBe(true);
+
+      // Exactly ONE assumption must be pre-selected (setAssumptionSelected
+      // enforces one-at-a-time).
+      const { data: assumptionsAfter } = await supabase
+        .from("itc_assumptions")
+        .select("id, selected_for_testing")
+        .eq("map_id", ctx.mapId);
+      const selected = (assumptionsAfter ?? []).filter(
+        (a) => a.selected_for_testing,
+      );
+      expect(
+        selected.length,
+        `exactly one assumption must be pre-selected after advance to prioritize; got ${selected.length}`,
+      ).toBe(1);
+
+      // The Continue-to-Test gate must now be enabled (walkthrough
+      // was delivered in prior step, selection just happened).
+      const { getAdvanceGate } = await import("@/app/itc/actions");
+      const gate = await getAdvanceGate(ctx.mapId);
+      expect(
+        gate.enabled,
+        `Continue-to-Test gate must be enabled after advance to prioritize; reason: ${gate.reason ?? "(none)"}`,
+      ).toBe(true);
+
+      // Idempotency: re-advancing to prioritize must NOT re-fire the
+      // recommendation (would overwrite the coachee's selection).
+      const advP2 = new FormData();
+      advP2.set("map_id", ctx.mapId);
+      advP2.set("to", "prioritize");
+      await advanceToStage(advP2);
+      const { data: notes2 } = await supabase
+        .from("itc_messages")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "stage_note")
+        .eq("stage_at_creation", "prioritize");
+      expect(notes2?.length).toBe(notes?.length);
+    },
+    300_000,
+  );
 });
 
 /**

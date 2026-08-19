@@ -1081,6 +1081,105 @@ export async function generateImmuneSystemWalkthrough(input: {
 }
 
 // -------------------------------------------------------------------------
+// recommendAssumptionToTest — coach picks the first assumption to test
+// -------------------------------------------------------------------------
+
+const PrioritizeRecommendationSchema = z.object({
+  /** 1-based index into the assumptions list passed to the prompt.
+   *  The server pre-selects this assumption for testing via
+   *  setAssumptionSelected, and the coachee can override by clicking
+   *  a different one in the UI. */
+  picked_index: z.number().int().min(1),
+  /** Two-paragraph Kegan-voice recommendation the coachee reads on
+   *  the prioritize section. Paragraph 1: the pick + why. Paragraph
+   *  2: what the coachee stands to learn. Close: one line invitation
+   *  to accept or override. */
+  prose: z.string().min(30).max(2000),
+});
+
+/**
+ * Kegan-voice recommendation of which Big Assumption to test first.
+ * Applies the Vol 2 p. 268 criteria (powerful / safe / disconfirmable)
+ * to the coachee's specific map. Fires once when the coachee advances
+ * into the prioritize stage (server-orchestrated via
+ * deliverPrioritizeRecommendationAfterAdvance).
+ *
+ * Form-First-pure: returns METADATA (pick + prose). Server persists
+ * the prose as a stage_note and pre-selects the recommended assumption
+ * via setAssumptionSelected. Coachee can override by clicking a
+ * different assumption in the UI.
+ */
+export async function recommendAssumptionToTest(input: {
+  goalText: string;
+  /** All assumptions on the map, in on-map order, with the commitment
+   *  texts they underwrite. Coverage count feeds the POWERFUL
+   *  criterion (more coverage → more system-loosening if it falls). */
+  assumptionsWithCoverage: Array<{
+    text: string;
+    commitmentTexts: string[];
+  }>;
+}): Promise<{ pickedIndex: number; prose: string } | null> {
+  const started = Date.now();
+  try {
+    if (input.assumptionsWithCoverage.length === 0) return null;
+
+    const assumptionsBlock = input.assumptionsWithCoverage
+      .map((a, i) => {
+        const coverage =
+          a.commitmentTexts.length > 0
+            ? a.commitmentTexts
+                .map((c, ci) => `        ${ci + 1}. ${c}`)
+                .join("\n")
+            : "        (no commitments linked)";
+        return `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments:\n${coverage}`;
+      })
+      .join("\n\n");
+
+    const { PRIORITIZE_STAGE } = await import(
+      "./prompts/stages/prioritize"
+    );
+
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: PrioritizeRecommendationSchema,
+      system: PRIORITIZE_STAGE,
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Big Assumptions (Column 5) with the commitments each underwrites:`,
+        assumptionsBlock,
+        ``,
+        `Recommend which assumption to test first. Return picked_index (1-based) and the two-paragraph prose recommendation.`,
+      ].join("\n"),
+      maxOutputTokens: 1500,
+    });
+
+    // Clamp index to input range so a hallucinated index can't point
+    // at nothing. Also normalize prose through scrubReplyLight (dashes
+    // + claim strip + comma-space, preserves paragraph breaks and
+    // column-name mentions — the recommendation legitimately names
+    // "Column 5" and the assumption text).
+    const max = input.assumptionsWithCoverage.length;
+    const pickedIndex = Math.max(1, Math.min(max, object.picked_index));
+    return {
+      pickedIndex,
+      prose: scrubReplyLight(object.prose),
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach] recommendAssumptionToTest failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] recommend kind=prioritize ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

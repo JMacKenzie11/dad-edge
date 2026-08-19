@@ -14,7 +14,11 @@ import {
   listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
-import { ensureWalkthroughDelivered, getAdvanceGate } from "../actions";
+import {
+  ensurePrioritizeRecommendationDelivered,
+  ensureWalkthroughDelivered,
+  getAdvanceGate,
+} from "../actions";
 import { MapCanvas } from "./map-canvas";
 import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
@@ -46,6 +50,15 @@ export default async function ItcMapPage({
   // circuits when the flag is already set.
   if (map.current_stage === "immune_system" && !map.walkthrough_delivered) {
     await ensureWalkthroughDelivered(map.id);
+  }
+  // Same recovery pattern for the prioritize stage — anyone stuck on
+  // prioritize without a coach-recommended assumption gets the
+  // recommendation delivered here before render. Adds one-time
+  // 5-10s latency for the recovery case; zero for anyone else
+  // because ensurePrioritizeRecommendationDelivered short-circuits
+  // when a selection already exists.
+  if (map.current_stage === "prioritize") {
+    await ensurePrioritizeRecommendationDelivered(map.id);
   }
 
   const [

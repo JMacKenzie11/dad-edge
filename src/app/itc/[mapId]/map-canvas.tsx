@@ -24,6 +24,7 @@ import { CoachDock } from "./coach-dock";
 import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
+import { PrioritizePicker } from "./prioritize-picker";
 import { WorriesRow } from "./worries-row";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
@@ -108,6 +109,19 @@ export function MapCanvas({
         (m) =>
           m.surface === "stage_note" &&
           m.stage_at_creation === "immune_system",
+      ),
+    [messages],
+  );
+  // Prioritize stage_notes — same always-visible pattern as the
+  // walkthrough. The coach's pick recommendation stays visible after
+  // the coachee advances into test_design so they can refer back to
+  // the reasoning.
+  const prioritizeNotes = useMemo(
+    () =>
+      messages.filter(
+        (m) =>
+          m.surface === "stage_note" &&
+          m.stage_at_creation === "prioritize",
       ),
     [messages],
   );
@@ -351,6 +365,21 @@ export function MapCanvas({
             liveIntro={liveIntroFor("immune_system")}
             stageNotes={immuneSystemNotes}
           />
+        ) : null}
+
+        {stageIndex(map.current_stage) >= stageIndex("prioritize") ? (
+          <Section
+            title="Which assumption to test first"
+            active={map.current_stage === "prioritize"}
+            stageNotes={prioritizeNotes}
+          >
+            {assumptions.length > 0 ? (
+              <PrioritizePicker
+                mapId={map.id}
+                assumptions={assumptions}
+              />
+            ) : null}
+          </Section>
         ) : null}
       </div>
 
