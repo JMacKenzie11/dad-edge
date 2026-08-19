@@ -2,6 +2,13 @@
 
 import type { ItcMessage } from "@/lib/itc/maps";
 
+export type ChipTarget =
+  | "goal"
+  | "behavior"
+  | "worry"
+  | "commitment"
+  | "assumption";
+
 /**
  * Inline coaching thread anchored to a specific map entry. Pure
  * render: shows the coach's reaction messages and any chip payload.
@@ -14,14 +21,19 @@ import type { ItcMessage } from "@/lib/itc/maps";
  */
 export function EntryThread({
   messages,
+  chipTarget,
 }: {
   messages: ItcMessage[];
+  /** Which input a refinement/suggestion chip in this thread should
+   *  fill when tapped. Required — chips without a target are inert
+   *  under the routed dispatch model. */
+  chipTarget: ChipTarget;
 }) {
   if (messages.length === 0) return null;
   return (
     <div className="pl-3 pt-2 space-y-2">
       {messages.map((m) => (
-        <ThreadMessage key={m.id} message={m} />
+        <ThreadMessage key={m.id} message={m} chipTarget={chipTarget} />
       ))}
     </div>
   );
@@ -47,7 +59,13 @@ function extractChipPayload(content: string): {
   }
 }
 
-function ThreadMessage({ message }: { message: ItcMessage }) {
+function ThreadMessage({
+  message,
+  chipTarget,
+}: {
+  message: ItcMessage;
+  chipTarget: ChipTarget;
+}) {
   if (message.role === "user") {
     return (
       <div className="ml-auto max-w-[90%] rounded-md bg-[color:var(--color-primary)]/20 px-3 py-2 text-sm leading-relaxed">
@@ -67,10 +85,11 @@ function ThreadMessage({ message }: { message: ItcMessage }) {
             <ChipButton
               label={`Use: "${chips.refinement}"`}
               value={chips.refinement}
+              target={chipTarget}
             />
           ) : null}
           {chips.suggestions?.map((s, i) => (
-            <ChipButton key={i} label={s} value={s} />
+            <ChipButton key={i} label={s} value={s} target={chipTarget} />
           ))}
         </div>
       ) : null}
@@ -78,10 +97,18 @@ function ThreadMessage({ message }: { message: ItcMessage }) {
   );
 }
 
-function ChipButton({ label, value }: { label: string; value: string }) {
+function ChipButton({
+  label,
+  value,
+  target,
+}: {
+  label: string;
+  value: string;
+  target: ChipTarget;
+}) {
   function handleClick() {
     window.dispatchEvent(
-      new CustomEvent("itc-chip-fill", { detail: { value } }),
+      new CustomEvent("itc-chip-fill", { detail: { value, target } }),
     );
   }
   return (

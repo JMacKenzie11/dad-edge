@@ -73,8 +73,9 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
 
   useEffect(() => {
     function onFill(ev: Event) {
-      const e = ev as CustomEvent<{ value: string }>;
+      const e = ev as CustomEvent<{ value: string; target?: string }>;
       if (!e.detail?.value) return;
+      if (e.detail.target !== "behavior") return;
       setText(e.detail.value);
       setTimeout(() => inputRef.current?.focus(), 50);
     }

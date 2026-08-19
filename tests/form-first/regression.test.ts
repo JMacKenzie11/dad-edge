@@ -1055,6 +1055,141 @@ describe("Form-First regression", () => {
     },
     180_000,
   );
+
+  it(
+    "regression f: saveGoal refuses to prepend the stem onto competing goal framing",
+    async () => {
+      // Prior bug: user typed "I want to get better at being with my
+      // wife. Help me" INSTEAD of the required stem; saveGoal blindly
+      // prepended and stored "I'm committed to getting better at I
+      // want to get better at being with my wife. Help me". Regression
+      // locks in that saveGoal now rejects competing framing with a
+      // clear error and does NOT mangle the stored goal.
+      const model = makeHardFailModel();
+      setMainModelOverride(model);
+      setUtilityModelOverride(model);
+
+      const cases = [
+        "I want to get better at being with my wife.",
+        "I would like to spend more time with my kids",
+        "My goal is to work out three times a week",
+        "Help me be a better father",
+        "I need to stop working late",
+        "I plan to call my brother every Sunday",
+      ];
+      for (const text of cases) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        const res = await saveGoal(fd);
+        expect(
+          res.ok,
+          `saveGoal should reject competing framing "${text}"`,
+        ).toBe(false);
+        if (!res.ok) {
+          expect(res.reason).toMatch(/committed/i);
+        }
+      }
+
+      // The stored goal must be untouched (still null — no successful
+      // save happened).
+      const supabase = createSupabaseServiceClient();
+      const { data: mapRow } = await supabase
+        .from("itc_maps")
+        .select("improvement_goal")
+        .eq("id", ctx.mapId)
+        .single();
+      expect(mapRow?.improvement_goal ?? null).toBeNull();
+
+      // Sanity: a plain fresh phrase with the stem still works and is
+      // NOT mashed (single stem, exact user suffix).
+      const goodFd = new FormData();
+      goodFd.set("map_id", ctx.mapId);
+      goodFd.set(
+        "text",
+        "I'm committed to getting better at being present when my wife is upset with me",
+      );
+      const goodRes = await saveGoal(goodFd);
+      expect(
+        goodRes.ok,
+        `saveGoal should accept stemmed goal: ${goodRes.ok ? "" : goodRes.reason}`,
+      ).toBe(true);
+      const { data: after } = await supabase
+        .from("itc_maps")
+        .select("improvement_goal")
+        .eq("id", ctx.mapId)
+        .single();
+      expect(after?.improvement_goal).toBe(
+        "I'm committed to getting better at being present when my wife is upset with me",
+      );
+      // Not a double-stem.
+      expect(
+        (after?.improvement_goal ?? "").split(
+          /i'?m committed to getting better at/i,
+        ).length,
+      ).toBe(2); // split by stem → exactly two segments = one stem
+    },
+    30_000,
+  );
+
+  it(
+    "regression g: itc-chip-fill event carries a target discriminator",
+    async () => {
+      // Prior bug: tapping a Column 1 goal chip filled BOTH the goal
+      // input AND the Column 2 Add-a-behavior form, because the
+      // window-scoped itc-chip-fill event had no target. Fix: every
+      // dispatch now includes { target: "goal"|"behavior"|... } and
+      // listeners filter by target.
+      //
+      // Structural check: the source of both dispatchers +
+      // both listeners must reference `target` in their event
+      // payload / filter, and the listeners must guard against
+      // wrong-target events.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
+
+      const files = [
+        "src/app/itc/[mapId]/entry-thread.tsx",
+        "src/app/itc/[mapId]/map-canvas.tsx",
+        "src/app/itc/[mapId]/goal-row.tsx",
+        "src/app/itc/[mapId]/behaviors-row.tsx",
+      ];
+      const contents: Record<string, string> = {};
+      for (const f of files) {
+        contents[f] = readFileSync(resolve(repoRoot, f), "utf8");
+      }
+
+      // Dispatchers include { value, target } in the event detail.
+      const dispatchRe = /new CustomEvent\(\s*["']itc-chip-fill["']\s*,\s*\{\s*detail:\s*\{[^}]*target[^}]*\}/;
+      expect(
+        dispatchRe.test(contents["src/app/itc/[mapId]/entry-thread.tsx"]),
+        "entry-thread.tsx dispatch must include target in detail",
+      ).toBe(true);
+      expect(
+        dispatchRe.test(contents["src/app/itc/[mapId]/map-canvas.tsx"]),
+        "map-canvas.tsx dispatch must include target in detail",
+      ).toBe(true);
+
+      // Listeners filter by target — required so goal chips don't
+      // fill the behavior form and vice versa.
+      expect(
+        /e\.detail\.target\s*!==\s*["']goal["']/.test(
+          contents["src/app/itc/[mapId]/goal-row.tsx"],
+        ),
+        "goal-row.tsx must filter itc-chip-fill to target === 'goal'",
+      ).toBe(true);
+      expect(
+        /e\.detail\.target\s*!==\s*["']behavior["']/.test(
+          contents["src/app/itc/[mapId]/behaviors-row.tsx"],
+        ),
+        "behaviors-row.tsx must filter itc-chip-fill to target === 'behavior'",
+      ).toBe(true);
+    },
+    5_000,
+  );
 });
 
 /**

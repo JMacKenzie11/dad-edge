@@ -460,6 +460,29 @@ const saveGoalSchema = z.object({
   text: z.string().min(1).max(500),
 });
 
+/**
+ * Detect goal-framing prefixes the user might type INSTEAD of the
+ * required `GOAL_STEM`. Prepending the stem to any of these produces
+ * a mashup ("I'm committed to getting better at I want to get better
+ * at X"). When one of these fires, saveGoal rejects with a clear
+ * error asking the user to keep the stem intact.
+ */
+function hasCompetingGoalFraming(text: string): boolean {
+  const openers = [
+    /^i\s*(?:'|')?m\s+committed/i, // "I'm committed" (any suffix but the stem)
+    /^i\s+want\s+to\b/i,
+    /^i\s*(?:'|')?d\s+like\s+to\b/i,
+    /^i\s+would\s+like\s+to\b/i,
+    /^my\s+goal\b/i,
+    /^my\s+commitment\b/i,
+    /^i\s+need\s+to\b/i,
+    /^i\s+will\b/i,
+    /^i\s+plan\s+to\b/i,
+    /^help\s+me\b/i,
+  ];
+  return openers.some((re) => re.test(text));
+}
+
 export async function saveGoal(formData: FormData): Promise<ActionResult> {
   const parsed = saveGoalSchema.safeParse({
     map_id: formData.get("map_id"),
@@ -468,9 +491,20 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, reason: "Invalid goal input." };
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  const withStem = hasGoalStem(parsed.data.text)
-    ? parsed.data.text
-    : `${GOAL_STEM} ${parsed.data.text.trim()}`;
+  // Reject if the text carries any other goal-framing prefix ("I want",
+  // "My goal", etc.) — blindly prepending the stem in those cases
+  // produces mashups like "I'm committed to getting better at I want to
+  // get better at X". Ask the user to keep the stem and phrase after it.
+  const rawTrimmed = parsed.data.text.trim();
+  if (!hasGoalStem(rawTrimmed) && hasCompetingGoalFraming(rawTrimmed)) {
+    return {
+      ok: false,
+      reason: `Keep "${GOAL_STEM}" at the start and write the rest after it.`,
+    };
+  }
+  const withStem = hasGoalStem(rawTrimmed)
+    ? rawTrimmed
+    : `${GOAL_STEM} ${rawTrimmed}`;
   const priorGoal = loaded.map.improvement_goal;
   const isEdit = Boolean(priorGoal && priorGoal.trim() !== withStem.trim());
   try {

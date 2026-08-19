@@ -42,10 +42,13 @@ export function GoalRow({
   }, [goalText]);
 
   // Fill from a coach-suggested chip dispatched from the chat pane.
+  // The event's `target` discriminator ensures only goal-column chips
+  // land here; behavior/worry/etc. chips route to their own inputs.
   useEffect(() => {
     function onFill(ev: Event) {
-      const e = ev as CustomEvent<{ value: string }>;
+      const e = ev as CustomEvent<{ value: string; target?: string }>;
       if (!e.detail?.value) return;
+      if (e.detail.target !== "goal") return;
       const raw = e.detail.value.trim();
       const withStem = raw.toLowerCase().startsWith(GOAL_STEM.toLowerCase())
         ? raw

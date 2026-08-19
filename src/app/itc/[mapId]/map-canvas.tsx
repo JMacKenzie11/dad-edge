@@ -159,6 +159,7 @@ export function MapCanvas({
         <Section
           title="1. Improvement goal"
           active={map.current_stage === "goal"}
+          chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "goal" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "goal" ? unattachedForCurrentStage : []
@@ -170,6 +171,7 @@ export function MapCanvas({
           />
           {map.improvement_goal ? (
             <EntryThread
+              chipTarget="goal"
               messages={threadFor("itc_maps", map.id).filter(
                 (m) => m.stage_at_creation === "goal",
               )}
@@ -185,6 +187,7 @@ export function MapCanvas({
           title="2. Doing / not-doing"
           active={map.current_stage === "behaviors"}
           liveIntro={liveIntroFor("behaviors")}
+          chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "behaviors" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "behaviors" ? unattachedForCurrentStage : []
@@ -209,7 +212,7 @@ export function MapCanvas({
                     <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
-                    <EntryThread messages={thread} />
+                    <EntryThread messages={thread} chipTarget="behavior" />
                   </div>
                 );
               })}
@@ -225,6 +228,7 @@ export function MapCanvas({
           title="3. Worry box"
           active={map.current_stage === "worries"}
           liveIntro={liveIntroFor("worries")}
+          chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "worries" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "worries" ? unattachedForCurrentStage : []
@@ -248,7 +252,7 @@ export function MapCanvas({
                     <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
-                    <EntryThread messages={thread} />
+                    <EntryThread messages={thread} chipTarget="worry" />
                   </div>
                 );
               })}
@@ -264,6 +268,7 @@ export function MapCanvas({
           title="4. Competing commitments"
           active={map.current_stage === "commitments"}
           liveIntro={liveIntroFor("commitments")}
+          chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "commitments" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "commitments" ? unattachedForCurrentStage : []
@@ -286,7 +291,7 @@ export function MapCanvas({
                     <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
-                    <EntryThread messages={thread} />
+                    <EntryThread messages={thread} chipTarget="commitment" />
                   </div>
                 );
               })}
@@ -302,6 +307,7 @@ export function MapCanvas({
           title="5. Big Assumptions"
           active={map.current_stage === "assumptions"}
           liveIntro={liveIntroFor("assumptions")}
+          chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "assumptions" ? stageNotes : []}
           unattachedCoachNotes={
             map.current_stage === "assumptions" ? unattachedForCurrentStage : []
@@ -324,7 +330,7 @@ export function MapCanvas({
                     <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
-                    <EntryThread messages={thread} />
+                    <EntryThread messages={thread} chipTarget="assumption" />
                   </div>
                 );
               })}
@@ -365,6 +371,7 @@ function Section({
   liveIntro,
   stageNotes,
   unattachedCoachNotes = [],
+  chipTarget,
 }: {
   title: string;
   children: React.ReactNode;
@@ -379,6 +386,9 @@ function Section({
    *  is visible even when the migration adding surface/entry_ref
    *  hasn't been applied yet. Only shown on the active section. */
   unattachedCoachNotes?: ItcMessage[];
+  /** Which input a chip tap in this section should fill. Undefined
+   *  on non-active sections (chips only render on active). */
+  chipTarget?: ChipTarget;
 }) {
   // Legacy canned intros used to be persisted with a goal snapshot
   // baked in. Filter them out so the live-interpolated intro is the
@@ -414,7 +424,7 @@ function Section({
       {active && notesToShow.length > 0 ? (
         <div className="mb-4 space-y-2">
           {notesToShow.map((m) => (
-            <StageNote key={m.id} content={m.content} />
+            <StageNote key={m.id} content={m.content} chipTarget={chipTarget} />
           ))}
         </div>
       ) : null}
@@ -423,7 +433,42 @@ function Section({
   );
 }
 
-function StageNote({ content }: { content: string }) {
+type ChipTarget =
+  | "goal"
+  | "behavior"
+  | "worry"
+  | "commitment"
+  | "assumption";
+
+/**
+ * Which input a chip tap should fill, given the active stage.
+ * Kept in one place so both stage-note chips and entry-thread chips
+ * route consistently.
+ */
+export function chipTargetForStage(stage: ItcStage): ChipTarget | undefined {
+  switch (stage) {
+    case "goal":
+      return "goal";
+    case "behaviors":
+      return "behavior";
+    case "worries":
+      return "worry";
+    case "commitments":
+      return "commitment";
+    case "assumptions":
+      return "assumption";
+    default:
+      return undefined;
+  }
+}
+
+function StageNote({
+  content,
+  chipTarget,
+}: {
+  content: string;
+  chipTarget?: ChipTarget;
+}) {
   // Stage notes may carry chips too (suggestions render as stage_note).
   const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
   const match = content.match(fence);
@@ -439,11 +484,13 @@ function StageNote({ content }: { content: string }) {
   return (
     <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
       {prose}
-      {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
+      {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) && chipTarget ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {chips.refinement ? <ChipButton value={chips.refinement} /> : null}
+          {chips.refinement ? (
+            <ChipButton value={chips.refinement} target={chipTarget} />
+          ) : null}
           {chips.suggestions?.map((s, i) => (
-            <ChipButton key={i} value={s} />
+            <ChipButton key={i} value={s} target={chipTarget} />
           ))}
         </div>
       ) : null}
@@ -451,10 +498,10 @@ function StageNote({ content }: { content: string }) {
   );
 }
 
-function ChipButton({ value }: { value: string }) {
+function ChipButton({ value, target }: { value: string; target: ChipTarget }) {
   function handleClick() {
     window.dispatchEvent(
-      new CustomEvent("itc-chip-fill", { detail: { value } }),
+      new CustomEvent("itc-chip-fill", { detail: { value, target } }),
     );
   }
   return (
