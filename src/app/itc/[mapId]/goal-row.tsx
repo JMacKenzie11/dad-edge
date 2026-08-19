@@ -122,6 +122,10 @@ export function GoalRow({
           <span className="text-[11px] text-[color:var(--color-text-muted)]">
             Saving…
           </span>
+        ) : focused ? (
+          <span className="text-[11px] text-[color:var(--color-text-muted)]">
+            Enter to save · Esc to cancel
+          </span>
         ) : null}
         <button
           type="button"

@@ -266,6 +266,10 @@ function BehaviorItem({
         <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)]">
           Saving…
         </p>
+      ) : focused ? (
+        <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)]">
+          Enter to save · Esc to cancel
+        </p>
       ) : null}
       {error ? (
         <p className="pl-5 text-[11px] text-[color:var(--color-danger)]">

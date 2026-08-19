@@ -159,6 +159,10 @@ function WorryItem({
         <p className="text-[10px] text-[color:var(--color-text-muted)] pl-5 mt-0.5">
           Saving…
         </p>
+      ) : focused ? (
+        <p className="text-[10px] text-[color:var(--color-text-muted)] pl-5 mt-0.5">
+          Enter to save · Esc to cancel
+        </p>
       ) : null}
       {error ? (
         <p className="text-[11px] text-[color:var(--color-danger)] pl-5 mt-0.5">
