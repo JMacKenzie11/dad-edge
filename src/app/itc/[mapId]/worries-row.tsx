@@ -203,7 +203,7 @@ function WorryItem({
           }}
           rows={2}
           disabled={pending}
-          placeholder="What are you afraid would happen if you stopped?"
+          placeholder="What are you afraid would happen if you did the opposite?"
           className={
             "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused

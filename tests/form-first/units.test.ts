@@ -276,6 +276,21 @@ describe("STAGE_INTROS", () => {
     expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
   });
 
+  it("assumptions intro names the ITC 'If…then…' shape and the many-to-many linking", () => {
+    const rendered = STAGE_INTROS["assumptions"]!({ goal: null });
+    // Big Assumptions in ITC are If/then beliefs that make the hidden
+    // commitments feel necessary — the intro must signal that shape so
+    // the coachee doesn't stop at a flat single-clause statement.
+    expect(/if.*then/i.test(rendered)).toBe(true);
+    // Many-to-many is the whole reason assumptions has an add form
+    // separate from the 1:1 worries/commitments — call it out.
+    expect(/underwrite|link|holds up|hold up/i.test(rendered)).toBe(true);
+    // Must connect back to the immune system framing (why they run
+    // the system on autopilot).
+    expect(/immunity|immune|autopilot|feels?\s+like\s+truth/i.test(rendered))
+      .toBe(true);
+  });
+
   it("no intro accidentally hard-codes an entry-shaped quote (no stale-quote reintroduction)", () => {
     // If a future edit puts a specific behavior/worry/commitment text
     // into a stage intro, this test still passes (we don't hard-code

@@ -22,7 +22,7 @@ export const STAGE_INTROS: Partial<
   commitments: () =>
     `Column 4 is what a part of you is SECRETLY committed to — the hidden self-protective vows that keep every worry in Column 3 from coming true. They compete DIRECTLY with your Column 1 goal, which is why "just try harder" hasn't worked. They shouldn't sound noble ("being a good listener"); they should sound self-protective and a little strange to say out loud ("never having to find out my effort didn't matter"). Under each worry the coach has drafted a starting point — review, tap to use, edit, or type your own.`,
   assumptions: () =>
-    `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment?`,
+    `Column 5 is the Big Assumptions — the beliefs about how the world works that make every hidden commitment in Column 4 feel necessary. They usually take an "If I…, then…" shape and land somewhere catastrophic ("I'd be nothing", "I'd lose them", "I'd fall apart"). To you they don't feel like assumptions — they feel like TRUTH. That's exactly why the immune system runs on autopilot. One assumption often underwrites several commitments, so link each one to every commitment it holds up. Naming them is the first move; testing them is what breaks the immunity.`,
   review: () =>
     `Before we test anything, take a beat and look at the whole map. What jumps out? Anything you'd sharpen or reword?`,
   immune_system: () =>

@@ -1538,6 +1538,198 @@ describe("Form-First regression", () => {
   );
 
   it(
+    "regression m: advance to commitments populates a non-noble coach draft per worry",
+    async () => {
+      // On advance into the commitments stage, the server pipeline
+      // generates a coach-drafted commitment for each worry that
+      // doesn't have a commitment yet. Assertion: every worry gets
+      // a draft, and each draft passes the commitment rubric at
+      // 2/3 or better (i.e., the coach's own drafts clear the same
+      // non-noble bar the user has to clear).
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probe — coach_commitment_draft column added in
+      // migration 20260819000001. Skip cleanly if not applied.
+      const probe = await supabase
+        .from("itc_worries")
+        .select("coach_commitment_draft")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression m] skipping: schema missing — apply migration 20260819000001. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      // Seed 3 deep worries directly so the depth gate opens.
+      for (const b of bs ?? []) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed worry: ${error?.message}`).toBeNull();
+      }
+
+      // Advance to commitments — this triggers the draft pipeline.
+      const advC = new FormData();
+      advC.set("map_id", ctx.mapId);
+      advC.set("to", "commitments");
+      const advCRes = await advanceToStage(advC);
+      expect(
+        advCRes.ok,
+        `advance to commitments: ${advCRes.ok ? "" : advCRes.reason}`,
+      ).toBe(true);
+
+      // Every worry must now carry a coach_commitment_draft.
+      const { data: worries } = await supabase
+        .from("itc_worries")
+        .select("id, text, coach_commitment_draft")
+        .eq("map_id", ctx.mapId);
+      expect(worries?.length).toBe(3);
+      for (const w of worries ?? []) {
+        expect(
+          w.coach_commitment_draft,
+          `worry "${w.text}" must have a coach draft after advance to commitments`,
+        ).toBeTruthy();
+        // Draft must start with "I'm committed to" (per the drafter
+        // prompt's non-noble shape rule).
+        expect(
+          /^i\s*(?:'|\u2019)?m\s+committed\s+to/i.test(
+            (w.coach_commitment_draft ?? "").trim(),
+          ),
+          `draft must start with "I'm committed to": "${w.coach_commitment_draft}"`,
+        ).toBe(true);
+      }
+
+      // Score each draft against the commitment rubric — the coach's
+      // own drafts must clear at 2/3 or better.
+      const { scoreCommitmentDepth } = await import("@/lib/itc/rubric");
+      for (const w of worries ?? []) {
+        const scored = await scoreCommitmentDepth({
+          goalText: goal,
+          worryText: w.text,
+          commitmentText: w.coach_commitment_draft as string,
+        });
+        expect(
+          scored.score >= 2,
+          `coach's own draft for worry "${w.text}" scored ${scored.score}/3 — must be ≥ 2. Draft: "${w.coach_commitment_draft}". Rubric reason: ${scored.reason}`,
+        ).toBe(true);
+      }
+    },
+    240_000,
+  );
+
+  it(
+    "regression n: downstream columns are locked until the coachee advances into them",
+    async () => {
+      // Structural check: map-canvas passes isLocked to each row
+      // based on stageIndex comparison. Each row file short-circuits
+      // to a "Complete previous columns first"-style placeholder when
+      // locked. If a future refactor drops the guard, this trips.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
+      const read = (rel: string) =>
+        readFileSync(resolve(repoRoot, rel), "utf8");
+
+      const mapCanvas = read("src/app/itc/[mapId]/map-canvas.tsx");
+      // 1. map-canvas computes isLocked via stageIndex comparison
+      //    and passes it to each row.
+      expect(
+        /isLocked\s*=\s*\(\s*rowStage[\s\S]{0,200}?stageIndex/.test(mapCanvas),
+        "map-canvas must compute isLocked via stageIndex comparison",
+      ).toBe(true);
+      // 2. Each of the four multi-column rows receives isLocked.
+      for (const rowJsx of [
+        "<BehaviorsRow",
+        "<WorriesRow",
+        "<CommitmentsRow",
+        "<AssumptionsRow",
+      ]) {
+        const re = new RegExp(
+          `${rowJsx}[\\s\\S]{0,400}?isLocked=\\{isLocked\\(`,
+        );
+        expect(
+          re.test(mapCanvas),
+          `${rowJsx} must be passed isLocked={isLocked("<stage>")}`,
+        ).toBe(true);
+      }
+      // 3. Each row file short-circuits when isLocked with a
+      //    "Complete ... first" placeholder that hides all inputs.
+      const rowFiles: Array<[string, string, RegExp]> = [
+        [
+          "behaviors-row.tsx",
+          read("src/app/itc/[mapId]/behaviors-row.tsx"),
+          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete the goal first/i,
+        ],
+        [
+          "worries-row.tsx",
+          read("src/app/itc/[mapId]/worries-row.tsx"),
+          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete behaviors first/i,
+        ],
+        [
+          "commitments-row.tsx",
+          read("src/app/itc/[mapId]/commitments-row.tsx"),
+          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete worries first/i,
+        ],
+        [
+          "assumptions-row.tsx",
+          read("src/app/itc/[mapId]/assumptions-row.tsx"),
+          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete commitments first/i,
+        ],
+      ];
+      for (const [name, src, re] of rowFiles) {
+        expect(
+          re.test(src),
+          `${name} must short-circuit with the correct locked placeholder`,
+        ).toBe(true);
+      }
+    },
+    5_000,
+  );
+
+  it(
     "regression k: coach rejects role-identity goals (Case 2, not Case 3)",
     async () => {
       // Prior bug: "I'm committed to getting better at being a husband"
@@ -1611,6 +1803,39 @@ describe("Form-First regression", () => {
       }
     },
     240_000,
+  );
+
+  it(
+    "regression o: worry input placeholder is polarity-safe for both doing and not-doing behaviors",
+    async () => {
+      // Prior bug: worry-row's placeholder was "What are you afraid
+      // would happen if you stopped?" — which asks the coachee to
+      // imagine stopping the behavior. That framing breaks for
+      // not-doing behaviors ("I don't listen to her"): "if you stopped
+      // not-listening" is a double negative that pushes the coachee
+      // toward practical concerns instead of felt fear. The stage
+      // prompt (src/lib/itc/prompts/stages/worries.ts) already spells
+      // out the fix: frame the imagination as "did the opposite",
+      // which works for both polarities.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
+      const src = readFileSync(
+        resolve(repoRoot, "src/app/itc/[mapId]/worries-row.tsx"),
+        "utf8",
+      );
+      expect(
+        /placeholder=["'][^"']*if you stopped/i.test(src),
+        "worry placeholder must not use 'if you stopped' (breaks for not-doing behaviors)",
+      ).toBe(false);
+      expect(
+        /placeholder=["'][^"']*did the opposite/i.test(src),
+        "worry placeholder must ask about 'did the opposite' so it works for both polarities",
+      ).toBe(true);
+    },
+    5_000,
   );
 });
 
