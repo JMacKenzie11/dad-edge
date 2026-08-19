@@ -890,6 +890,104 @@ export async function draftAssumptionsFromCommitments(input: {
 }
 
 // -------------------------------------------------------------------------
+// generateImmuneSystemWalkthrough — coach-delivered Column 5 walkthrough
+// -------------------------------------------------------------------------
+
+/**
+ * Kegan/Lahey-voiced three-movement walkthrough of the coachee's own
+ * immunity map. Fires once when the coachee advances into the
+ * immune_system stage (server-orchestrated via
+ * deliverWalkthroughAfterAdvance in actions.ts). The output is
+ * persisted as a stage_note message anchored to itc_maps and rendered
+ * at the top of the Column 5 section — the coachee sees it as one
+ * block of prose that explains his own map back to him.
+ *
+ * Form-First-pure: the coach never emits markers or writes state.
+ * This helper returns prose; the server writes the message + flips
+ * walkthrough_delivered.
+ */
+export async function generateImmuneSystemWalkthrough(input: {
+  goalText: string;
+  /** Selected Column 2 behaviors, in on-map order. */
+  behaviors: string[];
+  /** Column 4 commitments, in on-map order, each with paired worry
+   *  + behavior for the top-down chain. Index in this array is the
+   *  1-based commitment_index that assumptionsWithCoverage references. */
+  commitmentsWithChain: Array<{
+    text: string;
+    worryText: string;
+    behaviorText: string;
+  }>;
+  /** Column 5 assumptions with commitment coverage (1-based indices
+   *  into commitmentsWithChain). Each assumption's Movement-1 loop
+   *  names all its covered commitments + their behaviors. */
+  assumptionsWithCoverage: Array<{
+    text: string;
+    commitmentIndices: number[];
+  }>;
+}): Promise<string | null> {
+  const started = Date.now();
+  try {
+    if (input.assumptionsWithCoverage.length === 0) return null;
+    if (input.commitmentsWithChain.length === 0) return null;
+
+    const behaviorsBlock = input.behaviors
+      .map((t, i) => `  ${i + 1}. ${t}`)
+      .join("\n");
+
+    const commitmentsBlock = input.commitmentsWithChain
+      .map(
+        (c, i) =>
+          `  ${i + 1}. commitment: ${c.text}\n     paired worry: ${c.worryText}\n     paired behavior: ${c.behaviorText}`,
+      )
+      .join("\n");
+
+    const assumptionsBlock = input.assumptionsWithCoverage
+      .map(
+        (a, i) =>
+          `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments: ${a.commitmentIndices.join(", ") || "(none linked)"}`,
+      )
+      .join("\n");
+
+    const { IMMUNE_SYSTEM_STAGE } = await import(
+      "./prompts/stages/immune-system"
+    );
+
+    const { text } = await generateText({
+      model: mainModel(),
+      system: IMMUNE_SYSTEM_STAGE,
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Behaviors (Column 2):`,
+        behaviorsBlock || "  (none)",
+        ``,
+        `Competing commitments (Column 4) with paired worry + behavior:`,
+        commitmentsBlock,
+        ``,
+        `Big Assumptions (Column 5) with commitment coverage:`,
+        assumptionsBlock,
+        ``,
+        `Deliver the three-movement walkthrough now. Return only the walkthrough prose — no meta, no headings, no scaffolding.`,
+      ].join("\n"),
+      maxOutputTokens: 3000,
+    });
+    return scrubReply(text);
+  } catch (err) {
+    console.warn(
+      "[itc coach] generateImmuneSystemWalkthrough failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] walkthrough kind=immune_system ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

@@ -16,13 +16,31 @@ export const STAGE_INTROS: Partial<
   behaviors: ({ goal }) =>
     `Column 2 is what you actually do, or fail to do, in the moment that works against ${
       goal ? `"${goal}"` : "your goal"
-    }. Not why. Not what you should do instead. Just the specific behavior. Aim for 3 to 5 — enough to see the pattern, few enough to work. What's the first one that comes to mind?`,
+    }. Not why. Not what you should do instead. Just the specific behavior.
+
+Aim for 3 to 5 — enough to see the pattern, few enough to work. What's the first one that comes to mind?`,
   worries: () =>
-    `Column 3 is the worry box. For each Column 2 behavior, name the fear underneath. Not a practical concern like "she'd get upset" or "we'd fall behind" — a first-person felt fear about YOU. Imagine yourself doing the opposite of that behavior in a real moment: what would that expose about who you are, or how you'd be seen? Push until it lands on identity — that's the depth.`,
+    `Column 3 is the worry box. For each Column 2 behavior, name the fear underneath.
+
+Not a practical concern like "she'd get upset" or "we'd fall behind" — a first-person felt fear about YOU. Imagine yourself doing the opposite of that behavior in a real moment: what would that expose about who you are, or how you'd be seen?
+
+Push until it lands on identity — that's the depth.`,
   commitments: () =>
-    `Column 4 is what a part of you is SECRETLY committed to — the hidden self-protective vows that keep every worry in Column 3 from coming true. They compete DIRECTLY with your Column 1 goal, which is why "just try harder" hasn't worked. They shouldn't sound noble ("being a good listener"); they should sound self-protective and a little strange to say out loud ("never having to find out my effort didn't matter"). Under each worry the coach has drafted a starting point — review, tap to use, edit, or type your own.`,
+    `Column 4 is what a part of you is SECRETLY committed to — the hidden self-protective vows that keep every worry in Column 3 from coming true.
+
+They compete DIRECTLY with your Column 1 goal, which is why "just try harder" hasn't worked.
+
+They shouldn't sound noble ("being a good listener"); they should sound self-protective and a little strange to say out loud ("never having to find out my effort didn't matter").
+
+Under each worry the coach has drafted a starting point — review, tap to use, edit, or type your own.`,
   assumptions: () =>
-    `Column 5 is the Big Assumptions — the beliefs about how the world works that make every competing commitment in Column 4 feel necessary. They take an "I assume that if I…, then…" shape and land somewhere catastrophic ("I'd be nothing", "I'd lose them", "I'd fall apart"). To you they don't feel like assumptions — they feel like TRUTH. That's exactly why the immune system runs on autopilot. One assumption often underwrites several commitments, so link each one to every commitment it holds up. Naming them is the first move; testing them is what breaks the immunity.`,
+    `Column 5 is the Big Assumptions — the beliefs about how the world works that make every competing commitment in Column 4 feel necessary.
+
+They take an "I assume that if I…, then…" shape and land somewhere catastrophic ("I'd be nothing", "I'd lose them", "I'd fall apart"). To you they don't feel like assumptions — they feel like TRUTH. That's exactly why the immune system runs on autopilot.
+
+One assumption often underwrites several commitments, so link each one to every commitment it holds up.
+
+Naming them is the first move; testing them is what breaks the immunity.`,
   review: () =>
     `Before we test anything, take a beat and look at the whole map. What jumps out? Anything you'd sharpen or reword?`,
   immune_system: () =>

@@ -9,6 +9,7 @@ import {
   draftCommitmentForWorry,
   generateCoachChat,
   generateCoachReaction,
+  generateImmuneSystemWalkthrough,
   generateSuggestions,
   scrubReply,
   type ReactionInput,
@@ -39,6 +40,7 @@ import {
   listTestResults,
   listTests,
   listWorries,
+  markWalkthroughDelivered,
   saveAssumptionDrafts,
   saveImprovementGoal,
   setWorryCommitmentDraft,
@@ -1346,6 +1348,13 @@ export async function advanceToStage(
   if (target === "assumptions") {
     await draftAssumptionsAfterAdvance(loaded.map.id, events);
   }
+  // On entry to the immune-system stage, generate the three-movement
+  // Kegan/Lahey walkthrough of the coachee's own map and persist it
+  // as a stage-note message. Also flips walkthrough_delivered so the
+  // Continue-to-Prioritize gate opens.
+  if (target === "immune_system") {
+    await deliverWalkthroughAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -1465,6 +1474,142 @@ async function draftAssumptionsAfterAdvance(
     },
     { stage: "assumptions" },
   );
+}
+
+/**
+ * On advance to the immune-system stage, generate the three-movement
+ * Kegan/Lahey walkthrough of the coachee's own map, persist it as a
+ * stage-note message, and flip walkthrough_delivered so the
+ * Continue-to-Prioritize gate opens.
+ *
+ * Idempotent: no-op if walkthrough_delivered is already true (a
+ * coachee re-advancing shouldn't re-generate the walkthrough).
+ *
+ * Also exported (via ensureWalkthroughDelivered) for stuck-user
+ * recovery — anyone whose map is already at immune_system without a
+ * delivered walkthrough (because they advanced before this hook
+ * existed) will get the walkthrough on next page load via page.tsx.
+ */
+export async function deliverWalkthroughAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const map = await getMapById(mapId);
+  if (!map) return;
+  if (map.walkthrough_delivered) return;
+  const [behaviors, worries, commitments, assumptions, links] =
+    await Promise.all([
+      listBehaviors(mapId),
+      listWorries(mapId),
+      listCommitments(mapId),
+      listAssumptions(mapId),
+      listAssumptionLinks(mapId),
+    ]);
+  if (commitments.length === 0 || assumptions.length === 0) return;
+
+  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const commitmentsWithChain = commitments.map((c) => {
+    const w = worryById.get(c.worry_id);
+    const b = w ? behaviorById.get(w.behavior_id) : null;
+    return {
+      text: c.text,
+      worryText: w?.text ?? "(missing worry)",
+      behaviorText: b?.text ?? "(missing behavior)",
+    };
+  });
+
+  // Resolve assumption→commitment links to 1-based indices matching
+  // commitmentsWithChain order, so the prompt's "underwrites #N"
+  // pointers line up with the same numbers the coachee sees on the
+  // map panel.
+  const commitmentIndexById = new Map(
+    commitments.map((c, i) => [c.id, i + 1]),
+  );
+  const linksByAssumption = new Map<string, number[]>();
+  for (const l of links) {
+    const idx = commitmentIndexById.get(l.commitment_id);
+    if (idx === undefined) continue;
+    const arr = linksByAssumption.get(l.assumption_id) ?? [];
+    arr.push(idx);
+    linksByAssumption.set(l.assumption_id, arr);
+  }
+  const assumptionsWithCoverage = assumptions.map((a) => ({
+    text: a.text,
+    commitmentIndices: (linksByAssumption.get(a.id) ?? []).slice().sort(
+      (x, y) => x - y,
+    ),
+  }));
+
+  const selectedBehaviorTexts = behaviors
+    .filter((b) => b.selected)
+    .map((b) => b.text);
+
+  const walkthrough = await generateImmuneSystemWalkthrough({
+    goalText: map.improvement_goal ?? "",
+    behaviors: selectedBehaviorTexts,
+    commitmentsWithChain,
+    assumptionsWithCoverage,
+  });
+  if (!walkthrough) {
+    events.record(
+      "error",
+      {
+        where: "deliverWalkthroughAfterAdvance",
+        message: "LLM returned null; walkthrough_delivered stays false",
+      },
+      { stage: "immune_system" },
+    );
+    return;
+  }
+
+  await appendMessage(mapId, "assistant", walkthrough, "immune_system", {
+    surface: "stage_note",
+    entryRefTable: "itc_maps",
+    entryRefId: mapId,
+  });
+  await markWalkthroughDelivered(mapId);
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "immune_system_walkthrough",
+      length: walkthrough.length,
+      assumption_count: assumptions.length,
+      commitment_count: commitments.length,
+    },
+    { stage: "immune_system" },
+  );
+}
+
+/**
+ * Idempotent server action for stuck-user recovery. Called from
+ * page.tsx when the coachee lands on the immune_system stage with
+ * walkthrough_delivered=false (e.g., they advanced before the
+ * walkthrough pipeline existed). Wraps deliverWalkthroughAfterAdvance
+ * with a fresh TurnEventLog so the event lineage is preserved.
+ */
+export async function ensureWalkthroughDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (map.walkthrough_delivered) return { ok: true, delivered: false };
+    if (map.current_stage !== "immune_system") {
+      return { ok: true, delivered: false };
+    }
+    const events = new TurnEventLog(mapId, 0);
+    await deliverWalkthroughAfterAdvance(mapId, events);
+    await events.flush();
+    // Re-check — deliverWalkthroughAfterAdvance may have failed silently.
+    const after = await getMapById(mapId);
+    return { ok: true, delivered: Boolean(after?.walkthrough_delivered) };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
 }
 
 /**

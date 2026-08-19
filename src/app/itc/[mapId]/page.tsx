@@ -14,7 +14,7 @@ import {
   listWorries,
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
-import { getAdvanceGate } from "../actions";
+import { ensureWalkthroughDelivered, getAdvanceGate } from "../actions";
 import { MapCanvas } from "./map-canvas";
 import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
@@ -36,6 +36,17 @@ export default async function ItcMapPage({
   const participant = await requireItcParticipant();
   const map = await getMapForParticipant(mapId, participant.id);
   if (!map) notFound();
+
+  // Stuck-user recovery: anyone whose map is at the immune_system
+  // stage without a delivered walkthrough (because they advanced
+  // before this pipeline existed, or an earlier LLM call failed)
+  // gets the walkthrough delivered synchronously here before render.
+  // Adds one-time 5-15s latency for the recovery case; zero latency
+  // for everyone else because ensureWalkthroughDelivered short-
+  // circuits when the flag is already set.
+  if (map.current_stage === "immune_system" && !map.walkthrough_delivered) {
+    await ensureWalkthroughDelivered(map.id);
+  }
 
   const [
     messages,

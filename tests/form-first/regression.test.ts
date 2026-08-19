@@ -2093,6 +2093,214 @@ describe("Form-First regression", () => {
     },
     5_000,
   );
+
+  it(
+    "regression s: advance to immune_system delivers the three-movement walkthrough and flips walkthrough_delivered",
+    async () => {
+      // Pre-fix bug: clicking Continue at assumptions transitioned the
+      // stage to immune_system but no walkthrough fired and
+      // walkthrough_delivered stayed false forever — Continue-to-
+      // Prioritize sat disabled with "Deliver the walkthrough first."
+      // The old marker-based delivery ("<<mark_walkthrough_delivered>>")
+      // was ripped out under Form-First and never re-plumbed. This
+      // regression locks the new server-orchestrated delivery so it
+      // can't silently regress.
+      const supabase = createSupabaseServiceClient();
+
+      // Advancing to assumptions requires the assumption drafts schema
+      // (migration 20260819000002). Use it as the probe.
+      const probe = await supabase
+        .from("itc_assumption_drafts")
+        .select("id")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression s] skipping: schema missing — apply migrations 20260819000001 + 20260819000002. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      for (const b of bs ?? []) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed worry ${error?.message}`).toBeNull();
+      }
+
+      const advC = new FormData();
+      advC.set("map_id", ctx.mapId);
+      advC.set("to", "commitments");
+      expect((await advanceToStage(advC)).ok).toBe(true);
+
+      const { data: ws } = await supabase
+        .from("itc_worries")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      expect(ws?.length).toBe(3);
+
+      // Seed 3 deep commitments so the depth gate opens.
+      for (const w of ws ?? []) {
+        const { error } = await supabase.from("itc_commitments").insert({
+          map_id: ctx.mapId,
+          worry_id: w.id,
+          text: "I'm committed to never having to see I'm the husband who keeps failing her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed commitment ${error?.message}`).toBeNull();
+      }
+
+      const advA = new FormData();
+      advA.set("map_id", ctx.mapId);
+      advA.set("to", "assumptions");
+      expect((await advanceToStage(advA)).ok).toBe(true);
+
+      // Seed 1 deep assumption + link to all commitments so the
+      // walkthrough has coverage to render.
+      const { data: cs } = await supabase
+        .from("itc_commitments")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      const { data: aRow } = await supabase
+        .from("itc_assumptions")
+        .insert({
+          map_id: ctx.mapId,
+          text:
+            "I assume that if I let her see how many times I've failed her, then she'd finally see I'm not the husband she deserves.",
+          depth_score: 3,
+          attempts: 1,
+          sort_order: 0,
+        })
+        .select("id")
+        .single();
+      expect(aRow?.id).toBeTruthy();
+      for (const c of cs ?? []) {
+        const { error } = await supabase
+          .from("itc_assumption_commitments")
+          .insert({ assumption_id: aRow!.id, commitment_id: c.id });
+        expect(error).toBeNull();
+      }
+
+      // Baseline: walkthrough_delivered should be false before advance.
+      const { data: mapBefore } = await supabase
+        .from("itc_maps")
+        .select("walkthrough_delivered")
+        .eq("id", ctx.mapId)
+        .single();
+      expect(mapBefore?.walkthrough_delivered).toBe(false);
+
+      // Advance to immune_system — this triggers the walkthrough.
+      const advI = new FormData();
+      advI.set("map_id", ctx.mapId);
+      advI.set("to", "immune_system");
+      const advIRes = await advanceToStage(advI);
+      expect(
+        advIRes.ok,
+        `advance to immune_system: ${advIRes.ok ? "" : advIRes.reason}`,
+      ).toBe(true);
+
+      // Flag must be set.
+      const { data: mapAfter } = await supabase
+        .from("itc_maps")
+        .select("walkthrough_delivered")
+        .eq("id", ctx.mapId)
+        .single();
+      expect(
+        mapAfter?.walkthrough_delivered,
+        "walkthrough_delivered must flip to true after advance to immune_system",
+      ).toBe(true);
+
+      // A stage-note message must be persisted on the immune_system
+      // stage, anchored to itc_maps, carrying the walkthrough prose.
+      const { data: notes } = await supabase
+        .from("itc_messages")
+        .select("content, surface, entry_ref_table, entry_ref_id")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "stage_note")
+        .eq("stage_at_creation", "immune_system");
+      expect(
+        (notes?.length ?? 0) >= 1,
+        `at least one immune_system stage_note must exist after advance; got ${notes?.length ?? 0}`,
+      ).toBe(true);
+      const walkthrough = (notes ?? [])
+        .map((n) => n.content as string)
+        .join("\n");
+      // Kegan/Lahey's load-bearing metaphor must appear verbatim
+      // (the prompt requires it word-for-word — coachees remember
+      // this phrase a year later, per the guide).
+      expect(
+        /one foot on the gas/i.test(walkthrough) &&
+          /one foot on the brake/i.test(walkthrough),
+        `walkthrough must contain the "one foot on the gas, one foot on the brake" verbatim: got ${walkthrough}`,
+      ).toBe(true);
+      // Must reference the coachee's actual improvement goal (grounded
+      // in HIS map, not generic ITC theory).
+      expect(
+        walkthrough.includes(goal) ||
+          /being present and calm/i.test(walkthrough),
+        `walkthrough must quote or reference the coachee's improvement goal`,
+      ).toBe(true);
+
+      // Idempotency: re-advancing to immune_system must NOT generate
+      // a second walkthrough.
+      const advI2 = new FormData();
+      advI2.set("map_id", ctx.mapId);
+      advI2.set("to", "immune_system");
+      await advanceToStage(advI2);
+      const { data: notes2 } = await supabase
+        .from("itc_messages")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "stage_note")
+        .eq("stage_at_creation", "immune_system");
+      expect(notes2?.length).toBe(notes?.length);
+    },
+    300_000,
+  );
 });
 
 /**
