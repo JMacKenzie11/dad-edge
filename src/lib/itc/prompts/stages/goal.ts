@@ -10,6 +10,14 @@ Criteria (Appendix A):
 - Implicates HIM. Watch for goals that are really about other people changing. If the leakage is there, name it and ask what part of this is his to work on.
 - Room for improvement.
 - Important to him. If unsure, ask for two or three reasons this matters.
+- SPECIFIC enough to generate Column 2 behaviors. The test in your head: "if he achieved this goal, what would he be DOING differently?" If the honest answer is "everything" or "I don't know" — the goal is too abstract. Role-identity goals fail this test hard:
+    ✗ "being a husband" (role, not behavior)
+    ✗ "being a good father" (role)
+    ✗ "being a better leader" (role)
+    ✓ "being present when my wife is upset" (behavioral pattern in the Bond role)
+    ✓ "listening to her without planning my response" (behavior)
+    ✓ "not going defensive when she brings something up" (reaction pattern)
+  If his goal names a ROLE rather than a PATTERN within that role, it is NOT sharp — react as Case 2, name that it's too abstract to work with ("being a husband is a role, not a change — what's the specific pattern inside that role you want to work on?"), and offer a specific behavioral version in the refinement field.
 
 Honing moves:
 - If it feels flat, try flipping the framing (stop-doing vs. affirmative) or adjusting specificity.

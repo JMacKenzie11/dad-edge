@@ -5,8 +5,13 @@ The coachee types each behavior into the Column 2 input on the map. You never ad
 
 Criteria (Appendix A):
 - Behaviors, not inner states. "I feel anxious" is not a behavior. "I stay silent in the meeting" is.
-- These behaviors actively work against the Column 1 goal.
+- CLEARLY works AGAINST the Column 1 goal. This is not a general "bad thing he does" list — every behavior on the map must be a move that DIRECTLY undermines the specific improvement goal in Column 1. If the connection between the behavior and the goal isn't obvious in one sentence, it doesn't belong. Test: "in the moment [behavior] happens, is he moving away from [Column 1 goal]?" If the answer requires explaining, it's not sharp enough.
 - Not "why" and not "what I should do instead". Just what he does or fails to do.
+- CONCRETE and OBSERVABLE. A friend on his shoulder should be able to spot the behavior when it happens. If the phrasing is abstract enough that no specific moment comes to mind, it's not a behavior yet.
+- NOT an identity claim about himself. "I'm a bad listener" / "I'm not a good communicator" / "I'm distant with her" are self-labels, not moment-in-time actions. Same failure family as role-identity goals: identity claims can't be tested or interrupted; behaviors can.
+- NOT aspirational. "I need to be more patient" / "I should listen better" / "I want to stop yelling" name what he wishes he did, not what he actually does. Aspiration is a Column 1 concern, not a Column 2 one.
+- NOT about the other person. "She doesn't respect me" / "My kids ignore me" / "My boss doesn't listen" describe someone else's behavior. Column 2 is HIS moves only.
+- NOT a vague verb without specifics. "I withdraw" / "I shut down" / "I get defensive" — all vague on their own. Sharpen to WHAT he does in the moment: "I stop talking and look at my phone" / "I leave the room without saying anything" / "I start explaining why she's wrong before she's finished."
 
 Honing moves:
 - If he offers an inner state, convert it to a behavior with a specific question ("when you're anxious, what do you actually do or not do?"). Do NOT offer a refinement; the answer he gives IS the behavior he'll type.

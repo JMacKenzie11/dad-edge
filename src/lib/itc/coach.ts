@@ -362,6 +362,53 @@ function buildReactionPrompt(input: ReactionInput): string {
     parts.push(
       "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
     );
+    if (kind === "goal") {
+      // Explicit specificity guard for goals. Repeated failure mode:
+      // the model approves role-identity goals ("being a husband",
+      // "being a good father") as Case 3 because they're technically
+      // on the right pillar. They fail Kegan/Lahey's specificity bar
+      // — if the goal is a ROLE, not a PATTERN within that role, it
+      // can't generate observable Column 2 behaviors.
+      parts.push(
+        "GOAL-SPECIFIC HARD RULE (do not skip): if the goal names a ROLE rather than a PATTERN within that role, it is CASE 2, not Case 3. Test in your head: 'if he achieved this goal, what would he be DOING differently?' If the honest answer is 'everything' or 'I don't know', the goal is a role and fails the specificity bar.\n" +
+          "  BANNED as Case 3 (must go to Case 2 with a refinement chip):\n" +
+          "    - \"being a husband\" / \"being a good husband\" / \"being a better husband\"\n" +
+          "    - \"being a father\" / \"being a good father\" / \"being a dad\"\n" +
+          "    - \"being a leader\" / \"being a boss\" / \"being a partner\"\n" +
+          "    - any \"being a [role]\" or \"being a good [role]\" phrasing\n" +
+          "    - \"being present\" (too abstract — present when? during what?)\n" +
+          "    - \"being better\" / \"doing better\" (no content)\n" +
+          "  PASSES as Case 3 (specific behavioral patterns within a role):\n" +
+          "    - \"staying present when my wife is upset with me\"\n" +
+          "    - \"listening without planning my response\"\n" +
+          "    - \"not going defensive when she brings something up\"\n" +
+          "    - \"asking my kids what they need instead of telling them what to do\"\n" +
+          "  If the goal is a banned role-identity phrasing, react as CASE 2: name that it's a role not a change (\"'being a husband' is the whole role — what's the specific pattern inside that role you want to work on?\") and put a specific behavioral version in the `refinement` field.",
+      );
+    }
+    if (kind === "behavior") {
+      // Explicit specificity + goal-connection guard for behaviors.
+      // Same failure family as goal: identity claims, aspirational
+      // phrasings, vague verbs, or moves that don't clearly work
+      // against the Column 1 goal all get Case-3 approved when they
+      // shouldn't. Column 2 is specifically the counterproductive
+      // moments that undermine THIS specific goal.
+      parts.push(
+        "BEHAVIOR-SPECIFIC HARD RULES (do not skip):\n" +
+          "  (1) The behavior must CLEARLY work AGAINST the current Column 1 goal. Look at the goal in the map context above. Ask yourself: 'in the moment this behavior happens, is he moving away from that specific goal?' If the connection requires explanation, it's CASE 2 — ask him how this behavior works against his goal, and offer a sharper phrasing (in `refinement`) that makes the connection explicit.\n" +
+          "  (2) BANNED as Case 3 (must go to Case 2 or Case 1):\n" +
+          "    - Identity claims: \"I'm a bad listener\" / \"I'm not good at communicating\" / \"I'm distant with her\" — self-labels, not moment-in-time actions.\n" +
+          "    - Aspirational: \"I need to be more patient\" / \"I should listen better\" / \"I want to stop yelling\" — names what he wishes he did, not what he does. That's a Column 1 goal, not a Column 2 behavior.\n" +
+          "    - About other people: \"She doesn't respect me\" / \"He never listens\" — Column 2 is HIS moves only.\n" +
+          "    - Vague verbs without specifics: \"I withdraw\" / \"I shut down\" / \"I get defensive\" — on their own these are too abstract. Sharpen to a specific observable action (\"I stop talking and look at my phone\" / \"I leave the room without saying anything\" / \"I start explaining why she's wrong before she's finished\").\n" +
+          "  (3) PASSES as Case 3 (specific observable move that undermines the goal):\n" +
+          "    - \"I bring up things she did in the past instead of listening\"\n" +
+          "    - \"I explain why I'm right for ten minutes\"\n" +
+          "    - \"I check my phone during dinner\"\n" +
+          "    - \"I go silent for the rest of the day\"\n" +
+          "  If the behavior fails any of (1)–(3), react as CASE 2 or CASE 1 accordingly — do NOT bare-acknowledge a shallow behavior as sharp.",
+      );
+    }
   }
 
   parts.push(

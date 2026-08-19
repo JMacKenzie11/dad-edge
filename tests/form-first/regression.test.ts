@@ -1440,6 +1440,176 @@ describe("Form-First regression", () => {
     },
     90_000,
   );
+
+  it(
+    "regression l: coach rejects identity/aspirational/vague behaviors (Case 2, not Case 3)",
+    async () => {
+      // Behavior-column parallel to regression k. Column 2 requires
+      // observable moves that CLEARLY work against the Column 1 goal.
+      // These variants should not be Case-3 approved:
+      //   - identity claim: "I'm a bad listener"
+      //   - aspirational:   "I need to be more patient"
+      //   - vague verb:     "I withdraw"
+      // Assert the coach's reaction on each is Case-2-shaped
+      // (refinement chip OR a probing question).
+      const supabase = createSupabaseServiceClient();
+
+      const badBehaviors = [
+        "I'm a bad listener",
+        "I need to be more patient with my wife",
+        "I withdraw",
+      ];
+
+      for (const text of badBehaviors) {
+        const { participantId, mapId } = await seedParticipantAndMap();
+        try {
+          // Seed goal + advance to behaviors.
+          const goal =
+            "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+          const gfd = new FormData();
+          gfd.set("map_id", mapId);
+          gfd.set("text", goal);
+          expect((await saveGoal(gfd)).ok).toBe(true);
+
+          const { advanceToStage } = await import("@/app/itc/actions");
+          const advB = new FormData();
+          advB.set("map_id", mapId);
+          advB.set("to", "behaviors");
+          expect((await advanceToStage(advB)).ok).toBe(true);
+
+          // Save the bad behavior.
+          const bfd = new FormData();
+          bfd.set("map_id", mapId);
+          bfd.set("text", text);
+          const bRes = await addBehavior(bfd);
+          expect(
+            bRes.ok,
+            `addBehavior failed for "${text}": ${bRes.ok ? "" : bRes.reason}`,
+          ).toBe(true);
+
+          // Read the coach reaction on this behavior.
+          const { data: bs } = await supabase
+            .from("itc_behaviors")
+            .select("id")
+            .eq("map_id", mapId);
+          expect(bs?.length).toBe(1);
+          const behaviorId = bs![0].id;
+          const { data: msgs } = await supabase
+            .from("itc_messages")
+            .select("content")
+            .eq("map_id", mapId)
+            .eq("role", "assistant")
+            .eq("surface", "entry_thread")
+            .eq("entry_ref_table", "itc_behaviors")
+            .eq("entry_ref_id", behaviorId);
+          expect(
+            (msgs?.length ?? 0) > 0,
+            `no reaction landed for bad behavior "${text}"`,
+          ).toBe(true);
+          const content = (msgs ?? []).map((m) => m.content as string).join("\n");
+
+          // Case 2 shape: refinement chip OR a question mark in prose.
+          const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+          const match = content.match(fence);
+          let hasRefinement = false;
+          if (match) {
+            try {
+              const chips = JSON.parse(match[1]) as { refinement?: string };
+              hasRefinement = Boolean(
+                chips.refinement && chips.refinement.trim().length > 0,
+              );
+            } catch {
+              hasRefinement = false;
+            }
+          }
+          const hasQuestion = content.includes("?");
+          expect(
+            hasRefinement || hasQuestion,
+            `bad behavior "${text}" must trigger Case 2 (refinement chip) or a probing question; got: ${content}`,
+          ).toBe(true);
+        } finally {
+          await cleanup(participantId);
+        }
+      }
+    },
+    240_000,
+  );
+
+  it(
+    "regression k: coach rejects role-identity goals (Case 2, not Case 3)",
+    async () => {
+      // Prior bug: "I'm committed to getting better at being a husband"
+      // was Case-3 approved by the coach with a bare acknowledgment,
+      // even though the goal fails Kegan/Lahey's specificity bar (role
+      // rather than behavioral pattern). Fix: goal-stage criteria now
+      // enumerate role-identity phrasings as banned Case-3 outcomes.
+      //
+      // Assert: for each of several role-identity goal phrasings, the
+      // coach's reaction on the goal thread carries EITHER a
+      // refinement chip (Case 2) OR a question mark (excavation).
+      // A bare acknowledgment with no chip and no question would
+      // constitute the same false-approval bug.
+      const supabase = createSupabaseServiceClient();
+
+      const roleGoals = [
+        "I'm committed to getting better at being a husband",
+        "I'm committed to getting better at being a good father",
+        "I'm committed to getting better at being a leader",
+      ];
+
+      for (let i = 0; i < roleGoals.length; i++) {
+        // Fresh map per test case so the coach doesn't accumulate
+        // context that skews the reaction.
+        const { participantId, mapId } = await seedParticipantAndMap();
+        try {
+          const fd = new FormData();
+          fd.set("map_id", mapId);
+          fd.set("text", roleGoals[i]);
+          expect((await saveGoal(fd)).ok).toBe(true);
+
+          const { data: msgs } = await supabase
+            .from("itc_messages")
+            .select("content")
+            .eq("map_id", mapId)
+            .eq("role", "assistant")
+            .eq("surface", "entry_thread")
+            .eq("entry_ref_table", "itc_maps")
+            .eq("entry_ref_id", mapId);
+          expect(
+            (msgs?.length ?? 0) > 0,
+            `no reaction landed for role goal: ${roleGoals[i]}`,
+          ).toBe(true);
+          const content = (msgs ?? []).map((m) => m.content as string).join("\n");
+
+          // Parse the fenced chip payload (if any) — refinement chip
+          // means Case 2, which is the correct outcome for a role
+          // goal. Question mark in prose is also acceptable (the coach
+          // pushed back with an excavation question).
+          const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+          const match = content.match(fence);
+          let hasRefinement = false;
+          if (match) {
+            try {
+              const chips = JSON.parse(match[1]) as { refinement?: string };
+              hasRefinement = Boolean(
+                chips.refinement && chips.refinement.trim().length > 0,
+              );
+            } catch {
+              hasRefinement = false;
+            }
+          }
+          const hasQuestion = content.includes("?");
+          expect(
+            hasRefinement || hasQuestion,
+            `role goal "${roleGoals[i]}" must trigger Case 2 (refinement chip) or an excavation question; got: ${content}`,
+          ).toBe(true);
+        } finally {
+          await cleanup(participantId);
+        }
+      }
+    },
+    240_000,
+  );
 });
 
 /**
