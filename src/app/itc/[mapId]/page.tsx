@@ -16,6 +16,7 @@ import {
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   ensurePrioritizeRecommendationDelivered,
+  ensureTestDraftDelivered,
   ensureWalkthroughDelivered,
   getAdvanceGate,
 } from "../actions";
@@ -59,6 +60,12 @@ export default async function ItcMapPage({
   // when a selection already exists.
   if (map.current_stage === "prioritize") {
     await ensurePrioritizeRecommendationDelivered(map.id);
+  }
+  // Same recovery pattern for test_design — if coachee lands there
+  // with a selected assumption but no test draft, deliver the coach's
+  // pre-drafted test before render.
+  if (map.current_stage === "test_design") {
+    await ensureTestDraftDelivered(map.id);
   }
 
   const [

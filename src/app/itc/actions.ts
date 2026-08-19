@@ -7,11 +7,13 @@ import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
+  draftTestForAssumption,
   generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
   generateSuggestions,
   recommendAssumptionToTest,
+  reviewTestDesign,
   scrubReply,
   type ReactionInput,
   type ReactionOutput,
@@ -41,10 +43,13 @@ import {
   listTestResults,
   listTests,
   listWorries,
+  markTestAbandoned,
   markWalkthroughDelivered,
   saveAssumptionDrafts,
   saveImprovementGoal,
+  saveTestDraft,
   setAssumptionSelected,
+  updateTest,
   setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
@@ -1380,6 +1385,14 @@ export async function advanceToStage(
   if (target === "prioritize") {
     await deliverPrioritizeRecommendationAfterAdvance(loaded.map.id, events);
   }
+  // On entry to test_design, pre-draft a Kegan-voice test for the
+  // selected assumption. Coachee sees the draft in the form,
+  // reviews / edits any field, and saves. Idempotent — skip if any
+  // active (non-abandoned) test already exists for the selected
+  // assumption on this map.
+  if (target === "test_design") {
+    await deliverTestDraftAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -1790,6 +1803,314 @@ export async function selectAssumptionForTesting(
       selected_for_testing: true,
     },
     { stage: loaded.map.current_stage },
+  );
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+// -------------------------------------------------------------------------
+// Test design (Checkpoint C-ε.1)
+// -------------------------------------------------------------------------
+
+/**
+ * On advance to test_design, pre-draft a Kegan-voice test for the
+ * assumption the coachee selected for testing. Coachee sees the four
+ * fields pre-populated in the test-design form and edits before
+ * saving. Idempotent — skip if any non-abandoned test already exists
+ * on this map (the coachee may have started designing before and is
+ * now returning).
+ */
+async function deliverTestDraftAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, assumptions, tests, links, commitments, behaviors, worries] =
+    await Promise.all([
+      getMapById(mapId),
+      listAssumptions(mapId),
+      listTests(mapId),
+      listAssumptionLinks(mapId),
+      listCommitments(mapId),
+      listBehaviors(mapId),
+      listWorries(mapId),
+    ]);
+  if (!map) return;
+  const selected = assumptions.find((a) => a.selected_for_testing);
+  if (!selected) return;
+  // Idempotent: skip if a designed/run test already exists on this map.
+  const activeTest = tests.find((t) => t.status !== "abandoned");
+  if (activeTest) return;
+
+  // Build "commitments this assumption underwrites" with their paired
+  // behavior for the LLM's Vol 2 p 271 option-2 reasoning.
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const underwritten = links
+    .filter((l) => l.assumption_id === selected.id)
+    .map((l) => {
+      const commitment = commitmentById.get(l.commitment_id);
+      const worry = commitment ? worryById.get(commitment.worry_id) : null;
+      const behavior = worry ? behaviorById.get(worry.behavior_id) : null;
+      return commitment && behavior
+        ? { text: commitment.text, behaviorText: behavior.text }
+        : null;
+    })
+    .filter((x): x is { text: string; behaviorText: string } => Boolean(x));
+
+  const draft = await draftTestForAssumption({
+    goalText: map.improvement_goal ?? "",
+    assumptionText: selected.text,
+    underwrittenCommitments: underwritten,
+    todayIso: new Date().toISOString().slice(0, 10),
+  });
+  if (!draft) {
+    events.record(
+      "error",
+      {
+        where: "deliverTestDraftAfterAdvance",
+        message: "LLM returned null; coachee will fill the form from scratch",
+      },
+      { stage: "test_design" },
+    );
+    return;
+  }
+
+  const row = await saveTestDraft({
+    mapId,
+    assumptionId: selected.id,
+    testType: draft.testType,
+    assumptionSays: draft.assumptionSays,
+    behaviorChange: draft.behaviorChange,
+    dataToCollect: draft.dataToCollect,
+    inOrderToFindOut: draft.inOrderToFindOut,
+    targetDate: draft.targetDate,
+  });
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "test_draft",
+      test_id: row.id,
+      test_type: draft.testType,
+    },
+    { stage: "test_design" },
+  );
+}
+
+export async function ensureTestDraftDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (map.current_stage !== "test_design") {
+      return { ok: true, delivered: false };
+    }
+    const assumptions = await listAssumptions(mapId);
+    if (!assumptions.some((a) => a.selected_for_testing)) {
+      return { ok: true, delivered: false };
+    }
+    const tests = await listTests(mapId);
+    if (tests.some((t) => t.status !== "abandoned")) {
+      return { ok: true, delivered: false };
+    }
+    const events = new TurnEventLog(mapId, 0);
+    await deliverTestDraftAfterAdvance(mapId, events);
+    await events.flush();
+    const afterTests = await listTests(mapId);
+    return {
+      ok: true,
+      delivered: afterTests.some((t) => t.status !== "abandoned"),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
+}
+
+const saveTestSchema = z.object({
+  map_id: z.string().uuid(),
+  test_id: z.string().uuid().optional(),
+  assumption_id: z.string().uuid(),
+  test_type: z.enum([
+    "data_mining",
+    "observation",
+    "thought_experiment",
+    "behavioral",
+  ]),
+  assumption_says: z.string().min(3).max(1000),
+  behavior_change: z.string().min(3).max(1000),
+  data_to_collect: z.string().min(3).max(1000),
+  in_order_to_find_out: z.string().min(3).max(1000),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/**
+ * Save a test design (create if no test_id, update if test_id given).
+ * After saving, fires the reviewTestDesign LLM helper — the coach's
+ * review lands as an entry_thread message anchored to the test row.
+ *
+ * Gate for advance to test_running only requires the test to exist
+ * (test_design gate case in computeAdvanceGate). The coach's review
+ * is informational — coachee can edit + re-save or ignore and
+ * advance. Kegan-authentic: coach guides, coachee decides.
+ */
+export async function saveTest(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = saveTestSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_id: formData.get("test_id") || undefined,
+    assumption_id: formData.get("assumption_id"),
+    test_type: formData.get("test_type"),
+    assumption_says: formData.get("assumption_says"),
+    behavior_change: formData.get("behavior_change"),
+    data_to_collect: formData.get("data_to_collect"),
+    in_order_to_find_out: formData.get("in_order_to_find_out"),
+    target_date: formData.get("target_date"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid test input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  let row;
+  try {
+    if (parsed.data.test_id) {
+      row = await updateTest({
+        testId: parsed.data.test_id,
+        mapId: loaded.map.id,
+        testType: parsed.data.test_type,
+        assumptionSays: parsed.data.assumption_says,
+        behaviorChange: parsed.data.behavior_change,
+        dataToCollect: parsed.data.data_to_collect,
+        inOrderToFindOut: parsed.data.in_order_to_find_out,
+        targetDate: parsed.data.target_date,
+      });
+    } else {
+      row = await saveTestDraft({
+        mapId: loaded.map.id,
+        assumptionId: parsed.data.assumption_id,
+        testType: parsed.data.test_type,
+        assumptionSays: parsed.data.assumption_says,
+        behaviorChange: parsed.data.behavior_change,
+        dataToCollect: parsed.data.data_to_collect,
+        inOrderToFindOut: parsed.data.in_order_to_find_out,
+        targetDate: parsed.data.target_date,
+      });
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save test.",
+    };
+  }
+
+  // Fire the coach review. Lands as an entry_thread on the test row.
+  const assumptions = await listAssumptions(loaded.map.id);
+  const assumption = assumptions.find((a) => a.id === row.assumption_id);
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    parsed.data.test_id ? "entry_edited" : "entry_added",
+    {
+      kind: "test",
+      entry_id: row.id,
+      test_type: row.test_type,
+    },
+    { stage: loaded.map.current_stage },
+  );
+  try {
+    const review = await reviewTestDesign({
+      goalText: loaded.map.improvement_goal ?? "",
+      assumptionText: assumption?.text ?? "",
+      test: {
+        testType: row.test_type,
+        assumptionSays: row.assumption_says ?? "",
+        behaviorChange: row.behavior_change ?? "",
+        dataToCollect: row.data_to_collect ?? "",
+        inOrderToFindOut: row.in_order_to_find_out ?? "",
+        targetDate: row.target_date ?? "",
+      },
+    });
+    if (review) {
+      await appendMessage(
+        loaded.map.id,
+        "assistant",
+        review.prose,
+        loaded.map.current_stage,
+        {
+          surface: "entry_thread",
+          entryRefTable: "itc_tests",
+          entryRefId: row.id,
+        },
+      );
+      events.record(
+        "coach_reaction_sent",
+        {
+          kind: "test_review",
+          test_id: row.id,
+          verdict: review.verdict,
+        },
+        { stage: loaded.map.current_stage },
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[itc saveTest] review failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+const abandonTestSchema = z.object({
+  map_id: z.string().uuid(),
+  test_id: z.string().uuid(),
+});
+
+/**
+ * Escape hatch (C-ε.7). Called from the "Back to prioritize" affordance
+ * on test_design / test_running when the coachee decides to test a
+ * different assumption than the one they were designing for. Marks
+ * the in-flight test as "abandoned" (history preserved) and reverts
+ * the stage to prioritize.
+ */
+export async function abandonInFlightTest(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = abandonTestSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_id: formData.get("test_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid abandon input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await markTestAbandoned(parsed.data.test_id, loaded.map.id);
+    // Revert stage back to prioritize. canTransitionTo allows
+    // backward moves; advanceStage doesn't fire the recommendation
+    // hook on a backward transition because deliverPrioritize... is
+    // idempotent on existing selection.
+    await advanceStage(loaded.map.id, loaded.map.current_stage, "prioritize");
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not abandon.",
+    };
+  }
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    "entry_edited",
+    {
+      kind: "test",
+      entry_id: parsed.data.test_id,
+      abandoned: true,
+    },
+    { stage: "prioritize" },
   );
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);

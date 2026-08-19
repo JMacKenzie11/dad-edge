@@ -48,7 +48,9 @@ Naming them is the first move; testing them is what breaks the immunity.`,
   prioritize: () =>
     `You've mapped the whole immune system. Now: which Big Assumption do you want to test first? The best one to start on is usually the one that, if it turned out not to hold, would loosen the most of the system.`,
   test_design: () =>
-    `Design a test for the assumption you picked. Four fields: what the assumption says, what you'll do differently, what data you'll collect, what you'll find out.`,
+    `Design a small, safe experiment for the assumption you picked. The point isn't to succeed or fail — it's to gather real information about whether the belief actually holds.
+
+I've drafted a starting version below with all four fields filled in. Read it, change what needs changing, and save when it's the test you actually want to run. When you save, I'll review it against the criteria a good test has to clear.`,
   test_running: () =>
     `Test is designed. Go run it. Come back with what you observed.`,
   results: () =>

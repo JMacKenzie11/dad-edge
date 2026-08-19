@@ -1180,6 +1180,193 @@ export async function recommendAssumptionToTest(input: {
 }
 
 // -------------------------------------------------------------------------
+// draftTestForAssumption + reviewTestDesign — coach test-design helpers
+// -------------------------------------------------------------------------
+
+const TestDraftSchema = z.object({
+  test_type: z.enum([
+    "data_mining",
+    "observation",
+    "thought_experiment",
+    "behavioral",
+  ]),
+  /** Verbatim quote from the assumption's text, sharpened with the
+   *  specific prediction the assumption makes about what happens if
+   *  the counter-move runs. */
+  assumption_says: z.string().min(10).max(400),
+  /** The behavior change — one specific move in one specific moment.
+   *  Modest, actionable within a week, SAFE, and a real move against
+   *  what the assumption dictates. */
+  behavior_change: z.string().min(10).max(400),
+  /** Two kinds: observable data (what would show up on a videotape)
+   *  and experiential data (how the coachee felt). Not interpretive
+   *  data that requires reading anyone's mind. */
+  data_to_collect: z.string().min(10).max(400),
+  /** What the coachee hopes to LEARN. Names a specific disconfirmation
+   *  condition — what observation would tell them the assumption
+   *  doesn't hold. */
+  in_order_to_find_out: z.string().min(10).max(400),
+  /** ISO YYYY-MM-DD, in the future, within about a week. */
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/**
+ * Pre-draft a Kegan-voiced first-pass test for the assumption the
+ * coachee has selected for testing. Fires once on advance to
+ * test_design (idempotent — skip if a test already exists for this
+ * assumption). Coachee sees the draft in the test-design form,
+ * edits any field, and saves — the save action promotes the draft
+ * to a persisted itc_tests row.
+ *
+ * Form-First-pure: coach returns METADATA (four fields + type +
+ * target_date); server-orchestrated persistence.
+ */
+export async function draftTestForAssumption(input: {
+  goalText: string;
+  assumptionText: string;
+  /** Column 4 commitments the selected assumption underwrites, in
+   *  on-map order. Feeds Vol 2 p 271 option 2 (act counter to a
+   *  commitment). */
+  underwrittenCommitments: Array<{ text: string; behaviorText: string }>;
+  /** Today's date (ISO). Used to compute the target_date constraint
+   *  ("within about a week"). Server passes; helper doesn't
+   *  hard-code so tests can override. */
+  todayIso: string;
+}): Promise<{
+  testType: "data_mining" | "observation" | "thought_experiment" | "behavioral";
+  assumptionSays: string;
+  behaviorChange: string;
+  dataToCollect: string;
+  inOrderToFindOut: string;
+  targetDate: string;
+} | null> {
+  const started = Date.now();
+  try {
+    const commitmentsBlock = input.underwrittenCommitments
+      .map(
+        (c, i) =>
+          `  ${i + 1}. commitment: ${c.text}\n     paired behavior: ${c.behaviorText}`,
+      )
+      .join("\n");
+    const { TEST_DESIGN_STAGE } = await import(
+      "./prompts/stages/test-design"
+    );
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: TestDraftSchema,
+      system: TEST_DESIGN_STAGE,
+      prompt: [
+        `MODE: draft (pre-draft a first-pass test for the assumption below).`,
+        ``,
+        `Today's date (ISO): ${input.todayIso}`,
+        `Target date must be in the future, on or within about a week from today.`,
+        ``,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Big Assumption being tested (Column 5): ${input.assumptionText}`,
+        ``,
+        `Competing commitments this assumption underwrites (Column 4):`,
+        commitmentsBlock || "  (none)",
+        ``,
+        `Draft the four-field test now. Return the structured object.`,
+      ].join("\n"),
+      maxOutputTokens: 1200,
+    });
+    return {
+      testType: object.test_type,
+      assumptionSays: scrubReply(object.assumption_says),
+      behaviorChange: scrubReply(object.behavior_change),
+      dataToCollect: scrubReply(object.data_to_collect),
+      inOrderToFindOut: scrubReply(object.in_order_to_find_out),
+      targetDate: object.target_date,
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftTestForAssumption failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=test ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+const TestReviewSchema = z.object({
+  verdict: z.enum(["ready", "needs_work"]),
+  prose: z.string().min(20).max(1200),
+});
+
+/**
+ * Review a coachee-saved test against the SMART criteria + the
+ * "might it re-true?" check. Fires on every save of the test (via
+ * saveTest server action). Returns verdict + prose that renders as
+ * a coach reaction thread on the test row. Coachee edits and re-saves
+ * until verdict === "ready" (which enables the Continue-to-Test-
+ * Running gate). Same excavation-loop shape as worries / commitments /
+ * assumptions in earlier columns.
+ */
+export async function reviewTestDesign(input: {
+  goalText: string;
+  assumptionText: string;
+  test: {
+    testType: string;
+    assumptionSays: string;
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+    targetDate: string;
+  };
+}): Promise<{ verdict: "ready" | "needs_work"; prose: string } | null> {
+  const started = Date.now();
+  try {
+    const { TEST_DESIGN_STAGE } = await import(
+      "./prompts/stages/test-design"
+    );
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: TestReviewSchema,
+      system: TEST_DESIGN_STAGE,
+      prompt: [
+        `MODE: review (score the saved test below against SMART + might-it-re-true).`,
+        ``,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Big Assumption being tested (Column 5): ${input.assumptionText}`,
+        ``,
+        `The coachee's saved test:`,
+        `  test_type: ${input.test.testType}`,
+        `  My Big Assumption Says: ${input.test.assumptionSays}`,
+        `  So I Will (Change my Behavior This Way): ${input.test.behaviorChange}`,
+        `  And Collect the Following Data: ${input.test.dataToCollect}`,
+        `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
+        `  Target date: ${input.test.targetDate}`,
+        ``,
+        `Return verdict + one-paragraph prose review.`,
+      ].join("\n"),
+      maxOutputTokens: 1200,
+    });
+    return {
+      verdict: object.verdict,
+      prose: scrubReply(object.prose),
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach] reviewTestDesign failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] review kind=test ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

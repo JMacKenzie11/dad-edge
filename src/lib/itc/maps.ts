@@ -948,6 +948,61 @@ export async function markTestRun(testId: string): Promise<void> {
   if (error) throw new Error(`markTestRun: ${error.message}`);
 }
 
+/**
+ * Update an existing test's fields. Used by saveTest when the coachee
+ * edits a pre-drafted test in place before saving. Bumps status back
+ * to "designed" so a coachee who re-edits after running (rare edge)
+ * can't skip the fresh coach review.
+ */
+export async function updateTest(input: {
+  testId: string;
+  mapId: string;
+  testType: ItcTestType;
+  assumptionSays: string;
+  behaviorChange: string;
+  dataToCollect: string;
+  inOrderToFindOut: string;
+  targetDate: string;
+}): Promise<ItcTest> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_tests")
+    .update({
+      test_type: input.testType,
+      assumption_says: input.assumptionSays.trim(),
+      behavior_change: input.behaviorChange.trim(),
+      data_to_collect: input.dataToCollect.trim(),
+      in_order_to_find_out: input.inOrderToFindOut.trim(),
+      target_date: input.targetDate,
+      status: "designed",
+    })
+    .eq("id", input.testId)
+    .eq("map_id", input.mapId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`updateTest: ${error?.message ?? "no row"}`);
+  return data as ItcTest;
+}
+
+/**
+ * Mark a test as abandoned. Called by abandonInFlightTest server
+ * action when the coachee decides mid-design to pick a different
+ * assumption. History is preserved (row stays in DB) but the test
+ * is no longer the "active" one for gate + UI purposes.
+ */
+export async function markTestAbandoned(
+  testId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_tests")
+    .update({ status: "abandoned" })
+    .eq("id", testId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`markTestAbandoned: ${error.message}`);
+}
+
 export async function listTestResults(
   mapId: string,
 ): Promise<ItcTestResult[]> {
