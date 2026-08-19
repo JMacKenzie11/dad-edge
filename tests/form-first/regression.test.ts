@@ -1190,6 +1190,85 @@ describe("Form-First regression", () => {
     },
     5_000,
   );
+
+  it(
+    "regression h: entry threads only render on the active section (locked-in columns are quiet)",
+    async () => {
+      // Prior bug: after advancing from Column 1 to Column 2, the
+      // goal's coach thread (jumping-jacks pushback + approval
+      // acknowledgment) still showed in Column 1. Rule: once a stage
+      // is locked in, its thread disappears; the entry text is the
+      // only durable artifact. Applies to every column.
+      //
+      // Structural check: every <EntryThread> render in map-canvas
+      // must be guarded by `map.current_stage === "<kind>"`. If a
+      // future refactor drops the guard, this fires at test time.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const src = readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "..",
+          "..",
+          "src/app/itc/[mapId]/map-canvas.tsx",
+        ),
+        "utf8",
+      );
+
+      // Each of the five kinds must have at least one guarded thread
+      // render — the guard sits on the wrapping conditional the
+      // <EntryThread> lives inside.
+      const guards = [
+        {
+          kind: "goal",
+          re: /map\.current_stage\s*===\s*["']goal["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="goal"/,
+        },
+        {
+          kind: "behavior",
+          re: /map\.current_stage\s*===\s*["']behaviors["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="behavior"/,
+        },
+        {
+          kind: "worry",
+          re: /map\.current_stage\s*===\s*["']worries["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="worry"/,
+        },
+        {
+          kind: "commitment",
+          re: /map\.current_stage\s*===\s*["']commitments["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="commitment"/,
+        },
+        {
+          kind: "assumption",
+          re: /map\.current_stage\s*===\s*["']assumptions["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="assumption"/,
+        },
+      ];
+      for (const g of guards) {
+        expect(
+          g.re.test(src),
+          `${g.kind} <EntryThread> must be guarded by map.current_stage === "${g.kind === "behavior" ? "behaviors" : g.kind === "worry" ? "worries" : g.kind === "commitment" ? "commitments" : g.kind === "assumption" ? "assumptions" : g.kind}" so it hides once the section locks in`,
+        ).toBe(true);
+      }
+
+      // Exactly five thread renders — one per column. If a future
+      // refactor adds an unguarded thread render, either the count
+      // trips or the per-kind guard regex above trips.
+      const threadRenders = [
+        ...src.matchAll(/<EntryThread[\s\S]{0,300}?chipTarget="(\w+)"/g),
+      ];
+      expect(threadRenders.length).toBe(5);
+      const kinds = threadRenders.map((m) => m[1]).sort();
+      expect(kinds).toEqual([
+        "assumption",
+        "behavior",
+        "commitment",
+        "goal",
+        "worry",
+      ]);
+      // Silence unused var lint by touching `here`.
+      void here;
+    },
+    5_000,
+  );
 });
 
 /**

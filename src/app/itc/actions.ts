@@ -49,6 +49,7 @@ import {
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
+import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   GOAL_STEM,
@@ -459,29 +460,6 @@ const saveGoalSchema = z.object({
   map_id: z.string().uuid(),
   text: z.string().min(1).max(500),
 });
-
-/**
- * Detect goal-framing prefixes the user might type INSTEAD of the
- * required `GOAL_STEM`. Prepending the stem to any of these produces
- * a mashup ("I'm committed to getting better at I want to get better
- * at X"). When one of these fires, saveGoal rejects with a clear
- * error asking the user to keep the stem intact.
- */
-function hasCompetingGoalFraming(text: string): boolean {
-  const openers = [
-    /^i\s*(?:'|')?m\s+committed/i, // "I'm committed" (any suffix but the stem)
-    /^i\s+want\s+to\b/i,
-    /^i\s*(?:'|')?d\s+like\s+to\b/i,
-    /^i\s+would\s+like\s+to\b/i,
-    /^my\s+goal\b/i,
-    /^my\s+commitment\b/i,
-    /^i\s+need\s+to\b/i,
-    /^i\s+will\b/i,
-    /^i\s+plan\s+to\b/i,
-    /^help\s+me\b/i,
-  ];
-  return openers.some((re) => re.test(text));
-}
 
 export async function saveGoal(formData: FormData): Promise<ActionResult> {
   const parsed = saveGoalSchema.safeParse({
@@ -1333,23 +1311,6 @@ export async function getAdvanceGate(mapId: string): Promise<AdvanceGate> {
     };
   }
   return computeAdvanceGate(map);
-}
-
-/**
- * Depth-gate rule: a worry (or assumption) passes when the rubric
- * score is 3/3, OR when the score is 2/3 and the coachee has made
- * at least two attempts at this entry. The two-attempts-at-depth-2
- * escape hatch prevents locking a man out when a rubric edge case
- * disagrees with what's obviously a real fear.
- */
-function worryPassesDepth(
-  depthScore: number | null,
-  attempts: number,
-): boolean {
-  if (depthScore === null) return false;
-  if (depthScore >= 3) return true;
-  if (depthScore === 2 && attempts >= 2) return true;
-  return false;
 }
 
 async function computeAdvanceGate(

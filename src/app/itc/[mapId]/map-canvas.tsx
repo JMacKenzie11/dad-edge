@@ -12,6 +12,7 @@ import type {
   ItcTestResult,
   ItcWorry,
 } from "@/lib/itc/maps";
+import { chipTargetForStage, type ChipTarget } from "@/lib/itc/chip-target";
 import type { ItcStage } from "@/lib/itc/stage";
 import { isLegacyCannedIntro, STAGE_INTROS } from "@/lib/itc/stage-intros";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
@@ -169,7 +170,7 @@ export function MapCanvas({
             mapId={map.id}
             goalText={map.improvement_goal}
           />
-          {map.improvement_goal ? (
+          {map.improvement_goal && map.current_stage === "goal" ? (
             <EntryThread
               chipTarget="goal"
               messages={threadFor("itc_maps", map.id).filter(
@@ -202,7 +203,7 @@ export function MapCanvas({
               per-item props. To keep the row component focused, we
               render them here as a follow-up list keyed by behavior
               id. */}
-          {selectedBehaviors.length > 0 ? (
+          {selectedBehaviors.length > 0 && map.current_stage === "behaviors" ? (
             <div className="pl-3 mt-3 space-y-3">
               {selectedBehaviors.map((b, i) => {
                 const thread = threadFor("itc_behaviors", b.id);
@@ -240,7 +241,7 @@ export function MapCanvas({
             worries={worries}
             nowMs={renderedAt}
           />
-          {selectedBehaviors.length > 0 ? (
+          {selectedBehaviors.length > 0 && map.current_stage === "worries" ? (
             <div className="pl-3 mt-3 space-y-3">
               {selectedBehaviors.map((b, i) => {
                 const worry = worriesByBehavior.get(b.id);
@@ -281,7 +282,7 @@ export function MapCanvas({
             commitments={commitments}
             nowMs={renderedAt}
           />
-          {commitments.length > 0 ? (
+          {commitments.length > 0 && map.current_stage === "commitments" ? (
             <div className="pl-3 mt-3 space-y-3">
               {commitments.map((c, i) => {
                 const thread = threadFor("itc_commitments", c.id);
@@ -320,7 +321,7 @@ export function MapCanvas({
             links={assumptionLinks}
             nowMs={renderedAt}
           />
-          {assumptions.length > 0 ? (
+          {assumptions.length > 0 && map.current_stage === "assumptions" ? (
             <div className="pl-3 mt-3 space-y-3">
               {assumptions.map((a, i) => {
                 const thread = threadFor("itc_assumptions", a.id);
@@ -431,35 +432,6 @@ function Section({
       {children}
     </section>
   );
-}
-
-type ChipTarget =
-  | "goal"
-  | "behavior"
-  | "worry"
-  | "commitment"
-  | "assumption";
-
-/**
- * Which input a chip tap should fill, given the active stage.
- * Kept in one place so both stage-note chips and entry-thread chips
- * route consistently.
- */
-export function chipTargetForStage(stage: ItcStage): ChipTarget | undefined {
-  switch (stage) {
-    case "goal":
-      return "goal";
-    case "behaviors":
-      return "behavior";
-    case "worries":
-      return "worry";
-    case "commitments":
-      return "commitment";
-    case "assumptions":
-      return "assumption";
-    default:
-      return undefined;
-  }
 }
 
 function StageNote({

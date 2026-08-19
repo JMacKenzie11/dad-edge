@@ -1,13 +1,7 @@
 "use client";
 
+import type { ChipTarget } from "@/lib/itc/chip-target";
 import type { ItcMessage } from "@/lib/itc/maps";
-
-export type ChipTarget =
-  | "goal"
-  | "behavior"
-  | "worry"
-  | "commitment"
-  | "assumption";
 
 /**
  * Inline coaching thread anchored to a specific map entry. Pure
