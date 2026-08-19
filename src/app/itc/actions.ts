@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
+  draftCommitmentForWorry,
   generateCoachChat,
   generateCoachReaction,
   generateSuggestions,
@@ -36,6 +37,7 @@ import {
   listTests,
   listWorries,
   saveImprovementGoal,
+  setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
   updateBehaviorText,
@@ -1280,9 +1282,75 @@ export async function advanceToStage(
     { from: loaded.map.current_stage, to: target },
     { stage: target },
   );
+
+  // On entry to the commitments stage, generate a coach draft for
+  // each worry that doesn't already have one AND has no commitment
+  // yet. Per ITC methodology, Column 4 derivation is coach work —
+  // the coachee has already done the deep excavation at Column 3.
+  // Drafts are metadata, not map content: they only become real
+  // commitment.text when the user accepts via saveCommitment.
+  if (target === "commitments") {
+    await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
+}
+
+/**
+ * Populate itc_worries.coach_commitment_draft for every worry on the
+ * map that (a) has no commitment yet and (b) has no draft yet. Runs
+ * on advance to the commitments stage. Each draft is one LLM call;
+ * the whole set fires in parallel so the "Continue to Commitments"
+ * click doesn't block on N sequential round-trips.
+ */
+async function draftMissingCommitmentsAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, worries, commitments] = await Promise.all([
+    getMapById(mapId),
+    listWorries(mapId),
+    listCommitments(mapId),
+  ]);
+  if (!map) return;
+  const worriesWithCommitments = new Set(commitments.map((c) => c.worry_id));
+  const behaviorsById = new Map(
+    (await listBehaviors(mapId)).map((b) => [b.id, b]),
+  );
+
+  const needsDraft = worries.filter(
+    (w) => !worriesWithCommitments.has(w.id) && !w.coach_commitment_draft,
+  );
+  if (needsDraft.length === 0) return;
+
+  const drafted = await Promise.all(
+    needsDraft.map(async (w) => {
+      const behavior = behaviorsById.get(w.behavior_id);
+      if (!behavior) return { worryId: w.id, draft: null as string | null };
+      const draft = await draftCommitmentForWorry({
+        goalText: map.improvement_goal ?? "",
+        behaviorText: behavior.text,
+        worryText: w.text,
+      });
+      return { worryId: w.id, draft };
+    }),
+  );
+
+  await Promise.all(
+    drafted
+      .filter((d): d is { worryId: string; draft: string } => Boolean(d.draft))
+      .map((d) => setWorryCommitmentDraft(d.worryId, d.draft)),
+  );
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "commitment_drafts",
+      worry_count: needsDraft.length,
+      drafted_count: drafted.filter((d) => d.draft).length,
+    },
+    { stage: "commitments" },
+  );
 }
 
 /**

@@ -34,6 +34,7 @@ export function AssumptionsRow({
   links,
   nowMs,
   threads,
+  isLocked,
 }: {
   mapId: string;
   assumptions: ItcAssumption[];
@@ -43,12 +44,21 @@ export function AssumptionsRow({
   /** Per-assumption coach reaction threads. Non-empty only on the
    *  assumptions stage. Rendered above each assumption's input. */
   threads: Map<string, ItcMessage[]>;
+  /** True when the coachee hasn't advanced into assumptions yet. */
+  isLocked: boolean;
 }) {
   const linksByAssumption = new Map<string, string[]>();
   for (const l of links) {
     const arr = linksByAssumption.get(l.assumption_id) ?? [];
     arr.push(l.commitment_id);
     linksByAssumption.set(l.assumption_id, arr);
+  }
+  if (isLocked) {
+    return (
+      <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+        Complete commitments first.
+      </p>
+    );
   }
   return (
     <div className="space-y-3">

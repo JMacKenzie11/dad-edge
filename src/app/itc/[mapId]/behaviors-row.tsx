@@ -30,6 +30,7 @@ export function BehaviorsRow({
   behaviors,
   nowMs,
   threads,
+  isLocked,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
@@ -38,9 +39,20 @@ export function BehaviorsRow({
    *  the behaviors stage is currently active. Rendered above
    *  each item's input so read-then-edit stays adjacent. */
   threads: Map<string, ItcMessage[]>;
+  /** True when the coachee hasn't advanced into this column yet.
+   *  Locked columns show a placeholder and hide all edit affordances
+   *  so the user can't jump ahead. */
+  isLocked: boolean;
 }) {
   const selected = behaviors.filter((b) => b.selected);
   const capReached = selected.length >= MAX_BEHAVIORS;
+  if (isLocked) {
+    return (
+      <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+        Complete the goal first.
+      </p>
+    );
+  }
   return (
     <div className="space-y-3">
       {selected.length === 0 ? (

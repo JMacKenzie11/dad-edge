@@ -29,6 +29,7 @@ export function WorriesRow({
   worries,
   nowMs,
   threads,
+  isLocked,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
@@ -37,9 +38,19 @@ export function WorriesRow({
   /** Per-worry coach reaction threads. Non-empty only on the worries
    *  stage. Rendered above each worry's input. */
   threads: Map<string, ItcMessage[]>;
+  /** True when the coachee hasn't advanced into worries yet. */
+  isLocked: boolean;
 }) {
   const selected = behaviors.filter((b) => b.selected);
   const worryByBehaviorId = new Map(worries.map((w) => [w.behavior_id, w]));
+
+  if (isLocked) {
+    return (
+      <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+        Complete behaviors first.
+      </p>
+    );
+  }
 
   if (selected.length === 0) {
     return (

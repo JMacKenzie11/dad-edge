@@ -20,7 +20,7 @@ export const STAGE_INTROS: Partial<
   worries: () =>
     `Column 3 is the worry box. For each Column 2 behavior, name the fear underneath. Not a practical concern like "she'd get upset" or "we'd fall behind" — a first-person felt fear about YOU. Imagine yourself doing the opposite of that behavior in a real moment: what would that expose about who you are, or how you'd be seen? Push until it lands on identity — that's the depth.`,
   commitments: () =>
-    `Column 4 is what you're SECRETLY committed to. Every worry in Column 3 points at a hidden commitment you're keeping.`,
+    `Column 4 is what a part of you is SECRETLY committed to — the hidden self-protective vows that keep every worry in Column 3 from coming true. They compete DIRECTLY with your Column 1 goal, which is why "just try harder" hasn't worked. They shouldn't sound noble ("being a good listener"); they should sound self-protective and a little strange to say out loud ("never having to find out my effort didn't matter"). Under each worry the coach has drafted a starting point — review, tap to use, edit, or type your own.`,
   assumptions: () =>
     `Column 5 is the Big Assumptions underneath the hidden commitments. What do you assume would happen if you broke a competing commitment?`,
   review: () =>

@@ -32,6 +32,7 @@ export function CommitmentsRow({
   commitments,
   nowMs,
   threads,
+  isLocked,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
@@ -41,11 +42,21 @@ export function CommitmentsRow({
   /** Per-commitment coach reaction threads. Non-empty only on the
    *  commitments stage. Rendered above each commitment's input. */
   threads: Map<string, ItcMessage[]>;
+  /** True when the coachee hasn't advanced into commitments yet. */
+  isLocked: boolean;
 }) {
   const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
   const commitmentByWorryId = new Map(
     commitments.map((c) => [c.worry_id, c]),
   );
+
+  if (isLocked) {
+    return (
+      <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+        Complete worries first.
+      </p>
+    );
+  }
 
   if (worries.length === 0) {
     return (
@@ -185,6 +196,27 @@ function CommitmentItem({
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>
         </div>
+        {!commitment && worry.coach_commitment_draft ? (
+          <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
+            <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
+              Coach's draft
+            </div>
+            <div className="text-sm italic text-white/90 leading-relaxed">
+              {worry.coach_commitment_draft}
+            </div>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setDraft(worry.coach_commitment_draft ?? "");
+                setTimeout(() => inputRef.current?.focus(), 50);
+              }}
+              className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            >
+              Use this draft
+            </button>
+          </div>
+        ) : null}
         <textarea
           ref={inputRef}
           value={draft}

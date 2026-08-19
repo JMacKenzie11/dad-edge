@@ -589,6 +589,78 @@ function isQuestionShaped(s: string): boolean {
 }
 
 // -------------------------------------------------------------------------
+// draftCommitmentForWorry — coach-drafted Column 4 starting text
+// -------------------------------------------------------------------------
+
+const CommitmentDraftSchema = z.object({
+  /** "I'm committed to never…" phrasing. Non-noble (would sound
+   *  strange on a productivity blog), first-person, self-protective. */
+  draft: z.string().min(10).max(400),
+});
+
+const DRAFT_COMMITMENT_SYSTEM = `
+You draft ONE non-noble hidden competing commitment for a coachee's ITC map. This is Column 4 — the self-protective vow that keeps the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
+
+Non-noble is the whole game. A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice." Noble commitments ("I'm committed to being a good listener", "being the best husband I can be") fail immediately — they sound like wedding vows. Non-noble commitments name the SELF-PROTECTIVE MOVE explicitly ("I'm committed to never having to find out my effort didn't matter", "I'm committed to never letting her see the parts of me I'd have to disown").
+
+Three criteria (all must hold):
+  1. is_self_protective — the protective flinch is visible. Names what he's keeping himself safe from FEELING or FACING.
+  2. is_first_person — starts with "I'm committed to never…" (or equivalent). Named as his own vow.
+  3. is_not_productivity_platitude — would sound strange on a productivity blog. If it'd fit in a wedding speech, it hasn't landed.
+
+Two-step derivation (do this silently before you write the draft):
+  A. Read the paired worry. Identify the CONFRONTATION — the specific act that would force him to face that fear.
+  B. Draft "I'm committed to never [move that prevents the confrontation]." Make the mechanism specific — the actual protective flinch, not an abstract avoidance.
+
+Return exactly one draft in the \`draft\` field, starting with "I'm committed to never". No prose, no explanation, no meta. One sentence.
+`.trim();
+
+/**
+ * Server-side coach-draft generator for Column 4. Called once per
+ * worry when the coachee advances into the commitments stage.
+ *
+ * Same architectural class as the depth-scoring rubric: LLM computes
+ * a value, the server writes it, the user sees it as a suggestion in
+ * the UI. The draft becomes real commitment.text only when the user
+ * explicitly accepts (tap "Use this draft") or types their own —
+ * never silently.
+ */
+export async function draftCommitmentForWorry(input: {
+  goalText: string;
+  behaviorText: string;
+  worryText: string;
+}): Promise<string | null> {
+  const started = Date.now();
+  try {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: CommitmentDraftSchema,
+      system: DRAFT_COMMITMENT_SYSTEM,
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `Behavior (Column 2): ${input.behaviorText}`,
+        `Paired worry (Column 3): ${input.worryText}`,
+        ``,
+        `Draft the non-noble commitment underneath this worry.`,
+      ].join("\n"),
+      maxOutputTokens: 400,
+    });
+    return scrubReply(object.draft);
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftCommitmentForWorry failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=commitment ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

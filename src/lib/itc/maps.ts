@@ -60,6 +60,11 @@ export type ItcWorry = {
   text: string;
   depth_score: number | null;
   attempts: number;
+  /** Coach-drafted commitment text for this worry — populated by
+   *  the server pipeline on advance to Column 4. Metadata, not map
+   *  content: converts to real commitment.text only when the user
+   *  explicitly accepts (Use this draft) or types their own. */
+  coach_commitment_draft: string | null;
   created_at: string;
 };
 
@@ -444,6 +449,26 @@ export async function updateWorryDepth(
     .update({ depth_score: score })
     .eq("id", worryId);
   if (error) throw new Error(`updateWorryDepth: ${error.message}`);
+}
+
+/**
+ * Store the coach's drafted commitment text on the worry row. Called
+ * by the advance pipeline when moving into the commitments stage —
+ * one draft per worry, run in parallel. The draft is metadata; it
+ * only becomes real commitment.text when the user accepts it via
+ * saveCommitment (either by tapping "Use this draft" in the UI or
+ * by typing their own version on top).
+ */
+export async function setWorryCommitmentDraft(
+  worryId: string,
+  draftText: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_worries")
+    .update({ coach_commitment_draft: draftText.trim() })
+    .eq("id", worryId);
+  if (error) throw new Error(`setWorryCommitmentDraft: ${error.message}`);
 }
 
 export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {

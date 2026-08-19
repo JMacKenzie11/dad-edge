@@ -13,7 +13,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { chipTargetForStage, type ChipTarget } from "@/lib/itc/chip-target";
-import type { ItcStage } from "@/lib/itc/stage";
+import { stageIndex, type ItcStage } from "@/lib/itc/stage";
 import { isLegacyCannedIntro, STAGE_INTROS } from "@/lib/itc/stage-intros";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
@@ -134,6 +134,13 @@ export function MapCanvas({
     return STAGE_INTROS[stage]?.({ goal: map.improvement_goal });
   };
 
+  // A column is LOCKED when the coachee hasn't advanced into it
+  // yet. Past columns stay editable (backward navigation is always
+  // allowed under Form-First), only future columns are inaccessible.
+  const currentIdx = stageIndex(map.current_stage);
+  const isLocked = (rowStage: ItcStage): boolean =>
+    stageIndex(rowStage) > currentIdx;
+
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
 
@@ -238,6 +245,7 @@ export function MapCanvas({
             behaviors={behaviors}
             nowMs={renderedAt}
             threads={behaviorThreads}
+            isLocked={isLocked("behaviors")}
           />
         </Section>
 
@@ -261,6 +269,7 @@ export function MapCanvas({
             worries={worries}
             nowMs={renderedAt}
             threads={worryThreads}
+            isLocked={isLocked("worries")}
           />
         </Section>
 
@@ -285,6 +294,7 @@ export function MapCanvas({
             commitments={commitments}
             nowMs={renderedAt}
             threads={commitmentThreads}
+            isLocked={isLocked("commitments")}
           />
         </Section>
 
@@ -309,6 +319,7 @@ export function MapCanvas({
             links={assumptionLinks}
             nowMs={renderedAt}
             threads={assumptionThreads}
+            isLocked={isLocked("assumptions")}
           />
         </Section>
       </div>
