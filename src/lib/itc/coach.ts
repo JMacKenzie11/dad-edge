@@ -743,7 +743,11 @@ const AssumptionDraftsSchema = z.object({
          *  draft through ensureStem(text, ASSUMPTION_STEM) so a
          *  compliant model can drop the stem and the server still
          *  puts it in canonical form. */
-        text: z.string().min(10).max(400),
+        // Max ~40 words. The prompt targets 15 words (Kegan's average);
+        // 200 chars is a safety-net upper bound to catch runaway
+        // multi-clause chained drafts. Well-formed drafts sit comfortably
+        // under this.
+        text: z.string().min(10).max(200),
         /** 1-based indices into the commitments list passed to the
          *  prompt. At least one — a draft covering nothing is useless. */
         commitment_indices: z.array(z.number().int().min(1)).min(1),
@@ -785,6 +789,22 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
      - If his worry says "I'd lose control", the assumption says "I'd lose control". Do NOT reword to "I'd become someone I don't recognize".
      - If his commitment says "admit she's right", the assumption says "admit she's right". Do NOT add "completely" or any other intensifier he didn't use.
      You are naming HIS belief in HIS words. You are not editorializing a smoother, more literary, or more universal version.
+
+  6. **Ban meta-language self-verdicts in the consequent.** Do NOT write "I'd prove", "I'd confirm", "I'd realize", "I'd finally know", "I'd see that I'm" — these are META descriptions of what would become KNOWN to him as fact, not observable events. They collapse the belief into a self-verdict he can find evidence for internally without ever running a real test. Replace with an observable-in-the-world tell (behavior, reaction, felt state) and let the identity claim ride on top of that tell. Wrong: "then I'd prove I'm the husband who hurts her." Right: "then she'd tell me how many times I've hurt her and I'd have to face I really am that husband." The felt-shame version is fine ("then I'd feel the shame that lands it"), because feeling shame IS an observable event — but "prove", "realize", "confirm" as self-directed verbs are not.
+
+  7. **Ban unfalsifiable global qualifiers.** Do NOT include "no matter what I do", "no matter what", "always", "every time", "in every situation", "for good" in the consequent. These make the belief unfalsifiable by any single interaction — even if the test goes well, the coachee can dismiss it as one exception ("that's just one time, I still X every other time"). The consequent must name something that could turn out NOT to happen in ONE specific real-world interaction. Wrong: "then I'd prove I'm the husband who hurts her no matter what I do." Right: "then she'd tell me I've been hurting her." The right version can be falsified in a single conversation. Note: negation like "never" inside the coachee's OWN nouns (a commitment saying "I'm committed to never letting her see...") is fine — the ban is on universals in the CONSEQUENT that make the outcome unfalsifiable.
+
+  8. **Do NOT re-stem the worry.** The most common drafter failure: taking the paired worry and swapping "worry that" → "assume that" + injecting "then" — producing a draft that IS the worry with a canonical prefix. The worry and the Big Assumption are different objects. The worry is a felt fear ("I worry that if X, Y-catastrophic-chain"). The assumption is the belief UNDERNEATH the worry — the taken-as-truth claim that MAKES the worry feel warranted. Derivation:
+      - Isolate the ONE atomic testable belief inside the worry's chained clauses. If the worry is "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife", the atomic belief is either "I can't handle her anger without losing control" (about the behavior) OR "if I show her the worst of me, she couldn't stay" (about her response). Pick ONE.
+      - Make the antecedent NAME the specific act (not just repeat the worry's if-clause).
+      - Make the consequent ONE observable + ONE identity landing (not the worry's chain).
+     Wrong shape: worry = "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife" → assumption = "I assume that if I stay in the room, then I'd lose it and say something awful, and I'd be the husband who hurts his wife" (verbatim worry with prefix swap).
+     Right shape: assumption = "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back." One clean atomic testable belief distilled from the worry — not the worry re-stemmed.
+
+  9. **Aim for 15 words.** Kegan/Lahey's canonical Big Assumption examples in *Immunity to Change* average ~15 words per draft. That is your target, not a ceiling. Under 15 words is fine; 15–20 is acceptable; 20+ is a strong smell you're carrying extra clauses that should be cut or split into a second draft. 25+ words is nearly always the worry re-stemmed. Precision, not paragraph. When in doubt, cut. Compare:
+     - Too long (28 words): "I assume that if I stay in the room instead of walking out, then I'd lose it and say something awful, and I'd be the husband who hurts his wife."
+     - Right (16 words): "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back."
+     - Also right (14 words): "I assume that if I show her the worst of me, then she'd stop staying."
 
 ## Clustering — shared-root FIRST, split only as fallback
 
