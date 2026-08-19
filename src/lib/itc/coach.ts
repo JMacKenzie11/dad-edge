@@ -404,11 +404,43 @@ export async function generateSuggestions(
   const system = buildSystem(input);
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
-  const prompt =
-    `[system: the coachee asked for suggestions for the ${input.kind} column.` +
-    (input.contextText ? ` context entry: "${input.contextText}".` : "") +
-    (input.extra ? ` ${input.extra}` : "") +
-    ` Draft 3-5 concrete options. EVERY option MUST belong to the ${pillar.label} pillar (${pillar.domain}) — do not offer options from other domains (no fitness suggestions on Bond, no marriage suggestions on Amplify, etc.). Ground each option in his stated goal + prior entries. Each is one sentence, sayable out loud, in his voice.]`;
+
+  // Kind-specific template for what a suggestion chip must look like.
+  // Chips are TAPPABLE ENTRY CANDIDATES — the coachee taps one, it
+  // fills the input, he saves. So each chip must be a COMPLETE ENTRY
+  // ready to drop in as-is. Never a question. Never a meta-prompt.
+  const kindShape: Record<SuggestionsInput["kind"], string> = {
+    goal:
+      `Each suggestion is a COMPLETE improvement goal, starting with "I'm committed to getting better at…". Specific, personal, first-person, one sentence. Example on Bond: "I'm committed to getting better at staying in the room when my wife brings up something hard instead of shutting down."`,
+    behavior:
+      `Each suggestion is a COMPLETE column-2 doing/not-doing — a specific thing the coachee catches himself doing or failing to do in the moment that works against his goal. First-person present, one sentence. Example: "I explain why I'm right for ten minutes instead of asking what she needs."`,
+    worry:
+      `Each suggestion is a COMPLETE column-3 worry — first-person felt fear that lands on identity. Example: "That she'll finally see I've been faking it and stop trusting me."`,
+    commitment:
+      `Each suggestion is a COMPLETE column-4 hidden commitment starting with "I'm committed to never…" — self-protective, not noble. Example: "I'm committed to never letting her see the parts of me I'd have to disown."`,
+    assumption:
+      `Each suggestion is a COMPLETE column-5 Big Assumption in "If I…, then…" form, with the "then" clause carried through to identity or a Big Time Bad. Example: "If I let her see who I really am, then I will have proved I'm not the man I've been telling her I am."`,
+  };
+
+  const prompt = [
+    `[system: the coachee tapped "Give me ideas" for the ${input.kind} column. He wants 3-5 tappable options he can drop into the input as-is.]`,
+    `Rules for the \`suggestions\` field (STRICT):`,
+    `- Every item is a COMPLETE, ready-to-tap ENTRY on the ${pillar.label} pillar (${pillar.domain}). Not a question. Not a meta-prompt. Not "what have you typed" or "tell me more" — those go in \`reply\`, never in \`suggestions\`.`,
+    `- ${kindShape[input.kind]}`,
+    `- No cross-domain options (no fitness on Bond, no work on Vitality, no marriage on Amplify, etc.).`,
+    input.contextText
+      ? `- Ground the options in the paired context: "${input.contextText}".`
+      : `- No prior entry to ground in — draft options from the ${pillar.label} domain and typical patterns Boardroom men work on there.`,
+    input.extra ? `- ${input.extra}` : null,
+    ``,
+    `Rules for the \`reply\` field:`,
+    `- ONE short intro sentence framing the options. Example: "Here are five directions Bond men often work on. Tap one to start with, edit however you want."`,
+    `- Never a question demanding input from him first — he tapped the button precisely because he doesn't know what to write yet.`,
+    `- Never longer than one sentence.`,
+  ]
+    .filter((s): s is string => Boolean(s))
+    .join("\n");
+
   try {
     const { object } = await generateObject({
       model: mainModel(),
@@ -417,9 +449,16 @@ export async function generateSuggestions(
       prompt,
       maxOutputTokens: 1200,
     });
+    // Filter out any accidentally question-shaped suggestions the
+    // model slipped in despite the prompt. Cheap belt-and-suspenders
+    // against the observed failure mode where the chip array became
+    // meta-prompts.
+    const cleaned = object.suggestions
+      .map(scrubReply)
+      .filter((s) => !isQuestionShaped(s));
     return {
       reply: scrubReply(object.reply),
-      suggestions: object.suggestions.map(scrubReply),
+      suggestions: cleaned,
       durationMs: Date.now() - started,
     };
   } catch (err) {
@@ -433,6 +472,28 @@ export async function generateSuggestions(
       durationMs: Date.now() - started,
     };
   }
+}
+
+/**
+ * True when the string reads as a meta-prompt / question rather than
+ * a tappable entry candidate. Guards against the failure mode where
+ * the coach fills the suggestions array with "Share your draft with
+ * me" instead of actual entry text.
+ */
+function isQuestionShaped(s: string): boolean {
+  const trimmed = s.trim();
+  if (trimmed.endsWith("?")) return true;
+  const openers = [
+    /^share\b/i,
+    /^tell me\b/i,
+    /^show me\b/i,
+    /^what\b/i,
+    /^how\b/i,
+    /^which\b/i,
+    /^describe\b/i,
+    /^give me\b/i,
+  ];
+  return openers.some((re) => re.test(trimmed));
 }
 
 // -------------------------------------------------------------------------
