@@ -94,7 +94,7 @@ export default async function ItcMapPage({
         <StageProgress current={map.current_stage} />
       </div>
 
-      <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-6">
+      <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-8 md:py-10">
         <MapCanvas
           map={map}
           behaviors={behaviors}

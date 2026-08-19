@@ -137,13 +137,13 @@ export function MapCanvas({
   const selectedBehaviors = behaviors.filter((b) => b.selected);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
             Immunity Map
           </div>
-          <div className="text-sm">
+          <div className="text-base">
             Pillar:{" "}
             <span
               className="font-semibold"
@@ -155,7 +155,7 @@ export function MapCanvas({
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-4">
         <Section
           title="1. Improvement goal"
           active={map.current_stage === "goal"}
@@ -200,13 +200,13 @@ export function MapCanvas({
               render them here as a follow-up list keyed by behavior
               id. */}
           {selectedBehaviors.length > 0 ? (
-            <div className="pl-3 mt-1 space-y-2">
+            <div className="pl-3 mt-3 space-y-3">
               {selectedBehaviors.map((b, i) => {
                 const thread = threadFor("itc_behaviors", b.id);
                 if (thread.length === 0) return null;
                 return (
                   <div key={b.id}>
-                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
                     <EntryThread messages={thread} />
@@ -237,7 +237,7 @@ export function MapCanvas({
             nowMs={renderedAt}
           />
           {selectedBehaviors.length > 0 ? (
-            <div className="pl-3 mt-1 space-y-2">
+            <div className="pl-3 mt-3 space-y-3">
               {selectedBehaviors.map((b, i) => {
                 const worry = worriesByBehavior.get(b.id);
                 if (!worry) return null;
@@ -245,7 +245,7 @@ export function MapCanvas({
                 if (thread.length === 0) return null;
                 return (
                   <div key={worry.id}>
-                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
                     <EntryThread messages={thread} />
@@ -277,13 +277,13 @@ export function MapCanvas({
             nowMs={renderedAt}
           />
           {commitments.length > 0 ? (
-            <div className="pl-3 mt-1 space-y-2">
+            <div className="pl-3 mt-3 space-y-3">
               {commitments.map((c, i) => {
                 const thread = threadFor("itc_commitments", c.id);
                 if (thread.length === 0) return null;
                 return (
                   <div key={c.id}>
-                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
                     <EntryThread messages={thread} />
@@ -315,13 +315,13 @@ export function MapCanvas({
             nowMs={renderedAt}
           />
           {assumptions.length > 0 ? (
-            <div className="pl-3 mt-1 space-y-2">
+            <div className="pl-3 mt-3 space-y-3">
               {assumptions.map((a, i) => {
                 const thread = threadFor("itc_assumptions", a.id);
                 if (thread.length === 0) return null;
                 return (
                   <div key={a.id}>
-                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
                       Coach on #{i + 1}
                     </div>
                     <EntryThread messages={thread} />
@@ -390,7 +390,7 @@ function Section({
   return (
     <section
       className={
-        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-3 " +
+        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-5 " +
         (active
           ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
           : "border-[color:var(--color-border)]")
@@ -398,7 +398,7 @@ function Section({
     >
       <h3
         className={
-          "text-[11px] uppercase tracking-wide mb-2 " +
+          "text-xs uppercase tracking-widest mb-3 " +
           (active
             ? "text-[color:var(--color-primary)] font-semibold"
             : "text-[color:var(--color-text-muted)]")
@@ -407,12 +407,12 @@ function Section({
         {title}
       </h3>
       {active && liveIntro ? (
-        <div className="mb-3 rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-3 py-2 text-sm whitespace-pre-wrap">
+        <div className="mb-4 rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
           {liveIntro}
         </div>
       ) : null}
       {active && notesToShow.length > 0 ? (
-        <div className="mb-3 space-y-1.5">
+        <div className="mb-4 space-y-2">
           {notesToShow.map((m) => (
             <StageNote key={m.id} content={m.content} />
           ))}
@@ -437,10 +437,10 @@ function StageNote({ content }: { content: string }) {
     }
   }
   return (
-    <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-3 py-2 text-sm whitespace-pre-wrap">
+    <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/70 bg-[color:var(--color-surface-2)]/70 px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
       {prose}
       {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap gap-2">
           {chips.refinement ? <ChipButton value={chips.refinement} /> : null}
           {chips.suggestions?.map((s, i) => (
             <ChipButton key={i} value={s} />
@@ -461,7 +461,7 @@ function ChipButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={handleClick}
-      className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-2.5 py-0.5 text-[11px] text-white hover:bg-[color:var(--color-primary)]/20"
+      className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-3 py-1 text-sm text-white hover:bg-[color:var(--color-primary)]/20"
       title="Use this in the input"
     >
       {value}
@@ -471,7 +471,7 @@ function ChipButton({ value }: { value: string }) {
 
 function Placeholder({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs italic text-[color:var(--color-text-muted)]/70">
+    <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
       {children}
     </p>
   );
@@ -499,9 +499,9 @@ function ContinueBar({
     });
   }
   return (
-    <div className="pt-1">
+    <div className="pt-2">
       {gate.enabled ? (
-        <p className="mb-1 text-[11px] text-[color:var(--color-text-muted)] text-center">
+        <p className="mb-2 text-sm text-[color:var(--color-text-muted)] text-center">
           Ready when you are. Hit {gate.label} to lock this in and move on.
         </p>
       ) : null}
@@ -510,17 +510,17 @@ function ContinueBar({
         onClick={submit}
         disabled={pending || !gate.enabled}
         title={gate.enabled ? undefined : gate.reason ?? "Not ready to advance."}
-        className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+        className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
       >
         {pending ? "…" : gate.label}
       </button>
       {!gate.enabled && gate.reason ? (
-        <p className="mt-1 text-[11px] text-[color:var(--color-text-muted)]/80 text-center">
+        <p className="mt-2 text-sm text-[color:var(--color-text-muted)]/80 text-center">
           {gate.reason}
         </p>
       ) : null}
       {error ? (
-        <p className="mt-1 text-[11px] text-[color:var(--color-danger)] text-center">
+        <p className="mt-2 text-sm text-[color:var(--color-danger)] text-center">
           {error}
         </p>
       ) : null}

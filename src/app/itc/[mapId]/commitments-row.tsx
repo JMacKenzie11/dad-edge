@@ -39,14 +39,14 @@ export function CommitmentsRow({
 
   if (worries.length === 0) {
     return (
-      <p className="text-xs italic text-[color:var(--color-text-muted)]/70">
+      <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
         Add worries first.
       </p>
     );
   }
 
   return (
-    <ul className="space-y-1.5 text-sm">
+    <ul className="space-y-3 text-base">
       {worries.map((w, i) => (
         <CommitmentItem
           key={w.id}
@@ -125,19 +125,19 @@ function CommitmentItem({
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
+        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 " +
         (fresh ? "itc-fresh-row" : "")
       }
     >
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2 text-[color:var(--color-text-muted)]/80">
-          <span className="text-[11px] shrink-0">{index}.</span>
-          <span className="text-[10px] text-[color:var(--color-text-muted)]/60">
+          <span className="text-sm shrink-0">{index}.</span>
+          <span className="text-xs text-[color:var(--color-text-muted)]/70">
             worry:
           </span>
-          <span className="text-xs italic">{worry.text}</span>
+          <span className="text-sm italic">{worry.text}</span>
         </div>
-        <div className="flex items-baseline gap-2 text-[10px] text-[color:var(--color-text-muted)]/60 pl-5">
+        <div className="flex items-baseline gap-2 text-xs text-[color:var(--color-text-muted)]/70 pl-6">
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>
         </div>
@@ -163,7 +163,7 @@ function CommitmentItem({
           disabled={pending}
           placeholder="I'm committed to never…"
           className={
-            "w-full resize-none rounded-md px-2 py-1.5 text-sm transition-colors " +
+            "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
               : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
@@ -171,16 +171,16 @@ function CommitmentItem({
         />
       </div>
       {pending ? (
-        <p className="text-[10px] text-[color:var(--color-text-muted)] pl-5 mt-0.5">
+        <p className="text-xs text-[color:var(--color-text-muted)] pl-6 mt-1">
           Saving…
         </p>
       ) : focused ? (
-        <p className="text-[10px] text-[color:var(--color-text-muted)] pl-5 mt-0.5">
+        <p className="text-xs text-[color:var(--color-text-muted)] pl-6 mt-1">
           Enter to save · Esc to cancel
         </p>
       ) : null}
       {error ? (
-        <p className="text-[11px] text-[color:var(--color-danger)] pl-5 mt-0.5">
+        <p className="text-sm text-[color:var(--color-danger)] pl-6 mt-1">
           {error}
         </p>
       ) : null}

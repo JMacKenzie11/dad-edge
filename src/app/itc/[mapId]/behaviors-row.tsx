@@ -36,13 +36,13 @@ export function BehaviorsRow({
   const selected = behaviors.filter((b) => b.selected);
   const capReached = selected.length >= MAX_BEHAVIORS;
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {selected.length === 0 ? (
-        <p className="text-xs italic text-[color:var(--color-text-muted)]/70">
+        <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
           None yet.
         </p>
       ) : (
-        <ul className="space-y-1.5 text-sm">
+        <ul className="space-y-2 text-base">
           {selected.map((b, i) => (
             <BehaviorItem
               key={b.id}
@@ -55,7 +55,7 @@ export function BehaviorsRow({
         </ul>
       )}
       {capReached ? (
-        <p className="text-[11px] italic text-[color:var(--color-text-muted)]/80 pt-1">
+        <p className="text-sm italic text-[color:var(--color-text-muted)]/80 pt-1">
           5 on the map. Edit or remove one to add another.
         </p>
       ) : (
@@ -111,7 +111,7 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <textarea
         ref={inputRef}
         value={text}
@@ -126,14 +126,14 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
             submit();
           }
         }}
-        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm"
+        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
       />
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
           {pending ? "…" : "Add"}
         </button>
@@ -141,14 +141,14 @@ function AddBehaviorForm({ mapId }: { mapId: string }) {
           type="button"
           onClick={askForIdeas}
           disabled={pending}
-          className="ml-auto rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+          className="ml-auto rounded-md border border-[color:var(--color-border)] px-4 py-2 text-sm text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
           title="Ask the coach for options"
         >
           Give me ideas
         </button>
       </div>
       {error ? (
-        <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p>
+        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
       ) : null}
     </div>
   );
@@ -223,12 +223,12 @@ function BehaviorItem({
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-2 py-1 " +
+        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
         (fresh ? "itc-fresh-row" : "")
       }
     >
-      <div className="flex items-start gap-2">
-        <span className="mt-2 text-[11px] text-[color:var(--color-text-muted)] shrink-0">
+      <div className="flex items-start gap-3">
+        <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.
         </span>
         <textarea
@@ -251,7 +251,7 @@ function BehaviorItem({
           rows={1}
           disabled={pending}
           className={
-            "flex-1 resize-none rounded-md px-2 py-1 text-sm transition-colors " +
+            "flex-1 resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
               : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
@@ -262,22 +262,22 @@ function BehaviorItem({
           onClick={submitRemove}
           disabled={pending}
           title="Remove behavior"
-          className="mt-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+          className="mt-1 shrink-0 rounded px-2 py-1 text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
         >
           Remove
         </button>
       </div>
       {pending ? (
-        <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)]">
+        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Saving…
         </p>
       ) : focused ? (
-        <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)]">
+        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Enter to save · Esc to cancel
         </p>
       ) : null}
       {error ? (
-        <p className="pl-5 text-[11px] text-[color:var(--color-danger)]">
+        <p className="pl-6 text-sm text-[color:var(--color-danger)] mt-1">
           {error}
         </p>
       ) : null}

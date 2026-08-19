@@ -19,7 +19,7 @@ export function EntryThread({
 }) {
   if (messages.length === 0) return null;
   return (
-    <div className="pl-3 pt-1 space-y-1.5">
+    <div className="pl-3 pt-2 space-y-2">
       {messages.map((m) => (
         <ThreadMessage key={m.id} message={m} />
       ))}
@@ -50,19 +50,19 @@ function extractChipPayload(content: string): {
 function ThreadMessage({ message }: { message: ItcMessage }) {
   if (message.role === "user") {
     return (
-      <div className="ml-auto max-w-[90%] rounded-md bg-[color:var(--color-primary)]/20 px-2.5 py-1.5 text-xs">
+      <div className="ml-auto max-w-[90%] rounded-md bg-[color:var(--color-primary)]/20 px-3 py-2 text-sm leading-relaxed">
         {message.content}
       </div>
     );
   }
   const { prose, chips } = extractChipPayload(message.content);
   return (
-    <div className="space-y-1">
-      <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/60 bg-[color:var(--color-surface-2)]/60 px-2.5 py-1.5 text-xs whitespace-pre-wrap">
+    <div className="space-y-2">
+      <div className="rounded-md border-l-2 border-[color:var(--color-primary)]/60 bg-[color:var(--color-surface-2)]/60 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
         {prose}
       </div>
       {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-2">
           {chips.refinement ? (
             <ChipButton
               label={`Use: "${chips.refinement}"`}
@@ -88,7 +88,7 @@ function ChipButton({ label, value }: { label: string; value: string }) {
     <button
       type="button"
       onClick={handleClick}
-      className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-2.5 py-0.5 text-[10px] text-white hover:bg-[color:var(--color-primary)]/20"
+      className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-white hover:bg-[color:var(--color-primary)]/20"
       title="Use this in the input"
     >
       {label}

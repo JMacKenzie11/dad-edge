@@ -96,7 +96,7 @@ export function GoalRow({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <textarea
         ref={inputRef}
         value={draft}
@@ -119,7 +119,7 @@ export function GoalRow({
         disabled={pending}
         placeholder={`${GOAL_STEM} …`}
         className={
-          "w-full resize-none rounded-md px-2.5 py-1.5 text-sm leading-relaxed transition-colors " +
+          "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
           (focused
             ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
             : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
@@ -127,11 +127,11 @@ export function GoalRow({
       />
       <div className="flex flex-wrap items-center gap-2">
         {pending ? (
-          <span className="text-[11px] text-[color:var(--color-text-muted)]">
+          <span className="text-sm text-[color:var(--color-text-muted)]">
             Saving…
           </span>
         ) : focused ? (
-          <span className="text-[11px] text-[color:var(--color-text-muted)]">
+          <span className="text-sm text-[color:var(--color-text-muted)]">
             Enter to save · Esc to cancel
           </span>
         ) : null}
@@ -139,14 +139,14 @@ export function GoalRow({
           type="button"
           onClick={askForIdeas}
           disabled={pending}
-          className="ml-auto rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+          className="ml-auto rounded-md border border-[color:var(--color-border)] px-4 py-2 text-sm text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
           title="Ask the coach for options"
         >
           Give me ideas
         </button>
       </div>
       {error ? (
-        <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
       ) : null}
     </div>
   );

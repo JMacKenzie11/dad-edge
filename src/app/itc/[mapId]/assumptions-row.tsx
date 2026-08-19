@@ -45,13 +45,13 @@ export function AssumptionsRow({
     linksByAssumption.set(l.assumption_id, arr);
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {assumptions.length === 0 ? (
-        <p className="text-xs italic text-[color:var(--color-text-muted)]/70">
+        <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
           None yet.
         </p>
       ) : (
-        <ul className="space-y-1.5 text-sm">
+        <ul className="space-y-3 text-base">
           {assumptions.map((a, i) => (
             <AssumptionItem
               key={a.id}
@@ -66,7 +66,7 @@ export function AssumptionsRow({
         </ul>
       )}
       {commitments.length === 0 ? (
-        <p className="text-[11px] italic text-[color:var(--color-text-muted)]/70 pt-1">
+        <p className="text-sm italic text-[color:var(--color-text-muted)]/70 pt-1">
           Add commitments first.
         </p>
       ) : (
@@ -121,7 +121,7 @@ function AddAssumptionForm({
   }
 
   return (
-    <div className="space-y-1.5 rounded-md border border-dashed border-[color:var(--color-border)] bg-black/10 p-2">
+    <div className="space-y-2 rounded-md border border-dashed border-[color:var(--color-border)] bg-black/10 p-3">
       <textarea
         ref={inputRef}
         value={text}
@@ -136,9 +136,9 @@ function AddAssumptionForm({
             submit();
           }
         }}
-        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1 text-sm"
+        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
       />
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {commitments.map((c, i) => {
           const on = linkedIds.includes(c.id);
           return (
@@ -149,7 +149,7 @@ function AddAssumptionForm({
               disabled={pending}
               title={c.text}
               className={
-                "rounded-full border px-2 py-0.5 text-[10px] " +
+                "rounded-full border px-3 py-1 text-xs " +
                 (on
                   ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/20 text-white"
                   : "border-[color:var(--color-border)] bg-black/20 text-[color:var(--color-text-muted)] hover:text-white")
@@ -165,12 +165,12 @@ function AddAssumptionForm({
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
           {pending ? "…" : "Add"}
         </button>
         {error ? (
-          <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p>
+          <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
         ) : null}
       </div>
     </div>
@@ -274,15 +274,15 @@ function AssumptionItem({
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
+        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 " +
         (fresh ? "itc-fresh-row" : "")
       }
     >
-      <div className="flex items-start gap-2">
-        <span className="mt-2 text-[11px] text-[color:var(--color-text-muted)] shrink-0">
+      <div className="flex items-start gap-3">
+        <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.
         </span>
-        <div className="flex-1 space-y-1.5">
+        <div className="flex-1 space-y-2">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -308,13 +308,13 @@ function AssumptionItem({
             rows={2}
             disabled={pending}
             className={
-              "w-full resize-none rounded-md px-2 py-1 text-sm transition-colors " +
+              "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
               (focused
                 ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
                 : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
             }
           />
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {commitments.map((c, i) => {
               const on = linkDraft.includes(c.id);
               return (
@@ -328,7 +328,7 @@ function AssumptionItem({
                   disabled={pending}
                   title={c.text}
                   className={
-                    "rounded-full border px-2 py-0.5 text-[10px] " +
+                    "rounded-full border px-3 py-1 text-xs " +
                     (on
                       ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/20 text-white"
                       : "border-[color:var(--color-border)] bg-black/20 text-[color:var(--color-text-muted)] hover:text-white")
@@ -345,22 +345,22 @@ function AssumptionItem({
           onClick={submitRemove}
           disabled={pending}
           title="Remove assumption"
-          className="mt-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+          className="mt-1 shrink-0 rounded px-2 py-1 text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
         >
           Remove
         </button>
       </div>
       {pending ? (
-        <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)] mt-0.5">
+        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Saving…
         </p>
       ) : focused ? (
-        <p className="pl-5 text-[10px] text-[color:var(--color-text-muted)] mt-0.5">
+        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Enter to save · Esc to cancel
         </p>
       ) : null}
       {error ? (
-        <p className="pl-5 text-[11px] text-[color:var(--color-danger)] mt-0.5">
+        <p className="pl-6 text-sm text-[color:var(--color-danger)] mt-1">
           {error}
         </p>
       ) : null}

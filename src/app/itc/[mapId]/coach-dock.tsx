@@ -73,20 +73,20 @@ export function CoachDock({
           role="dialog"
           aria-label="Ask the coach"
         >
-          <div className="border-b border-[color:var(--color-border)] px-4 py-2.5">
-            <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
+          <div className="border-b border-[color:var(--color-border)] px-4 py-3">
+            <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
               Ask the coach
             </div>
-            <div className="text-[10px] text-[color:var(--color-text-muted)]/70">
+            <div className="text-xs text-[color:var(--color-text-muted)]/70 mt-0.5">
               Anything you want. Nothing here changes the map.
             </div>
           </div>
           <ol
             ref={listRef}
-            className="flex-1 overflow-y-auto space-y-2 px-3 py-2"
+            className="flex-1 overflow-y-auto space-y-2 px-4 py-3"
           >
             {messages.length === 0 ? (
-              <li className="text-xs italic text-[color:var(--color-text-muted)]/70">
+              <li className="text-sm italic text-[color:var(--color-text-muted)]/70">
                 What's on your mind?
               </li>
             ) : null}
@@ -95,20 +95,20 @@ export function CoachDock({
                 key={m.id}
                 className={
                   m.role === "user"
-                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-1.5 text-sm"
-                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-1.5 text-sm whitespace-pre-wrap"
+                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm leading-relaxed"
+                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap"
                 }
               >
                 {m.content}
               </li>
             ))}
             {pending ? (
-              <li className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)]">
+              <li className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-2 text-sm text-[color:var(--color-text-muted)]">
                 Thinking…
               </li>
             ) : null}
           </ol>
-          <div className="border-t border-[color:var(--color-border)] p-2">
+          <div className="border-t border-[color:var(--color-border)] p-3">
             <textarea
               ref={inputRef}
               value={text}
@@ -127,10 +127,10 @@ export function CoachDock({
                   submit();
                 }
               }}
-              className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-2 py-1.5 text-sm"
+              className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed"
             />
             {error ? (
-              <p className="mt-1 text-[11px] text-[color:var(--color-danger)]">
+              <p className="mt-2 text-sm text-[color:var(--color-danger)]">
                 {error}
               </p>
             ) : null}
