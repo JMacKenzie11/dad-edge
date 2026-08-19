@@ -79,6 +79,7 @@ function WorryItem({
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const savedRef = useRef(initial);
+  const inflightRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -91,6 +92,7 @@ function WorryItem({
 
   function commit() {
     setError(null);
+    if (inflightRef.current) return;
     const text = draft.trim();
     if (text.length < 3) {
       setError("Add a few more words.");
@@ -98,17 +100,20 @@ function WorryItem({
       return;
     }
     if (text === savedRef.current.trim()) return;
+    const priorSaved = savedRef.current;
+    savedRef.current = text; // optimistic — dedupes concurrent commits
+    inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("behavior_id", behavior.id);
     fd.set("text", text);
     startTransition(async () => {
       const res = await saveWorry(fd);
+      inflightRef.current = false;
       if (!res.ok) {
+        savedRef.current = priorSaved; // rollback
         setError(res.reason ?? "Could not save.");
-        setDraft(savedRef.current);
-      } else {
-        savedRef.current = text;
+        setDraft(priorSaved);
       }
     });
   }

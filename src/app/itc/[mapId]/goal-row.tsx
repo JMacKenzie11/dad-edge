@@ -29,6 +29,7 @@ export function GoalRow({
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const savedRef = useRef(initial);
+  const inflightRef = useRef(false);
 
   // Sync state when server-side goal text changes (revalidation) so
   // the input reflects the just-saved value on next render.
@@ -58,6 +59,7 @@ export function GoalRow({
 
   function commit() {
     setError(null);
+    if (inflightRef.current) return;
     const text = draft.trim();
     if (text.length < GOAL_STEM.length + 3) {
       setError("Add a few more words after the stem.");
@@ -66,13 +68,19 @@ export function GoalRow({
     if (text === savedRef.current.trim()) {
       return;
     }
+    const priorSaved = savedRef.current;
+    savedRef.current = text; // optimistic — dedupes concurrent commits
+    inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("text", text);
     startTransition(async () => {
       const res = await saveGoal(fd);
-      if (!res.ok) setError(res.reason ?? "Could not save.");
-      else savedRef.current = text;
+      inflightRef.current = false;
+      if (!res.ok) {
+        savedRef.current = priorSaved; // rollback
+        setError(res.reason ?? "Could not save.");
+      }
     });
   }
 

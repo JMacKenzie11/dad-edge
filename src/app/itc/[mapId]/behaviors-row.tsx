@@ -170,6 +170,7 @@ function BehaviorItem({
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const savedRef = useRef(behavior.text);
+  const inflightRef = useRef(false);
 
   // Sync from server on revalidation.
   useEffect(() => {
@@ -181,6 +182,7 @@ function BehaviorItem({
 
   function commit() {
     setError(null);
+    if (inflightRef.current) return;
     const text = draft.trim();
     if (text.length < 3) {
       setError("Too short.");
@@ -188,17 +190,20 @@ function BehaviorItem({
       return;
     }
     if (text === savedRef.current.trim()) return; // no change
+    const priorSaved = savedRef.current;
+    savedRef.current = text; // optimistic — dedupes concurrent commits
+    inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("behavior_id", behavior.id);
     fd.set("text", text);
     startTransition(async () => {
       const res = await updateBehavior(fd);
+      inflightRef.current = false;
       if (!res.ok) {
+        savedRef.current = priorSaved; // rollback
         setError(res.reason ?? "Could not save.");
-        setDraft(savedRef.current);
-      } else {
-        savedRef.current = text;
+        setDraft(priorSaved);
       }
     });
   }

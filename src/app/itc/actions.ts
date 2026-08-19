@@ -1094,7 +1094,7 @@ async function computeAdvanceGate(
           to,
           label,
           enabled: false,
-          reason: `${missing.length} worr${missing.length === 1 ? "y" : "ies"} still need a commitment.`,
+          reason: `${missing.length} worr${missing.length === 1 ? "y" : "ies"} still ${missing.length === 1 ? "needs" : "need"} a commitment.`,
         };
       }
       return { from, to, label, enabled: true, reason: null };

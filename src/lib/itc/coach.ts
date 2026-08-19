@@ -281,7 +281,7 @@ function buildReactionPrompt(input: ReactionInput): string {
       "SCORE 2 (getting there): The worry is named and personal but still one layer up from identity. One-line acknowledgment of what's landed, then either (a) ONE more excavation question inviting a rewrite, OR (b) offer a specific sharper version in the `refinement` field. If it's clearly one small edit away, use the refinement chip. If it needs another layer of work, ask the question.",
     );
     parts.push(
-      "SCORE 3 (deep): The worry is specific, personal, and identity-level. Acknowledge in one line what makes it work (\"that's felt, it's yours, and it names what's really at stake\"). Stop. No question, no chips.",
+      "SCORE 3 (deep): The worry is at genuine depth. ONE SHORT sentence of plain acknowledgment. Examples: \"Yeah. That's the fear.\" \"That's the one.\" \"Right. That's underneath it.\" Then STOP. Do NOT list criteria (banned: chains like 'that's felt, it's yours, and it names X' — reads like a checklist). Do NOT restate the worry back to him. No question. No 'what else', 'what other', 'what more', 'what shows up'. No reference to other columns (behaviors, commitments, etc.). No invitation to add or edit anything else. He decides what's next; your only output is that short acknowledgment.",
     );
   } else {
     // Non-depth stages (goal, behavior): the classic three-case flow.
