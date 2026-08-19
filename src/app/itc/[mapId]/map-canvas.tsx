@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
+  ItcAssumptionDraft,
   ItcBehavior,
   ItcCommitment,
   ItcMap,
@@ -52,6 +53,7 @@ export function MapCanvas({
   commitments,
   assumptions,
   assumptionLinks,
+  assumptionDrafts,
   tests,
   testResults,
   messages,
@@ -63,6 +65,7 @@ export function MapCanvas({
   commitments: ItcCommitment[];
   assumptions: ItcAssumption[];
   assumptionLinks: ItcAssumptionCommitment[];
+  assumptionDrafts: ItcAssumptionDraft[];
   tests: ItcTest[];
   testResults: ItcTestResult[];
   messages: ItcMessage[];
@@ -317,6 +320,9 @@ export function MapCanvas({
             assumptions={assumptions}
             commitments={commitments}
             links={assumptionLinks}
+            drafts={
+              map.current_stage === "assumptions" ? assumptionDrafts : []
+            }
             nowMs={renderedAt}
             threads={assumptionThreads}
             isLocked={isLocked("assumptions")}

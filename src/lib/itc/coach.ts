@@ -661,6 +661,112 @@ export async function draftCommitmentForWorry(input: {
 }
 
 // -------------------------------------------------------------------------
+// draftAssumptionsFromCommitments — coach-drafted Column 5 starting text
+// -------------------------------------------------------------------------
+
+/**
+ * Cluster-first assumption drafter. Reads all commitments on the map
+ * and proposes N Big Assumptions where each proposal names which
+ * commitments (by 1-based index into the input list) it underwrites.
+ * Many-to-many: one assumption typically covers several commitments.
+ *
+ * The schema uses INDICES (not ids) so the LLM never has to echo an
+ * opaque uuid — the server maps indices → commitment_ids before
+ * persisting via saveAssumptionDrafts.
+ */
+const AssumptionDraftsSchema = z.object({
+  drafts: z
+    .array(
+      z.object({
+        /** "If I…, then…" belief the coachee holds as truth. */
+        text: z.string().min(10).max(400),
+        /** 1-based indices into the commitments list passed to the
+         *  prompt. At least one — a draft covering nothing is useless. */
+        commitment_indices: z.array(z.number().int().min(1)).min(1),
+      }),
+    )
+    .min(1)
+    .max(6),
+});
+
+const DRAFT_ASSUMPTIONS_SYSTEM = `
+You cluster a coachee's competing commitments and draft the Big Assumptions underneath them for an ITC map (Column 5). Big Assumptions are the beliefs about how the world works that make the hidden commitments in Column 4 feel necessary — to the coachee they don't feel like assumptions, they feel like TRUTH. That's why the immune system runs itself.
+
+Every Big Assumption you write MUST:
+  1. Take the shape "If I [break this specific commitment], then [something catastrophic about identity/relationship/worth]." Explicit if/then, not a flat statement.
+  2. Land somewhere catastrophic — identity ("I'd be nothing", "I'd be a fraud"), relational ("I'd lose them", "no one would stay"), or existential ("I'd fall apart", "I'd have nothing left"). Not "it would be awkward" — that's a practical concern, not a Big Assumption.
+  3. Be first-person felt. This is HIS worldview, in his voice — not a coach's diagnosis in third person.
+
+Clustering rules:
+  - One Big Assumption often underwrites SEVERAL commitments. If two commitments share the same catastrophic if/then, group them under one draft — don't repeat.
+  - Aim for FEWER drafts, not more. 2–4 well-clustered assumptions usually cover a whole map. Six is a ceiling, not a target.
+  - Every draft must list at least one commitment_index it underwrites.
+  - Every commitment on the input list should be covered by AT LEAST ONE draft — no orphans. If a commitment doesn't fit an existing cluster, propose a new draft for it.
+
+Two-step derivation (do this silently before you write):
+  A. Read the goal + commitments together. Group commitments by the shared catastrophic belief they'd all be violating.
+  B. For each cluster, write ONE Big Assumption in "If I…, then…" form that names the catastrophe the whole cluster is protecting against.
+
+Return only drafts. No prose, no meta, no explanation. Each draft.text starts with "If I".
+`.trim();
+
+/**
+ * Server-side coach-draft generator for Column 5. Called once per
+ * map when the coachee advances into the assumptions stage. Returns
+ * the drafts in a schema-safe shape; the caller resolves indices to
+ * commitment_ids and persists via saveAssumptionDrafts.
+ */
+export async function draftAssumptionsFromCommitments(input: {
+  goalText: string;
+  commitments: Array<{ text: string; worry_text: string }>;
+}): Promise<Array<{ text: string; commitment_indices: number[] }>> {
+  const started = Date.now();
+  try {
+    if (input.commitments.length === 0) return [];
+    const commitmentBlock = input.commitments
+      .map(
+        (c, i) =>
+          `  ${i + 1}. commitment: ${c.text}\n     paired worry: ${c.worry_text}`,
+      )
+      .join("\n");
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: AssumptionDraftsSchema,
+      system: DRAFT_ASSUMPTIONS_SYSTEM,
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Competing commitments (Column 4) with their paired worries:`,
+        commitmentBlock,
+        ``,
+        `Cluster these commitments and draft the Big Assumptions underneath. Use 1-based indices from the list above in each draft's commitment_indices.`,
+      ].join("\n"),
+      maxOutputTokens: 1200,
+    });
+    // Clamp indices to the input range so a hallucinated index can't
+    // land a link pointing at nothing.
+    const max = input.commitments.length;
+    return object.drafts.map((d) => ({
+      text: scrubReply(d.text),
+      commitment_indices: d.commitment_indices.filter(
+        (n) => n >= 1 && n <= max,
+      ),
+    }));
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftAssumptionsFromCommitments failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return [];
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=assumptions ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

@@ -41,6 +41,23 @@ export type ItcAssumptionCommitment = {
   commitment_id: string;
 };
 
+/**
+ * Coach-drafted Big Assumption offered as a Column 5 suggestion card.
+ * `commitment_ids` lists the commitments this draft would underwrite
+ * (many-to-many — one draft usually covers several commitments). The
+ * draft becomes real map state only when the user taps "Use this
+ * draft" (server writes an itc_assumptions row + copies links + deletes
+ * the draft) or writes their own from scratch. Not a persisted view
+ * of an assumption — assumptions live in itc_assumptions.
+ */
+export type ItcAssumptionDraft = {
+  id: string;
+  map_id: string;
+  text: string;
+  commitment_ids: string[];
+  created_at: string;
+};
+
 export type ItcBehavior = {
   id: string;
   map_id: string;
@@ -708,6 +725,106 @@ export async function listAssumptionLinks(
     .in("assumption_id", ids);
   if (error) throw new Error(`listAssumptionLinks: ${error.message}`);
   return (data ?? []) as ItcAssumptionCommitment[];
+}
+
+/**
+ * List coach-drafted assumptions for a map with their commitment
+ * coverage joined in. Empty array when no drafts exist yet.
+ */
+export async function listAssumptionDrafts(
+  mapId: string,
+): Promise<ItcAssumptionDraft[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data: drafts, error } = await supabase
+    .from("itc_assumption_drafts")
+    .select("id, map_id, text, created_at")
+    .eq("map_id", mapId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listAssumptionDrafts: ${error.message}`);
+  const rows = (drafts ?? []) as Array<{
+    id: string;
+    map_id: string;
+    text: string;
+    created_at: string;
+  }>;
+  if (rows.length === 0) return [];
+  const { data: links, error: lErr } = await supabase
+    .from("itc_assumption_draft_commitments")
+    .select("draft_id, commitment_id")
+    .in(
+      "draft_id",
+      rows.map((r) => r.id),
+    );
+  if (lErr) throw new Error(`listAssumptionDrafts links: ${lErr.message}`);
+  const byDraft = new Map<string, string[]>();
+  for (const l of (links ?? []) as Array<{
+    draft_id: string;
+    commitment_id: string;
+  }>) {
+    const arr = byDraft.get(l.draft_id) ?? [];
+    arr.push(l.commitment_id);
+    byDraft.set(l.draft_id, arr);
+  }
+  return rows.map((r) => ({
+    ...r,
+    commitment_ids: byDraft.get(r.id) ?? [],
+  }));
+}
+
+/**
+ * Persist a batch of coach-drafted assumptions. Called by the
+ * advance-to-assumptions pipeline after the LLM has produced its
+ * cluster proposals. Any draft with zero commitment links is
+ * silently dropped — a draft that underwrites nothing is useless.
+ */
+export async function saveAssumptionDrafts(
+  mapId: string,
+  drafts: Array<{ text: string; commitment_ids: string[] }>,
+): Promise<void> {
+  const clean = drafts
+    .map((d) => ({
+      text: d.text.trim(),
+      commitment_ids: Array.from(new Set(d.commitment_ids)),
+    }))
+    .filter((d) => d.text.length >= 3 && d.commitment_ids.length > 0);
+  if (clean.length === 0) return;
+  const supabase = createSupabaseServiceClient();
+  const { data: inserted, error } = await supabase
+    .from("itc_assumption_drafts")
+    .insert(clean.map((d) => ({ map_id: mapId, text: d.text })))
+    .select("id");
+  if (error || !inserted)
+    throw new Error(`saveAssumptionDrafts insert: ${error?.message ?? "no rows"}`);
+  const linkRows: Array<{ draft_id: string; commitment_id: string }> = [];
+  for (let i = 0; i < clean.length; i++) {
+    const draftId = (inserted[i] as { id: string }).id;
+    for (const cid of clean[i].commitment_ids) {
+      linkRows.push({ draft_id: draftId, commitment_id: cid });
+    }
+  }
+  if (linkRows.length === 0) return;
+  const { error: lErr } = await supabase
+    .from("itc_assumption_draft_commitments")
+    .insert(linkRows);
+  if (lErr) throw new Error(`saveAssumptionDrafts links: ${lErr.message}`);
+}
+
+/**
+ * Delete a single draft (and cascade its commitment links). Called on
+ * Use-this-draft (after promoting to an itc_assumptions row) and on
+ * Dismiss. Idempotent — silently no-ops if the draft is already gone.
+ */
+export async function deleteAssumptionDraft(
+  draftId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumption_drafts")
+    .delete()
+    .eq("id", draftId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`deleteAssumptionDraft: ${error.message}`);
 }
 
 export async function setAssumptionSelected(

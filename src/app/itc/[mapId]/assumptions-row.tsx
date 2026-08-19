@@ -4,10 +4,15 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
+  ItcAssumptionDraft,
   ItcCommitment,
   ItcMessage,
 } from "@/lib/itc/maps";
-import { removeAssumption, saveAssumption } from "../actions";
+import {
+  dismissAssumptionDraft,
+  removeAssumption,
+  saveAssumption,
+} from "../actions";
 import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
@@ -32,6 +37,7 @@ export function AssumptionsRow({
   assumptions,
   commitments,
   links,
+  drafts,
   nowMs,
   threads,
   isLocked,
@@ -40,6 +46,10 @@ export function AssumptionsRow({
   assumptions: ItcAssumption[];
   commitments: ItcCommitment[];
   links: ItcAssumptionCommitment[];
+  /** Coach-drafted Big Assumptions offered as suggestion cards. Empty
+   *  when the section is locked, when drafts have all been used or
+   *  dismissed, or when the LLM produced nothing. */
+  drafts: ItcAssumptionDraft[];
   nowMs: number;
   /** Per-assumption coach reaction threads. Non-empty only on the
    *  assumptions stage. Rendered above each assumption's input. */
@@ -60,11 +70,29 @@ export function AssumptionsRow({
       </p>
     );
   }
+  const commitmentIndexById = new Map(commitments.map((c, i) => [c.id, i + 1]));
   return (
     <div className="space-y-3">
+      {drafts.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
+            Coach's drafts
+          </p>
+          {drafts.map((d) => (
+            <DraftCard
+              key={d.id}
+              mapId={mapId}
+              draft={d}
+              commitmentIndexById={commitmentIndexById}
+            />
+          ))}
+        </div>
+      ) : null}
       {assumptions.length === 0 ? (
         <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
-          None yet.
+          {drafts.length > 0
+            ? "Review the drafts above, or write your own below."
+            : "None yet."}
         </p>
       ) : (
         <ul className="space-y-3 text-base">
@@ -213,6 +241,106 @@ function AddAssumptionForm({
           <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A single coach-drafted Big Assumption. Two buttons: "Use this draft"
+ * promotes it to a real itc_assumptions row (with the same commitment
+ * links the coach proposed) and dismisses the draft; "Dismiss" just
+ * deletes it. The card disappears via revalidation after either.
+ */
+function DraftCard({
+  mapId,
+  draft,
+  commitmentIndexById,
+}: {
+  mapId: string;
+  draft: ItcAssumptionDraft;
+  commitmentIndexById: Map<string, number>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function useDraft() {
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("map_id", mapId);
+      fd.set("text", draft.text);
+      for (const cid of draft.commitment_ids) fd.append("commitment_ids", cid);
+      const res = await saveAssumption(fd);
+      if (!res.ok) {
+        setError(res.reason ?? "Could not use draft.");
+        return;
+      }
+      const dfd = new FormData();
+      dfd.set("map_id", mapId);
+      dfd.set("draft_id", draft.id);
+      // Best-effort — even if this fails, the draft will be filtered
+      // out on next render once the user reviews the promoted row.
+      await dismissAssumptionDraft(dfd);
+    });
+  }
+
+  function dismiss() {
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("map_id", mapId);
+      fd.set("draft_id", draft.id);
+      const res = await dismissAssumptionDraft(fd);
+      if (!res.ok) setError(res.reason ?? "Could not dismiss.");
+    });
+  }
+
+  const coverageLabels = draft.commitment_ids
+    .map((cid) => commitmentIndexById.get(cid))
+    .filter((n): n is number => typeof n === "number")
+    .sort((a, b) => a - b);
+
+  return (
+    <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-4 py-3 space-y-2">
+      <div className="text-sm italic text-white/90 leading-relaxed">
+        {draft.text}
+      </div>
+      {coverageLabels.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 text-xs text-[color:var(--color-text-muted)]">
+          <span className="uppercase tracking-widest opacity-70">
+            underwrites
+          </span>
+          {coverageLabels.map((n) => (
+            <span
+              key={n}
+              className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 px-2 py-0.5 text-white"
+            >
+              #{n}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={useDraft}
+          className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+        >
+          {pending ? "…" : "Use this draft"}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={dismiss}
+          className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+        >
+          Dismiss
+        </button>
+      </div>
+      {error ? (
+        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
+      ) : null}
     </div>
   );
 }

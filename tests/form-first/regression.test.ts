@@ -1837,6 +1837,208 @@ describe("Form-First regression", () => {
     },
     5_000,
   );
+
+  it(
+    "regression p: advance to assumptions populates clustered coach drafts covering every commitment",
+    async () => {
+      // On advance into the assumptions stage, the server pipeline
+      // reads the map's commitments, calls the coach to cluster them,
+      // and persists 2–6 coach-drafted Big Assumptions in itc_assumption_drafts
+      // (with commitment coverage links in itc_assumption_draft_commitments).
+      // Assertion: every commitment gets covered by at least one draft;
+      // every draft has "If I…, then…" shape; the LLM clustered (fewer
+      // drafts than commitments in the typical case).
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probe — itc_assumption_drafts table added in migration
+      // 20260819000002. Skip cleanly if not applied.
+      const probe = await supabase
+        .from("itc_assumption_drafts")
+        .select("id")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression p] skipping: schema missing — apply migration 20260819000002. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      for (const b of bs ?? []) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed worry ${error?.message}`).toBeNull();
+      }
+
+      const advC = new FormData();
+      advC.set("map_id", ctx.mapId);
+      advC.set("to", "commitments");
+      expect((await advanceToStage(advC)).ok).toBe(true);
+
+      const { data: ws } = await supabase
+        .from("itc_worries")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      expect(ws?.length).toBe(3);
+
+      // Seed three deep commitments pre-scored so the gate opens.
+      const seededCommitmentTexts = [
+        "I'm committed to never letting her see the parts of me I'd have to disown.",
+        "I'm committed to never having to admit I was the one who got it wrong.",
+        "I'm committed to never sitting in the discomfort of her being upset with me.",
+      ];
+      for (let i = 0; i < (ws?.length ?? 0); i++) {
+        const { error } = await supabase.from("itc_commitments").insert({
+          map_id: ctx.mapId,
+          worry_id: ws![i].id,
+          text: seededCommitmentTexts[i],
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed commitment ${error?.message}`).toBeNull();
+      }
+
+      // Advance to assumptions — this triggers the draft pipeline.
+      const advA = new FormData();
+      advA.set("map_id", ctx.mapId);
+      advA.set("to", "assumptions");
+      const advARes = await advanceToStage(advA);
+      expect(
+        advARes.ok,
+        `advance to assumptions: ${advARes.ok ? "" : advARes.reason}`,
+      ).toBe(true);
+
+      // Drafts must exist.
+      const { data: drafts } = await supabase
+        .from("itc_assumption_drafts")
+        .select("id, text")
+        .eq("map_id", ctx.mapId);
+      expect(
+        (drafts?.length ?? 0) >= 1,
+        `at least one coach draft must be persisted after advance to assumptions; got ${drafts?.length ?? 0}`,
+      ).toBe(true);
+      expect(
+        (drafts?.length ?? 0) <= 6,
+        `coach must not spam drafts (max 6 per schema); got ${drafts?.length}`,
+      ).toBe(true);
+
+      // Every draft must be "If I…, then…" shaped and start with "If I".
+      for (const d of drafts ?? []) {
+        expect(
+          /^if\s+i\b/i.test((d.text as string).trim()),
+          `draft must start with "If I": "${d.text}"`,
+        ).toBe(true);
+        expect(
+          /\bthen\b/i.test(d.text as string),
+          `draft must contain "then" (if/then shape): "${d.text}"`,
+        ).toBe(true);
+      }
+
+      // Every commitment must be underwritten by at least one draft
+      // (no orphans — the whole map has coverage).
+      const { data: cs } = await supabase
+        .from("itc_commitments")
+        .select("id")
+        .eq("map_id", ctx.mapId);
+      const draftIds = (drafts ?? []).map((d) => d.id as string);
+      const { data: links } = await supabase
+        .from("itc_assumption_draft_commitments")
+        .select("draft_id, commitment_id")
+        .in("draft_id", draftIds);
+      const coveredCommitmentIds = new Set(
+        (links ?? []).map((l) => l.commitment_id as string),
+      );
+      for (const c of cs ?? []) {
+        expect(
+          coveredCommitmentIds.has(c.id as string),
+          `commitment ${c.id} must be covered by at least one coach draft`,
+        ).toBe(true);
+      }
+
+      // Idempotency: advancing again (a hypothetical resume) must not
+      // duplicate drafts. Re-fire and confirm the count is unchanged.
+      const advA2 = new FormData();
+      advA2.set("map_id", ctx.mapId);
+      advA2.set("to", "assumptions");
+      await advanceToStage(advA2);
+      const { data: drafts2 } = await supabase
+        .from("itc_assumption_drafts")
+        .select("id")
+        .eq("map_id", ctx.mapId);
+      expect(drafts2?.length).toBe(drafts?.length);
+    },
+    240_000,
+  );
+
+  it(
+    "regression q: Continue-to-immune-system button reads 'Show Me What's Going On'",
+    async () => {
+      // The assumptions → immune_system transition is the reveal
+      // moment — the "gas + brake" walkthrough where the coach shows
+      // how the columns interlock. A generic "Continue to Immune
+      // System" label undersells that beat. This is a small UX
+      // affordance the user asked for; lock it in structurally so a
+      // future refactor of computeAdvanceGate can't quietly regress
+      // the copy.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
+      const src = readFileSync(
+        resolve(repoRoot, "src/app/itc/actions.ts"),
+        "utf8",
+      );
+      // Must special-case immune_system with the reveal-moment label.
+      expect(
+        /to\s*===\s*["']immune_system["'][\s\S]{0,120}?Show Me What's Going On/i
+          .test(src),
+        "actions.ts must set label to \"Show Me What's Going On\" when to === \"immune_system\"",
+      ).toBe(true);
+    },
+    5_000,
+  );
 });
 
 /**

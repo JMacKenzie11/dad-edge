@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
+  draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   generateCoachChat,
   generateCoachReaction,
@@ -21,12 +22,14 @@ import {
   clearAssumptionLinks,
   createMap,
   deleteAssumption,
+  deleteAssumptionDraft,
   deleteBehavior,
   deleteMap,
   getActiveTest,
   getMapById,
   getMapForParticipant,
   linkAssumptionToCommitments,
+  listAssumptionDrafts,
   listAssumptionLinks,
   listAssumptions,
   listBehaviors,
@@ -36,6 +39,7 @@ import {
   listTestResults,
   listTests,
   listWorries,
+  saveAssumptionDrafts,
   saveImprovementGoal,
   setWorryCommitmentDraft,
   updateAssumptionDepth,
@@ -1145,6 +1149,40 @@ export async function removeAssumption(
   return { ok: true };
 }
 
+const assumptionDraftDismissSchema = z.object({
+  map_id: z.string().uuid(),
+  draft_id: z.string().uuid(),
+});
+
+/**
+ * Delete a coach-drafted Big Assumption without promoting it. Called
+ * on the Column 5 "Dismiss" button and also after a successful
+ * saveAssumption promotion (client fires save, then this) so the
+ * draft card disappears once the assumption is real map state.
+ * Idempotent — a missing draft is not an error.
+ */
+export async function dismissAssumptionDraft(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = assumptionDraftDismissSchema.safeParse({
+    map_id: formData.get("map_id"),
+    draft_id: formData.get("draft_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid dismiss input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await deleteAssumptionDraft(parsed.data.draft_id, loaded.map.id);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not dismiss draft.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
 // -------------------------------------------------------------------------
 // Suggestions ("Give me ideas" button)
 // -------------------------------------------------------------------------
@@ -1292,6 +1330,13 @@ export async function advanceToStage(
   if (target === "commitments") {
     await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
   }
+  // On entry to the assumptions stage, cluster the commitments and
+  // draft a small set of Big Assumptions with commitment coverage.
+  // Same architectural class as commitment drafts: metadata only,
+  // becomes map state via saveAssumption when the user acts.
+  if (target === "assumptions") {
+    await draftAssumptionsAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -1354,6 +1399,66 @@ async function draftMissingCommitmentsAfterAdvance(
 }
 
 /**
+ * On advance to assumptions, cluster the map's commitments and
+ * persist a small set of coach-drafted Big Assumptions. Skips
+ * cleanly if drafts already exist (idempotent — user coming back to
+ * a resumed map shouldn't see the drafts multiply). Runs one LLM
+ * call for the whole map (not per commitment) since clustering is
+ * the whole point.
+ */
+async function draftAssumptionsAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, commitments, worries, existingDrafts, existingAssumptions] =
+    await Promise.all([
+      getMapById(mapId),
+      listCommitments(mapId),
+      listWorries(mapId),
+      listAssumptionDrafts(mapId),
+      listAssumptions(mapId),
+    ]);
+  if (!map) return;
+  if (commitments.length === 0) return;
+  // Don't re-draft if the user already has drafts pending review OR
+  // has authored any of their own assumptions.
+  if (existingDrafts.length > 0 || existingAssumptions.length > 0) return;
+
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const orderedCommitments = commitments.map((c) => ({
+    id: c.id,
+    text: c.text,
+    worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
+  }));
+  const drafts = await draftAssumptionsFromCommitments({
+    goalText: map.improvement_goal ?? "",
+    commitments: orderedCommitments.map((c) => ({
+      text: c.text,
+      worry_text: c.worry_text,
+    })),
+  });
+  if (drafts.length === 0) return;
+  const toPersist = drafts.map((d) => ({
+    text: d.text,
+    // Resolve 1-based indices → commitment_ids using the same
+    // ordered list the prompt saw.
+    commitment_ids: d.commitment_indices
+      .map((n) => orderedCommitments[n - 1]?.id)
+      .filter((v): v is string => Boolean(v)),
+  }));
+  await saveAssumptionDrafts(mapId, toPersist);
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "assumption_drafts",
+      commitment_count: commitments.length,
+      drafted_count: toPersist.length,
+    },
+    { stage: "assumptions" },
+  );
+}
+
+/**
  * Which stage the Continue button targets, whether it's tappable,
  * and (if not) the reason. Server-side single source of truth.
  * Called on every render of the conversation.
@@ -1407,7 +1512,13 @@ async function computeAdvanceGate(
     from === "assumptions"
       ? "immune_system"
       : (ITC_STAGES[ITC_STAGES.indexOf(from) + 1] as ItcStage);
-  const label = `Continue to ${STAGE_LABELS[to]}`;
+  // The assumptions → immune_system transition is the reveal moment
+  // (Kegan's "gas + brake" walkthrough). The button label makes what
+  // happens next feel like a payoff, not another chore.
+  const label =
+    to === "immune_system"
+      ? "Show Me What's Going On"
+      : `Continue to ${STAGE_LABELS[to]}`;
 
   switch (from) {
     case "goal": {

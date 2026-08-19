@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapForParticipant,
+  listAssumptionDrafts,
   listAssumptionLinks,
   listAssumptions,
   listBehaviors,
@@ -43,6 +44,7 @@ export default async function ItcMapPage({
     commitments,
     assumptions,
     assumptionLinks,
+    assumptionDrafts,
     tests,
     testResults,
     advanceGate,
@@ -53,6 +55,7 @@ export default async function ItcMapPage({
     listCommitments(map.id),
     listAssumptions(map.id),
     listAssumptionLinks(map.id),
+    listAssumptionDrafts(map.id),
     listTests(map.id),
     listTestResults(map.id),
     getAdvanceGate(map.id),
@@ -102,6 +105,7 @@ export default async function ItcMapPage({
           commitments={commitments}
           assumptions={assumptions}
           assumptionLinks={assumptionLinks}
+          assumptionDrafts={assumptionDrafts}
           tests={tests}
           testResults={testResults}
           messages={messages}
