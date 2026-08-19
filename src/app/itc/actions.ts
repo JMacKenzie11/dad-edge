@@ -13,15 +13,19 @@ import {
   type ReactionOutput,
 } from "@/lib/itc/coach";
 import {
+  addAssumption,
   addBehavior as insertBehaviorRow,
   advanceStage,
   appendMessage,
+  clearAssumptionLinks,
   createMap,
+  deleteAssumption,
   deleteBehavior,
   deleteMap,
   getActiveTest,
   getMapById,
   getMapForParticipant,
+  linkAssumptionToCommitments,
   listAssumptionLinks,
   listAssumptions,
   listBehaviors,
@@ -32,13 +36,19 @@ import {
   listTests,
   listWorries,
   saveImprovementGoal,
+  updateAssumptionDepth,
+  updateAssumptionText,
   updateBehaviorText,
   updateCommitmentDepth,
   updateWorryDepth,
   upsertCommitmentForWorry,
   upsertWorryForBehavior,
 } from "@/lib/itc/maps";
-import { scoreCommitmentDepth, scoreWorryDepth } from "@/lib/itc/rubric";
+import {
+  scoreAssumptionDepth,
+  scoreCommitmentDepth,
+  scoreWorryDepth,
+} from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   GOAL_STEM,
@@ -914,6 +924,214 @@ export async function saveCommitment(
 }
 
 // -------------------------------------------------------------------------
+// Assumptions (Column 5) — depth-stage excavation loop
+// -------------------------------------------------------------------------
+
+const assumptionSaveSchema = z.object({
+  map_id: z.string().uuid(),
+  assumption_id: z.string().uuid().optional(),
+  text: z.string().min(3).max(400),
+  commitment_ids: z.array(z.string().uuid()).default([]),
+});
+
+/**
+ * Save-or-edit a Big Assumption. Different from worries/commitments
+ * in one key way: pairing is many-to-many via itc_assumption_commitments.
+ * A single assumption can underwrite multiple commitments (Kegan/Lahey:
+ * several fears often share one root belief).
+ *
+ * Pipeline:
+ *   1. upsert the assumption row (new or edit; attempts++ on edit)
+ *   2. replace the assumption's commitment links with the payload set
+ *   3. run scoreAssumptionDepth (server rubric) and persist the score
+ *   4. fire coach reaction (kind=assumption); pairedText carries the
+ *      linked commitment(s) so the coach can excavate against them
+ */
+export async function saveAssumption(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = assumptionSaveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    assumption_id: formData.get("assumption_id") || undefined,
+    text: formData.get("text"),
+    commitment_ids: formData.getAll("commitment_ids").filter(
+      (v): v is string => typeof v === "string" && v.length > 0,
+    ),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid assumption input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  // Every commitment_id must exist on this map.
+  const allCommitments = await listCommitments(loaded.map.id);
+  const commitmentsById = new Map(allCommitments.map((c) => [c.id, c]));
+  for (const cid of parsed.data.commitment_ids) {
+    if (!commitmentsById.has(cid)) {
+      return { ok: false, reason: "One of those commitments isn't on the map." };
+    }
+  }
+
+  let row: Awaited<ReturnType<typeof addAssumption>>["row"];
+  let isEdit: boolean;
+  try {
+    if (parsed.data.assumption_id) {
+      row = await updateAssumptionText(
+        parsed.data.assumption_id,
+        loaded.map.id,
+        parsed.data.text,
+      );
+      isEdit = true;
+    } else {
+      const result = await addAssumption(loaded.map.id, parsed.data.text);
+      if (result.deduped) {
+        return {
+          ok: false,
+          reason:
+            "That assumption is already on the map. Edit the existing one instead.",
+        };
+      }
+      row = result.row;
+      isEdit = false;
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save assumption.",
+    };
+  }
+
+  // Replace links atomically: clear then re-insert the payload set.
+  try {
+    await clearAssumptionLinks(row.id);
+    if (parsed.data.commitment_ids.length > 0) {
+      await linkAssumptionToCommitments(row.id, parsed.data.commitment_ids);
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not update links.",
+    };
+  }
+
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    isEdit ? "entry_edited" : "entry_added",
+    {
+      kind: "assumption",
+      entry_id: row.id,
+      text: row.text,
+      attempts: row.attempts,
+      commitment_ids: parsed.data.commitment_ids,
+      ...(isEdit ? { stage_at_edit: loaded.map.current_stage } : {}),
+    },
+    { stage: loaded.map.current_stage },
+  );
+
+  let score = 0;
+  try {
+    const scored = await scoreAssumptionDepth({
+      goalText: loaded.map.improvement_goal ?? "",
+      assumptionText: row.text,
+    });
+    score = scored.score;
+    await updateAssumptionDepth(row.id, score);
+    events.record(
+      "rubric_scored",
+      {
+        kind: "assumption",
+        entry_id: row.id,
+        score,
+        attempts: row.attempts,
+        has_finished_then: scored.has_finished_then,
+        is_first_person_felt: scored.is_first_person_felt,
+        lands_in_identity_or_big_time_bad:
+          scored.lands_in_identity_or_big_time_bad,
+        reason: scored.reason,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } catch (err) {
+    console.warn(
+      "[itc] saveAssumption rubric failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      {
+        where: "saveAssumption.rubric",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      { stage: loaded.map.current_stage },
+    );
+  }
+  await events.flush();
+
+  // pairedText: the commitment(s) this assumption underwrites, joined
+  // so the coach can excavate against them in prose.
+  const linkedTexts = parsed.data.commitment_ids
+    .map((cid) => commitmentsById.get(cid)?.text)
+    .filter((t): t is string => Boolean(t));
+  const pairedText = linkedTexts.length
+    ? linkedTexts.map((t, i) => `${i + 1}. ${t}`).join(" / ")
+    : undefined;
+
+  await awaitReactionOrSwallow(() =>
+    fireCoachReaction(
+      loaded.map.id,
+      {
+        kind: "assumption",
+        text: row.text,
+        pairedText,
+        depthScore: score,
+        attempts: row.attempts,
+      },
+      { table: "itc_assumptions", id: row.id },
+    ),
+  );
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+const assumptionRemoveSchema = z.object({
+  map_id: z.string().uuid(),
+  assumption_id: z.string().uuid(),
+});
+
+export async function removeAssumption(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = assumptionRemoveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    assumption_id: formData.get("assumption_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid remove input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    // Links cascade via FK on itc_assumption_commitments.
+    await deleteAssumption(parsed.data.assumption_id, loaded.map.id);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not remove.",
+    };
+  }
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    "entry_edited",
+    {
+      kind: "assumption",
+      entry_id: parsed.data.assumption_id,
+      removed: true,
+    },
+    { stage: loaded.map.current_stage },
+  );
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+// -------------------------------------------------------------------------
 // Suggestions ("Give me ideas" button)
 // -------------------------------------------------------------------------
 
@@ -1262,7 +1480,20 @@ async function computeAdvanceGate(
           to,
           label,
           enabled: false,
-          reason: `${uncovered.length} commitment${uncovered.length === 1 ? "" : "s"} still need an assumption.`,
+          reason: `${uncovered.length} commitment${uncovered.length === 1 ? "" : "s"} still ${uncovered.length === 1 ? "needs" : "need"} an assumption.`,
+        };
+      }
+      // Depth gate: same rule as worries and commitments.
+      const shallow = assumptions.filter(
+        (a) => !worryPassesDepth(a.depth_score, a.attempts),
+      );
+      if (shallow.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${shallow.length} assumption${shallow.length === 1 ? "" : "s"} ${shallow.length === 1 ? "needs" : "need"} more depth.`,
         };
       }
       return { from, to, label, enabled: true, reason: null };

@@ -568,11 +568,85 @@ export async function addAssumption(
       map_id: mapId,
       text: text.trim(),
       sort_order: existing.length,
+      attempts: 1,
     })
     .select("*")
     .single();
   if (error || !data) throw new Error(`addAssumption: ${error?.message ?? "no row"}`);
   return { row: data as ItcAssumption, deduped: false };
+}
+
+/**
+ * Update an assumption's text and bump attempts by one. Called from
+ * saveAssumption on the edit path. Clears depth_score so the caller
+ * (saveAssumption) re-scores immediately with the fresh rubric.
+ */
+export async function updateAssumptionText(
+  id: string,
+  mapId: string,
+  text: string,
+): Promise<ItcAssumption> {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) throw new Error("Assumption is too short.");
+  const supabase = createSupabaseServiceClient();
+  const existing = await supabase
+    .from("itc_assumptions")
+    .select("attempts")
+    .eq("id", id)
+    .eq("map_id", mapId)
+    .maybeSingle();
+  if (existing.error) throw new Error(`updateAssumptionText lookup: ${existing.error.message}`);
+  if (!existing.data) throw new Error("Assumption not on this map.");
+  const { data, error } = await supabase
+    .from("itc_assumptions")
+    .update({
+      text: trimmed,
+      attempts: (existing.data.attempts ?? 0) + 1,
+      depth_score: null,
+    })
+    .eq("id", id)
+    .eq("map_id", mapId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`updateAssumptionText: ${error?.message ?? "no row"}`);
+  return data as ItcAssumption;
+}
+
+export async function updateAssumptionDepth(
+  assumptionId: string,
+  score: number,
+): Promise<void> {
+  if (score < 0 || score > 3 || !Number.isInteger(score)) {
+    throw new Error(`updateAssumptionDepth: score must be int 0-3, got ${score}`);
+  }
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumptions")
+    .update({ depth_score: score })
+    .eq("id", assumptionId);
+  if (error) throw new Error(`updateAssumptionDepth: ${error.message}`);
+}
+
+export async function deleteAssumption(
+  assumptionId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumptions")
+    .delete()
+    .eq("id", assumptionId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`deleteAssumption: ${error.message}`);
+}
+
+export async function clearAssumptionLinks(assumptionId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumption_commitments")
+    .delete()
+    .eq("assumption_id", assumptionId);
+  if (error) throw new Error(`clearAssumptionLinks: ${error.message}`);
 }
 
 export async function linkAssumptionToCommitments(

@@ -16,6 +16,7 @@ import type { ItcStage } from "@/lib/itc/stage";
 import { isLegacyCannedIntro, STAGE_INTROS } from "@/lib/itc/stage-intros";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
+import { AssumptionsRow } from "./assumptions-row";
 import { BehaviorsRow } from "./behaviors-row";
 import { CoachDock } from "./coach-dock";
 import { CommitmentsRow } from "./commitments-row";
@@ -134,16 +135,6 @@ export function MapCanvas({
 
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
-  const worryById = new Map(worries.map((w) => [w.id, w]));
-  const commitmentIndexById = new Map(
-    commitments.map((c, i) => [c.id, i + 1]),
-  );
-  const linksByAssumption = new Map<string, string[]>();
-  for (const l of assumptionLinks) {
-    const arr = linksByAssumption.get(l.assumption_id) ?? [];
-    arr.push(l.commitment_id);
-    linksByAssumption.set(l.assumption_id, arr);
-  }
 
   return (
     <div className="space-y-3">
@@ -316,39 +307,29 @@ export function MapCanvas({
             map.current_stage === "assumptions" ? unattachedForCurrentStage : []
           }
         >
-          {assumptions.length === 0 ? (
-            <Placeholder>Comes together from the commitments.</Placeholder>
-          ) : (
-            <ul className="space-y-1.5 text-sm">
-              {assumptions.map((a) => {
-                const linkedIndices = (linksByAssumption.get(a.id) ?? [])
-                  .map((cid) => commitmentIndexById.get(cid))
-                  .filter((n): n is number => typeof n === "number")
-                  .sort((x, y) => x - y);
+          <AssumptionsRow
+            mapId={map.id}
+            assumptions={assumptions}
+            commitments={commitments}
+            links={assumptionLinks}
+            nowMs={renderedAt}
+          />
+          {assumptions.length > 0 ? (
+            <div className="pl-3 mt-1 space-y-2">
+              {assumptions.map((a, i) => {
+                const thread = threadFor("itc_assumptions", a.id);
+                if (thread.length === 0) return null;
                 return (
-                  <li
-                    key={a.id}
-                    className={
-                      "rounded-md border px-3 py-2 " +
-                      (a.selected_for_testing
-                        ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10"
-                        : "border-[color:var(--color-border)] bg-black/20") +
-                      (isFresh(a.created_at, renderedAt) ? " itc-fresh-row" : "")
-                    }
-                  >
-                    <div className="flex flex-wrap gap-2 items-baseline">
-                      <span className="flex-1 min-w-[12rem]">{a.text}</span>
-                      {linkedIndices.length > 0 ? (
-                        <span className="text-[10px] text-[color:var(--color-text-muted)]/70 shrink-0">
-                          underwrites {linkedIndices.join(", ")}
-                        </span>
-                      ) : null}
+                  <div key={a.id}>
+                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                      Coach on #{i + 1}
                     </div>
-                  </li>
+                    <EntryThread messages={thread} />
+                  </div>
                 );
               })}
-            </ul>
-          )}
+            </div>
+          ) : null}
         </Section>
       </div>
 
