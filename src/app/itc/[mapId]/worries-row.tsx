@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { ItcBehavior, ItcWorry } from "@/lib/itc/maps";
+import type { ItcBehavior, ItcMessage, ItcWorry } from "@/lib/itc/maps";
 import { saveWorry } from "../actions";
+import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -27,11 +28,15 @@ export function WorriesRow({
   behaviors,
   worries,
   nowMs,
+  threads,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
   worries: ItcWorry[];
   nowMs: number;
+  /** Per-worry coach reaction threads. Non-empty only on the worries
+   *  stage. Rendered above each worry's input. */
+  threads: Map<string, ItcMessage[]>;
 }) {
   const selected = behaviors.filter((b) => b.selected);
   const worryByBehaviorId = new Map(worries.map((w) => [w.behavior_id, w]));
@@ -46,16 +51,20 @@ export function WorriesRow({
 
   return (
     <ul className="space-y-3 text-base">
-      {selected.map((b, i) => (
-        <WorryItem
-          key={b.id}
-          mapId={mapId}
-          behavior={b}
-          index={i + 1}
-          worry={worryByBehaviorId.get(b.id) ?? null}
-          fresh={isFresh(worryByBehaviorId.get(b.id)?.created_at, nowMs)}
-        />
-      ))}
+      {selected.map((b, i) => {
+        const w = worryByBehaviorId.get(b.id) ?? null;
+        return (
+          <WorryItem
+            key={b.id}
+            mapId={mapId}
+            behavior={b}
+            index={i + 1}
+            worry={w}
+            fresh={isFresh(w?.created_at, nowMs)}
+            thread={w ? threads.get(w.id) ?? [] : []}
+          />
+        );
+      })}
     </ul>
   );
 }
@@ -66,12 +75,14 @@ function WorryItem({
   index,
   worry,
   fresh,
+  thread,
 }: {
   mapId: string;
   behavior: ItcBehavior;
   index: number;
   worry: ItcWorry | null;
   fresh: boolean;
+  thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
   const initial = worry?.text ?? "";
@@ -125,6 +136,11 @@ function WorryItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {thread.length > 0 ? (
+        <div className="mb-3">
+          <EntryThread messages={thread} chipTarget="worry" />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2 text-[color:var(--color-text-muted)]/80">
           <span className="text-sm shrink-0">{index}.</span>

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { ItcBehavior } from "@/lib/itc/maps";
+import type { ItcBehavior, ItcMessage } from "@/lib/itc/maps";
 import {
   addBehavior,
   removeBehavior,
   requestSuggestions,
   updateBehavior,
 } from "../actions";
+import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string, nowMs: number): boolean {
@@ -28,10 +29,15 @@ export function BehaviorsRow({
   mapId,
   behaviors,
   nowMs,
+  threads,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
   nowMs: number;
+  /** Per-behavior coach reaction threads. Non-empty only when
+   *  the behaviors stage is currently active. Rendered above
+   *  each item's input so read-then-edit stays adjacent. */
+  threads: Map<string, ItcMessage[]>;
 }) {
   const selected = behaviors.filter((b) => b.selected);
   const capReached = selected.length >= MAX_BEHAVIORS;
@@ -50,6 +56,7 @@ export function BehaviorsRow({
               behavior={b}
               index={i + 1}
               fresh={isFresh(b.created_at, nowMs)}
+              thread={threads.get(b.id) ?? []}
             />
           ))}
         </ul>
@@ -160,11 +167,13 @@ function BehaviorItem({
   behavior,
   index,
   fresh,
+  thread,
 }: {
   mapId: string;
   behavior: ItcBehavior;
   index: number;
   fresh: boolean;
+  thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState(behavior.text);
@@ -228,6 +237,11 @@ function BehaviorItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {thread.length > 0 ? (
+        <div className="mb-2">
+          <EntryThread messages={thread} chipTarget="behavior" />
+        </div>
+      ) : null}
       <div className="flex items-start gap-3">
         <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.

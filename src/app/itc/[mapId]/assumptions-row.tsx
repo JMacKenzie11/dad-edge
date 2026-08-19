@@ -5,8 +5,10 @@ import type {
   ItcAssumption,
   ItcAssumptionCommitment,
   ItcCommitment,
+  ItcMessage,
 } from "@/lib/itc/maps";
 import { removeAssumption, saveAssumption } from "../actions";
+import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string, nowMs: number): boolean {
@@ -31,12 +33,16 @@ export function AssumptionsRow({
   commitments,
   links,
   nowMs,
+  threads,
 }: {
   mapId: string;
   assumptions: ItcAssumption[];
   commitments: ItcCommitment[];
   links: ItcAssumptionCommitment[];
   nowMs: number;
+  /** Per-assumption coach reaction threads. Non-empty only on the
+   *  assumptions stage. Rendered above each assumption's input. */
+  threads: Map<string, ItcMessage[]>;
 }) {
   const linksByAssumption = new Map<string, string[]>();
   for (const l of links) {
@@ -61,6 +67,7 @@ export function AssumptionsRow({
               commitments={commitments}
               linkedCommitmentIds={linksByAssumption.get(a.id) ?? []}
               fresh={isFresh(a.created_at, nowMs)}
+              thread={threads.get(a.id) ?? []}
             />
           ))}
         </ul>
@@ -184,6 +191,7 @@ function AssumptionItem({
   commitments,
   linkedCommitmentIds,
   fresh,
+  thread,
 }: {
   mapId: string;
   assumption: ItcAssumption;
@@ -191,6 +199,7 @@ function AssumptionItem({
   commitments: ItcCommitment[];
   linkedCommitmentIds: string[];
   fresh: boolean;
+  thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState(assumption.text);
@@ -278,6 +287,11 @@ function AssumptionItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {thread.length > 0 ? (
+        <div className="mb-3">
+          <EntryThread messages={thread} chipTarget="assumption" />
+        </div>
+      ) : null}
       <div className="flex items-start gap-3">
         <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.

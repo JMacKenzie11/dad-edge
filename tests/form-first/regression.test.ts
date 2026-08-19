@@ -1198,74 +1198,88 @@ describe("Form-First regression", () => {
       // goal's coach thread (jumping-jacks pushback + approval
       // acknowledgment) still showed in Column 1. Rule: once a stage
       // is locked in, its thread disappears; the entry text is the
-      // only durable artifact. Applies to every column.
+      // only durable artifact.
       //
-      // Structural check: every <EntryThread> render in map-canvas
-      // must be guarded by `map.current_stage === "<kind>"`. If a
-      // future refactor drops the guard, this fires at test time.
+      // Under the feedback-above-input layout the goal thread lives
+      // in map-canvas (single input), while per-item threads for
+      // behaviors/worries/commitments/assumptions live INSIDE their
+      // row components and render above each item's textarea. Both
+      // paths must stay guarded.
       const { readFileSync } = await import("node:fs");
       const { fileURLToPath } = await import("node:url");
       const { dirname, resolve } = await import("node:path");
       const here = dirname(fileURLToPath(import.meta.url));
-      const src = readFileSync(
-        resolve(
-          dirname(fileURLToPath(import.meta.url)),
-          "..",
-          "..",
-          "src/app/itc/[mapId]/map-canvas.tsx",
-        ),
-        "utf8",
-      );
+      const repoRoot = resolve(here, "..", "..");
+      const read = (rel: string) =>
+        readFileSync(resolve(repoRoot, rel), "utf8");
 
-      // Each of the five kinds must have at least one guarded thread
-      // render — the guard sits on the wrapping conditional the
-      // <EntryThread> lives inside.
-      const guards = [
-        {
-          kind: "goal",
-          re: /map\.current_stage\s*===\s*["']goal["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="goal"/,
-        },
-        {
-          kind: "behavior",
-          re: /map\.current_stage\s*===\s*["']behaviors["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="behavior"/,
-        },
-        {
-          kind: "worry",
-          re: /map\.current_stage\s*===\s*["']worries["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="worry"/,
-        },
-        {
-          kind: "commitment",
-          re: /map\.current_stage\s*===\s*["']commitments["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="commitment"/,
-        },
-        {
-          kind: "assumption",
-          re: /map\.current_stage\s*===\s*["']assumptions["'][\s\S]{0,1500}?<EntryThread[\s\S]{0,400}?chipTarget="assumption"/,
-        },
+      const mapCanvas = read("src/app/itc/[mapId]/map-canvas.tsx");
+      const behaviorsRow = read("src/app/itc/[mapId]/behaviors-row.tsx");
+      const worriesRow = read("src/app/itc/[mapId]/worries-row.tsx");
+      const commitmentsRow = read("src/app/itc/[mapId]/commitments-row.tsx");
+      const assumptionsRow = read("src/app/itc/[mapId]/assumptions-row.tsx");
+
+      // 1. Goal thread in map-canvas must be guarded by
+      //    map.current_stage === "goal".
+      expect(
+        /map\.current_stage\s*===\s*["']goal["'][\s\S]{0,600}?<EntryThread[\s\S]{0,400}?chipTarget="goal"/.test(
+          mapCanvas,
+        ),
+        "goal <EntryThread> in map-canvas must be guarded by map.current_stage === 'goal'",
+      ).toBe(true);
+
+      // 2. Each row file has exactly one <EntryThread> render,
+      //    positioned above the item's input (thread.length > 0 gate
+      //    ensures empty state renders no thread).
+      const rowFiles: Array<[string, string, string]> = [
+        ["behavior", behaviorsRow, "src/app/itc/[mapId]/behaviors-row.tsx"],
+        ["worry", worriesRow, "src/app/itc/[mapId]/worries-row.tsx"],
+        [
+          "commitment",
+          commitmentsRow,
+          "src/app/itc/[mapId]/commitments-row.tsx",
+        ],
+        [
+          "assumption",
+          assumptionsRow,
+          "src/app/itc/[mapId]/assumptions-row.tsx",
+        ],
       ];
-      for (const g of guards) {
+      for (const [kind, src, path] of rowFiles) {
+        const matches = [
+          ...src.matchAll(/<EntryThread[\s\S]{0,300}?chipTarget="(\w+)"/g),
+        ];
+        expect(matches.length, `${path} must render exactly one <EntryThread>`).toBe(1);
         expect(
-          g.re.test(src),
-          `${g.kind} <EntryThread> must be guarded by map.current_stage === "${g.kind === "behavior" ? "behaviors" : g.kind === "worry" ? "worries" : g.kind === "commitment" ? "commitments" : g.kind === "assumption" ? "assumptions" : g.kind}" so it hides once the section locks in`,
+          matches[0][1],
+          `${path}'s <EntryThread> chipTarget must be "${kind}"`,
+        ).toBe(kind);
+        // Guarded by thread.length > 0 (or thread.length !== 0) so
+        // the item without a reaction still shows the input alone.
+        expect(
+          /thread\.length\s*(?:>\s*0|!==?\s*0)[\s\S]{0,200}?<EntryThread/.test(
+            src,
+          ),
+          `${path}'s <EntryThread> must be guarded by thread.length check`,
         ).toBe(true);
       }
 
-      // Exactly five thread renders — one per column. If a future
-      // refactor adds an unguarded thread render, either the count
-      // trips or the per-kind guard regex above trips.
-      const threadRenders = [
-        ...src.matchAll(/<EntryThread[\s\S]{0,300}?chipTarget="(\w+)"/g),
-      ];
-      expect(threadRenders.length).toBe(5);
-      const kinds = threadRenders.map((m) => m[1]).sort();
-      expect(kinds).toEqual([
-        "assumption",
-        "behavior",
-        "commitment",
-        "goal",
-        "worry",
-      ]);
-      // Silence unused var lint by touching `here`.
-      void here;
+      // 3. Non-active stages get an empty threads map — enforced in
+      //    map-canvas by wrapping the population in
+      //    `if (map.current_stage === "<stage>")` guards.
+      for (const stage of [
+        "behaviors",
+        "worries",
+        "commitments",
+        "assumptions",
+      ]) {
+        expect(
+          new RegExp(
+            `map\\.current_stage\\s*===\\s*["']${stage}["'][\\s\\S]{0,400}?threadFor`,
+          ).test(mapCanvas),
+          `map-canvas ${stage} threads must be populated only when stage is active`,
+        ).toBe(true);
+      }
     },
     5_000,
   );

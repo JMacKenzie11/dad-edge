@@ -137,6 +137,40 @@ export function MapCanvas({
   const worriesByBehavior = new Map(worries.map((w) => [w.behavior_id, w]));
   const selectedBehaviors = behaviors.filter((b) => b.selected);
 
+  // Per-item thread maps for the interleaved layout. Populated only
+  // when the corresponding stage is active — non-active stages get
+  // empty maps so the row components render inputs without threads
+  // (the same "quiet locked column" rule that hides the goal thread
+  // when the goal stage isn't active).
+  const behaviorThreads = new Map<string, ItcMessage[]>();
+  if (map.current_stage === "behaviors") {
+    for (const b of selectedBehaviors) {
+      const t = threadFor("itc_behaviors", b.id);
+      if (t.length > 0) behaviorThreads.set(b.id, t);
+    }
+  }
+  const worryThreads = new Map<string, ItcMessage[]>();
+  if (map.current_stage === "worries") {
+    for (const w of worries) {
+      const t = threadFor("itc_worries", w.id);
+      if (t.length > 0) worryThreads.set(w.id, t);
+    }
+  }
+  const commitmentThreads = new Map<string, ItcMessage[]>();
+  if (map.current_stage === "commitments") {
+    for (const c of commitments) {
+      const t = threadFor("itc_commitments", c.id);
+      if (t.length > 0) commitmentThreads.set(c.id, t);
+    }
+  }
+  const assumptionThreads = new Map<string, ItcMessage[]>();
+  if (map.current_stage === "assumptions") {
+    for (const a of assumptions) {
+      const t = threadFor("itc_assumptions", a.id);
+      if (t.length > 0) assumptionThreads.set(a.id, t);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -166,18 +200,23 @@ export function MapCanvas({
             map.current_stage === "goal" ? unattachedForCurrentStage : []
           }
         >
+          {/* Feedback-above-input: coach reaction on the goal renders
+              directly above the input so read-then-edit is adjacent,
+              not a scroll-back-up loop. */}
+          {map.improvement_goal && map.current_stage === "goal" ? (
+            <div className="mb-3">
+              <EntryThread
+                chipTarget="goal"
+                messages={threadFor("itc_maps", map.id).filter(
+                  (m) => m.stage_at_creation === "goal",
+                )}
+              />
+            </div>
+          ) : null}
           <GoalRow
             mapId={map.id}
             goalText={map.improvement_goal}
           />
-          {map.improvement_goal && map.current_stage === "goal" ? (
-            <EntryThread
-              chipTarget="goal"
-              messages={threadFor("itc_maps", map.id).filter(
-                (m) => m.stage_at_creation === "goal",
-              )}
-            />
-          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "goal" ? (
@@ -198,27 +237,8 @@ export function MapCanvas({
             mapId={map.id}
             behaviors={behaviors}
             nowMs={renderedAt}
+            threads={behaviorThreads}
           />
-          {/* Behavior-level threads render inside BehaviorsRow via
-              per-item props. To keep the row component focused, we
-              render them here as a follow-up list keyed by behavior
-              id. */}
-          {selectedBehaviors.length > 0 && map.current_stage === "behaviors" ? (
-            <div className="pl-3 mt-3 space-y-3">
-              {selectedBehaviors.map((b, i) => {
-                const thread = threadFor("itc_behaviors", b.id);
-                if (thread.length === 0) return null;
-                return (
-                  <div key={b.id}>
-                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
-                      Coach on #{i + 1}
-                    </div>
-                    <EntryThread messages={thread} chipTarget="behavior" />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "behaviors" ? (
@@ -240,25 +260,8 @@ export function MapCanvas({
             behaviors={behaviors}
             worries={worries}
             nowMs={renderedAt}
+            threads={worryThreads}
           />
-          {selectedBehaviors.length > 0 && map.current_stage === "worries" ? (
-            <div className="pl-3 mt-3 space-y-3">
-              {selectedBehaviors.map((b, i) => {
-                const worry = worriesByBehavior.get(b.id);
-                if (!worry) return null;
-                const thread = threadFor("itc_worries", worry.id);
-                if (thread.length === 0) return null;
-                return (
-                  <div key={worry.id}>
-                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
-                      Coach on #{i + 1}
-                    </div>
-                    <EntryThread messages={thread} chipTarget="worry" />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "worries" ? (
@@ -281,23 +284,8 @@ export function MapCanvas({
             worries={worries}
             commitments={commitments}
             nowMs={renderedAt}
+            threads={commitmentThreads}
           />
-          {commitments.length > 0 && map.current_stage === "commitments" ? (
-            <div className="pl-3 mt-3 space-y-3">
-              {commitments.map((c, i) => {
-                const thread = threadFor("itc_commitments", c.id);
-                if (thread.length === 0) return null;
-                return (
-                  <div key={c.id}>
-                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
-                      Coach on #{i + 1}
-                    </div>
-                    <EntryThread messages={thread} chipTarget="commitment" />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "commitments" ? (
@@ -320,23 +308,8 @@ export function MapCanvas({
             commitments={commitments}
             links={assumptionLinks}
             nowMs={renderedAt}
+            threads={assumptionThreads}
           />
-          {assumptions.length > 0 && map.current_stage === "assumptions" ? (
-            <div className="pl-3 mt-3 space-y-3">
-              {assumptions.map((a, i) => {
-                const thread = threadFor("itc_assumptions", a.id);
-                if (thread.length === 0) return null;
-                return (
-                  <div key={a.id}>
-                    <div className="text-xs text-[color:var(--color-text-muted)]/80 pl-2 mb-1.5">
-                      Coach on #{i + 1}
-                    </div>
-                    <EntryThread messages={thread} chipTarget="assumption" />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
         </Section>
       </div>
 

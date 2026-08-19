@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { ItcBehavior, ItcCommitment, ItcWorry } from "@/lib/itc/maps";
+import type {
+  ItcBehavior,
+  ItcCommitment,
+  ItcMessage,
+  ItcWorry,
+} from "@/lib/itc/maps";
 import { saveCommitment } from "../actions";
+import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -25,12 +31,16 @@ export function CommitmentsRow({
   worries,
   commitments,
   nowMs,
+  threads,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
   worries: ItcWorry[];
   commitments: ItcCommitment[];
   nowMs: number;
+  /** Per-commitment coach reaction threads. Non-empty only on the
+   *  commitments stage. Rendered above each commitment's input. */
+  threads: Map<string, ItcMessage[]>;
 }) {
   const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
   const commitmentByWorryId = new Map(
@@ -47,17 +57,21 @@ export function CommitmentsRow({
 
   return (
     <ul className="space-y-3 text-base">
-      {worries.map((w, i) => (
-        <CommitmentItem
-          key={w.id}
-          mapId={mapId}
-          worry={w}
-          behaviorText={behaviorById.get(w.behavior_id)?.text ?? "(behavior)"}
-          index={i + 1}
-          commitment={commitmentByWorryId.get(w.id) ?? null}
-          fresh={isFresh(commitmentByWorryId.get(w.id)?.created_at, nowMs)}
-        />
-      ))}
+      {worries.map((w, i) => {
+        const c = commitmentByWorryId.get(w.id) ?? null;
+        return (
+          <CommitmentItem
+            key={w.id}
+            mapId={mapId}
+            worry={w}
+            behaviorText={behaviorById.get(w.behavior_id)?.text ?? "(behavior)"}
+            index={i + 1}
+            commitment={c}
+            fresh={isFresh(c?.created_at, nowMs)}
+            thread={c ? threads.get(c.id) ?? [] : []}
+          />
+        );
+      })}
     </ul>
   );
 }
@@ -69,6 +83,7 @@ function CommitmentItem({
   index,
   commitment,
   fresh,
+  thread,
 }: {
   mapId: string;
   worry: ItcWorry;
@@ -76,6 +91,7 @@ function CommitmentItem({
   index: number;
   commitment: ItcCommitment | null;
   fresh: boolean;
+  thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
   const initial = commitment?.text ?? "";
@@ -129,6 +145,11 @@ function CommitmentItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {thread.length > 0 ? (
+        <div className="mb-3">
+          <EntryThread messages={thread} chipTarget="commitment" />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2 text-[color:var(--color-text-muted)]/80">
           <span className="text-sm shrink-0">{index}.</span>
