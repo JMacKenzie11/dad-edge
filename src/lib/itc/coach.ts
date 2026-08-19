@@ -109,6 +109,7 @@ function buildSystem(input: MapContextInput): string | SystemModelMessage[] {
   const pillar = PILLAR_BY_CODE[input.pillar];
   const built = buildItcCoachSystemSplit({
     pillarLabel: pillar.label,
+    pillarDomain: pillar.domain,
     stage: input.stage,
     improvementGoal: input.improvementGoal,
     behaviors: input.behaviors,
@@ -342,11 +343,12 @@ export async function generateSuggestions(
 ): Promise<SuggestionsOutput> {
   const system = buildSystem(input);
   const started = Date.now();
+  const pillar = PILLAR_BY_CODE[input.pillar];
   const prompt =
     `[system: the coachee asked for suggestions for the ${input.kind} column.` +
     (input.contextText ? ` context entry: "${input.contextText}".` : "") +
     (input.extra ? ` ${input.extra}` : "") +
-    " Draft 3-5 concrete options grounded in his stated goal, prior entries, and BRAVEMAN domain. Each option is one sentence, sayable out loud, in his voice.]";
+    ` Draft 3-5 concrete options. EVERY option MUST belong to the ${pillar.label} pillar (${pillar.domain}) — do not offer options from other domains (no fitness suggestions on Bond, no marriage suggestions on Amplify, etc.). Ground each option in his stated goal + prior entries. Each is one sentence, sayable out loud, in his voice.]`;
   try {
     const { object } = await generateObject({
       model: mainModel(),

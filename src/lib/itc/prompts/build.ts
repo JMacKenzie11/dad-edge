@@ -48,6 +48,7 @@ const STAGE_PROMPT: Record<ItcStage, string> = {
 
 type BuildInput = {
   pillarLabel: string;
+  pillarDomain: string;
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
@@ -214,7 +215,7 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
 Current context
 - Today's date: ${todayISO}. Any target_date you propose MUST be on or after this date; picking a past date is a bug (the LLM has no idea what today is unless you look at this line).
 - One-week horizon (test target_date must fall on or before this): ${oneWeekISO}. Tests are timed so results land before the next mastermind call — 7 days is the outer bound, sooner is fine.
-- BRAVEMAN pillar the coachee chose: ${input.pillarLabel}.
+- BRAVEMAN pillar the coachee chose: ${input.pillarLabel} — ${input.pillarDomain}. Every goal, behavior, worry, commitment, and assumption on this map MUST belong to this specific domain. If he adds an entry outside the domain (e.g. a fitness behavior on Bond, or a work behavior on Vitality), that's a Case-1 mismatch — push back plainly and ask what he'd actually want to work on inside ${input.pillarLabel}.
 - Current stage: ${input.stage}.
 - Map status: ${input.mapStatus}.
 - Immune-system walkthrough delivered: ${input.walkthroughDelivered ? "yes" : "no"}.
