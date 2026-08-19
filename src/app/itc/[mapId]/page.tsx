@@ -87,38 +87,44 @@ export default async function ItcMapPage({
 
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="border-b border-[color:var(--color-border)] px-4 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/itc"
-            className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-          >
-            ← Maps
-          </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          {isItcAdmin(participant.email) ? (
+      {/* Sticky top strip — nav bar + stage progress. Keeps the
+          coachee's location in the flow visible while they scroll
+          through a long map (walkthrough + assumptions can easily
+          fill more than one screen). */}
+      <div className="sticky top-0 z-20 bg-[color:var(--color-background)]/95 backdrop-blur border-b border-[color:var(--color-border)]">
+        <header className="px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <Link
-              href="/itc/admin"
+              href="/itc"
               className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
             >
-              Admin
+              ← Maps
             </Link>
-          ) : null}
-          <ResetMapButton mapId={map.id} />
-          <form action="/itc/logout" method="POST">
-            <button
-              type="submit"
-              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
+          </div>
+          <div className="flex items-center gap-3">
+            {isItcAdmin(participant.email) ? (
+              <Link
+                href="/itc/admin"
+                className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
+              >
+                Admin
+              </Link>
+            ) : null}
+            <ResetMapButton mapId={map.id} />
+            <form action="/itc/logout" method="POST">
+              <button
+                type="submit"
+                className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        </header>
 
-      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
-        <StageProgress current={map.current_stage} />
+        <div className="px-4 py-2 border-t border-[color:var(--color-border)]/50">
+          <StageProgress current={map.current_stage} />
+        </div>
       </div>
 
       <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-8 md:py-10">

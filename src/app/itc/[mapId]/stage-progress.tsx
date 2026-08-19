@@ -1,17 +1,20 @@
 import { ITC_STAGES, STAGE_LABELS, stageIndex, type ItcStage } from "@/lib/itc/stage";
 
-// Stages surfaced in the progress bar. The database has more (test_running,
-// done, etc.) but the header only needs the milestones the coachee sees.
+// Stages surfaced in the progress bar. "review" is intentionally
+// omitted — canTransitionTo allows assumptions → immune_system to
+// skip it, so it's a dead stage in the actual flow; showing it in
+// the header confuses the coachee about a step they never land on.
+// "done" is also omitted (terminal state, not a step to reach for).
 const HEADER_STAGES: ItcStage[] = [
   "goal",
   "behaviors",
   "worries",
   "commitments",
   "assumptions",
-  "review",
   "immune_system",
   "prioritize",
   "test_design",
+  "test_running",
   "results",
 ];
 
