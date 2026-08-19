@@ -773,11 +773,18 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
 
   1. **One catastrophic clause in the consequent.** Land on ONE identity or relational catastrophe — "then I'd be a fraud", "then she'd have no choice but to leave", "then I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
 
-  2. **Observable consequent — behavioral tell required.** Testability is the whole point of Column 5. A pure identity verdict ("then I'd be a fraud", "then I'm not enough") is nearly impossible to test — you can't directly observe "am I a fraud." The consequent MUST contain something OBSERVABLE the coachee could see, hear, or feel that would prove the identity claim. Options for the observable tell:
-      - **A behavior he'd do**: "then I'd lose control and say something I can't take back"
-      - **A reaction from another person**: "then she'd show me I've been hurting her all along" / "then she'd stop trusting me"
-      - **A specific felt state**: "then I'd feel the shame that confirms it"
-     If your first-draft consequent is only an identity verdict, add the tell. Draft 2 shape (right): "then I'd lose it and be the husband who hurts his wife" — "lose it" is the tell. Draft 1 shape (wrong, needs a tell): "then I'm the husband who keeps hurting the people he loves" — no observable, untestable. Fix by adding "then she'd show me I've been hurting her" or similar.
+  2. **Consequent must have BOTH parts: observable tell AND identity landing.** Not one or the other. Both. Every draft.
+
+     - The **OBSERVABLE TELL** is something the coachee could see, hear, or feel — a behavior he'd exhibit ("I'd lose control"), a reaction from another person ("she'd pull away"), or a specific felt state ("I'd feel the shame"). Without this the belief is untestable — you can't run an experiment on "am I a fraud."
+     - The **IDENTITY LANDING** is what the tell would CONFIRM about who he is — "the husband who hurts her", "not good enough for her", "the man she can't trust". Without this the draft is just a behavioral prediction and it fails BOTH the coach reaction (which will push "what does that prove about you?") AND the depth rubric (which will score it below identity-level).
+
+     Two very common failure modes to avoid:
+
+     **Failure A — pure identity verdict, no tell.** "then I'm the husband who keeps hurting the people he loves." Untestable. Fix by adding the tell: "then she'd show me I've been hurting her and I'd have to face I'm the husband who keeps hurting her."
+
+     **Failure B — pure behavioral prediction, no landing.** "then I'd lose control and say something I can't take back." This will get bounced by the depth rubric AND get pushed on by the reaction coach ("what does that prove about you as a husband?"). Fix by adding the landing: "then I'd lose control and be the husband who hurts her."
+
+     The template: "then [observable tell] and [identity landing]". Both required.
 
   3. **Land in identity/relationship/worth — NOT practical outcome.** "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
 
@@ -801,10 +808,13 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
      Wrong shape: worry = "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife" → assumption = "I assume that if I stay in the room, then I'd lose it and say something awful, and I'd be the husband who hurts his wife" (verbatim worry with prefix swap).
      Right shape: assumption = "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back." One clean atomic testable belief distilled from the worry — not the worry re-stemmed.
 
-  9. **Aim for 15 words.** Kegan/Lahey's canonical Big Assumption examples in *Immunity to Change* average ~15 words per draft. That is your target, not a ceiling. Under 15 words is fine; 15–20 is acceptable; 20+ is a strong smell you're carrying extra clauses that should be cut or split into a second draft. 25+ words is nearly always the worry re-stemmed. Precision, not paragraph. When in doubt, cut. Compare:
-     - Too long (28 words): "I assume that if I stay in the room instead of walking out, then I'd lose it and say something awful, and I'd be the husband who hurts his wife."
-     - Right (16 words): "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back."
-     - Also right (14 words): "I assume that if I show her the worst of me, then she'd stop staying."
+  9. **Aim for ~15–20 words WITH both consequent parts included.** Kegan/Lahey's canonical Big Assumptions in *Immunity to Change* average ~15 words. Your target: 15–20 words with BOTH the observable tell AND the identity landing (per rule 2). 20+ is a smell you're carrying extra modifiers or chained clauses. 25+ is nearly always the worry re-stemmed. Precision, not paragraph. When in doubt, tighten the antecedent (drop "actually" / "in the moment" / "really") — but NEVER drop the identity landing to hit a word count.
+
+     Compare:
+     - **Wrong — 34 words, chained catastrophes:** "I assume that if I stay in the room instead of walking out, then I'd lose it and say something awful, and I'd be the husband who hurts his wife, and she'd have no choice but to leave me."
+     - **Wrong — 22 words, no identity landing (behavioral prediction only, will fail rubric + get pushed by reaction coach):** "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back."
+     - **Right — 19 words, tell + landing:** "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
+     - **Right — 17 words, relational tell + landing:** "I assume that if I show her the worst of me, then she'd pull away and I'd know I'm not enough."
 
 ## Clustering — shared-root FIRST, split only as fallback
 
