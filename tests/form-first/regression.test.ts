@@ -1964,18 +1964,23 @@ describe("Form-First regression", () => {
       ).toBe(true);
 
       // Every draft must be in canonical Kegan/Lahey form:
-      // "I assume that if I …, then …". The "I assume that" stem is
-      // enforced server-side by ensureStem in draftAssumptionsFromCommitments,
-      // so even a model that drops the prefix lands here in canonical
-      // form.
+      // "I assume that if I …, then …". Both the "I assume that" stem
+      // (via ensureStem) and the "then" between antecedent and
+      // consequent (via ensureThenAfterIfClause) are enforced
+      // server-side in draftAssumptionsFromCommitments, so even a
+      // compliant model that drops either token still lands here in
+      // canonical form. The "then" is what makes the consequent
+      // testable-as-prediction rather than diagnostic-as-fact.
       for (const d of drafts ?? []) {
         expect(
           /^i\s+assume\s+that\s+if\s+i\b/i.test((d.text as string).trim()),
           `draft must start with "I assume that if I": "${d.text}"`,
         ).toBe(true);
+        // The "then" must appear AFTER the antecedent comma, not just
+        // anywhere in the string. This regex checks the shape.
         expect(
-          /\bthen\b/i.test(d.text as string),
-          `draft must contain "then" (if/then shape): "${d.text}"`,
+          /\bif\s+i\b[^,]*,\s*then\b/i.test(d.text as string),
+          `draft must include "then" after the antecedent comma (predictive frame): "${d.text}"`,
         ).toBe(true);
       }
 

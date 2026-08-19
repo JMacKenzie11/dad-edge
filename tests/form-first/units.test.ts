@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { scrubReply } from "@/lib/itc/coach";
+import { ensureThenAfterIfClause, scrubReply } from "@/lib/itc/coach";
 import {
   chipTargetForStage,
   type ChipTarget,
@@ -188,6 +188,49 @@ describe("hasAssumptionStem", () => {
   it("ensureStem no-ops when the user already typed the stem", () => {
     const t = `${ASSUMPTION_STEM} if I stop lying`;
     expect(ensureStem(t, ASSUMPTION_STEM)).toBe(t);
+  });
+});
+
+describe("ensureThenAfterIfClause", () => {
+  it("injects 'then' after the antecedent comma when missing", () => {
+    // ITC canonical form is "if I …, then …" — the "then" makes the
+    // consequent a testable prediction, not a diagnosis. Auto-inject
+    // is belt-and-suspenders in case the LLM drops it.
+    expect(
+      ensureThenAfterIfClause(
+        "I assume that if I stay in the room, I'll lose it and be that husband.",
+      ),
+    ).toBe(
+      "I assume that if I stay in the room, then I'll lose it and be that husband.",
+    );
+  });
+
+  it("is a no-op when 'then' is already present", () => {
+    const t =
+      "I assume that if I stay in the room, then I'll lose it and be that husband.";
+    expect(ensureThenAfterIfClause(t)).toBe(t);
+  });
+
+  it("preserves case of the existing 'then' (case-insensitive detection)", () => {
+    // The negative lookahead is case-insensitive so we don't
+    // double-insert if the model wrote "Then" — but we preserve their
+    // capitalization rather than lowercasing.
+    const t =
+      "I assume that if I stay in the room, Then I'll lose it.";
+    expect(ensureThenAfterIfClause(t)).toBe(t);
+  });
+
+  it("handles smart-apostrophe drafts (still finds the 'if I' opener)", () => {
+    // Coach output sometimes carries U+2019 for "I'm"; the "if I"
+    // detection is on the ASCII form which is what ensureStem
+    // normalizes to, so this should still work.
+    expect(
+      ensureThenAfterIfClause(
+        "I assume that if I stop lying, she'll finally see I'm not enough.",
+      ),
+    ).toBe(
+      "I assume that if I stop lying, then she'll finally see I'm not enough.",
+    );
   });
 });
 

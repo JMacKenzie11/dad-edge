@@ -674,6 +674,33 @@ export async function draftCommitmentForWorry(input: {
  * opaque uuid — the server maps indices → commitment_ids before
  * persisting via saveAssumptionDrafts.
  */
+/**
+ * Belt-and-suspenders "then" injection for Big Assumption drafts.
+ * The drafter prompt requires "I assume that if I …, then …" but LLMs
+ * occasionally drop the "then". Without it the consequent reads as a
+ * diagnosis (fact) rather than a prediction (testable belief) — a real
+ * ITC-purity loss.
+ *
+ * Two-step (detect-then-inject) instead of one regex with lookahead:
+ * negative lookahead + \s* interact badly (the engine picks the
+ * shortest \s* that lets the lookahead succeed, so a "then" already
+ * present after a space is missed). Separate detection avoids that.
+ *
+ * Exported for tests. Not a general-purpose helper — assumes the text
+ * has already been stem-normalized ("I assume that if I ...").
+ */
+export function ensureThenAfterIfClause(text: string): string {
+  // Already canonical — "then" appears after the antecedent's comma.
+  if (/\bif\s+I\b[^,]*,\s*then\b/i.test(text)) return text;
+  // Inject "then " right after the antecedent comma. The `\s*` in the
+  // match swallows any existing whitespace so we don't end up with
+  // ",  then" (double space) after the replacement.
+  return text.replace(
+    /(\bif\s+I\b[^,]*,)\s*/i,
+    "$1 then ",
+  );
+}
+
 const AssumptionDraftsSchema = z.object({
   drafts: z
     .array(
@@ -700,14 +727,33 @@ You cluster a coachee's competing commitments and draft the Big Assumptions unde
 
 ## Canonical form (mandatory)
 
-Every draft.text MUST start with "I assume that if I …, then …". The "I assume that" prefix is not decoration — it explicitly names the epistemic status (belief, not fact) which is what makes the assumption testable and what unlocks the immunity. Kegan/Lahey's canonical form.
+Every draft.text MUST match the shape: "I assume that if I …, then …". Three literal tokens are non-negotiable and must appear in this order in every draft:
+  - "I assume that" — the epistemic-status prefix. Names it as belief, not fact.
+  - "if I" — the antecedent opener. Frames the behavior he'd do differently.
+  - "then" — the consequent opener. Frames what would follow as a PREDICTION, not a diagnosis.
+
+Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveals Y as an already-true fact). "I assume that if I X, then Y" reads as a prediction (X would cause / lead to Y). Only the second is testable. Kegan/Lahey's canonical form.
 
 ## The bar every draft must clear
 
-  1. ONE catastrophic clause in the consequent. Land on ONE identity or relational catastrophe — "I'd be a fraud", "she'd have no choice but to leave", "I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
-  2. Land in identity/relationship/worth — NOT practical outcome. "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
-  3. First-person felt, in HIS voice.
-  4. Preserve the coachee's own specificity. If his worry says "his wife", the assumption says "his wife" — do NOT broaden to "the people he loves" or "his family". If his worry says "I'd lose control", the assumption says "I'd lose control" — do NOT reword to "I'd become someone I don't recognize". You are naming HIS belief, not editorializing a smoother version.
+  1. **One catastrophic clause in the consequent.** Land on ONE identity or relational catastrophe — "then I'd be a fraud", "then she'd have no choice but to leave", "then I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
+
+  2. **Observable consequent — behavioral tell required.** Testability is the whole point of Column 5. A pure identity verdict ("then I'd be a fraud", "then I'm not enough") is nearly impossible to test — you can't directly observe "am I a fraud." The consequent MUST contain something OBSERVABLE the coachee could see, hear, or feel that would prove the identity claim. Options for the observable tell:
+      - **A behavior he'd do**: "then I'd lose control and say something I can't take back"
+      - **A reaction from another person**: "then she'd show me I've been hurting her all along" / "then she'd stop trusting me"
+      - **A specific felt state**: "then I'd feel the shame that confirms it"
+     If your first-draft consequent is only an identity verdict, add the tell. Draft 2 shape (right): "then I'd lose it and be the husband who hurts his wife" — "lose it" is the tell. Draft 1 shape (wrong, needs a tell): "then I'm the husband who keeps hurting the people he loves" — no observable, untestable. Fix by adding "then she'd show me I've been hurting her" or similar.
+
+  3. **Land in identity/relationship/worth — NOT practical outcome.** "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
+
+  4. **First-person felt, in HIS voice.**
+
+  5. **Preserve the coachee's own specificity — copy his nouns.** This rule was violated in prior drafts; enforce it strictly.
+     - If his worry says "his wife", the assumption says "his wife". Do NOT substitute "his family", "the people he loves", "anyone he cares about", "his loved ones".
+     - If his worry says "she'd leave", the assumption says "she'd leave". Do NOT reword to "I'd end up alone" or "I'd lose everyone".
+     - If his worry says "I'd lose control", the assumption says "I'd lose control". Do NOT reword to "I'd become someone I don't recognize".
+     - If his commitment says "admit she's right", the assumption says "admit she's right". Do NOT add "completely" or any other intensifier he didn't use.
+     You are naming HIS belief in HIS words. You are not editorializing a smoother, more literary, or more universal version.
 
 ## Clustering — shared-root FIRST, split only as fallback
 
@@ -728,9 +774,9 @@ Every commitment on the input list must be covered by at least one draft. No orp
 ## Silent two-step derivation
 
   A. Read goal + commitments together. Ask: is there ONE catastrophic belief that, if provisionally suspended, would loosen ALL these commitments? If yes → one cluster.
-  B. For each cluster (or standalone commitment), write one draft in "I assume that if I …, then …" form. One antecedent. One catastrophic consequent. HIS words, not yours.
+  B. For each cluster (or standalone commitment), write one draft in "I assume that if I …, then …" form. Include the "then". One antecedent. One catastrophic consequent WITH a behavioral or relational tell. HIS words, HIS nouns.
 
-Return only drafts. No prose, no meta, no explanation. Each draft.text starts with "I assume that if I".
+Return only drafts. No prose, no meta, no explanation. Every draft.text starts with "I assume that if I" and contains the word "then" between antecedent and consequent.
 `.trim();
 
 /**
@@ -767,12 +813,18 @@ export async function draftAssumptionsFromCommitments(input: {
       maxOutputTokens: 1200,
     });
     // Clamp indices to the input range so a hallucinated index can't
-    // land a link pointing at nothing. Also pipe each draft through
-    // ensureStem so even if the model drops the "I assume that" prefix
-    // (they sometimes do), the persisted draft is in canonical form.
+    // land a link pointing at nothing. Also pipe each draft through:
+    //   - scrubReply: dash/claim/comma-space cleanup
+    //   - ensureStem: canonical "I assume that" prefix
+    //   - ensureThenAfterIfClause: canonical "then" between antecedent
+    //     and consequent (predictive frame, not diagnostic)
+    // so a compliant model that drops either token still lands here in
+    // canonical Kegan/Lahey form.
     const max = input.commitments.length;
     return object.drafts.map((d) => ({
-      text: ensureStem(scrubReply(d.text), ASSUMPTION_STEM),
+      text: ensureThenAfterIfClause(
+        ensureStem(scrubReply(d.text), ASSUMPTION_STEM),
+      ),
       commitment_indices: d.commitment_indices.filter(
         (n) => n >= 1 && n <= max,
       ),

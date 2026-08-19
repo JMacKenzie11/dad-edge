@@ -118,7 +118,9 @@ export function AssumptionsRow({
         <AddAssumptionForm
           mapId={mapId}
           commitments={commitments}
-          initiallyExpanded={assumptions.length === 0}
+          initiallyExpanded={
+            assumptions.length === 0 && drafts.length === 0
+          }
         />
       )}
     </div>
