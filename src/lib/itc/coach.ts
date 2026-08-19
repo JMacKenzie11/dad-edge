@@ -30,7 +30,7 @@ import { mainModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
-import type { ItcStage } from "./stage";
+import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
   const raw = process.env.ITC_PROMPT_CACHE;
@@ -678,7 +678,13 @@ const AssumptionDraftsSchema = z.object({
   drafts: z
     .array(
       z.object({
-        /** "If I…, then…" belief the coachee holds as truth. */
+        /** "I assume that if I …, then …" belief the coachee holds as
+         *  truth. The "I assume that" stem makes the epistemic status
+         *  explicit (testable belief, not fact about reality) — that's
+         *  what unlocks the immunity. The server post-processes each
+         *  draft through ensureStem(text, ASSUMPTION_STEM) so a
+         *  compliant model can drop the stem and the server still
+         *  puts it in canonical form. */
         text: z.string().min(10).max(400),
         /** 1-based indices into the commitments list passed to the
          *  prompt. At least one — a draft covering nothing is useless. */
@@ -690,24 +696,41 @@ const AssumptionDraftsSchema = z.object({
 });
 
 const DRAFT_ASSUMPTIONS_SYSTEM = `
-You cluster a coachee's competing commitments and draft the Big Assumptions underneath them for an ITC map (Column 5). Big Assumptions are the beliefs about how the world works that make the hidden commitments in Column 4 feel necessary — to the coachee they don't feel like assumptions, they feel like TRUTH. That's why the immune system runs itself.
+You cluster a coachee's competing commitments and draft the Big Assumptions underneath them for an ITC map (Column 5). Big Assumptions are beliefs the coachee holds about how the world works that make each hidden commitment in Column 4 feel NECESSARY. To him they don't feel like assumptions — they feel like TRUTH. That's why the immune system runs itself.
 
-Every Big Assumption you write MUST:
-  1. Take the shape "If I [break this specific commitment], then [something catastrophic about identity/relationship/worth]." Explicit if/then, not a flat statement.
-  2. Land somewhere catastrophic — identity ("I'd be nothing", "I'd be a fraud"), relational ("I'd lose them", "no one would stay"), or existential ("I'd fall apart", "I'd have nothing left"). Not "it would be awkward" — that's a practical concern, not a Big Assumption.
-  3. Be first-person felt. This is HIS worldview, in his voice — not a coach's diagnosis in third person.
+## Canonical form (mandatory)
 
-Clustering rules:
-  - One Big Assumption often underwrites SEVERAL commitments. If two commitments share the same catastrophic if/then, group them under one draft — don't repeat.
-  - Aim for FEWER drafts, not more. 2–4 well-clustered assumptions usually cover a whole map. Six is a ceiling, not a target.
-  - Every draft must list at least one commitment_index it underwrites.
-  - Every commitment on the input list should be covered by AT LEAST ONE draft — no orphans. If a commitment doesn't fit an existing cluster, propose a new draft for it.
+Every draft.text MUST start with "I assume that if I …, then …". The "I assume that" prefix is not decoration — it explicitly names the epistemic status (belief, not fact) which is what makes the assumption testable and what unlocks the immunity. Kegan/Lahey's canonical form.
 
-Two-step derivation (do this silently before you write):
-  A. Read the goal + commitments together. Group commitments by the shared catastrophic belief they'd all be violating.
-  B. For each cluster, write ONE Big Assumption in "If I…, then…" form that names the catastrophe the whole cluster is protecting against.
+## The bar every draft must clear
 
-Return only drafts. No prose, no meta, no explanation. Each draft.text starts with "If I".
+  1. ONE catastrophic clause in the consequent. Land on ONE identity or relational catastrophe — "I'd be a fraud", "she'd have no choice but to leave", "I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
+  2. Land in identity/relationship/worth — NOT practical outcome. "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
+  3. First-person felt, in HIS voice.
+  4. Preserve the coachee's own specificity. If his worry says "his wife", the assumption says "his wife" — do NOT broaden to "the people he loves" or "his family". If his worry says "I'd lose control", the assumption says "I'd lose control" — do NOT reword to "I'd become someone I don't recognize". You are naming HIS belief, not editorializing a smoother version.
+
+## Clustering — shared-root FIRST, split only as fallback
+
+Kegan/Lahey's methodology explicitly favors finding ONE Big Assumption that underwrites MULTIPLE competing commitments when a genuine shared root exists — that's evidence you've found a deep assumption vs. a surface one. Many-to-many is the target when it's real.
+
+BUT: a fake cluster is worse than a split. The test is —
+
+  - Can you write ONE antecedent ("if I ...") that names a protective move present in EVERY commitment in the cluster?
+  - If yes, cluster under one draft.
+  - If your antecedent only fits ONE of the commitments, the cluster is fake. Split into separate drafts, one per commitment.
+
+Example of a FAILED shared-root: two commitments cover (a) listening to her feedback and (b) admitting when he lied. If your antecedent is "if I actually listen to what she says", that only fits (a). The lying commitment isn't about listening. Either find a deeper shared move ("if I stop protecting her from seeing my failures" covers both) or split.
+
+## Coverage
+
+Every commitment on the input list must be covered by at least one draft. No orphans. Aim for FEWER drafts (2–4 is typical for a whole map); six is a ceiling, not a target.
+
+## Silent two-step derivation
+
+  A. Read goal + commitments together. Ask: is there ONE catastrophic belief that, if provisionally suspended, would loosen ALL these commitments? If yes → one cluster.
+  B. For each cluster (or standalone commitment), write one draft in "I assume that if I …, then …" form. One antecedent. One catastrophic consequent. HIS words, not yours.
+
+Return only drafts. No prose, no meta, no explanation. Each draft.text starts with "I assume that if I".
 `.trim();
 
 /**
@@ -744,10 +767,12 @@ export async function draftAssumptionsFromCommitments(input: {
       maxOutputTokens: 1200,
     });
     // Clamp indices to the input range so a hallucinated index can't
-    // land a link pointing at nothing.
+    // land a link pointing at nothing. Also pipe each draft through
+    // ensureStem so even if the model drops the "I assume that" prefix
+    // (they sometimes do), the persisted draft is in canonical form.
     const max = input.commitments.length;
     return object.drafts.map((d) => ({
-      text: scrubReply(d.text),
+      text: ensureStem(scrubReply(d.text), ASSUMPTION_STEM),
       commitment_indices: d.commitment_indices.filter(
         (n) => n >= 1 && n <= max,
       ),
@@ -838,9 +863,14 @@ export function scrubReply(text: string): string {
   }
 
   // Collapse double spaces / stranded punctuation the strips left.
+  // Also fix a recurring LLM typo: comma directly followed by a letter
+  // ("wife,and", "loves,and") should be "wife, and". Numeric commas
+  // (1,000) are preserved because we only match commas followed by an
+  // A–Z letter, not a digit.
   cleaned = cleaned
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([.,!?])/g, "$1")
+    .replace(/,([A-Za-z])/g, ", $1")
     .replace(/([.!?])\s*\1/g, "$1")
     .trim();
   return cleaned;

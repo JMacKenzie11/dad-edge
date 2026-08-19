@@ -23,8 +23,10 @@ import {
 } from "@/lib/itc/chip-target";
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import {
+  ASSUMPTION_STEM,
   ensureStem,
   GOAL_STEM,
+  hasAssumptionStem,
   hasGoalStem,
   ITC_STAGES,
   STAGE_LABELS,
@@ -86,6 +88,29 @@ describe("scrubReply", () => {
     expect(() => scrubReply("")).not.toThrow();
     expect(scrubReply("")).toBe("");
   });
+
+  it("fixes comma-directly-followed-by-letter typos (wife,and → wife, and)", () => {
+    // Recurring LLM typo we saw in real coach-drafted assumptions:
+    // "hurts his wife,and she'd have no choice" — the missing space
+    // makes visible output look sloppy. Defensive normalization on
+    // every scrubReply pass ensures we never ship this to a coachee.
+    expect(scrubReply("hurts his wife,and she'd leave")).toBe(
+      "hurts his wife, and she'd leave",
+    );
+    expect(scrubReply("the people he loves,and that man isn't enough")).toBe(
+      "the people he loves, and that man isn't enough",
+    );
+  });
+
+  it("preserves numeric commas (1,000 unaffected)", () => {
+    // The comma-space fix only injects space when the comma is followed
+    // by an A-Z letter — digits (numeric commas) are preserved so
+    // "1,000" or "2,500 words" don't get mangled.
+    expect(scrubReply("It took 1,000 hours.")).toBe("It took 1,000 hours.");
+    expect(scrubReply("Over 2,500 words, roughly.")).toBe(
+      "Over 2,500 words, roughly.",
+    );
+  });
 });
 
 describe("hasGoalStem", () => {
@@ -128,6 +153,41 @@ describe("ensureStem", () => {
     expect(ensureStem("Being present is important", GOAL_STEM)).toBe(
       `${GOAL_STEM} being present is important`,
     );
+  });
+});
+
+describe("hasAssumptionStem", () => {
+  it("accepts the exact stem", () => {
+    expect(hasAssumptionStem(`${ASSUMPTION_STEM} if I fail`)).toBe(true);
+  });
+
+  it("rejects text that lacks the stem", () => {
+    // "If I …, then …" alone is NOT canonical ITC form — the whole
+    // point of the stem is to name the epistemic status (belief, not
+    // fact) which is what makes the assumption testable.
+    expect(hasAssumptionStem("If I stay, then I'd lose control")).toBe(false);
+    expect(hasAssumptionStem("She'd leave me")).toBe(false);
+  });
+
+  it("tolerates smart apostrophes and quotes (parses same as ASCII)", () => {
+    // Coach output sometimes carries U+2019 smart apostrophes; the
+    // stem check normalizes both sides so real drafts pass.
+    const smart = "I assume that if I\u2019m too honest, then she\u2019d leave";
+    expect(hasAssumptionStem(smart)).toBe(true);
+  });
+
+  it("ensureStem auto-prepends when the user types raw 'If I …'", () => {
+    // saveAssumption pipes user input through ensureStem so a user
+    // typing "If I stop lying" lands as "I assume that if I stop lying"
+    // without them having to know the ceremony.
+    expect(ensureStem("If I stop lying", ASSUMPTION_STEM)).toBe(
+      `${ASSUMPTION_STEM} if I stop lying`,
+    );
+  });
+
+  it("ensureStem no-ops when the user already typed the stem", () => {
+    const t = `${ASSUMPTION_STEM} if I stop lying`;
+    expect(ensureStem(t, ASSUMPTION_STEM)).toBe(t);
   });
 });
 
@@ -277,11 +337,13 @@ describe("STAGE_INTROS", () => {
     expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
   });
 
-  it("assumptions intro names the ITC 'If…then…' shape and the many-to-many linking", () => {
+  it("assumptions intro names the ITC 'I assume that if…then…' shape and the many-to-many linking", () => {
     const rendered = STAGE_INTROS["assumptions"]!({ goal: null });
-    // Big Assumptions in ITC are If/then beliefs that make the hidden
-    // commitments feel necessary — the intro must signal that shape so
-    // the coachee doesn't stop at a flat single-clause statement.
+    // Big Assumptions in ITC are "I assume that if I…, then …" beliefs
+    // — the "I assume that" stem makes the epistemic status explicit
+    // (testable belief, not fact) which is what unlocks the immunity.
+    // The intro must model that canonical form for the coachee.
+    expect(rendered.toLowerCase()).toContain("i assume");
     expect(/if.*then/i.test(rendered)).toBe(true);
     // Many-to-many is the whole reason assumptions has an add form
     // separate from the 1:1 worries/commitments — call it out.

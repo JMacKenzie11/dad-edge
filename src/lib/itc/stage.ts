@@ -106,3 +106,21 @@ export function hasGoalStem(text: string): boolean {
     .toLowerCase();
   return normalized.startsWith(GOAL_STEM.toLowerCase());
 }
+
+/**
+ * Column 5 Big-Assumption stem check. ITC's canonical assumption form
+ * is "I assume that if I …, then …" — the "I assume that" prefix makes
+ * the epistemic status explicit (this is a testable belief, not a fact
+ * about reality). Unlike goals, where saveGoal rejects competing
+ * framing, saveAssumption auto-prepends the stem via ensureStem so the
+ * user can type either "If I …" or "I assume that if I …" and land in
+ * the same place.
+ */
+export function hasAssumptionStem(text: string): boolean {
+  const normalized = text
+    .trim()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .toLowerCase();
+  return normalized.startsWith(ASSUMPTION_STEM.toLowerCase());
+}

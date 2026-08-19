@@ -1963,11 +1963,15 @@ describe("Form-First regression", () => {
         `coach must not spam drafts (max 6 per schema); got ${drafts?.length}`,
       ).toBe(true);
 
-      // Every draft must be "If I…, then…" shaped and start with "If I".
+      // Every draft must be in canonical Kegan/Lahey form:
+      // "I assume that if I …, then …". The "I assume that" stem is
+      // enforced server-side by ensureStem in draftAssumptionsFromCommitments,
+      // so even a model that drops the prefix lands here in canonical
+      // form.
       for (const d of drafts ?? []) {
         expect(
-          /^if\s+i\b/i.test((d.text as string).trim()),
-          `draft must start with "If I": "${d.text}"`,
+          /^i\s+assume\s+that\s+if\s+i\b/i.test((d.text as string).trim()),
+          `draft must start with "I assume that if I": "${d.text}"`,
         ).toBe(true);
         expect(
           /\bthen\b/i.test(d.text as string),

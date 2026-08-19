@@ -196,7 +196,7 @@ function AddAssumptionForm({
         onChange={(e) => setText(e.target.value)}
         rows={2}
         disabled={pending}
-        placeholder="If I…, then… — the belief underneath."
+        placeholder="I assume that if I…, then…"
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();

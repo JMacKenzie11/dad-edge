@@ -58,9 +58,11 @@ import {
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
+  ASSUMPTION_STEM,
   GOAL_STEM,
   ITC_STAGES,
   STAGE_LABELS,
+  ensureStem,
   hasGoalStem,
   type ItcStage,
 } from "@/lib/itc/stage";
@@ -989,6 +991,13 @@ export async function saveAssumption(
     }
   }
 
+  // Auto-prepend the ITC "I assume that" stem so both user-typed and
+  // draft-promoted assumptions land in canonical Kegan/Lahey form.
+  // Unlike goals (where competing framing is a hard reject), assumptions
+  // are more forgiving — the user might type "If I …" naturally and we
+  // just add the "I assume that" prefix so it reads as a testable belief.
+  const stemmed = ensureStem(parsed.data.text, ASSUMPTION_STEM);
+
   let row: Awaited<ReturnType<typeof addAssumption>>["row"];
   let isEdit: boolean;
   try {
@@ -996,11 +1005,11 @@ export async function saveAssumption(
       row = await updateAssumptionText(
         parsed.data.assumption_id,
         loaded.map.id,
-        parsed.data.text,
+        stemmed,
       );
       isEdit = true;
     } else {
-      const result = await addAssumption(loaded.map.id, parsed.data.text);
+      const result = await addAssumption(loaded.map.id, stemmed);
       if (result.deduped) {
         return {
           ok: false,
