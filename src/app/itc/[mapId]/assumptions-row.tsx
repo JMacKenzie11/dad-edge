@@ -66,7 +66,7 @@ export function AssumptionsRow({
   if (isLocked) {
     return (
       <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
-        Complete commitments first.
+        Complete competing commitments first.
       </p>
     );
   }
@@ -112,7 +112,7 @@ export function AssumptionsRow({
       )}
       {commitments.length === 0 ? (
         <p className="text-sm italic text-[color:var(--color-text-muted)]/70 pt-1">
-          Add commitments first.
+          Add competing commitments first.
         </p>
       ) : (
         <AddAssumptionForm

@@ -27,6 +27,7 @@ import {
   GOAL_STEM,
   hasGoalStem,
   ITC_STAGES,
+  STAGE_LABELS,
 } from "@/lib/itc/stage";
 import {
   isLegacyCannedIntro,
@@ -303,6 +304,20 @@ describe("STAGE_INTROS", () => {
       const out = factory({ goal: null });
       expect(out).not.toContain("jumping jacks");
     }
+  });
+});
+
+describe("STAGE_LABELS", () => {
+  it("labels Column 4 as 'Competing Commitments' (ITC terminology)", () => {
+    // Kegan/Lahey's ITC framework specifically calls Column 4 the
+    // "hidden competing commitments" — distinct from the Column 1
+    // improvement goal, which is also a "commitment" ("I'm committed
+    // to getting better at…"). Using the plain word "Commitments"
+    // for Column 4 conflates the two and blurs the whole point of
+    // the immunity map: that a hidden vow COMPETES with the stated
+    // goal. This test locks the disambiguation into the label used
+    // by the Continue button and the progress bar.
+    expect(STAGE_LABELS.commitments).toBe("Competing Commitments");
   });
 });
 

@@ -141,9 +141,19 @@ function CommitmentItem({
   }, [commitment?.id]);
 
   function commit() {
+    saveText(draft);
+  }
+
+  /**
+   * Save a specific text value directly, bypassing the draft state.
+   * Used by the "Use this draft" button so a click on the coach's
+   * draft card auto-saves — clicking is already the user's explicit
+   * intent, an extra Enter step is friction with no upside.
+   */
+  function saveText(nextText: string) {
     setError(null);
     if (inflightRef.current) return;
-    const text = draft.trim();
+    const text = nextText.trim();
     if (text.length < 3) {
       setError("Add a few more words.");
       setDraft(savedRef.current);
@@ -152,6 +162,7 @@ function CommitmentItem({
     if (text === savedRef.current.trim()) return;
     const priorSaved = savedRef.current;
     savedRef.current = text;
+    setDraft(text);
     inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -207,10 +218,7 @@ function CommitmentItem({
             <button
               type="button"
               disabled={pending}
-              onClick={() => {
-                setDraft(worry.coach_commitment_draft ?? "");
-                setTimeout(() => inputRef.current?.focus(), 50);
-              }}
+              onClick={() => saveText(worry.coach_commitment_draft ?? "")}
               className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             >
               Use this draft

@@ -281,7 +281,7 @@ export function MapCanvas({
         ) : null}
 
         <Section
-          title="4. Competing commitments"
+          title="4. Competing Commitments"
           active={map.current_stage === "commitments"}
           liveIntro={liveIntroFor("commitments")}
           chipTarget={chipTargetForStage(map.current_stage)}

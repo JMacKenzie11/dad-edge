@@ -25,7 +25,7 @@ export const STAGE_LABELS: Record<ItcStage, string> = {
   goal: "Goal",
   behaviors: "Behaviors",
   worries: "Worries",
-  commitments: "Commitments",
+  commitments: "Competing Commitments",
   assumptions: "Big Assumptions",
   review: "Review",
   immune_system: "Immune System",

@@ -124,7 +124,7 @@ export default async function ItcAdminMapPage({
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
-              Commitments ({commitments.length})
+              Competing Commitments ({commitments.length})
             </div>
             <ul className="list-decimal ml-4">
               {commitments.map((c) => (

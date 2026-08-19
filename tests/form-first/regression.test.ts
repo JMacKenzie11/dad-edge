@@ -1716,7 +1716,7 @@ describe("Form-First regression", () => {
         [
           "assumptions-row.tsx",
           read("src/app/itc/[mapId]/assumptions-row.tsx"),
-          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete commitments first/i,
+          /if\s*\(\s*isLocked\s*\)[\s\S]{0,300}?Complete competing commitments first/i,
         ],
       ];
       for (const [name, src, re] of rowFiles) {
@@ -2009,6 +2009,51 @@ describe("Form-First regression", () => {
       expect(drafts2?.length).toBe(drafts?.length);
     },
     240_000,
+  );
+
+  it(
+    "regression r: 'Use this draft' auto-saves — no extra Enter step needed",
+    async () => {
+      // Prior UX: clicking "Use this draft" on the commitments coach-
+      // draft card only filled the textarea and focused it — the user
+      // then had to press Enter or blur to save. That's a lie of an
+      // affordance: clicking the button IS the accept action, so an
+      // extra keystroke is friction with zero upside. The assumption-
+      // drafts flow (C-β) already auto-saves; this locks the parity
+      // for C-α so a future refactor can't accidentally re-introduce
+      // the fill-and-wait pattern.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
+      const src = readFileSync(
+        resolve(repoRoot, "src/app/itc/[mapId]/commitments-row.tsx"),
+        "utf8",
+      );
+      // The "Use this draft" button must invoke saveText (which fires
+      // the server action) — not just setDraft + focus.
+      const useThisDraftBlock = src.match(
+        /Use this draft[\s\S]{0,600}?<\/button>/,
+      );
+      expect(
+        useThisDraftBlock,
+        "commitments-row must contain a 'Use this draft' button",
+      ).toBeTruthy();
+      const block = useThisDraftBlock![0];
+      expect(
+        /saveText\s*\(/.test(block) ||
+          /commit\s*\(\s*worry\.coach_commitment_draft/.test(block),
+        `"Use this draft" onClick must call saveText(...) (auto-save), not just setDraft + focus. Block was: ${block}`,
+      ).toBe(true);
+      // Anti-pattern: the button MUST NOT simply setDraft + focus and
+      // wait for a manual save.
+      expect(
+        /onClick=\{[^}]*setDraft[^}]*inputRef\.current\?\.focus/.test(block),
+        `"Use this draft" onClick must not be a fill-and-focus without save. Block was: ${block}`,
+      ).toBe(false);
+    },
+    5_000,
   );
 
   it(
