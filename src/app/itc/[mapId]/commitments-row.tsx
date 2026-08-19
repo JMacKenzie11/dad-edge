@@ -166,7 +166,7 @@ function CommitmentItem({
             "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
-              : "bg-transparent border border-transparent hover:bg-black/20 hover:border-[color:var(--color-border)] cursor-text")
+              : "bg-transparent border border-[color:var(--color-border)] hover:bg-black/20 hover:border-[color:var(--color-text-muted)] cursor-text")
           }
         />
       </div>
