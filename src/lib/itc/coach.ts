@@ -30,6 +30,7 @@ import { mainModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
+import { scoreAssumptionDepth } from "./rubric";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -774,18 +775,16 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
 
   1. **One catastrophic clause in the consequent.** Land on ONE identity or relational catastrophe — "then I'd be a fraud", "then she'd have no choice but to leave", "then I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
 
-  2. **Consequent must have BOTH parts: observable tell AND identity landing.** Not one or the other. Both. Every draft.
+  2. **Consequent must have BOTH parts: observable tell AND identity landing.** Not one or the other. Both. Every draft. This is the hardest bar and the one drafts most often miss.
 
      - The **OBSERVABLE TELL** is something the coachee could see, hear, or feel — a behavior he'd exhibit ("I'd lose control"), a reaction from another person ("she'd pull away"), or a specific felt state ("I'd feel the shame"). Without this the belief is untestable — you can't run an experiment on "am I a fraud."
-     - The **IDENTITY LANDING** is what the tell would CONFIRM about who he is — "the husband who hurts her", "not good enough for her", "the man she can't trust". Without this the draft is just a behavioral prediction and it fails BOTH the coach reaction (which will push "what does that prove about you?") AND the depth rubric (which will score it below identity-level).
+     - The **IDENTITY LANDING** is what the tell would CONFIRM about who he is — "the husband who hurts her", "not good enough for her", "the man she can't trust". Without this the draft is just a behavioral prediction and it fails BOTH the coach reaction (which will push "what does that prove about you?") AND the depth rubric (which will score it below identity-level and reject it).
 
-     Two very common failure modes to avoid:
+     The template is strict: "then [OBSERVABLE TELL] and [IDENTITY LANDING]". Both slots must be filled. Test each draft yourself before returning it — cover the second half of the consequent with your hand: if what remains is just a behavioral prediction ("I'd lose control", "I'd say something awful", "she'd pull away") with no identity claim following, you have NOT completed the draft. Extend it with the identity landing.
 
-     **Failure A — pure identity verdict, no tell.** "then I'm the husband who keeps hurting the people he loves." Untestable. Fix by adding the tell: "then she'd show me I've been hurting her and I'd have to face I'm the husband who keeps hurting her."
+     Anchor the identity landing in the coachee's OWN commitment language when possible. If his commitment says "never becoming that guy", the assumption's landing should invoke "that guy" or "the guy I'm terrified I am." If his commitment says "never letting her see I've failed her", the landing should invoke "the husband who fails her" or similar. His identity language is the raw material for your consequent's back half.
 
-     **Failure B — pure behavioral prediction, no landing.** "then I'd lose control and say something I can't take back." This will get bounced by the depth rubric AND get pushed on by the reaction coach ("what does that prove about you as a husband?"). Fix by adding the landing: "then I'd lose control and be the husband who hurts her."
-
-     The template: "then [observable tell] and [identity landing]". Both required.
+     Draft is rejected server-side (via scoreAssumptionDepth) if the identity landing is missing — you don't get to hand the coachee a draft that will fail the gate.
 
   3. **Land in identity/relationship/worth — NOT practical outcome.** "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
 
@@ -811,11 +810,13 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
 
   9. **Aim for ~15–20 words WITH both consequent parts included.** Kegan/Lahey's canonical Big Assumptions in *Immunity to Change* average ~15 words. Your target: 15–20 words with BOTH the observable tell AND the identity landing (per rule 2). 20+ is a smell you're carrying extra modifiers or chained clauses. 25+ is nearly always the worry re-stemmed. Precision, not paragraph. When in doubt, tighten the antecedent (drop "actually" / "in the moment" / "really") — but NEVER drop the identity landing to hit a word count.
 
-     Compare:
-     - **Wrong — 34 words, chained catastrophes:** "I assume that if I stay in the room instead of walking out, then I'd lose it and say something awful, and I'd be the husband who hurts his wife, and she'd have no choice but to leave me."
-     - **Wrong — 22 words, no identity landing (behavioral prediction only, will fail rubric + get pushed by reaction coach):** "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back."
-     - **Right — 19 words, tell + landing:** "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
-     - **Right — 17 words, relational tell + landing:** "I assume that if I show her the worst of me, then she'd pull away and I'd know I'm not enough."
+     Canonical shapes (study these — they are your templates):
+     - "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her." (19 words: tell "lose control" + landing "husband who hurts her")
+     - "I assume that if I show her the worst of me, then she'd pull away and I'd know I'm not enough." (17 words: relational tell + landing)
+     - "I assume that if I stop protecting her from my failures, then she'd finally see I'm not the husband she deserves." (18 words: tell "she'd see" + landing "not the husband she deserves")
+     - "I assume that if I keep admitting I'm wrong, then she'd stop trusting me and I'd be the man she can't rely on." (19 words: tell "stop trusting" + landing "the man she can't rely on")
+
+     Every canonical shape has: "I assume that if I" + [act] + ", then" + [tell] + [and-connector] + [identity landing]. Match this shape.
 
 ## Clustering — shared-root FIRST, split only as fallback
 
@@ -898,7 +899,7 @@ export async function draftAssumptionsFromCommitments(input: {
     // so a compliant model that drops either token still lands here in
     // canonical Kegan/Lahey form.
     const max = input.commitments.length;
-    return object.drafts.map((d) => ({
+    const normalized = object.drafts.map((d) => ({
       text: ensureThenAfterIfClause(
         ensureStem(scrubReply(d.text), ASSUMPTION_STEM),
       ),
@@ -906,6 +907,62 @@ export async function draftAssumptionsFromCommitments(input: {
         (n) => n >= 1 && n <= max,
       ),
     }));
+
+    // Belt-and-suspenders rubric filter. Prompt guidance alone has
+    // proven insufficient — the drafter periodically produces drafts
+    // that pass Form-First checks (stem, then, atomic) but fail the
+    // depth rubric (missing identity landing). Those drafts then get
+    // offered to the coachee, who taps "Use this draft", promotes to
+    // itc_assumptions, and immediately gets bounced by the same
+    // rubric via computeAdvanceGate ("N assumptions need more depth").
+    // Solving upstream: score every draft here and drop any that
+    // fails identity-landing OR overall score < 2. Better to show
+    // the coachee fewer drafts than to show him drafts that will
+    // trap him at the depth gate.
+    //
+    // Architecturally Form-First-pure: server-side scoring of
+    // server-computed metadata before persisting metadata. Coachee
+    // never sees a rejected draft. If ALL drafts are rejected, the
+    // return is empty and the UI shows the "Add another Big
+    // Assumption" form with no drafts — user writes their own.
+    const scored = await Promise.all(
+      normalized.map(async (d) => {
+        try {
+          const score = await scoreAssumptionDepth({
+            goalText: input.goalText,
+            assumptionText: d.text,
+          });
+          return { draft: d, score };
+        } catch (err) {
+          console.warn(
+            "[itc coach] draft rubric score failed, keeping draft: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+          // On score failure keep the draft (fail-open) — better a
+          // possibly-shallow draft than losing the drafter output
+          // entirely to a transient rubric error.
+          return { draft: d, score: null };
+        }
+      }),
+    );
+    const kept = scored.filter(({ score }) => {
+      if (score === null) return true; // fail-open on rubric error
+      // Require identity-landing AND score >= 2. A draft with a
+      // finished-then + first-person-felt but no identity-landing
+      // would score 2 without lands_in_identity — reject those
+      // explicitly, since that's exactly the failure mode we're
+      // guarding against.
+      return score.lands_in_identity_or_big_time_bad && score.score >= 2;
+    });
+    const dropped = scored.length - kept.length;
+    if (dropped > 0) {
+      console.warn(
+        "[itc coach] rubric filter dropped %d/%d draft(s) for missing identity landing or low depth score",
+        dropped,
+        scored.length,
+      );
+    }
+    return kept.map(({ draft }) => draft);
   } catch (err) {
     console.warn(
       "[itc coach] draftAssumptionsFromCommitments failed: %s",
