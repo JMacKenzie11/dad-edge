@@ -790,13 +790,28 @@ Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveal
 
 Kegan/Lahey's methodology explicitly favors finding ONE Big Assumption that underwrites MULTIPLE competing commitments when a genuine shared root exists — that's evidence you've found a deep assumption vs. a surface one. Many-to-many is the target when it's real.
 
-BUT: a fake cluster is worse than a split. The test is —
+BUT: a fake cluster is worse than a split. Coverage is determined by the ANTECEDENT ONLY — not by keywords in your consequent.
 
-  - Can you write ONE antecedent ("if I ...") that names a protective move present in EVERY commitment in the cluster?
-  - If yes, cluster under one draft.
-  - If your antecedent only fits ONE of the commitments, the cluster is fake. Split into separate drafts, one per commitment.
+**The cluster-coverage test (mandatory before you list a commitment_index):**
 
-Example of a FAILED shared-root: two commitments cover (a) listening to her feedback and (b) admitting when he lied. If your antecedent is "if I actually listen to what she says", that only fits (a). The lying commitment isn't about listening. Either find a deeper shared move ("if I stop protecting her from seeing my failures" covers both) or split.
+  1. Read the antecedent — the "if I ..." clause.
+  2. For EACH commitment you're about to link, ask: "Would this coachee actually perform the act named in the antecedent under this commitment's protective vow?"
+  3. If yes for all — cluster under one draft.
+  4. If yes for only some — split. Do NOT list commitment_indices for the ones that don't fit.
+
+**The consequent-keyword trap — do NOT do this:**
+
+If your consequent contains a phrase like "I'd lose it" or "hurt her" or "not good enough," and one of the commitments' paired worries also mentions "lose it" or "hurt her" or "not good enough" — that is NOT evidence the antecedent covers that commitment. That is just a shared FEAR downstream. The antecedent (the ACT) must fit, independently of what fears the consequent names.
+
+**Worked example of the trap:**
+
+Antecedent: "if I actually listen to her and admit she's right".
+Consequent contains: "then I'd lose it and be the husband who hurts her".
+Commitment #3's paired worry mentions "losing it" and "hurting his wife."
+Wrong move: linking this draft to #3 because the consequent-keyword matches.
+Right move: check the antecedent independently — does #3's commitment involve listening and admitting? No, #3 is about walking out. So the antecedent DOESN'T fit #3. Do not link. If #3 needs coverage, draft a second assumption whose antecedent names the walking-out move.
+
+**A cluster with a wrong link is worse than a smaller cluster with no wrong links.** A wrong link produces an assumption the coachee can't actually test — the antecedent doesn't describe an act she'd perform under that commitment, so the "test" is empty.
 
 ## Coverage
 
