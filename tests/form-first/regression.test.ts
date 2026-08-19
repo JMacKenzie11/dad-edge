@@ -1269,6 +1269,163 @@ describe("Form-First regression", () => {
     },
     5_000,
   );
+
+  it(
+    "regression i: coach reactions never carry a suggestions array (menus are Give-me-ideas's job)",
+    async () => {
+      // Prior bug: on adding behavior #2, the reaction returned 4
+      // suggestion chips (inconsistent — didn't happen on #1) and
+      // several of them near-duplicated what the user already added.
+      // Fix: reactions are refinement-only; the multi-item menu is
+      // exclusively the "Give me ideas" pipeline.
+      //
+      // Verify with the real LLM: seed a goal + advance to behaviors,
+      // add a behavior via saveWorry's cousin action addBehavior,
+      // then read back the coach reaction message and assert its
+      // parsed chip payload has no `suggestions` (or an empty array).
+      const supabase = createSupabaseServiceClient();
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      // Add two behaviors so we exercise the same path where the
+      // prior bug fired on the second addition.
+      for (const text of [
+        "I bring up things she did in the past instead of listening",
+        "I shut down and walk out of the room",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+
+      // Read every assistant reaction on behavior threads and assert
+      // no fenced chip payload carries a non-empty suggestions array.
+      const { data: reactions } = await supabase
+        .from("itc_messages")
+        .select("content")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "entry_thread")
+        .eq("entry_ref_table", "itc_behaviors");
+      expect((reactions?.length ?? 0) >= 2).toBe(true);
+      for (const m of reactions ?? []) {
+        const content = m.content as string;
+        const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+        const match = content.match(fence);
+        if (!match) continue; // no chip payload = trivially fine
+        const chips = JSON.parse(match[1]) as {
+          refinement?: string;
+          suggestions?: string[];
+        };
+        expect(
+          chips.suggestions ?? [],
+          `reaction should not carry suggestions[]; got: ${JSON.stringify(chips.suggestions)}`,
+        ).toEqual([]);
+      }
+    },
+    90_000,
+  );
+
+  it(
+    "regression j: Give-me-ideas suggestions never duplicate an existing on-map entry",
+    async () => {
+      // Prior bug: after adding two behaviors, tapping Give-me-ideas
+      // returned 4 suggestions that near-mirrored those behaviors.
+      // Fix: generateSuggestions now feeds existing entries into the
+      // prompt and post-filters by normalized-text dedup.
+      const supabase = createSupabaseServiceClient();
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage, requestSuggestions } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      const existingTexts = [
+        "I bring up things she did in the past instead of listening",
+        "I shut down and walk out of the room",
+      ];
+      for (const text of existingTexts) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+
+      // Tap Give-me-ideas for behaviors.
+      const sfd = new FormData();
+      sfd.set("map_id", ctx.mapId);
+      sfd.set("kind", "behavior");
+      const sRes = await requestSuggestions(sfd);
+      expect(
+        sRes.ok,
+        `requestSuggestions failed: ${sRes.ok ? "" : sRes.reason}`,
+      ).toBe(true);
+
+      // Suggestions live on the resulting stage_note message's fenced
+      // payload. Fetch the most recent stage_note assistant message
+      // on the behaviors stage and inspect chips.
+      const { data: notes } = await supabase
+        .from("itc_messages")
+        .select("content, created_at")
+        .eq("map_id", ctx.mapId)
+        .eq("role", "assistant")
+        .eq("surface", "stage_note")
+        .eq("stage_at_creation", "behaviors")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      expect(notes?.length).toBe(1);
+      const content = notes![0].content as string;
+      const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
+      const match = content.match(fence);
+      expect(
+        match,
+        "suggestions message must carry a coach-chips payload",
+      ).not.toBeNull();
+      const chips = JSON.parse(match![1]) as { suggestions?: string[] };
+      expect(
+        (chips.suggestions ?? []).length,
+        "at least one suggestion should survive the dedup filter",
+      ).toBeGreaterThan(0);
+
+      // Normalized-text dedup: no suggestion may match an existing
+      // behavior when compared case-insensitively with punctuation /
+      // whitespace collapsed.
+      const norm = (s: string) =>
+        s
+          .trim()
+          .toLowerCase()
+          .replace(/[\u2018\u2019\u02BC]/g, "'")
+          .replace(/[\u201C\u201D]/g, '"')
+          .replace(/[.!?]+$/, "")
+          .replace(/\s+/g, " ");
+      const existingNormalized = new Set(existingTexts.map(norm));
+      for (const s of chips.suggestions ?? []) {
+        expect(
+          existingNormalized.has(norm(s)),
+          `suggestion "${s}" duplicates an existing behavior`,
+        ).toBe(false);
+      }
+    },
+    90_000,
+  );
 });
 
 /**

@@ -28,6 +28,7 @@ import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 import { mainModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
 import type { ItcStage } from "./stage";
 
@@ -225,11 +226,14 @@ export async function generateCoachReaction(
       ],
       maxOutputTokens: 1500,
     });
+    // Reactions never carry a suggestions array — that's what the
+    // "Give me ideas" button is for. Strip regardless of what the
+    // model produced. Belt-and-suspenders against prompt drift.
     return {
       ...object,
       reply: scrubReply(object.reply),
       refinement: object.refinement ? scrubReply(object.refinement) : undefined,
-      suggestions: object.suggestions?.map(scrubReply),
+      suggestions: undefined,
       durationMs: Date.now() - started,
     };
   } catch (err) {
@@ -367,8 +371,8 @@ function buildReactionPrompt(input: ReactionInput): string {
       "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
       "- The rubric, scores, and attempts count are internal — never reference them in prose. Do not tell him 'you're at 2 out of 3' or 'attempt 3'.\n" +
       "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain read against the criteria.\n" +
-      "- Suggestions are optional; include 3-5 in the `suggestions` field only when he'd benefit from options he can tap into the input.\n" +
-      "- Refinement is optional; only include when it's a genuine one-line sharpening of what he wrote.",
+      "- LEAVE `suggestions` EMPTY. Reactions never carry a multi-item suggestions menu — that's what the 'Give me ideas' button generates in a separate call. If you think he'd benefit from options, that's a signal to end your reaction with a question, not to hand him a menu.\n" +
+      "- `refinement` is optional; only include when it's a genuine one-line sharpening of what he wrote (Case 2 / depth-score 2 only).",
   );
   return parts.join("\n\n");
 }
@@ -422,15 +426,27 @@ export async function generateSuggestions(
       `Each suggestion is a COMPLETE column-5 Big Assumption in "If I…, then…" form, with the "then" clause carried through to identity or a Big Time Bad. Example: "If I let her see who I really am, then I will have proved I'm not the man I've been telling her I am."`,
   };
 
+  // Existing entries for this kind — the model must not repeat these
+  // and neither should the post-generation dedup allow them through.
+  const existing = existingEntriesForKind(input);
+  const existingBlock = existing.length
+    ? [
+        `- DO NOT duplicate or paraphrase any of the entries already on the map for this column:`,
+        ...existing.map((t, i) => `    ${i + 1}. "${t}"`),
+        `- If your first drafts overlap semantically with the above, rewrite them until they name genuinely different patterns.`,
+      ].join("\n")
+    : `- No existing entries for this column — options draft fresh.`;
+
   const prompt = [
     `[system: the coachee tapped "Give me ideas" for the ${input.kind} column. He wants 3-5 tappable options he can drop into the input as-is.]`,
     `Rules for the \`suggestions\` field (STRICT):`,
     `- Every item is a COMPLETE, ready-to-tap ENTRY on the ${pillar.label} pillar (${pillar.domain}). Not a question. Not a meta-prompt. Not "what have you typed" or "tell me more" — those go in \`reply\`, never in \`suggestions\`.`,
     `- ${kindShape[input.kind]}`,
     `- No cross-domain options (no fitness on Bond, no work on Vitality, no marriage on Amplify, etc.).`,
+    existingBlock,
     input.contextText
       ? `- Ground the options in the paired context: "${input.contextText}".`
-      : `- No prior entry to ground in — draft options from the ${pillar.label} domain and typical patterns Boardroom men work on there.`,
+      : null,
     input.extra ? `- ${input.extra}` : null,
     ``,
     `Rules for the \`reply\` field:`,
@@ -449,13 +465,17 @@ export async function generateSuggestions(
       prompt,
       maxOutputTokens: 1200,
     });
-    // Filter out any accidentally question-shaped suggestions the
-    // model slipped in despite the prompt. Cheap belt-and-suspenders
-    // against the observed failure mode where the chip array became
-    // meta-prompts.
+    // Three-step filter:
+    //   1. scrub voice/dash cleanup
+    //   2. drop any question-shaped chip (meta-prompt leak)
+    //   3. drop any chip whose normalized text matches an existing
+    //      entry on the map (semantic dedup — prevents the coach from
+    //      re-offering what he just typed)
+    const existingNormalized = new Set(existing.map(normalizeMapText));
     const cleaned = object.suggestions
       .map(scrubReply)
-      .filter((s) => !isQuestionShaped(s));
+      .filter((s) => !isQuestionShaped(s))
+      .filter((s) => !existingNormalized.has(normalizeMapText(s)));
     return {
       reply: scrubReply(object.reply),
       suggestions: cleaned,
@@ -471,6 +491,31 @@ export async function generateSuggestions(
       suggestions: [],
       durationMs: Date.now() - started,
     };
+  }
+}
+
+/**
+ * Pull the existing on-map entry texts for the column the coachee
+ * asked for suggestions on. The suggestions prompt uses these
+ * verbatim to bias the model away from duplicates, and the
+ * post-generation filter strips any that snuck through.
+ */
+function existingEntriesForKind(input: SuggestionsInput): string[] {
+  switch (input.kind) {
+    case "behavior":
+      return input.behaviors.filter((b) => b.selected).map((b) => b.text);
+    case "worry":
+      return input.worries.map((w) => w.text);
+    case "commitment":
+      return input.commitments.map((c) => c.text);
+    case "assumption":
+      return input.assumptions.map((a) => a.text);
+    case "goal":
+    default:
+      // Goal is a single field; if it's already set, listing it as
+      // "existing" biases the model to write near-duplicates. Better
+      // to draft fresh alternatives.
+      return [];
   }
 }
 
