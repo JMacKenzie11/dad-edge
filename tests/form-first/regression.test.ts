@@ -18,7 +18,9 @@ import { setMainModelOverride, setUtilityModelOverride } from "@/lib/model-confi
 import type { LanguageModel } from "ai";
 import {
   addBehavior,
+  getAdvanceGate,
   saveGoal,
+  saveWorry,
   sendDockMessage,
 } from "@/app/itc/actions";
 import { createMap } from "@/lib/itc/maps";
@@ -426,6 +428,171 @@ describe("Form-First regression", () => {
       ).toBe("behaviors");
     },
     30_000,
+  );
+
+  it(
+    "regression c: worry excavation loop — shallow blocks Continue, deep unblocks",
+    async () => {
+      // Real LLMs — the rubric and reaction must both actually fire.
+      // Seed a goal + one selected behavior, then advance to worries.
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probe: this test writes to depth_score + attempts, added
+      // by migration 20260818000004_reinstate_depth_and_attempts.sql.
+      // If those columns aren't on the target DB yet, skip cleanly
+      // rather than failing on a schema-cache error.
+      const probe = await supabase
+        .from("itc_worries")
+        .select("attempts, depth_score")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression c] skipping: schema missing — apply migration 20260818000004. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      const bfd = new FormData();
+      bfd.set("map_id", ctx.mapId);
+      bfd.set("text", "I bring up things she did in the past");
+      expect((await addBehavior(bfd)).ok).toBe(true);
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId);
+      expect(bs?.length).toBe(1);
+      const behaviorId = bs![0].id as string;
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      // 1. Save a shallow worry. Rubric should score low; gate should block.
+      const shallowText = "I'm afraid of wasting time.";
+      const w1 = new FormData();
+      w1.set("map_id", ctx.mapId);
+      w1.set("behavior_id", behaviorId);
+      w1.set("text", shallowText);
+      const w1Res = await saveWorry(w1);
+      expect(
+        w1Res.ok,
+        `saveWorry (shallow) should succeed: ${w1Res.ok ? "" : w1Res.reason}`,
+      ).toBe(true);
+
+      const { data: worryRowsShallow } = await supabase
+        .from("itc_worries")
+        .select("id, text, depth_score, attempts")
+        .eq("map_id", ctx.mapId);
+      expect(worryRowsShallow?.length).toBe(1);
+      const shallowWorry = worryRowsShallow![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+      };
+      expect(shallowWorry.text).toBe(shallowText);
+      // The rubric may return 0-1 for this text; guard both bounds.
+      expect(
+        shallowWorry.depth_score,
+        "shallow worry should be scored below 2/3",
+      ).not.toBeNull();
+      expect(shallowWorry.depth_score! < 2).toBe(true);
+      expect(shallowWorry.attempts).toBe(1);
+
+      // Reaction should have landed anchored to this worry.
+      const { data: shallowReactions } = await supabase
+        .from("itc_messages")
+        .select("content, role, surface, entry_ref_table, entry_ref_id")
+        .eq("map_id", ctx.mapId)
+        .eq("surface", "entry_thread")
+        .eq("entry_ref_table", "itc_worries")
+        .eq("entry_ref_id", shallowWorry.id)
+        .eq("role", "assistant");
+      expect(
+        (shallowReactions?.length ?? 0) > 0,
+        "coach reaction on the shallow worry must land in the entry thread",
+      ).toBe(true);
+      // A shallow-score reaction should end on a question (excavation
+      // invitation). Loose check: contains a '?'. Non-deterministic
+      // LLM prose can vary, but a question is the mechanism.
+      const shallowProse = (shallowReactions ?? [])
+        .map((m) => m.content as string)
+        .join("\n");
+      expect(
+        shallowProse.includes("?"),
+        `shallow reaction should ask a question (excavation), got: ${shallowProse}`,
+      ).toBe(true);
+
+      // Gate: worries → commitments must be disabled with depth reason.
+      const blockedGate = await getAdvanceGate(ctx.mapId);
+      expect(blockedGate.from).toBe("worries");
+      expect(blockedGate.enabled).toBe(false);
+      expect(blockedGate.reason ?? "").toMatch(/depth/i);
+
+      // 2. Edit to a deep worry. attempts should be 2; score should go up.
+      const deepText =
+        "That she'll finally see I've been faking it my whole marriage and stop trusting me, and I'll have proved I'm the man who breaks the family the way I was broken.";
+      const w2 = new FormData();
+      w2.set("map_id", ctx.mapId);
+      w2.set("behavior_id", behaviorId);
+      w2.set("text", deepText);
+      expect((await saveWorry(w2)).ok).toBe(true);
+
+      const { data: worryRowsDeep } = await supabase
+        .from("itc_worries")
+        .select("id, text, depth_score, attempts")
+        .eq("map_id", ctx.mapId);
+      expect(worryRowsDeep?.length).toBe(1);
+      const deepWorry = worryRowsDeep![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+      };
+      expect(deepWorry.text).toBe(deepText);
+      expect(deepWorry.attempts).toBe(2);
+      expect(
+        deepWorry.depth_score,
+        "deep worry must be scored 2 or 3",
+      ).not.toBeNull();
+      expect(deepWorry.depth_score! >= 2).toBe(true);
+
+      // Gate: with a passing worry (3/3, OR 2/3 with attempts>=2), the
+      // gate must now be enabled.
+      const openGate = await getAdvanceGate(ctx.mapId);
+      expect(openGate.from).toBe("worries");
+      expect(
+        openGate.enabled,
+        `gate should open on deep worry (score=${deepWorry.depth_score}, attempts=${deepWorry.attempts}); reason: ${openGate.reason}`,
+      ).toBe(true);
+
+      // rubric_scored event should have fired twice.
+      const { data: rubricEvents } = await supabase
+        .from("itc_turn_events")
+        .select("payload")
+        .eq("map_id", ctx.mapId)
+        .eq("event_type", "rubric_scored");
+      expect(
+        (rubricEvents?.length ?? 0) >= 2,
+        "rubric_scored should have logged once per worry save",
+      ).toBe(true);
+    },
+    120_000,
   );
 });
 

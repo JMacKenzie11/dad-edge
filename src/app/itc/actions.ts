@@ -33,7 +33,10 @@ import {
   listWorries,
   saveImprovementGoal,
   updateBehaviorText,
+  updateWorryDepth,
+  upsertWorryForBehavior,
 } from "@/lib/itc/maps";
+import { scoreWorryDepth } from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   GOAL_STEM,
@@ -144,6 +147,7 @@ async function loadCoachContext(mapId: string) {
       worries: worries.map((w) => ({
         behavior_id: w.behavior_id,
         text: w.text,
+        depth_score: w.depth_score,
       })),
       commitments: commitments.map((c) => ({
         id: c.id,
@@ -153,6 +157,7 @@ async function loadCoachContext(mapId: string) {
       assumptions: assumptions.map((a) => ({
         id: a.id,
         text: a.text,
+        depth_score: a.depth_score,
         selected_for_testing: a.selected_for_testing,
         linked_commitment_ids: linksByAssumption.get(a.id) ?? [],
       })),
@@ -657,6 +662,132 @@ export async function removeBehavior(
 }
 
 // -------------------------------------------------------------------------
+// Worries (Column 3) — depth-stage excavation loop
+// -------------------------------------------------------------------------
+
+const worrySaveSchema = z.object({
+  map_id: z.string().uuid(),
+  behavior_id: z.string().uuid(),
+  text: z.string().min(3).max(400),
+});
+
+/**
+ * Save-or-edit the worry paired to a behavior. Pipeline:
+ *   1. upsert the worry row (attempts++)
+ *   2. run scoreWorryDepth (server rubric) and persist the score
+ *   3. fire coach reaction with depth+attempts as prompt inputs
+ *
+ * Steps 2-3 are the excavation loop: shallow scores prompt the coach
+ * to ask an excavation question and invite a rewrite. The rubric
+ * result is metadata (server-written), not map content (user-written).
+ */
+export async function saveWorry(formData: FormData): Promise<ActionResult> {
+  const parsed = worrySaveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    behavior_id: formData.get("behavior_id"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid worry input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  // Behavior must exist on the map and be selected.
+  const behaviors = await listBehaviors(loaded.map.id);
+  const behavior = behaviors.find(
+    (b) => b.id === parsed.data.behavior_id && b.selected,
+  );
+  if (!behavior) {
+    return { ok: false, reason: "That behavior is not on the map." };
+  }
+
+  let row: Awaited<ReturnType<typeof upsertWorryForBehavior>>["row"];
+  let isEdit: boolean;
+  try {
+    const result = await upsertWorryForBehavior(
+      loaded.map.id,
+      behavior.id,
+      parsed.data.text,
+    );
+    row = result.row;
+    isEdit = result.isEdit;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save worry.",
+    };
+  }
+
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    isEdit ? "entry_edited" : "entry_added",
+    {
+      kind: "worry",
+      entry_id: row.id,
+      behavior_id: behavior.id,
+      text: row.text,
+      attempts: row.attempts,
+      ...(isEdit ? { stage_at_edit: loaded.map.current_stage } : {}),
+    },
+    { stage: loaded.map.current_stage },
+  );
+
+  // Rubric — deterministic pipeline step. Score persists even if the
+  // coach reaction later fails; the Continue gate reads directly from
+  // depth_score/attempts.
+  let score = 0;
+  try {
+    const scored = await scoreWorryDepth({
+      goalText: loaded.map.improvement_goal ?? "",
+      behaviorText: behavior.text,
+      worryText: row.text,
+    });
+    score = scored.score;
+    await updateWorryDepth(row.id, score);
+    events.record(
+      "rubric_scored",
+      {
+        kind: "worry",
+        entry_id: row.id,
+        score,
+        attempts: row.attempts,
+        is_fear: scored.is_fear,
+        is_first_person_felt: scored.is_first_person_felt,
+        touches_identity: scored.touches_identity,
+        reason: scored.reason,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } catch (err) {
+    console.warn(
+      "[itc] saveWorry rubric failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      { where: "saveWorry.rubric", message: err instanceof Error ? err.message : String(err) },
+      { stage: loaded.map.current_stage },
+    );
+  }
+  await events.flush();
+
+  await awaitReactionOrSwallow(() =>
+    fireCoachReaction(
+      loaded.map.id,
+      {
+        kind: "worry",
+        text: row.text,
+        behaviorText: behavior.text,
+        depthScore: score,
+        attempts: row.attempts,
+      },
+      { table: "itc_worries", id: row.id },
+    ),
+  );
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+// -------------------------------------------------------------------------
 // Suggestions ("Give me ideas" button)
 // -------------------------------------------------------------------------
 
@@ -826,6 +957,23 @@ export async function getAdvanceGate(mapId: string): Promise<AdvanceGate> {
   return computeAdvanceGate(map);
 }
 
+/**
+ * Depth-gate rule: a worry (or assumption) passes when the rubric
+ * score is 3/3, OR when the score is 2/3 and the coachee has made
+ * at least two attempts at this entry. The two-attempts-at-depth-2
+ * escape hatch prevents locking a man out when a rubric edge case
+ * disagrees with what's obviously a real fear.
+ */
+function worryPassesDepth(
+  depthScore: number | null,
+  attempts: number,
+): boolean {
+  if (depthScore === null) return false;
+  if (depthScore >= 3) return true;
+  if (depthScore === 2 && attempts >= 2) return true;
+  return false;
+}
+
 async function computeAdvanceGate(
   map: Awaited<ReturnType<typeof getMapById>>,
 ): Promise<AdvanceGate> {
@@ -914,6 +1062,21 @@ async function computeAdvanceGate(
           label,
           enabled: false,
           reason: `${missing.length} behavior${missing.length === 1 ? "" : "s"} still need a worry.`,
+        };
+      }
+      // Depth gate: every worry passes at 3/3 OR at 2/3 with attempts >= 2.
+      // Deterministic — reads rubric-written metadata, not coach prose.
+      const shallow = ws.filter(
+        (w) =>
+          !worryPassesDepth(w.depth_score, w.attempts),
+      );
+      if (shallow.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${shallow.length} worr${shallow.length === 1 ? "y needs" : "ies need"} more depth.`,
         };
       }
       return { from, to, label, enabled: true, reason: null };

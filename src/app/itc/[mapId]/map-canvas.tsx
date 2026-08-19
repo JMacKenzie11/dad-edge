@@ -20,6 +20,7 @@ import { BehaviorsRow } from "./behaviors-row";
 import { CoachDock } from "./coach-dock";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
+import { WorriesRow } from "./worries-row";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   data_mining: "Data mining",
@@ -237,47 +238,30 @@ export function MapCanvas({
             map.current_stage === "worries" ? unattachedForCurrentStage : []
           }
         >
-          {selectedBehaviors.length === 0 ? (
-            <Placeholder>Fills in after behaviors.</Placeholder>
-          ) : (
-            <ul className="space-y-1.5 text-sm">
+          <WorriesRow
+            mapId={map.id}
+            behaviors={behaviors}
+            worries={worries}
+            nowMs={renderedAt}
+          />
+          {selectedBehaviors.length > 0 ? (
+            <div className="pl-3 mt-1 space-y-2">
               {selectedBehaviors.map((b, i) => {
                 const worry = worriesByBehavior.get(b.id);
+                if (!worry) return null;
+                const thread = threadFor("itc_worries", worry.id);
+                if (thread.length === 0) return null;
                 return (
-                  <li
-                    key={b.id}
-                    className={
-                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
-                      (worry && isFresh(worry.created_at, renderedAt)
-                        ? "itc-fresh-row"
-                        : "")
-                    }
-                  >
-                    <div className="flex flex-wrap gap-2 items-baseline">
-                      <span className="text-[11px] text-[color:var(--color-text-muted)] shrink-0">
-                        {i + 1}.
-                      </span>
-                      <span className="text-[color:var(--color-text-muted)]/80 min-w-[10rem]">
-                        {b.text}
-                      </span>
-                      <span className="text-[color:var(--color-text-muted)]/50 shrink-0">
-                        →
-                      </span>
-                      {worry ? (
-                        <span className="flex-1 min-w-[10rem]">
-                          {worry.text}
-                        </span>
-                      ) : (
-                        <span className="italic text-[color:var(--color-text-muted)]/70">
-                          not yet
-                        </span>
-                      )}
+                  <div key={worry.id}>
+                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                      Coach on #{i + 1}
                     </div>
-                  </li>
+                    <EntryThread messages={thread} />
+                  </div>
                 );
               })}
-            </ul>
-          )}
+            </div>
+          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "worries" ? (

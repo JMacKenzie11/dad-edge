@@ -28,6 +28,8 @@ export type ItcAssumption = {
   map_id: string;
   sort_order: number;
   text: string;
+  depth_score: number | null;
+  attempts: number;
   selected_for_testing: boolean;
   created_at: string;
 };
@@ -54,6 +56,8 @@ export type ItcWorry = {
   map_id: string;
   behavior_id: string;
   text: string;
+  depth_score: number | null;
+  attempts: number;
   created_at: string;
 };
 
@@ -370,6 +374,74 @@ export async function listWorries(mapId: string): Promise<ItcWorry[]> {
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listWorries: ${error.message}`);
   return (data ?? []) as ItcWorry[];
+}
+
+/**
+ * Insert-or-update the worry paired to a behavior. One worry per
+ * behavior (pairing rule). Increments `attempts` on every save so
+ * the Continue gate can grant a pass at depth_score=2 after two
+ * honest attempts. `depth_score` is left null here — the caller
+ * (saveWorry server action) runs the rubric and stores the score
+ * via updateWorryDepth in a second step.
+ */
+export async function upsertWorryForBehavior(
+  mapId: string,
+  behaviorId: string,
+  text: string,
+): Promise<{ row: ItcWorry; isEdit: boolean }> {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) throw new Error("Worry is too short.");
+  const supabase = createSupabaseServiceClient();
+  const lookup = await supabase
+    .from("itc_worries")
+    .select("*")
+    .eq("map_id", mapId)
+    .eq("behavior_id", behaviorId)
+    .maybeSingle();
+  if (lookup.error) throw new Error(`upsertWorryForBehavior lookup: ${lookup.error.message}`);
+  if (lookup.data) {
+    const existing = lookup.data as ItcWorry;
+    const { data, error } = await supabase
+      .from("itc_worries")
+      .update({
+        text: trimmed,
+        attempts: (existing.attempts ?? 0) + 1,
+        // Clear stale score; caller re-scores immediately.
+        depth_score: null,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error || !data) throw new Error(`upsertWorryForBehavior update: ${error?.message ?? "no row"}`);
+    return { row: data as ItcWorry, isEdit: true };
+  }
+  const { data, error } = await supabase
+    .from("itc_worries")
+    .insert({
+      map_id: mapId,
+      behavior_id: behaviorId,
+      text: trimmed,
+      attempts: 1,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`upsertWorryForBehavior insert: ${error?.message ?? "no row"}`);
+  return { row: data as ItcWorry, isEdit: false };
+}
+
+export async function updateWorryDepth(
+  worryId: string,
+  score: number,
+): Promise<void> {
+  if (score < 0 || score > 3 || !Number.isInteger(score)) {
+    throw new Error(`updateWorryDepth: score must be int 0-3, got ${score}`);
+  }
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_worries")
+    .update({ depth_score: score })
+    .eq("id", worryId);
+  if (error) throw new Error(`updateWorryDepth: ${error.message}`);
 }
 
 export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {

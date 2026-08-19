@@ -51,11 +51,16 @@ type BuildInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
-  worries: { behavior_id: string; text: string }[];
+  worries: {
+    behavior_id: string;
+    text: string;
+    depth_score: number | null;
+  }[];
   commitments: { id: string; worry_id: string; text: string }[];
   assumptions: {
     id: string;
     text: string;
+    depth_score: number | null;
     selected_for_testing: boolean;
     linked_commitment_ids: string[];
   }[];
@@ -134,7 +139,9 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
     ? selectedBehaviors
         .map((b, i) => {
           const w = worriesByBehavior.get(b.id);
-          const status = w ? `"${w.text}"` : "[not yet]";
+          const status = w
+            ? `[depth ${w.depth_score ?? "?"}/3] "${w.text}"`
+            : "[not yet]";
           return `  ${i + 1}. ${b.text} → ${status}`;
         })
         .join("\n")
@@ -155,8 +162,13 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
   const assumptionList = input.assumptions.length
     ? input.assumptions
         .map((a, i) => {
-          const flag = a.selected_for_testing ? " [SELECTED]" : "";
-          return `  ${i + 1}. "${a.text}"${flag}`;
+          const flags = [
+            a.selected_for_testing ? "SELECTED" : null,
+            a.depth_score !== null ? `depth ${a.depth_score}/3` : null,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          return `  ${i + 1}. "${a.text}"${flags ? ` [${flags}]` : ""}`;
         })
         .join("\n")
     : "  (none yet)";

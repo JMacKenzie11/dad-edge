@@ -68,11 +68,16 @@ type MapContextInput = {
   stage: ItcStage;
   improvementGoal: string | null;
   behaviors: { id: string; text: string; selected: boolean }[];
-  worries: { behavior_id: string; text: string }[];
+  worries: {
+    behavior_id: string;
+    text: string;
+    depth_score: number | null;
+  }[];
   commitments: { id: string; worry_id: string; text: string }[];
   assumptions: {
     id: string;
     text: string;
+    depth_score: number | null;
     selected_for_testing: boolean;
     linked_commitment_ids: string[];
   }[];
@@ -183,6 +188,13 @@ export type ReactionInput = MapContextInput & {
     kind: "behavior" | "worry" | "commitment" | "assumption" | "goal";
     text: string;
     behaviorText?: string; // for worries — the paired behavior
+    /** Rubric score (server-computed) for depth-stage entries. Fed to
+     *  the coach as prompt input so it can excavate at the right depth.
+     *  The coach must never mention the score itself. */
+    depthScore?: number | null;
+    /** Number of save/edit attempts on this entry so far. Used
+     *  alongside depthScore to shape the excavation prose. */
+    attempts?: number;
   };
 };
 
@@ -239,34 +251,63 @@ export async function generateCoachReaction(
 }
 
 function buildReactionPrompt(input: ReactionInput): string {
-  const { kind, text, behaviorText } = input.justAdded;
+  const { kind, text, behaviorText, depthScore, attempts } = input.justAdded;
+  const isDepthStage = kind === "worry" || kind === "assumption";
   const parts: string[] = [];
   parts.push(
     `[system: the coachee just added a ${kind} to the map: "${text}".` +
       (behaviorText ? ` (paired to behavior: "${behaviorText}")` : "") +
+      (isDepthStage && typeof depthScore === "number"
+        ? ` rubric depth: ${depthScore}/3 across ${attempts ?? 1} attempt(s). NEVER mention the score itself to the coachee — it's for your prose shaping only.`
+        : "") +
       "]",
   );
-  parts.push(
-    "Evaluate the entry against the column's full criteria, including whether it belongs on the BRAVEMAN pillar he chose. Three cases:",
-  );
-  parts.push(
-    "CASE 1: Fundamental mismatch (wrong pillar, wrong column, not a valid entry type at all). Push back plainly. Name what's off in one to two sentences (\"jumping jacks is a fitness behavior, not a goal about your marriage. what would you actually want to be better at with your wife?\"). Do NOT offer a refinement chip. Do NOT offer suggestions — ask the question that gets him to the real entry.",
-  );
-  parts.push(
-    "CASE 2: Right shape but needs sharpening (right pillar, right column, but phrasing is vague, or implicates other people, or doesn't meet a specific criterion). Name what's off in one line and offer a specific sharper phrasing in the `refinement` field. He can tap the chip to fill his input.",
-  );
-  parts.push(
-    "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
-  );
+
+  if (isDepthStage) {
+    // Depth-stage flow: the field IS the conversation. Coach reads the
+    // rubric score and shapes prose accordingly. Every reply either
+    // asks an excavation question the coachee can answer by rewriting
+    // the entry, or offers a sharper phrasing as a refinement chip.
+    parts.push(
+      "This is a DEPTH stage entry. The input field is the conversation — every save re-runs the server rubric and fires you again with the new score. Your job is to help him go deeper, not to hand him a pass.",
+    );
+    parts.push(
+      "Shape your reaction from the depth score:",
+    );
+    parts.push(
+      "SCORE 0-1 (shallow): He's stayed at the surface — practical, external, about other people, or not a felt fear at all. Name in one sentence what's still missing (\"that's a practical concern, not a fear you feel — what part of *you* is on the line if this happens?\"). Then ask ONE excavation question that goes one layer deeper. End with an explicit invitation to rewrite: \"Rewrite the worry with that in it.\" No refinement chip — you don't have a sharper phrasing until he does the excavation. Suggestions are also off — he needs to answer the question, not pick from a menu.",
+    );
+    parts.push(
+      "SCORE 2 (getting there): The worry is named and personal but still one layer up from identity. One-line acknowledgment of what's landed, then either (a) ONE more excavation question inviting a rewrite, OR (b) offer a specific sharper version in the `refinement` field. If it's clearly one small edit away, use the refinement chip. If it needs another layer of work, ask the question.",
+    );
+    parts.push(
+      "SCORE 3 (deep): The worry is specific, personal, and identity-level. Acknowledge in one line what makes it work (\"that's felt, it's yours, and it names what's really at stake\"). Stop. No question, no chips.",
+    );
+  } else {
+    // Non-depth stages (goal, behavior): the classic three-case flow.
+    parts.push(
+      "Evaluate the entry against the column's full criteria, including whether it belongs on the BRAVEMAN pillar he chose. Three cases:",
+    );
+    parts.push(
+      "CASE 1: Fundamental mismatch (wrong pillar, wrong column, not a valid entry type at all). Push back plainly. Name what's off in one to two sentences (\"jumping jacks is a fitness behavior, not a goal about your marriage. what would you actually want to be better at with your wife?\"). Do NOT offer a refinement chip. Do NOT offer suggestions — ask the question that gets him to the real entry.",
+    );
+    parts.push(
+      "CASE 2: Right shape but needs sharpening (right pillar, right column, but phrasing is vague, or implicates other people, or doesn't meet a specific criterion). Name what's off in one line and offer a specific sharper phrasing in the `refinement` field. He can tap the chip to fill his input.",
+    );
+    parts.push(
+      "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
+    );
+  }
+
   parts.push(
     "HARD RULES for every case:\n" +
       "- Do NOT mention the next column, the next stage, moving on, being ready for the next step, or anything that suggests forward motion. The coachee decides when to advance by tapping the Continue button. Your job is done when you've reacted to this entry.\n" +
       "- Do NOT ask 'ready to move on?', 'ready for the worry box?', 'want to move to X?', or any variant. He'll advance himself when he sees the button.\n" +
       "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
-      "- The rubric and scores are for you; never reference them in prose.\n" +
+      "- The rubric, scores, and attempts count are internal — never reference them in prose. Do not tell him 'you're at 2 out of 3' or 'attempt 3'.\n" +
       "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain read against the criteria.\n" +
       "- Suggestions are optional; include 3-5 in the `suggestions` field only when he'd benefit from options he can tap into the input.\n" +
-      "- Refinement is optional; only include for case 2. Not for case 1 (mismatch) or case 3 (sharp).",
+      "- Refinement is optional; only include when it's a genuine one-line sharpening of what he wrote.",
   );
   return parts.join("\n\n");
 }
