@@ -59,6 +59,7 @@ import {
 } from "@/lib/itc/rubric";
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   ASSUMPTION_STEM,
   GOAL_STEM,
@@ -479,6 +480,21 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, reason: "Invalid goal input." };
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  // Dev-only test-seed escape hatch. Typing one of the recognized
+  // goals (e.g., "I'm committed to getting better at test") wipes the
+  // map's current state and seeds the full happy-path fixture up
+  // through commitments, then advances to the assumptions stage —
+  // which fires the assumption drafter so you land ready to review
+  // drafts and click Continue → walkthrough. Faster than typing the
+  // whole map by hand for every iteration.
+  if (isTestSeedGoal(parsed.data.text)) {
+    const res = await seedTestMap(loaded.map.id);
+    if (!res.ok) return res;
+    safeRevalidate(`/itc/${loaded.map.id}`);
+    return { ok: true };
+  }
+
   // Reject if the text carries any other goal-framing prefix ("I want",
   // "My goal", etc.) — blindly prepending the stem in those cases
   // produces mashups like "I'm committed to getting better at I want to
@@ -1610,6 +1626,168 @@ export async function ensureWalkthroughDelivered(
       reason: err instanceof Error ? err.message : "Could not deliver.",
     };
   }
+}
+
+/**
+ * Dev-only test-seed detection. Recognizes goals like
+ * "I'm committed to getting better at test" (or "test happy path",
+ * "seed", "demo"). Trailing punctuation is tolerated.
+ *
+ * Intentionally distinct from the drafter's Case-2 rejection paths:
+ * these phrases would ordinarily fail the goal-specificity bar
+ * (they're not specific coachable goals), so they don't collide
+ * with any real coachee input.
+ */
+const TEST_SEED_MARKERS = ["test", "test happy path", "seed", "demo"] as const;
+function isTestSeedGoal(text: string): boolean {
+  const stem = GOAL_STEM.toLowerCase();
+  const normalized = text
+    .trim()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[.!?]+$/, "")
+    .toLowerCase();
+  return TEST_SEED_MARKERS.some(
+    (marker) => normalized === `${stem} ${marker}`,
+  );
+}
+
+/**
+ * Dev-only fixture seeder. Wipes the map's current state and inserts
+ * a canonical happy-path ITC map (goal + 3 behaviors + 3 deep worries
+ * + 3 identity-level commitments), then advances to the assumptions
+ * stage so the assumption drafter fires. Coachee lands ready to
+ * review the drafts and click Continue to see the immune-system
+ * walkthrough — the whole reveal sequence in two clicks instead of
+ * fifteen minutes of typing.
+ *
+ * Destructive by design. Only reached via the isTestSeedGoal path;
+ * a real coachee typing a real goal never touches this.
+ */
+async function seedTestMap(mapId: string): Promise<ActionResult> {
+  const supabase = createSupabaseServiceClient();
+
+  // Wipe existing state. Delete children before parents where FK
+  // cascades don't already handle it.
+  const draftIds = (
+    await supabase
+      .from("itc_assumption_drafts")
+      .select("id")
+      .eq("map_id", mapId)
+  ).data as Array<{ id: string }> | null;
+  if (draftIds && draftIds.length > 0) {
+    await supabase
+      .from("itc_assumption_draft_commitments")
+      .delete()
+      .in("draft_id", draftIds.map((d) => d.id));
+  }
+  await supabase.from("itc_assumption_drafts").delete().eq("map_id", mapId);
+
+  const assumptionIds = (
+    await supabase.from("itc_assumptions").select("id").eq("map_id", mapId)
+  ).data as Array<{ id: string }> | null;
+  if (assumptionIds && assumptionIds.length > 0) {
+    await supabase
+      .from("itc_assumption_commitments")
+      .delete()
+      .in("assumption_id", assumptionIds.map((a) => a.id));
+  }
+  await supabase.from("itc_assumptions").delete().eq("map_id", mapId);
+  await supabase.from("itc_commitments").delete().eq("map_id", mapId);
+  await supabase.from("itc_worries").delete().eq("map_id", mapId);
+  await supabase.from("itc_behaviors").delete().eq("map_id", mapId);
+  await supabase.from("itc_messages").delete().eq("map_id", mapId);
+
+  // Reset map flags + goal + stage.
+  const seedGoal =
+    "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+  const { error: mapErr } = await supabase
+    .from("itc_maps")
+    .update({
+      improvement_goal: seedGoal,
+      current_stage: "commitments",
+      reveal_delivered: false,
+      walkthrough_delivered: false,
+    })
+    .eq("id", mapId);
+  if (mapErr) return { ok: false, reason: `seed map: ${mapErr.message}` };
+
+  // Behaviors (in order).
+  const behaviorTexts = [
+    "I bring up things she did in the past instead of listening to her",
+    "I lie to get myself out of the situation when she's right",
+    "I shut down and walk out of the room",
+  ];
+  const { data: bs, error: bErr } = await supabase
+    .from("itc_behaviors")
+    .insert(
+      behaviorTexts.map((text, i) => ({
+        map_id: mapId,
+        text,
+        selected: true,
+        source: "user",
+        sort_order: i,
+      })),
+    )
+    .select("id, sort_order");
+  if (bErr || !bs) return { ok: false, reason: `seed behaviors: ${bErr?.message}` };
+  const typedBs = bs as Array<{ id: string; sort_order: number }>;
+  const sortedBehaviors = typedBs
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  // Worries — depth 3, attempts 1 (bypasses excavation-loop gate).
+  const worryTextsByBehavior = [
+    "I worry that if I actually listen and admit she's right, it proves I'm the kind of husband who can't stop doing things that hurt her.",
+    "I worry that if I stop lying and own it, admitting I'm wrong again and again means I'm not good enough for her.",
+    "I worry that if I stay in the room instead of walking out, I'd lose it and say something awful, and I'd be the husband who hurts his wife.",
+  ];
+  const { data: ws, error: wErr } = await supabase
+    .from("itc_worries")
+    .insert(
+      sortedBehaviors.map((b, i) => ({
+        map_id: mapId,
+        behavior_id: b.id,
+        text: worryTextsByBehavior[i],
+        depth_score: 3,
+        attempts: 1,
+      })),
+    )
+    .select("id, behavior_id");
+  if (wErr || !ws) return { ok: false, reason: `seed worries: ${wErr?.message}` };
+  const typedWs = ws as Array<{ id: string; behavior_id: string }>;
+
+  // Commitments — identity-level, depth 3, attempts 1.
+  const commitmentTextsByBehaviorIdx = [
+    "I'm committed to never having to see I'm the husband who keeps failing her no matter how hard I try.",
+    "I'm committed to never letting her see how many times I've gotten it wrong.",
+    "I'm committed to never staying in the room long enough to find out I can handle her anger without becoming that guy.",
+  ];
+  const worriesByBehaviorId = new Map(typedWs.map((w) => [w.behavior_id, w]));
+  const { error: cErr } = await supabase.from("itc_commitments").insert(
+    sortedBehaviors.map((b, i) => {
+      const w = worriesByBehaviorId.get(b.id);
+      return {
+        map_id: mapId,
+        worry_id: w?.id,
+        text: commitmentTextsByBehaviorIdx[i],
+        depth_score: 3,
+        attempts: 1,
+      };
+    }),
+  );
+  if (cErr) return { ok: false, reason: `seed commitments: ${cErr.message}` };
+
+  // Advance to assumptions. This uses the normal server action so
+  // the assumption drafter fires on the transition — you land on the
+  // assumptions stage with coach's drafts already populated, exactly
+  // as if you'd walked the map by hand.
+  const advFd = new FormData();
+  advFd.set("map_id", mapId);
+  advFd.set("to", "assumptions");
+  const advRes = await advanceToStage(advFd);
+  if (!advRes.ok) return { ok: false, reason: `advance to assumptions: ${advRes.reason ?? "unknown"}` };
+
+  return { ok: true };
 }
 
 /**
