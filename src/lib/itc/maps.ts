@@ -925,8 +925,10 @@ export async function advanceStage(mapId: string, from: ItcStage, to: ItcStage):
     if (to === "worries") {
       const behaviors = await listBehaviors(mapId);
       const selectedCount = behaviors.filter((b) => b.selected).length;
-      if (selectedCount < 1) {
-        throw new Error("Add at least one behavior before moving to worries.");
+      if (selectedCount < 3) {
+        throw new Error(
+          `Add at least 3 doings/not-doings before moving to worries (currently ${selectedCount}). 3 to 5 is what shows the pattern.`,
+        );
       }
       if (selectedCount > MAX_SELECTED_BEHAVIORS) {
         throw new Error(

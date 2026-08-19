@@ -466,21 +466,44 @@ describe("Form-First regression", () => {
       advB.set("to", "behaviors");
       expect((await advanceToStage(advB)).ok).toBe(true);
 
-      const bfd = new FormData();
-      bfd.set("map_id", ctx.mapId);
-      bfd.set("text", "I bring up things she did in the past");
-      expect((await addBehavior(bfd)).ok).toBe(true);
+      // Three behaviors — the map's min-3 rule for behaviors → worries.
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get myself out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
       const { data: bs } = await supabase
         .from("itc_behaviors")
-        .select("id")
-        .eq("map_id", ctx.mapId);
-      expect(bs?.length).toBe(1);
+        .select("id, text")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
       const behaviorId = bs![0].id as string;
 
       const advW = new FormData();
       advW.set("map_id", ctx.mapId);
       advW.set("to", "worries");
       expect((await advanceToStage(advW)).ok).toBe(true);
+
+      // Pre-populate the other two worries directly in the DB with
+      // depth_score=3 so the pairing + depth gates for those aren't
+      // what's being tested here. Regression c isolates the excavation
+      // loop on the FIRST behavior's worry.
+      for (const b of (bs ?? []).slice(1)) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed worry for ${b.id} failed: ${error?.message}`).toBeNull();
+      }
 
       // 1. Save a shallow worry. Rubric should score low; gate should block.
       const shallowText = "I'm afraid of wasting time.";
@@ -497,7 +520,8 @@ describe("Form-First regression", () => {
       const { data: worryRowsShallow } = await supabase
         .from("itc_worries")
         .select("id, text, depth_score, attempts")
-        .eq("map_id", ctx.mapId);
+        .eq("map_id", ctx.mapId)
+        .eq("behavior_id", behaviorId);
       expect(worryRowsShallow?.length).toBe(1);
       const shallowWorry = worryRowsShallow![0] as {
         id: string;
@@ -556,7 +580,8 @@ describe("Form-First regression", () => {
       const { data: worryRowsDeep } = await supabase
         .from("itc_worries")
         .select("id, text, depth_score, attempts")
-        .eq("map_id", ctx.mapId);
+        .eq("map_id", ctx.mapId)
+        .eq("behavior_id", behaviorId);
       expect(worryRowsDeep?.length).toBe(1);
       const deepWorry = worryRowsDeep![0] as {
         id: string;

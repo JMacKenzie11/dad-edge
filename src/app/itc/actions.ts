@@ -1027,13 +1027,13 @@ async function computeAdvanceGate(
     case "behaviors": {
       const bs = await listBehaviors(map.id);
       const selected = bs.filter((b) => b.selected);
-      if (selected.length === 0) {
+      if (selected.length < 3) {
         return {
           from,
           to,
           label,
           enabled: false,
-          reason: "Add at least one behavior first.",
+          reason: `Add ${3 - selected.length} more ${selected.length === 2 ? "behavior" : "behaviors"} — 3 to 5 total is what shows the pattern.`,
         };
       }
       if (selected.length > 5) {
