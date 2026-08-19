@@ -57,7 +57,12 @@ type BuildInput = {
     text: string;
     depth_score: number | null;
   }[];
-  commitments: { id: string; worry_id: string; text: string }[];
+  commitments: {
+    id: string;
+    worry_id: string;
+    text: string;
+    depth_score: number | null;
+  }[];
   assumptions: {
     id: string;
     text: string;
@@ -157,7 +162,12 @@ function buildParts(input: BuildInput): BuiltCoachSystem {
     : "  (none yet)";
 
   const commitmentList = input.commitments.length
-    ? input.commitments.map((c, i) => `  ${i + 1}. "${c.text}"`).join("\n")
+    ? input.commitments
+        .map(
+          (c, i) =>
+            `  ${i + 1}. [depth ${c.depth_score ?? "?"}/3] "${c.text}"`,
+        )
+        .join("\n")
     : "  (none yet)";
 
   const assumptionList = input.assumptions.length

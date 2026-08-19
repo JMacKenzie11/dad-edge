@@ -33,10 +33,12 @@ import {
   listWorries,
   saveImprovementGoal,
   updateBehaviorText,
+  updateCommitmentDepth,
   updateWorryDepth,
+  upsertCommitmentForWorry,
   upsertWorryForBehavior,
 } from "@/lib/itc/maps";
-import { scoreWorryDepth } from "@/lib/itc/rubric";
+import { scoreCommitmentDepth, scoreWorryDepth } from "@/lib/itc/rubric";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
   GOAL_STEM,
@@ -153,6 +155,7 @@ async function loadCoachContext(mapId: string) {
         id: c.id,
         worry_id: c.worry_id,
         text: c.text,
+        depth_score: c.depth_score,
       })),
       assumptions: assumptions.map((a) => ({
         id: a.id,
@@ -776,11 +779,134 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
       {
         kind: "worry",
         text: row.text,
-        behaviorText: behavior.text,
+        pairedText: behavior.text,
         depthScore: score,
         attempts: row.attempts,
       },
       { table: "itc_worries", id: row.id },
+    ),
+  );
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+// -------------------------------------------------------------------------
+// Commitments (Column 4) — depth-stage excavation loop
+// -------------------------------------------------------------------------
+
+const commitmentSaveSchema = z.object({
+  map_id: z.string().uuid(),
+  worry_id: z.string().uuid(),
+  text: z.string().min(3).max(400),
+});
+
+/**
+ * Save-or-edit the commitment paired to a worry. Same shape as
+ * saveWorry: upsert → rubric → persist score → coach reaction.
+ * The rubric (scoreCommitmentDepth) pushes back on noble-sounding
+ * "productivity blog" commitments and requires self-protective
+ * first-person phrasing that would sound strange said out loud.
+ */
+export async function saveCommitment(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = commitmentSaveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    worry_id: formData.get("worry_id"),
+    text: formData.get("text"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid commitment input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  // Worry must exist on the map.
+  const worries = await listWorries(loaded.map.id);
+  const worry = worries.find((w) => w.id === parsed.data.worry_id);
+  if (!worry) {
+    return { ok: false, reason: "That worry is not on the map." };
+  }
+
+  let row: Awaited<ReturnType<typeof upsertCommitmentForWorry>>["row"];
+  let isEdit: boolean;
+  try {
+    const result = await upsertCommitmentForWorry(
+      loaded.map.id,
+      worry.id,
+      parsed.data.text,
+    );
+    row = result.row;
+    isEdit = result.isEdit;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save commitment.",
+    };
+  }
+
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    isEdit ? "entry_edited" : "entry_added",
+    {
+      kind: "commitment",
+      entry_id: row.id,
+      worry_id: worry.id,
+      text: row.text,
+      attempts: row.attempts,
+      ...(isEdit ? { stage_at_edit: loaded.map.current_stage } : {}),
+    },
+    { stage: loaded.map.current_stage },
+  );
+
+  let score = 0;
+  try {
+    const scored = await scoreCommitmentDepth({
+      goalText: loaded.map.improvement_goal ?? "",
+      worryText: worry.text,
+      commitmentText: row.text,
+    });
+    score = scored.score;
+    await updateCommitmentDepth(row.id, score);
+    events.record(
+      "rubric_scored",
+      {
+        kind: "commitment",
+        entry_id: row.id,
+        score,
+        attempts: row.attempts,
+        is_self_protective: scored.is_self_protective,
+        is_first_person: scored.is_first_person,
+        is_not_productivity_platitude: scored.is_not_productivity_platitude,
+        reason: scored.reason,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } catch (err) {
+    console.warn(
+      "[itc] saveCommitment rubric failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      {
+        where: "saveCommitment.rubric",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      { stage: loaded.map.current_stage },
+    );
+  }
+  await events.flush();
+
+  await awaitReactionOrSwallow(() =>
+    fireCoachReaction(
+      loaded.map.id,
+      {
+        kind: "commitment",
+        text: row.text,
+        pairedText: worry.text,
+        depthScore: score,
+        attempts: row.attempts,
+      },
+      { table: "itc_commitments", id: row.id },
     ),
   );
   safeRevalidate(`/itc/${loaded.map.id}`);
@@ -1095,6 +1221,20 @@ async function computeAdvanceGate(
           label,
           enabled: false,
           reason: `${missing.length} worr${missing.length === 1 ? "y" : "ies"} still ${missing.length === 1 ? "needs" : "need"} a commitment.`,
+        };
+      }
+      // Depth gate: mirror of worries — every commitment passes at
+      // 3/3 or (2/3 AND attempts >= 2).
+      const shallow = cs.filter(
+        (c) => !worryPassesDepth(c.depth_score, c.attempts),
+      );
+      if (shallow.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${shallow.length} commitment${shallow.length === 1 ? "" : "s"} ${shallow.length === 1 ? "needs" : "need"} more depth.`,
         };
       }
       return { from, to, label, enabled: true, reason: null };

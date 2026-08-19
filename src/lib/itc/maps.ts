@@ -20,6 +20,8 @@ export type ItcCommitment = {
   map_id: string;
   worry_id: string;
   text: string;
+  depth_score: number | null;
+  attempts: number;
   created_at: string;
 };
 
@@ -456,47 +458,70 @@ export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
 }
 
 /**
- * Insert a commitment paired to a worry. Refuses to create a second
- * commitment on the same worry (that's what "pairing" means — 1:1),
- * AND refuses exact-text duplicates across the map even if they'd
- * belong to different worries. Same failure family as the assumptions
- * and behaviors dupes. Returns the existing row on duplicate.
+ * Insert-or-update the commitment paired to a worry. One commitment
+ * per worry (pairing rule). Increments `attempts` on every save so
+ * the Continue gate can grant a pass at depth_score=2 after two
+ * honest attempts. `depth_score` is cleared here; the caller
+ * (saveCommitment server action) runs the rubric and stores the
+ * fresh score in a second step.
  */
-export async function addCommitment(
+export async function upsertCommitmentForWorry(
   mapId: string,
   worryId: string,
   text: string,
-): Promise<{ row: ItcCommitment; deduped: boolean }> {
+): Promise<{ row: ItcCommitment; isEdit: boolean }> {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) throw new Error("Commitment is too short.");
   const supabase = createSupabaseServiceClient();
-  const existing = await listCommitments(mapId);
-  const normalized = normalizeMapText(text);
-  const worryDuplicate = existing.find((c) => c.worry_id === worryId);
-  if (worryDuplicate) {
-    console.warn(
-      "[itc] addCommitment: worry %s already has a commitment on map %s — returning existing",
-      worryId,
-      mapId,
-    );
-    return { row: worryDuplicate, deduped: true };
-  }
-  const textDuplicate = existing.find(
-    (c) => normalizeMapText(c.text) === normalized,
-  );
-  if (textDuplicate) {
-    console.warn(
-      "[itc] addCommitment: refusing exact-text duplicate on map %s (text=%o)",
-      mapId,
-      text.trim(),
-    );
-    return { row: textDuplicate, deduped: true };
+  const lookup = await supabase
+    .from("itc_commitments")
+    .select("*")
+    .eq("map_id", mapId)
+    .eq("worry_id", worryId)
+    .maybeSingle();
+  if (lookup.error) throw new Error(`upsertCommitmentForWorry lookup: ${lookup.error.message}`);
+  if (lookup.data) {
+    const existing = lookup.data as ItcCommitment;
+    const { data, error } = await supabase
+      .from("itc_commitments")
+      .update({
+        text: trimmed,
+        attempts: (existing.attempts ?? 0) + 1,
+        depth_score: null,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error || !data) throw new Error(`upsertCommitmentForWorry update: ${error?.message ?? "no row"}`);
+    return { row: data as ItcCommitment, isEdit: true };
   }
   const { data, error } = await supabase
     .from("itc_commitments")
-    .insert({ map_id: mapId, worry_id: worryId, text: text.trim() })
+    .insert({
+      map_id: mapId,
+      worry_id: worryId,
+      text: trimmed,
+      attempts: 1,
+    })
     .select("*")
     .single();
-  if (error || !data) throw new Error(`addCommitment: ${error?.message ?? "no row"}`);
-  return { row: data as ItcCommitment, deduped: false };
+  if (error || !data) throw new Error(`upsertCommitmentForWorry insert: ${error?.message ?? "no row"}`);
+  return { row: data as ItcCommitment, isEdit: false };
+}
+
+export async function updateCommitmentDepth(
+  commitmentId: string,
+  score: number,
+): Promise<void> {
+  if (score < 0 || score > 3 || !Number.isInteger(score)) {
+    throw new Error(`updateCommitmentDepth: score must be int 0-3, got ${score}`);
+  }
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_commitments")
+    .update({ depth_score: score })
+    .eq("id", commitmentId);
+  if (error) throw new Error(`updateCommitmentDepth: ${error.message}`);
 }
 
 export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {

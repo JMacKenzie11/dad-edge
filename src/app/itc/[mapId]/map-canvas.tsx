@@ -18,6 +18,7 @@ import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
 import { BehaviorsRow } from "./behaviors-row";
 import { CoachDock } from "./coach-dock";
+import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
 import { WorriesRow } from "./worries-row";
@@ -277,38 +278,29 @@ export function MapCanvas({
             map.current_stage === "commitments" ? unattachedForCurrentStage : []
           }
         >
-          {commitments.length === 0 ? (
-            <Placeholder>
-              My vows to make sure my worries never come true.
-            </Placeholder>
-          ) : (
-            <ul className="space-y-1.5 text-sm">
+          <CommitmentsRow
+            mapId={map.id}
+            behaviors={behaviors}
+            worries={worries}
+            commitments={commitments}
+            nowMs={renderedAt}
+          />
+          {commitments.length > 0 ? (
+            <div className="pl-3 mt-1 space-y-2">
               {commitments.map((c, i) => {
-                const w = worryById.get(c.worry_id);
+                const thread = threadFor("itc_commitments", c.id);
+                if (thread.length === 0) return null;
                 return (
-                  <li
-                    key={c.id}
-                    className={
-                      "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
-                      (isFresh(c.created_at, renderedAt) ? "itc-fresh-row" : "")
-                    }
-                  >
-                    <div className="flex flex-wrap gap-2 items-baseline">
-                      <span className="text-[11px] text-[color:var(--color-text-muted)] shrink-0">
-                        {i + 1}.
-                      </span>
-                      <span className="flex-1 min-w-[12rem]">{c.text}</span>
+                  <div key={c.id}>
+                    <div className="text-[10px] text-[color:var(--color-text-muted)]/70 pl-2 mb-1">
+                      Coach on #{i + 1}
                     </div>
-                    {w ? (
-                      <div className="text-[10px] text-[color:var(--color-text-muted)]/70 mt-1 pl-5">
-                        ↑ worry: {w.text}
-                      </div>
-                    ) : null}
-                  </li>
+                    <EntryThread messages={thread} />
+                  </div>
                 );
               })}
-            </ul>
-          )}
+            </div>
+          ) : null}
         </Section>
 
         {advanceGate && map.current_stage === "commitments" ? (

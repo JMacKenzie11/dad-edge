@@ -44,24 +44,30 @@ Return your judgment as three booleans plus one short reason (under 40 words) ex
 const CommitmentSchema = z.object({
   is_self_protective: z.boolean(),
   is_first_person: z.boolean(),
-  passes: z.boolean(),
+  is_not_productivity_platitude: z.boolean(),
   reason: z.string().min(1).max(400),
 });
 
-export type CommitmentRubricResult = z.infer<typeof CommitmentSchema>;
+export type CommitmentRubricResult = {
+  score: 0 | 1 | 2 | 3;
+  is_self_protective: boolean;
+  is_first_person: boolean;
+  is_not_productivity_platitude: boolean;
+  reason: string;
+};
 
 const COMMITMENT_SYSTEM = `
-You are a strict rubric for column-3 hidden competing commitments in an Immunity to Change map. A commitment must read as SELF-PROTECTION, not as sensible productivity advice. It should sound like the man keeping himself safe from the worry, not like a business-book platitude.
+You are a strict rubric for column-4 hidden competing commitments in an Immunity to Change map. A commitment must read as SELF-PROTECTION, not as sensible productivity advice. It should sound like the man keeping himself safe from the paired worry, not like a virtuous vow or a business-book platitude.
 
 Score three binary criteria. When in doubt, false.
 
-1. is_self_protective: The commitment names what he's keeping himself safe from — a protective flinch is visible. "I'm committed to never having to find out that my effort didn't matter" is self-protective. "I'm committed to always having a real plan" is a productivity platitude.
+1. is_self_protective: The commitment names what he's keeping himself safe from — a protective flinch is visible. "I'm committed to never having to find out that my effort didn't matter" is self-protective. "I'm committed to always having a real plan" is not — that's a productivity platitude.
 
-2. is_first_person: Starts with "I'm committed to" (or equivalent) and names something the man himself commits to, not a general principle or a rule for other people.
+2. is_first_person: Starts with "I'm committed to" (or equivalent) and names something the man himself commits to, not a general principle, not a rule for other people, not framed as advice.
 
-3. passes: Both of the above are true AND the commitment would sound strange on a productivity blog. If it would fit right in there, it hasn't done its job yet.
+3. is_not_productivity_platitude: The commitment would sound STRANGE on a productivity blog or in a corporate meeting — a stranger reading it would think "that's a weird thing to admit," not "that's good advice." A noble-sounding vow ("I'm committed to being the best husband I can be") fails this; it's socially acceptable and doesn't reveal a hidden flinch.
 
-Also return a one-line reason (<40 words) explaining what would need to change.
+Also return a one-line reason (<40 words) explaining what would need to change to raise a false criterion to true.
 `.trim();
 
 export async function scoreCommitmentDepth(input: {
@@ -70,7 +76,7 @@ export async function scoreCommitmentDepth(input: {
   commitmentText: string;
 }): Promise<CommitmentRubricResult> {
   const started = Date.now();
-  let passed: boolean | null = null;
+  let scoreForLog: number | null = null;
   try {
     const { object } = await generateObject({
       model: utilityModel(),
@@ -83,13 +89,23 @@ export async function scoreCommitmentDepth(input: {
       ].join("\n"),
       maxOutputTokens: 512,
     });
-    passed = object.passes;
-    return object;
+    const score =
+      (object.is_self_protective ? 1 : 0) +
+      (object.is_first_person ? 1 : 0) +
+      (object.is_not_productivity_platitude ? 1 : 0);
+    scoreForLog = score;
+    return {
+      score: score as 0 | 1 | 2 | 3,
+      is_self_protective: object.is_self_protective,
+      is_first_person: object.is_first_person,
+      is_not_productivity_platitude: object.is_not_productivity_platitude,
+      reason: object.reason,
+    };
   } finally {
     console.warn(
-      "[itc timing] rubric kind=commitment ms=%d passed=%s",
+      "[itc timing] rubric kind=commitment ms=%d score=%s",
       Date.now() - started,
-      passed === null ? "error" : passed ? "yes" : "no",
+      scoreForLog === null ? "error" : `${scoreForLog}/3`,
     );
   }
 }

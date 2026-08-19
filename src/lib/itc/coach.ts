@@ -73,7 +73,12 @@ type MapContextInput = {
     text: string;
     depth_score: number | null;
   }[];
-  commitments: { id: string; worry_id: string; text: string }[];
+  commitments: {
+    id: string;
+    worry_id: string;
+    text: string;
+    depth_score: number | null;
+  }[];
   assumptions: {
     id: string;
     text: string;
@@ -188,7 +193,11 @@ export type ReactionInput = MapContextInput & {
   justAdded: {
     kind: "behavior" | "worry" | "commitment" | "assumption" | "goal";
     text: string;
-    behaviorText?: string; // for worries — the paired behavior
+    /** For worries: the paired behavior text.
+     *  For commitments: the paired worry text.
+     *  For assumptions: the paired commitment text.
+     *  The prompt labels it correctly based on kind. */
+    pairedText?: string;
     /** Rubric score (server-computed) for depth-stage entries. Fed to
      *  the coach as prompt input so it can excavate at the right depth.
      *  The coach must never mention the score itself. */
@@ -252,12 +261,23 @@ export async function generateCoachReaction(
 }
 
 function buildReactionPrompt(input: ReactionInput): string {
-  const { kind, text, behaviorText, depthScore, attempts } = input.justAdded;
-  const isDepthStage = kind === "worry" || kind === "assumption";
+  const { kind, text, pairedText, depthScore, attempts } = input.justAdded;
+  const isDepthStage =
+    kind === "worry" || kind === "commitment" || kind === "assumption";
+  const pairedLabel =
+    kind === "worry"
+      ? "behavior"
+      : kind === "commitment"
+        ? "worry"
+        : kind === "assumption"
+          ? "commitment"
+          : null;
   const parts: string[] = [];
   parts.push(
     `[system: the coachee just added a ${kind} to the map: "${text}".` +
-      (behaviorText ? ` (paired to behavior: "${behaviorText}")` : "") +
+      (pairedText && pairedLabel
+        ? ` (paired to ${pairedLabel}: "${pairedText}")`
+        : "") +
       (isDepthStage && typeof depthScore === "number"
         ? ` rubric depth: ${depthScore}/3 across ${attempts ?? 1} attempt(s). NEVER mention the score itself to the coachee — it's for your prose shaping only.`
         : "") +
@@ -272,18 +292,46 @@ function buildReactionPrompt(input: ReactionInput): string {
     parts.push(
       "This is a DEPTH stage entry. The input field is the conversation — every save re-runs the server rubric and fires you again with the new score. Your job is to help him go deeper, not to hand him a pass.",
     );
-    parts.push(
-      "Shape your reaction from the depth score:",
-    );
-    parts.push(
-      "SCORE 0-1 (shallow): He's stayed at the surface — practical, external, about other people, or not a felt fear at all. Name in one sentence what's still missing (\"that's a practical concern, not a fear you feel — what part of *you* is on the line if this happens?\"). Then ask ONE excavation question that goes one layer deeper. End with an explicit invitation to rewrite: \"Rewrite the worry with that in it.\" No refinement chip — you don't have a sharper phrasing until he does the excavation. Suggestions are also off — he needs to answer the question, not pick from a menu.",
-    );
-    parts.push(
-      "SCORE 2 (getting there): The worry is named and personal but still one layer up from identity. One-line acknowledgment of what's landed, then either (a) ONE more excavation question inviting a rewrite, OR (b) offer a specific sharper version in the `refinement` field. If it's clearly one small edit away, use the refinement chip. If it needs another layer of work, ask the question.",
-    );
-    parts.push(
-      "SCORE 3 (deep): The worry is at genuine depth. ONE SHORT sentence of plain acknowledgment. Examples: \"Yeah. That's the fear.\" \"That's the one.\" \"Right. That's underneath it.\" Then STOP. Do NOT list criteria (banned: chains like 'that's felt, it's yours, and it names X' — reads like a checklist). Do NOT restate the worry back to him. No question. No 'what else', 'what other', 'what more', 'what shows up'. No reference to other columns (behaviors, commitments, etc.). No invitation to add or edit anything else. He decides what's next; your only output is that short acknowledgment.",
-    );
+    // Kind-specific excavation angle.
+    if (kind === "worry") {
+      parts.push(
+        "For a WORRY (Column 3): depth means a first-person felt fear that lands on his identity or role. Shallow = practical concern, external outcome, or someone else's reaction. Deep = 'what part of ME is on the line if this happens.' Your excavation question moves from external → felt → identity.",
+      );
+      parts.push(
+        "SCORE 0-1 (shallow): He's stayed at the surface. Name in one sentence what's still missing (\"that's a practical concern, not a fear you feel — what part of *you* is on the line if this happens?\"). Then ask ONE excavation question that goes one layer deeper. End with an explicit invitation to rewrite: \"Rewrite the worry with that in it.\" No refinement chip — you don't have a sharper phrasing until he does the excavation. Suggestions are also off — he needs to answer the question, not pick from a menu.",
+      );
+      parts.push(
+        "SCORE 2 (getting there): The worry is named and personal but still one layer up from identity. One-line acknowledgment of what's landed, then either (a) ONE more excavation question inviting a rewrite, OR (b) offer a specific sharper version in the `refinement` field. If it's clearly one small edit away, use the refinement chip. If it needs another layer of work, ask the question.",
+      );
+      parts.push(
+        "SCORE 3 (deep): The worry is at genuine depth. ONE SHORT sentence of plain acknowledgment. Examples: \"Yeah. That's the fear.\" \"That's the one.\" \"Right. That's underneath it.\" Then STOP. Do NOT list criteria (banned: chains like 'that's felt, it's yours, and it names X' — reads like a checklist). Do NOT restate the worry back to him. No question. No 'what else', 'what other', 'what more', 'what shows up'. No reference to other columns. No invitation to add or edit anything else.",
+      );
+    } else if (kind === "commitment") {
+      parts.push(
+        "For a COMMITMENT (Column 4): this is the HIDDEN, self-protective vow he's keeping — the flip side of the paired worry. It must sound like protecting himself from the fear, NOT like a virtuous goal or productivity advice. Deep commitments would sound strange said out loud (\"I'm committed to never having to find out that my effort didn't matter\"). Noble-sounding commitments (\"I'm committed to being a good husband\") are shallow — they're what he'd say in the group, not what's really running the show. Push past nobility to protection.",
+      );
+      parts.push(
+        "SCORE 0-1 (shallow): He wrote something noble, generic, or platitudinous — a productivity-blog vow, a goal, or a rule. Name it plainly (\"that's a productivity commitment, not a self-protective one — what are you keeping YOURSELF safe from when [paired worry]?\"). Ask ONE excavation question that flips it from virtue to protection. Invite rewrite: \"Rewrite the commitment starting with 'I'm committed to never...'.\" No chip. No suggestions.",
+      );
+      parts.push(
+        "SCORE 2 (getting there): Self-protective and first-person but still a bit too socially acceptable — would still pass on a productivity blog. One-line acknowledgment, then either (a) ONE more question that squeezes the last drop of nobility out, OR (b) offer a sharper (weirder-sounding, more protective) version in `refinement`. Use the chip when it's a one-line phrasing tweak.",
+      );
+      parts.push(
+        "SCORE 3 (deep): The commitment is self-protective, first-person, and would sound strange on a productivity blog — a real hidden vow. ONE SHORT sentence of plain acknowledgment. Examples: \"Yeah. That's the vow.\" \"That's what's running it.\" \"Right. That's the commitment keeping him safe.\" Then STOP. Do NOT list criteria. Do NOT restate the commitment. No question. No 'what else', no cross-column direction.",
+      );
+    } else {
+      // assumption — treated same as worry-shape for now; refined in
+      // the next checkpoint when the assumptions row lands.
+      parts.push(
+        "SCORE 0-1 (shallow): Name what's missing in one sentence, ask ONE excavation question, invite rewrite. No chip.",
+      );
+      parts.push(
+        "SCORE 2 (getting there): One-line acknowledgment, then a question OR a refinement chip.",
+      );
+      parts.push(
+        "SCORE 3 (deep): ONE SHORT acknowledgment. Then STOP. No question, no chip, no cross-column direction.",
+      );
+    }
   } else {
     // Non-depth stages (goal, behavior): the classic three-case flow.
     parts.push(

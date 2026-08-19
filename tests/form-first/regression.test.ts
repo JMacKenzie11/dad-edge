@@ -19,6 +19,7 @@ import type { LanguageModel } from "ai";
 import {
   addBehavior,
   getAdvanceGate,
+  saveCommitment,
   saveGoal,
   saveWorry,
   sendDockMessage,
@@ -615,6 +616,202 @@ describe("Form-First regression", () => {
       expect(
         (rubricEvents?.length ?? 0) >= 2,
         "rubric_scored should have logged once per worry save",
+      ).toBe(true);
+    },
+    120_000,
+  );
+
+  it(
+    "regression d: commitment excavation loop — noble blocks Continue, self-protective unblocks",
+    async () => {
+      // Real LLMs (rubric + reaction). Mirror of regression c on
+      // Column 4. Seed goal + 3 behaviors + 3 worries (all deep) +
+      // advance to commitments. Pre-populate two commitments at
+      // depth 3 so the assertion isolates on the first.
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probe — depth_score + attempts on itc_commitments come
+      // from migration 20260818000005. Skip cleanly if not applied.
+      const probe = await supabase
+        .from("itc_commitments")
+        .select("attempts, depth_score")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression d] skipping: schema missing — apply migration 20260818000005. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      for (const text of [
+        "I bring up things she did in the past",
+        "I lie to get out of admitting she's right",
+        "I go silent for the rest of the day",
+      ]) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
+
+      const advW = new FormData();
+      advW.set("map_id", ctx.mapId);
+      advW.set("to", "worries");
+      expect((await advanceToStage(advW)).ok).toBe(true);
+
+      // Seed 3 deep worries directly in the DB (bypass saveWorry to
+      // save LLM cost — this test is about commitments).
+      for (const b of bs ?? []) {
+        const { error } = await supabase.from("itc_worries").insert({
+          map_id: ctx.mapId,
+          behavior_id: b.id,
+          text: "That I would prove I'm the man who can never be enough for her.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(error, `seed worry for ${b.id} failed: ${error?.message}`).toBeNull();
+      }
+
+      const advC = new FormData();
+      advC.set("map_id", ctx.mapId);
+      advC.set("to", "commitments");
+      const advCRes = await advanceToStage(advC);
+      expect(
+        advCRes.ok,
+        `advance to commitments failed: ${advCRes.ok ? "" : advCRes.reason}`,
+      ).toBe(true);
+
+      const { data: ws } = await supabase
+        .from("itc_worries")
+        .select("id")
+        .eq("map_id", ctx.mapId)
+        .order("created_at");
+      expect(ws?.length).toBe(3);
+      const worryId = ws![0].id as string;
+
+      // Pre-populate the other two commitments at depth 3 so the
+      // gate assertion is exclusively about the first commitment.
+      for (const w of (ws ?? []).slice(1)) {
+        const { error } = await supabase.from("itc_commitments").insert({
+          map_id: ctx.mapId,
+          worry_id: w.id,
+          text: "I'm committed to never having to find out what she really thinks of me.",
+          depth_score: 3,
+          attempts: 1,
+        });
+        expect(
+          error,
+          `seed commitment for ${w.id} failed: ${error?.message}`,
+        ).toBeNull();
+      }
+
+      // 1. Save a noble commitment. Rubric should score low; gate
+      // should block on depth.
+      const nobleText = "I'm committed to being the best husband I can be.";
+      const c1 = new FormData();
+      c1.set("map_id", ctx.mapId);
+      c1.set("worry_id", worryId);
+      c1.set("text", nobleText);
+      const c1Res = await saveCommitment(c1);
+      expect(
+        c1Res.ok,
+        `saveCommitment (noble) should succeed: ${c1Res.ok ? "" : c1Res.reason}`,
+      ).toBe(true);
+
+      const { data: shallowRows } = await supabase
+        .from("itc_commitments")
+        .select("id, text, depth_score, attempts")
+        .eq("map_id", ctx.mapId)
+        .eq("worry_id", worryId);
+      expect(shallowRows?.length).toBe(1);
+      const shallowRow = shallowRows![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+      };
+      expect(shallowRow.text).toBe(nobleText);
+      expect(shallowRow.depth_score, "noble commitment should score below 2/3").not.toBeNull();
+      expect(shallowRow.depth_score! < 2).toBe(true);
+      expect(shallowRow.attempts).toBe(1);
+
+      const { data: shallowReactions } = await supabase
+        .from("itc_messages")
+        .select("content")
+        .eq("map_id", ctx.mapId)
+        .eq("surface", "entry_thread")
+        .eq("entry_ref_table", "itc_commitments")
+        .eq("entry_ref_id", shallowRow.id)
+        .eq("role", "assistant");
+      expect(
+        (shallowReactions?.length ?? 0) > 0,
+        "coach reaction on the noble commitment must land in the entry thread",
+      ).toBe(true);
+      const shallowProse = (shallowReactions ?? [])
+        .map((m) => m.content as string)
+        .join("\n");
+      expect(
+        shallowProse.includes("?"),
+        `noble reaction should ask a question (excavation), got: ${shallowProse}`,
+      ).toBe(true);
+
+      const blockedGate = await getAdvanceGate(ctx.mapId);
+      expect(blockedGate.from).toBe("commitments");
+      expect(blockedGate.enabled).toBe(false);
+      expect(blockedGate.reason ?? "").toMatch(/depth/i);
+
+      // 2. Edit to a deep self-protective commitment. attempts=2;
+      // score should reach 2 or 3 and the gate opens.
+      const deepText =
+        "I'm committed to never letting her see the parts of me I'd have to disown to earn her trust back.";
+      const c2 = new FormData();
+      c2.set("map_id", ctx.mapId);
+      c2.set("worry_id", worryId);
+      c2.set("text", deepText);
+      expect((await saveCommitment(c2)).ok).toBe(true);
+
+      const { data: deepRows } = await supabase
+        .from("itc_commitments")
+        .select("id, text, depth_score, attempts")
+        .eq("map_id", ctx.mapId)
+        .eq("worry_id", worryId);
+      expect(deepRows?.length).toBe(1);
+      const deepRow = deepRows![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+      };
+      expect(deepRow.text).toBe(deepText);
+      expect(deepRow.attempts).toBe(2);
+      expect(deepRow.depth_score, "deep commitment must be scored 2 or 3").not.toBeNull();
+      expect(deepRow.depth_score! >= 2).toBe(true);
+
+      const openGate = await getAdvanceGate(ctx.mapId);
+      expect(openGate.from).toBe("commitments");
+      expect(
+        openGate.enabled,
+        `gate should open on deep commitment (score=${deepRow.depth_score}, attempts=${deepRow.attempts}); reason: ${openGate.reason}`,
       ).toBe(true);
     },
     120_000,
