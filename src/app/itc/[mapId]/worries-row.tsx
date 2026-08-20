@@ -281,7 +281,7 @@ function WorryItem({
           }}
           minRows={2}
           disabled={pending}
-          placeholder="What are you afraid would happen if you did the opposite?"
+          placeholder="I worry that if I…"
           className={
             "w-full rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
