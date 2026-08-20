@@ -217,9 +217,12 @@ export function TestDesignForm({
       setDataToCollect(res.draft.dataToCollect);
       setInOrderToFindOut(res.draft.inOrderToFindOut);
       setTargetDate(res.draft.targetDate);
-      // The old SMART verdict is stale now — coachee needs to hit
-      // Run the Test again to score the revised version.
-      setLatestReview(null);
+      // Server ran the self-verify loop and returns the SMART verdict
+      // of the FINAL revision. If ready: SMART card flips to green.
+      // If still needs_work (rare — retry cap hit): fresh feedback
+      // for the next round. If null (review LLM failed): clear the
+      // stale card; coachee can hit Run the Test to re-score.
+      setLatestReview(res.review);
     });
   }
 
@@ -529,10 +532,10 @@ function SmartReviewCard({
       note: review.smart.researches.note,
     },
     {
-      key: "tests_belief",
-      label: "Tests the belief",
-      pass: review.smart.tests_belief.pass,
-      note: review.smart.tests_belief.note,
+      key: "counters_assumption",
+      label: "Counters the assumption",
+      pass: review.smart.counters_assumption.pass,
+      note: review.smart.counters_assumption.note,
     },
   ];
   const borderClass = isReady

@@ -100,7 +100,7 @@ The server calls you to review a test after the coachee runs it. Your job: asses
 - **modest** — small in scope; one specific move in one specific moment.
 - **actionable** — fits in the coachee's normal week without special staging.
 - **researches** — collects information about the belief; not trying to succeed or fail.
-- **tests_belief** — the behavior is a real move AGAINST what the assumption dictates (not what the coachee would already do).
+- **counters_assumption** — the behavior is a real move AGAINST what the assumption dictates (not what the coachee would already do).
 
 Each note is ONE short plain-English sentence grounded in the SPECIFIC content of THIS test. Under ~140 chars. No markdown. No leading label. No asterisks. Just the sentence.
 
@@ -129,5 +129,5 @@ Return structured JSON matching TestDraftSchema: test_type, assumption_says, beh
 
 === OUTPUT FORMAT (review mode) ===
 
-Return structured JSON matching TestReviewSchema: verdict, smart {safe, modest, actionable, researches, tests_belief} each { pass, note }, one_thing_to_tighten. No markdown, no asterisks, no bullets — the client renders the layout.
+Return structured JSON matching TestReviewSchema: verdict, smart {safe, modest, actionable, researches, counters_assumption} each { pass, note }, one_thing_to_tighten. No markdown, no asterisks, no bullets — the client renders the layout.
 `.trim();

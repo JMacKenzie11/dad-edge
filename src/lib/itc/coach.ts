@@ -1529,7 +1529,12 @@ const TestReviewSchema = z.object({
     modest: SmartCriterionSchema,
     actionable: SmartCriterionSchema,
     researches: SmartCriterionSchema,
-    tests_belief: SmartCriterionSchema,
+    /** Was tests_belief before we standardized on "assumption" as
+     *  the single term for the Column 5 element (Kegan's Big
+     *  Assumption). "Counters" is also more precise: the criterion
+     *  is that the behavior moves AGAINST what the assumption
+     *  dictates, not just any test in the abstract. */
+    counters_assumption: SmartCriterionSchema,
   }),
   /** Present iff verdict === "needs_work". One sentence naming the
    *  single specific edit to make, pointing at the failed criterion. */
@@ -1603,9 +1608,9 @@ export async function reviewTestDesign(input: {
           pass: object.smart.researches.pass,
           note: scrubReply(object.smart.researches.note),
         },
-        tests_belief: {
-          pass: object.smart.tests_belief.pass,
-          note: scrubReply(object.smart.tests_belief.note),
+        counters_assumption: {
+          pass: object.smart.counters_assumption.pass,
+          note: scrubReply(object.smart.counters_assumption.note),
         },
       },
       one_thing_to_tighten: object.one_thing_to_tighten
@@ -1681,7 +1686,7 @@ export async function reviseTestFromReview(input: {
       `  modest: ${input.review.smart.modest.pass ? "PASS" : "FAIL"} — ${input.review.smart.modest.note}`,
       `  actionable: ${input.review.smart.actionable.pass ? "PASS" : "FAIL"} — ${input.review.smart.actionable.note}`,
       `  researches: ${input.review.smart.researches.pass ? "PASS" : "FAIL"} — ${input.review.smart.researches.note}`,
-      `  tests_belief: ${input.review.smart.tests_belief.pass ? "PASS" : "FAIL"} — ${input.review.smart.tests_belief.note}`,
+      `  counters_assumption: ${input.review.smart.counters_assumption.pass ? "PASS" : "FAIL"} — ${input.review.smart.counters_assumption.note}`,
     ].join("\n");
     const { object } = await generateObject({
       model: mainModel(),
@@ -1717,7 +1722,11 @@ export async function reviseTestFromReview(input: {
           ? `  one_thing_to_tighten: ${input.review.one_thing_to_tighten}`
           : ``,
         ``,
-        `Return the revised test as the full structured object. Fields that were fine can stay identical; fields tied to a FAIL criterion must change to address it. The revised test must clear every SMART criterion.`,
+        `Return the revised test as the full structured object.`,
+        ``,
+        `INVARIANT: the revised test MUST clear ALL FIVE SMART criteria — not just the one that failed. A revision that fixes counters_assumption but breaks modest has not helped the coachee. Before you return, mentally re-score the revision against every criterion. If addressing the failure requires touching a field that was passing, touch it — for example, if you rewrite behavior_change to counter the assumption more directly, you may need to sharpen data_to_collect + in_order_to_find_out to match, and you may need to bound the scope (specific moment, specific duration) so modest still passes.`,
+        ``,
+        `Prefer targeted edits over rewrites, but if the failure is fundamental — e.g., counters_assumption failed because the behavior is what the coachee already does — rewrite the affected field entirely rather than tweaking around the edges. Don't try to preserve a behavior that structurally can't pass the criterion.`,
       ].join("\n"),
       maxOutputTokens: 1200,
     });

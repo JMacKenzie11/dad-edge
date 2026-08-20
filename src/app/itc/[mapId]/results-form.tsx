@@ -166,12 +166,14 @@ export function ResultsForm({
             disabled={pending}
             className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
           >
-            <option value="held">Held — evidence was belief-consistent</option>
+            <option value="held">
+              Held — the evidence supported the assumption
+            </option>
             <option value="partially_challenged">
               Partially challenged — some evidence didn't fit
             </option>
             <option value="challenged">
-              Challenged — evidence clearly didn't fit
+              Challenged — the evidence clearly didn't fit
             </option>
           </select>
         </label>

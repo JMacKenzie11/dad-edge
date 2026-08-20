@@ -2157,11 +2157,26 @@ const reviseTestFromCoachSchema = z.object({
 
 /**
  * Client-triggered "Have the coach revise this" — the coachee saw a
- * needs_work SMART verdict on the SMART card and asked the coach to
- * revise the test from that specific feedback. Does NOT persist —
- * the revised fields land in client form state; the coachee reviews
- * them and then hits Run the Test again for a fresh SMART pass.
+ * needs_work SMART verdict and asked the coach to fix the test.
+ *
+ * Self-verify loop: after each revision we re-run reviewTestDesign on
+ * the revised test. If ready, return. If needs_work, feed the new
+ * review back into another revise pass. Cap at MAX_REVISE_ATTEMPTS
+ * total attempts. Return the final draft + its verdict so the client
+ * updates both form fields AND the SMART card in one round-trip.
+ *
+ * The retry loop backstops the model when its first pass fixes X but
+ * breaks Y. Total LLM cost is the same as the coachee clicking
+ * Revise+Run manually N times — but from their perspective it's one
+ * click and one wait.
+ *
+ * Does NOT persist to the DB — the revised fields land in client
+ * form state; the coachee reviews and then hits Run the Test to
+ * commit + advance (or clicks Revise again if the final verdict
+ * still needs work).
  */
+const MAX_REVISE_ATTEMPTS = 3;
+
 export async function reviseTestFromCoach(
   formData: FormData,
 ): Promise<
@@ -2175,6 +2190,18 @@ export async function reviseTestFromCoach(
         inOrderToFindOut: string;
         targetDate: string;
       };
+      /** SMART verdict of the FINAL revision (the one being returned).
+       *  Client updates the SMART card from this so the coachee sees
+       *  the new state without clicking Run the Test just to check.
+       *  Null iff the review LLM failed on the final revision (rare;
+       *  we still return the draft and the client shows no updated
+       *  card). */
+      review: SmartReview | null;
+      /** How many revision attempts we actually ran. Useful for
+       *  telemetry — a 3 means we hit the cap and returned the best
+       *  attempt even though its final verdict may still be
+       *  needs_work. */
+      attempts: number;
     }
   | { ok: false; reason: string }
 > {
@@ -2227,28 +2254,100 @@ export async function reviseTestFromCoach(
     })
     .filter((x): x is { text: string; behaviorText: string } => Boolean(x));
 
-  const revised = await reviseTestFromReview({
-    goalText: loaded.map.improvement_goal ?? "",
-    assumptionText: selected.text,
-    underwrittenCommitments: underwritten,
-    todayIso: new Date().toISOString().slice(0, 10),
-    currentTest: {
-      testType: parsed.data.test_type,
-      assumptionSays: parsed.data.assumption_says,
-      behaviorChange: parsed.data.behavior_change,
-      dataToCollect: parsed.data.data_to_collect,
-      inOrderToFindOut: parsed.data.in_order_to_find_out,
-      targetDate: parsed.data.target_date,
-    },
-    review,
-  });
-  if ("error" in revised) {
-    return {
-      ok: false,
-      reason: `Coach couldn't produce a revision: ${revised.error}`,
+  // Self-verify loop. Each iteration: (1) revise from the latest
+  // review, (2) re-review the revision. Exit on verdict=ready OR
+  // review-LLM failure OR attempt cap. The `currentTest` fed into
+  // each revise starts as the coachee's input and rolls forward with
+  // each attempt so the LLM sees its previous work as the baseline.
+  let currentTest = {
+    testType: parsed.data.test_type,
+    assumptionSays: parsed.data.assumption_says,
+    behaviorChange: parsed.data.behavior_change,
+    dataToCollect: parsed.data.data_to_collect,
+    inOrderToFindOut: parsed.data.in_order_to_find_out,
+    targetDate: parsed.data.target_date,
+  };
+  let currentReview: SmartReview = review;
+  let latestDraft: {
+    testType: "data_mining" | "observation" | "thought_experiment" | "behavioral";
+    assumptionSays: string;
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+    targetDate: string;
+  } | null = null;
+  let latestVerdict: SmartReview | null = null;
+  let attempts = 0;
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  for (let i = 0; i < MAX_REVISE_ATTEMPTS; i++) {
+    attempts = i + 1;
+    const revised = await reviseTestFromReview({
+      goalText: loaded.map.improvement_goal ?? "",
+      assumptionText: selected.text,
+      underwrittenCommitments: underwritten,
+      todayIso,
+      currentTest,
+      review: currentReview,
+    });
+    if ("error" in revised) {
+      // If we already have a valid revision from an earlier attempt,
+      // return it (better than throwing away progress). Otherwise
+      // surface the error.
+      if (latestDraft) break;
+      return {
+        ok: false,
+        reason: `Coach couldn't produce a revision: ${revised.error}`,
+      };
+    }
+    latestDraft = revised;
+    // Roll the baseline forward for the next iteration.
+    currentTest = {
+      testType: revised.testType,
+      assumptionSays: revised.assumptionSays,
+      behaviorChange: revised.behaviorChange,
+      dataToCollect: revised.dataToCollect,
+      inOrderToFindOut: revised.inOrderToFindOut,
+      targetDate: revised.targetDate,
     };
+
+    // Verify the revision. If the review LLM errors, we've still got
+    // a valid revision — return it with a null verdict; the client
+    // just doesn't update the SMART card and the coachee can re-run.
+    const nextReview = await reviewTestDesign({
+      goalText: loaded.map.improvement_goal ?? "",
+      assumptionText: selected.text,
+      test: {
+        testType: revised.testType,
+        assumptionSays: revised.assumptionSays,
+        behaviorChange: revised.behaviorChange,
+        dataToCollect: revised.dataToCollect,
+        inOrderToFindOut: revised.inOrderToFindOut,
+        targetDate: revised.targetDate,
+      },
+    });
+    latestVerdict = nextReview;
+    if (!nextReview) {
+      // Review LLM failed on this attempt; return what we have.
+      break;
+    }
+    if (nextReview.verdict === "ready") {
+      break;
+    }
+    // Still needs_work — feed this fresh review into the next revise.
+    currentReview = nextReview;
   }
-  return { ok: true, draft: revised };
+
+  if (!latestDraft) {
+    return { ok: false, reason: "Coach couldn't produce a revision." };
+  }
+  return {
+    ok: true,
+    draft: latestDraft,
+    review: latestVerdict,
+    attempts,
+  };
 }
 
 const saveTestSchema = z.object({
