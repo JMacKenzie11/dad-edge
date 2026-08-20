@@ -417,7 +417,7 @@ export function MapCanvas({
               if (!activeAssumption) {
                 return (
                   <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
-                    Pick an assumption to test first (Column 5 above).
+                    Pick an assumption to test first from your Big Assumptions above.
                   </p>
                 );
               }
@@ -730,22 +730,23 @@ function ContinueBar({
   }
   return (
     <div className="pt-2">
-      {gate.enabled ? (
-        <p className="mb-2 text-sm text-[color:var(--color-text-muted)] text-center">
-          Ready when you are. Hit {gate.label} to lock this in and move on.
-        </p>
-      ) : null}
       <button
         type="button"
         onClick={submit}
         disabled={pending || !gate.enabled}
         title={gate.enabled ? undefined : gate.reason ?? "Not ready to advance."}
+        aria-describedby={!gate.enabled && gate.reason ? "advance-gate-reason" : undefined}
         className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
       >
         {pending ? "…" : gate.label}
       </button>
       {!gate.enabled && gate.reason ? (
-        <p className="mt-2 text-sm text-[color:var(--color-text-muted)]/80 text-center">
+        <p
+          id="advance-gate-reason"
+          role="status"
+          aria-live="polite"
+          className="mt-2 text-sm text-[color:var(--color-text-muted)]/80 text-center"
+        >
           {gate.reason}
         </p>
       ) : null}

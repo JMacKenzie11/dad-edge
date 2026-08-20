@@ -15,6 +15,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { useConfirm } from "./use-confirm";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string, nowMs: number): boolean {
@@ -370,6 +371,7 @@ function AssumptionItem({
   const [linkDraft, setLinkDraft] = useState<string[]>(linkedCommitmentIds);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
   const savedRef = useRef({
     text: assumption.text,
     links: linkedCommitmentIds.slice().sort(),
@@ -451,8 +453,14 @@ function AssumptionItem({
     );
   }
 
-  function submitRemove() {
-    if (!confirm(`Remove assumption #${index}: "${assumption.text}"?`)) return;
+  async function submitRemove() {
+    const ok = await confirm({
+      title: `Remove assumption ${index}?`,
+      body: `"${assumption.text}"`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
     setError(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -470,6 +478,7 @@ function AssumptionItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {confirmDialog}
       {thread.length > 0 ? (
         <div className="mb-3">
           <EntryThread

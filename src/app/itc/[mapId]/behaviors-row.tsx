@@ -10,6 +10,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { useConfirm } from "./use-confirm";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string, nowMs: number): boolean {
@@ -258,6 +259,7 @@ function BehaviorItem({
   const savedRef = useRef(behavior.text);
   const inflightRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
   // Sync from server on revalidation.
   useEffect(() => {
@@ -315,8 +317,14 @@ function BehaviorItem({
     });
   }
 
-  function submitRemove() {
-    if (!confirm(`Remove behavior #${index}: "${behavior.text}"?`)) return;
+  async function submitRemove() {
+    const ok = await confirm({
+      title: `Remove behavior ${index}?`,
+      body: `"${behavior.text}"\n\nAny worry attached to this behavior will need to be cleared first.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
     setError(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -334,6 +342,7 @@ function BehaviorItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {confirmDialog}
       {thread.length > 0 ? (
         <div className="mb-2">
           <EntryThread

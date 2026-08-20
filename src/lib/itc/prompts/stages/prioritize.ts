@@ -60,7 +60,7 @@ Two short paragraphs. That's the target — punchy, not a wall of text.
 
 **Paragraph 2 — what makes it the right first move.** One or two sentences on what the coachee stands to LEARN if the test produces disconfirming information. This is the epistemic frame (Vol 2 p. 252 — the test is for information about validity, not a performance to succeed at). Not "you'll fix this" — "you'll find out something you can't currently see."
 
-**Close — one plain line.** Something like "I've pre-selected this one for you. If you want to test a different assumption, click it in your Big Assumptions above. When you're ready, hit Continue to Test." No question mark, no demand for a typed response. Do NOT use therapy-speak framing ("sit with this," "take a moment," "let this land"). Do NOT use product-speak ("shape," "the format," "the structure"). Do NOT say "Column 5" — say "your Big Assumptions above."
+**Close — one plain line.** Something like "I've pre-selected this one for you. If you want to test a different assumption, pick it from your Big Assumptions above. When you're ready, we'll design the test." No question mark, no demand for a typed response. Do NOT use therapy-speak framing ("sit with this," "take a moment," "let this land"). Do NOT use product-speak ("shape," "the format," "the structure"). Do NOT say "Column 5" — say "your Big Assumptions above." Do NOT reference the button label or use UI verbs like "hit" or "click".
 
 === OUTPUT FORMAT ===
 

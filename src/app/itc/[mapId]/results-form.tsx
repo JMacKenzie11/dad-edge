@@ -127,7 +127,7 @@ export function ResultsForm({
 
       <Field
         label="So in Order to Test it I Changed my Behavior This Way"
-        hint="What you actually did — the concrete move. If plan and reality diverged, say so."
+        hint="What you actually did. The concrete move. If plan and reality diverged, say so."
         value={whatIDid}
         onChange={setWhatIDid}
         rows={3}
@@ -142,7 +142,7 @@ export function ResultsForm({
         onChange={setDataCollected}
         rows={4}
         disabled={pending}
-        placeholder={`Observable: what they said, what they did, how it ended — the videotape version.\n\nFelt: what came up in you while it was happening.`}
+        placeholder={`Observable: what they said, what they did, how it ended. The videotape version.\n\nFelt: what came up in you while it was happening.`}
       />
 
       <Field
@@ -166,16 +166,17 @@ export function ResultsForm({
             disabled={pending}
             className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
           >
-            <option value="held">
-              Held — the evidence supported the assumption
-            </option>
-            <option value="partially_challenged">
-              Partially challenged — some evidence didn't fit
-            </option>
-            <option value="challenged">
-              Challenged — the evidence clearly didn't fit
-            </option>
+            <option value="held">Held</option>
+            <option value="partially_challenged">Partially challenged</option>
+            <option value="challenged">Challenged</option>
           </select>
+          <span className="block text-[11px] text-[color:var(--color-text-muted)]/80 italic">
+            {verdict === "held"
+              ? "The evidence supported the assumption."
+              : verdict === "partially_challenged"
+                ? "Some of the evidence didn't fit."
+                : "The evidence clearly didn't fit."}
+          </span>
         </label>
 
         <label className="space-y-1">

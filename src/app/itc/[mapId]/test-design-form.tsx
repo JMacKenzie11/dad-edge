@@ -16,6 +16,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { useConfirm } from "./use-confirm";
 
 /**
  * Feature flag. The "Give me a safer version" toolbar button is hidden
@@ -29,9 +30,13 @@ import { EntryThread } from "./entry-thread";
 const SHOW_SAFER_BUTTON = false;
 
 /**
- * Test design form. Renders the four Kegan/Lahey worksheet fields
- * (My Big Assumption Says / So I Will / And Collect the Following
- * Data / In Order to Find Out Whether) plus test_type + target_date.
+ * Test design form. Renders three of the four Kegan/Lahey worksheet
+ * fields (So I Will / And Collect the Following Data / In Order to
+ * Find Out Whether) plus test_type + target_date. The fourth field
+ * (My Big Assumption Says) is not surfaced — it's always in sync
+ * with the live assumption text, shown in the "Testing this
+ * assumption" panel above. See the note at the top of the component
+ * function for the rationale.
  *
  * On advance to test_design the server pre-drafts a test via
  * draftTestForAssumption and persists it — so on first render the
@@ -66,6 +71,7 @@ export function TestDesignForm({
   const [pending, startTransition] = useTransition();
   const [regenPending, startRegen] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
   // Latest SMART review from Run the Test. Held in client state only —
   // not persisted server-side. Populated on needs_work; on ready we've
   // already advanced (form unmounts) so it never displays. Cleared on
@@ -74,9 +80,15 @@ export function TestDesignForm({
   const [testType, setTestType] = useState<ItcTestType>(
     test?.test_type ?? "behavioral",
   );
-  const [assumptionSays, setAssumptionSays] = useState(
-    test?.assumption_says ?? assumption.text,
-  );
+  // assumption_says intentionally NOT surfaced as an editable field.
+  // Previously it was a snapshot the coach could "sharpen with the
+  // prediction" but that snapshot went stale the moment the coachee
+  // edited the assumption on Column 5, and it duplicated the intent
+  // that in_order_to_find_out already carries. The "Testing this
+  // assumption" panel below shows the live assumption text; every
+  // write below force-syncs assumption_says to assumption.text so
+  // legacy readers (test row, coach helpers, admin view) see the
+  // current text without a per-write manual field.
   const [behaviorChange, setBehaviorChange] = useState(
     test?.behavior_change ?? "",
   );
@@ -105,46 +117,45 @@ export function TestDesignForm({
    * (see actions.ts ANOTHER_ROTATION / SAFER_LADDER). No prompt-
    * shaping instructions for variation — variation is architectural.
    */
-  function regenerate(mode: "initial" | "another" | "safer") {
+  async function regenerate(mode: "initial" | "another" | "safer") {
     const hasEdits =
-      (test?.assumption_says ?? assumption.text) !== assumptionSays ||
       (test?.behavior_change ?? "") !== behaviorChange ||
       (test?.data_to_collect ?? "") !== dataToCollect ||
       (test?.in_order_to_find_out ?? "") !== inOrderToFindOut;
     if (hasEdits) {
-      const msg =
+      const confirmLabel =
         mode === "safer"
-          ? "You'll lose your current edits. Get a safer version anyway?"
+          ? "Get safer version"
           : mode === "another"
-            ? "You'll lose your current edits. Get another draft anyway?"
-            : "You'll lose your current edits. Change type and get a new draft anyway?";
-      if (!confirm(msg)) return;
+            ? "Get another draft"
+            : "Change type";
+      const ok = await confirm({
+        title: "Replace your current edits?",
+        body: "You'll lose the changes you've made to the fields.",
+        confirmLabel,
+        destructive: true,
+      });
+      if (!ok) return;
     }
     fireRegenerate(mode, testType);
   }
 
-  function onTypeChange(newType: ItcTestType) {
+  async function onTypeChange(newType: ItcTestType) {
     if (newType === testType) return;
-    // Same edits-confirm dialog as regenerate() — the type change
-    // discards the current draft in favor of a fresh one of the
-    // chosen type.
     const hasEdits =
-      (test?.assumption_says ?? assumption.text) !== assumptionSays ||
       (test?.behavior_change ?? "") !== behaviorChange ||
       (test?.data_to_collect ?? "") !== dataToCollect ||
       (test?.in_order_to_find_out ?? "") !== inOrderToFindOut;
     if (hasEdits) {
-      if (
-        !confirm(
-          "You'll lose your current edits. Change type and get a new draft anyway?",
-        )
-      ) {
-        return;
-      }
+      const ok = await confirm({
+        title: "Change test type and start over?",
+        body: "You'll lose the changes you've made to the fields.",
+        confirmLabel: "Change type",
+        destructive: true,
+      });
+      if (!ok) return;
     }
     setTestType(newType);
-    // Fire the regenerate with the NEW type; mode "initial" so the
-    // server just uses the passed type (no rotation).
     fireRegenerate("initial", newType);
   }
 
@@ -171,7 +182,6 @@ export function TestDesignForm({
       }
       // Update local form state; user still has to Save to persist.
       setTestType(res.draft.testType);
-      setAssumptionSays(res.draft.assumptionSays);
       setBehaviorChange(res.draft.behaviorChange);
       setDataToCollect(res.draft.dataToCollect);
       setInOrderToFindOut(res.draft.inOrderToFindOut);
@@ -199,7 +209,9 @@ export function TestDesignForm({
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("test_type", testType);
-    fd.set("assumption_says", assumptionSays.trim());
+    // Always send the LIVE assumption text — never a snapshot. See
+    // the note on assumption_says at the top of this component.
+    fd.set("assumption_says", assumption.text);
     fd.set("behavior_change", behaviorChange.trim());
     fd.set("data_to_collect", dataToCollect.trim());
     fd.set("in_order_to_find_out", inOrderToFindOut.trim());
@@ -212,7 +224,6 @@ export function TestDesignForm({
         return;
       }
       setTestType(res.draft.testType);
-      setAssumptionSays(res.draft.assumptionSays);
       setBehaviorChange(res.draft.behaviorChange);
       setDataToCollect(res.draft.dataToCollect);
       setInOrderToFindOut(res.draft.inOrderToFindOut);
@@ -240,7 +251,9 @@ export function TestDesignForm({
     if (test?.id) fd.set("test_id", test.id);
     fd.set("assumption_id", assumption.id);
     fd.set("test_type", testType);
-    fd.set("assumption_says", assumptionSays.trim());
+    // Always send the LIVE assumption text — never a snapshot. See
+    // the note on assumption_says at the top of this component.
+    fd.set("assumption_says", assumption.text);
     fd.set("behavior_change", behaviorChange.trim());
     fd.set("data_to_collect", dataToCollect.trim());
     fd.set("in_order_to_find_out", inOrderToFindOut.trim());
@@ -261,7 +274,7 @@ export function TestDesignForm({
     });
   }
 
-  function goBackToPrioritize() {
+  async function goBackToPrioritize() {
     if (!test?.id) {
       // No test to abandon — coachee just navigates back. In practice
       // this shouldn't happen (server pre-drafts on advance) but
@@ -269,13 +282,13 @@ export function TestDesignForm({
       window.location.reload();
       return;
     }
-    if (
-      !confirm(
-        "Abandon this test and pick a different assumption? Your current design will be marked abandoned but preserved in history.",
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Test a different assumption?",
+      body: "Your current design will be marked abandoned but preserved in history.",
+      confirmLabel: "Test a different one",
+      destructive: true,
+    });
+    if (!ok) return;
     setError(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -288,6 +301,7 @@ export function TestDesignForm({
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       {thread.length > 0 && test ? (
         <EntryThread messages={thread} chipTarget="assumption" />
       ) : null}
@@ -374,17 +388,8 @@ export function TestDesignForm({
         }
       >
         <Field
-          label="My Big Assumption Says"
-          hint="Verbatim from the map, sharpened with what it specifically predicts."
-          value={assumptionSays}
-          onChange={setAssumptionSays}
-          rows={2}
-          disabled={pending || regenPending}
-        />
-
-        <Field
           label="So I Will (Change my Behavior This Way)"
-          hint="One specific move in one specific moment. Modest — worst case must be livable."
+          hint="One specific move in one specific moment. Modest. Worst case must be livable."
           value={behaviorChange}
           onChange={setBehaviorChange}
           rows={2}
@@ -572,7 +577,7 @@ function SmartReviewCard({
             </span>
             <span>
               <span className="font-semibold text-white">{row.label}</span>
-              <span className="text-[color:var(--color-text-muted)]"> — {row.note}</span>
+              <span className="text-[color:var(--color-text-muted)]">: {row.note}</span>
             </span>
           </li>
         ))}

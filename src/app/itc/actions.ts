@@ -379,7 +379,7 @@ export async function startMap(formData: FormData): Promise<void> {
   await appendMessage(
     map.id,
     "assistant",
-    `You've picked ${pillar.label}. Column 1 is one goal that starts "${GOAL_STEM}...". Type it into the goal input above, or ask the coach anything about what you want to work on.`,
+    `Your goal for ${pillar.label} starts "${GOAL_STEM} …". If you know how you'd finish it, write it. If you want to work it out first, tell me what's on your mind.`,
     "goal",
     {
       surface: "stage_note",
@@ -3354,6 +3354,28 @@ export type AdvanceGate = {
 export async function getAdvanceGate(mapId: string): Promise<AdvanceGate> {
   const participant = await requireItcParticipant();
   const map = await getMapForParticipant(mapId, participant.id);
+  if (!map) {
+    return {
+      from: "goal",
+      to: null,
+      label: null,
+      enabled: false,
+      reason: "Map not found.",
+    };
+  }
+  return computeAdvanceGate(map);
+}
+
+/**
+ * Admin-only variant: fetches ANY map's advance gate without a
+ * participant-match check. Used by /itc/admin/[mapId] so the
+ * facilitator can see what's currently blocking the coachee.
+ * Callers must have already verified isItcAdmin.
+ */
+export async function getAdvanceGateAdmin(
+  mapId: string,
+): Promise<AdvanceGate> {
+  const map = await getMapById(mapId);
   if (!map) {
     return {
       from: "goal",

@@ -73,9 +73,9 @@ After Movement 3, close with one plain sentence that points at the next step —
 
 Use this exact line:
 
-  "When you're ready, hit Continue to Prioritize to pick which assumption to test first."
+  "When you're ready, pick which assumption to test first."
 
-Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully this landed"). Just the next-step line.
+Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully this landed"). Do NOT reference the button label or use UI verbs like "hit" or "click". Just the next-step line naming the intent.
 
 === VOICE — Kegan explaining it one-on-one ===
 
@@ -93,5 +93,5 @@ Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully 
 
 Return the walkthrough as a single block of prose. Movements 1, 2, and 3 flow into each other with paragraph breaks between them — no headings, no bullet points, no "Movement 1:" labels. The coachee reads it top to bottom as one continuous reflection on his own map. Blank line between paragraphs (Markdown-style double newline).
 
-End with the next-step line from the CLOSE section ("When you're ready, hit Continue to Prioritize to pick which assumption to test first.") on its own line. No question mark, no additional prompts, no therapy-speak preamble.
+End with the next-step line from the CLOSE section ("When you're ready, pick which assumption to test first.") on its own line. No question mark, no additional prompts, no therapy-speak preamble, no UI verbs, no button-label references.
 `.trim();
