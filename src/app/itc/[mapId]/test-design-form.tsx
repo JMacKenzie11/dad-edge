@@ -7,7 +7,11 @@ import type {
   ItcTest,
   ItcTestType,
 } from "@/lib/itc/maps";
-import { abandonInFlightTest, saveTest } from "../actions";
+import {
+  abandonInFlightTest,
+  regenerateTestDraft,
+  saveTest,
+} from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 
@@ -47,6 +51,7 @@ export function TestDesignForm({
   thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [regenPending, startRegen] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [testType, setTestType] = useState<ItcTestType>(
     test?.test_type ?? "behavioral",
@@ -66,6 +71,87 @@ export function TestDesignForm({
   const [targetDate, setTargetDate] = useState(
     test?.target_date ?? defaultTargetDate(),
   );
+
+  /**
+   * Fires the LLM to produce a new draft (initial / another / safer)
+   * and updates form state with the returned slots. Does NOT touch
+   * the DB — the coachee still has to click Save to persist. This
+   * lets them freely regenerate variants until they find one they
+   * want. If they've made unsaved edits, a confirm dialog protects
+   * against blowing them away.
+   */
+  function regenerate(mode: "initial" | "another" | "safer") {
+    const hasEdits =
+      (test?.assumption_says ?? assumption.text) !== assumptionSays ||
+      (test?.behavior_change ?? "") !== behaviorChange ||
+      (test?.data_to_collect ?? "") !== dataToCollect ||
+      (test?.in_order_to_find_out ?? "") !== inOrderToFindOut;
+    if (hasEdits) {
+      const msg =
+        mode === "safer"
+          ? "You'll lose your current edits. Get a safer draft anyway?"
+          : mode === "another"
+            ? "You'll lose your current edits. Get another draft anyway?"
+            : "You'll lose your current edits. Change type and regenerate anyway?";
+      if (!confirm(msg)) return;
+    }
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("test_type", testType);
+    fd.set("mode", mode);
+    // Include the current form state as "prior draft" so the LLM can
+    // produce a materially different / safer version.
+    fd.set("prior_assumption_says", assumptionSays);
+    fd.set("prior_behavior_change", behaviorChange);
+    fd.set("prior_data_to_collect", dataToCollect);
+    fd.set("prior_in_order_to_find_out", inOrderToFindOut);
+    startRegen(async () => {
+      const res = await regenerateTestDraft(fd);
+      if (!res.ok) {
+        setError(res.reason ?? "Could not regenerate.");
+        return;
+      }
+      // Update local form state; user still has to Save to persist.
+      setTestType(res.draft.testType);
+      setAssumptionSays(res.draft.assumptionSays);
+      setBehaviorChange(res.draft.behaviorChange);
+      setDataToCollect(res.draft.dataToCollect);
+      setInOrderToFindOut(res.draft.inOrderToFindOut);
+      setTargetDate(res.draft.targetDate);
+    });
+  }
+
+  function onTypeChange(newType: ItcTestType) {
+    if (newType === testType) return;
+    setTestType(newType);
+    // Type change triggers an implicit regenerate — the whole test
+    // shape hinges on the type, so keeping the old drafts around
+    // when the type changes reads as broken. Uses "initial" mode
+    // with the new type constraint (LLM produces a fresh test in
+    // that shape rather than mutating the prior one).
+    setTimeout(() => {
+      // Defer so setTestType commits and regenerate reads the new type.
+      const fd = new FormData();
+      fd.set("map_id", mapId);
+      fd.set("test_type", newType);
+      fd.set("mode", "initial");
+      setError(null);
+      startRegen(async () => {
+        const res = await regenerateTestDraft(fd);
+        if (!res.ok) {
+          setError(res.reason ?? "Could not regenerate.");
+          return;
+        }
+        setTestType(res.draft.testType);
+        setAssumptionSays(res.draft.assumptionSays);
+        setBehaviorChange(res.draft.behaviorChange);
+        setDataToCollect(res.draft.dataToCollect);
+        setInOrderToFindOut(res.draft.inOrderToFindOut);
+        setTargetDate(res.draft.targetDate);
+      });
+    }, 0);
+  }
 
   function save() {
     setError(null);
@@ -125,6 +211,52 @@ export function TestDesignForm({
         </div>
       </div>
 
+      {/* Type dropdown at the top — the whole test shape hinges on
+          type. Changing it fires a re-draft (see onTypeChange). */}
+      <label className="block space-y-1">
+        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
+          Type of test
+        </span>
+        <select
+          value={testType}
+          onChange={(e) => onTypeChange(e.target.value as ItcTestType)}
+          disabled={pending || regenPending}
+          className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
+        >
+          <option value="behavioral">Behavioral (do something different in real life)</option>
+          <option value="observation">Observation (watch, don't act)</option>
+          <option value="data_mining">Data mining (look at what's already happened)</option>
+          <option value="thought_experiment">Thought experiment (imagine, don't act)</option>
+        </select>
+        <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
+          Changing the type gets you a fresh draft in that shape.
+        </span>
+      </label>
+
+      {/* Regenerate row — sit right under the type dropdown so the
+          coachee sees the "get another draft" affordances at the top
+          of the form, not buried after the fields. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => regenerate("another")}
+          disabled={pending || regenPending}
+          className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+          title="Ask the coach for a materially different draft on this same assumption"
+        >
+          {regenPending ? "…" : "Give me another draft"}
+        </button>
+        <button
+          type="button"
+          onClick={() => regenerate("safer")}
+          disabled={pending || regenPending}
+          className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+          title="Ask the coach for a lower-stakes / smaller-scope version of this draft"
+        >
+          {regenPending ? "…" : "Give me a safer version"}
+        </button>
+      </div>
+
       <div className="space-y-3">
         <Field
           label="My Big Assumption Says"
@@ -132,7 +264,7 @@ export function TestDesignForm({
           value={assumptionSays}
           onChange={setAssumptionSays}
           rows={2}
-          disabled={pending}
+          disabled={pending || regenPending}
         />
 
         <Field
@@ -141,7 +273,7 @@ export function TestDesignForm({
           value={behaviorChange}
           onChange={setBehaviorChange}
           rows={2}
-          disabled={pending}
+          disabled={pending || regenPending}
         />
 
         <Field
@@ -150,7 +282,7 @@ export function TestDesignForm({
           value={dataToCollect}
           onChange={setDataToCollect}
           rows={2}
-          disabled={pending}
+          disabled={pending || regenPending}
         />
 
         <Field
@@ -159,48 +291,29 @@ export function TestDesignForm({
           value={inOrderToFindOut}
           onChange={setInOrderToFindOut}
           rows={2}
-          disabled={pending}
+          disabled={pending || regenPending}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label className="space-y-1">
-            <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-              Type of test
-            </span>
-            <select
-              value={testType}
-              onChange={(e) => setTestType(e.target.value as ItcTestType)}
-              disabled={pending}
-              className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
-            >
-              <option value="behavioral">Behavioral (do something different)</option>
-              <option value="observation">Observation (watch, don't act)</option>
-              <option value="data_mining">Data mining (look at what's already happened)</option>
-              <option value="thought_experiment">Thought experiment (imagine, don't act)</option>
-            </select>
-          </label>
-
-          <label className="space-y-1">
-            <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-              Target date
-            </span>
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              min={new Date().toISOString().slice(0, 10)}
-              disabled={pending}
-              className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
-            />
-          </label>
-        </div>
+        <label className="block space-y-1">
+          <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
+            Target date
+          </span>
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            min={new Date().toISOString().slice(0, 10)}
+            disabled={pending || regenPending}
+            className="rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
+          />
+        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           type="button"
           onClick={save}
-          disabled={pending}
+          disabled={pending || regenPending}
           className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save this test"}
@@ -208,7 +321,7 @@ export function TestDesignForm({
         <button
           type="button"
           onClick={goBackToPrioritize}
-          disabled={pending}
+          disabled={pending || regenPending}
           className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
           title="Abandon this test and pick a different assumption"
         >

@@ -1973,6 +1973,126 @@ export async function ensureTestDraftDelivered(
   }
 }
 
+const regenerateTestSchema = z.object({
+  map_id: z.string().uuid(),
+  test_type: z.enum([
+    "data_mining",
+    "observation",
+    "thought_experiment",
+    "behavioral",
+  ]),
+  mode: z.enum(["initial", "another", "safer"]),
+  // Prior draft snapshot — required for "another" and "safer" modes
+  // so the LLM can produce a materially different / smaller version.
+  prior_assumption_says: z.string().optional(),
+  prior_behavior_change: z.string().optional(),
+  prior_data_to_collect: z.string().optional(),
+  prior_in_order_to_find_out: z.string().optional(),
+});
+
+/**
+ * On-demand test-draft regeneration. Called by the TestDesignForm
+ * when the coachee:
+ *   - changes the test_type dropdown (mode="initial" with new type)
+ *   - clicks "Give me another draft" (mode="another")
+ *   - clicks "Give me a safer version" (mode="safer")
+ *
+ * Purely LLM call + return — does NOT touch the DB. Client updates
+ * its local form state with the returned draft; user must Save to
+ * persist. This means the coachee can freely regenerate until they
+ * find a draft they want.
+ */
+export async function regenerateTestDraft(
+  formData: FormData,
+): Promise<
+  | {
+      ok: true;
+      draft: {
+        testType: "data_mining" | "observation" | "thought_experiment" | "behavioral";
+        assumptionSays: string;
+        behaviorChange: string;
+        dataToCollect: string;
+        inOrderToFindOut: string;
+        targetDate: string;
+      };
+    }
+  | { ok: false; reason: string }
+> {
+  const parsed = regenerateTestSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_type: formData.get("test_type"),
+    mode: formData.get("mode"),
+    prior_assumption_says: formData.get("prior_assumption_says") || undefined,
+    prior_behavior_change: formData.get("prior_behavior_change") || undefined,
+    prior_data_to_collect: formData.get("prior_data_to_collect") || undefined,
+    prior_in_order_to_find_out:
+      formData.get("prior_in_order_to_find_out") || undefined,
+  });
+  if (!parsed.success) {
+    return { ok: false, reason: "Invalid regenerate input." };
+  }
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  const [assumptions, links, commitments, behaviors, worries] =
+    await Promise.all([
+      listAssumptions(loaded.map.id),
+      listAssumptionLinks(loaded.map.id),
+      listCommitments(loaded.map.id),
+      listBehaviors(loaded.map.id),
+      listWorries(loaded.map.id),
+    ]);
+  const selected = assumptions.find((a) => a.selected_for_testing);
+  if (!selected) {
+    return { ok: false, reason: "No assumption is selected for testing." };
+  }
+
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const underwritten = links
+    .filter((l) => l.assumption_id === selected.id)
+    .map((l) => {
+      const commitment = commitmentById.get(l.commitment_id);
+      const worry = commitment ? worryById.get(commitment.worry_id) : null;
+      const behavior = worry ? behaviorById.get(worry.behavior_id) : null;
+      return commitment && behavior
+        ? { text: commitment.text, behaviorText: behavior.text }
+        : null;
+    })
+    .filter((x): x is { text: string; behaviorText: string } => Boolean(x));
+
+  // Assemble the priorDraft only when it matters (another/safer modes).
+  const priorDraft =
+    parsed.data.mode !== "initial" &&
+    parsed.data.prior_assumption_says &&
+    parsed.data.prior_behavior_change &&
+    parsed.data.prior_data_to_collect &&
+    parsed.data.prior_in_order_to_find_out
+      ? {
+          testType: parsed.data.test_type,
+          assumptionSays: parsed.data.prior_assumption_says,
+          behaviorChange: parsed.data.prior_behavior_change,
+          dataToCollect: parsed.data.prior_data_to_collect,
+          inOrderToFindOut: parsed.data.prior_in_order_to_find_out,
+        }
+      : undefined;
+
+  const draft = await draftTestForAssumption({
+    goalText: loaded.map.improvement_goal ?? "",
+    assumptionText: selected.text,
+    underwrittenCommitments: underwritten,
+    todayIso: new Date().toISOString().slice(0, 10),
+    mode: parsed.data.mode,
+    testType: parsed.data.test_type,
+    priorDraft,
+  });
+  if (!draft) {
+    return { ok: false, reason: "Could not generate a new draft." };
+  }
+  return { ok: true, draft };
+}
+
 const saveTestSchema = z.object({
   map_id: z.string().uuid(),
   test_id: z.string().uuid().optional(),
