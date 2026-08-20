@@ -669,20 +669,25 @@ const WorryDraftSchema = z.object({
 /**
  * Deterministic shortener for over-cap assembled draft sentences.
  * Shared by worry, commitment, and assumption drafters — all three
- * hit the same LLM-overshoots-word-cap failure mode, and the prior
- * fix (`917dc54`: one-shot retry with "you overshot, cut it") still
- * silently dropped drafts when the retry also overshot. Coachee saw
- * nothing.
+ * hit the same LLM-overshoots-word-cap failure mode.
  *
- * Server-owned structure over LLM-obedience: instead of asking the
- * model nicely to trim, we mechanically strip patterns the drafter
- * prompts already call out as filler ("actually", "fully", trailing
- * "instead of ..." clauses, parenthetical qualifiers) and return the
- * shortened sentence. Returns null only if the sentence is beyond
- * mechanical rescue — a rare true LLM sprawl the coachee is better
- * off not seeing.
+ * Prior fixes were both bandaids: `917dc54` added an LLM-retry with
+ * "you overshot, cut it" (LLM retried and overshot again, silent
+ * drop); `f805bf7` mechanically stripped known filler tics but
+ * returned null when the sentence had none to strip (also silent
+ * drop). Same user-visible outcome: coachee saw fewer drafts than
+ * behaviors.
+ *
+ * Current design: always return a string. Best-effort trim strips
+ * filler ("actually", "fully", "really", "just"), trailing "instead
+ * of ..." clauses, and parenthetical qualifiers when they exist.
+ * If the sentence is still over cap after best-effort, return it
+ * anyway — a slightly-long draft the coachee can edit down beats
+ * an empty state where he doesn't even know a draft was attempted.
+ * The cap is now a quality target the drafter aims for, not a
+ * hard block that silently discards output.
  */
-export function trimAssembledDraft(assembled: string, cap: number): string | null {
+export function trimAssembledDraft(assembled: string, cap: number): string {
   const wc = (s: string) => s.trim().split(/\s+/).length;
   let s = assembled.trim();
   if (wc(s) <= cap) return s;
@@ -711,11 +716,12 @@ export function trimAssembledDraft(assembled: string, cap: number): string | nul
   }
 
   // 3. Strip a trailing parenthetical qualifier ("(when she's upset)").
-  const paren = s.replace(/\s*\([^)]*\)(?=[.!?]?\s*$)/, "");
-  if (wc(paren) <= cap) return paren;
+  s = s.replace(/\s*\([^)]*\)(?=[.!?]?\s*$)/, "");
 
-  // 4. Beyond mechanical rescue.
-  return null;
+  // 4. Still over cap after all mechanical strips. Return it anyway —
+  //    empty state is worse than a slightly-long draft the coachee
+  //    can edit.
+  return s;
 }
 
 /**
@@ -893,14 +899,7 @@ export async function draftWorryForBehavior(input: {
     });
     const assembled = scrubReply(assembleWorry(object));
     if (!assembled) return null;
-    const trimmed = trimAssembledDraft(assembled, WORRY_HARD_WORD_CAP);
-    if (!trimmed) {
-      console.warn(
-        '[itc coach] worry draft beyond mechanical trim, dropping: "%s"',
-        assembled,
-      );
-    }
-    return trimmed;
+    return trimAssembledDraft(assembled, WORRY_HARD_WORD_CAP);
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1173,14 +1172,7 @@ export async function draftCommitmentForWorry(input: {
     });
     const assembled = scrubReply(assembleCommitment(object));
     if (!assembled) return null;
-    const trimmed = trimAssembledDraft(assembled, COMMITMENT_HARD_WORD_CAP);
-    if (!trimmed) {
-      console.warn(
-        '[itc coach] commitment draft beyond mechanical trim, dropping: "%s"',
-        assembled,
-      );
-    }
-    return trimmed;
+    return trimAssembledDraft(assembled, COMMITMENT_HARD_WORD_CAP);
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",
@@ -1501,23 +1493,16 @@ export async function draftAssumptionsFromCommitments(input: {
       ),
     }));
 
-    // HARD 20-word cap. Overshoots are mechanically trimmed via
-    // trimAssembledDraft rather than silently dropped (prior fix
-    // silently dropped over-cap drafts, coachee saw fewer cards than
-    // the LLM actually produced). Drafts still beyond mechanical
-    // rescue after trim are dropped as a last resort.
+    // 20-word soft quality target. trimAssembledDraft strips known
+    // filler / trailing "instead of" / parenthetical qualifiers when
+    // present; if the sentence is still over cap it comes through
+    // anyway. Empty state (silent drop) is worse than a slightly-long
+    // draft the coachee can edit.
     const HARD_WORD_CAP = 20;
-    const withinCap = normalized.flatMap((d) => {
-      const trimmed = trimAssembledDraft(d.text, HARD_WORD_CAP);
-      if (!trimmed) {
-        console.warn(
-          '[itc coach] assumption draft beyond mechanical trim, dropping: "%s"',
-          d.text,
-        );
-        return [];
-      }
-      return [{ ...d, text: trimmed }];
-    });
+    const withinCap = normalized.map((d) => ({
+      ...d,
+      text: trimAssembledDraft(d.text, HARD_WORD_CAP),
+    }));
 
     // Belt-and-suspenders rubric filter. Prompt guidance alone has
     // proven insufficient — the drafter periodically produces drafts

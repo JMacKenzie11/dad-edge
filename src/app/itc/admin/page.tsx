@@ -12,10 +12,15 @@ export default async function ItcAdminPage() {
   const viewer = await requireItcParticipant();
   if (!isItcAdmin(viewer.email)) notFound();
 
-  const [participants, maps] = await Promise.all([
+  const [participants, allMaps] = await Promise.all([
     listAllParticipants(),
     listAllMaps(),
   ]);
+
+  // Hide completed maps from the default admin view — they're not what
+  // the facilitator is watching. Add a query-string toggle later if
+  // reviewing historical maps becomes a real need.
+  const maps = allMaps.filter((m) => m.status === "in_progress");
 
   const participantsById = new Map(participants.map((p) => [p.id, p]));
 
@@ -41,10 +46,10 @@ export default async function ItcAdminPage() {
         <header className="flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight">
-              ITC Admin: all maps
+              ITC Admin: active maps
             </h1>
             <p className="text-xs text-[color:var(--color-muted)]">
-              Signed in as {viewer.email}. Read-only view of every participant's map.
+              Signed in as {viewer.email}. Read-only view of every in-progress map.
             </p>
           </div>
           <Link
