@@ -535,13 +535,21 @@ function AssumptionItem({
             Needs more depth
           </span>
         ) : null}
-        {needsMoreDepth && assumption.rubric_reason ? (
-          // Rubric's one-line "what to sharpen" from the last save.
-          <p className="mt-2 text-xs text-[color:var(--color-warning)]/90 italic leading-relaxed shrink-0 basis-full">
-            Coach's read: {assumption.rubric_reason}
-          </p>
-        ) : null}
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 min-w-0 space-y-2">
+          {needsMoreDepth && assumption.rubric_reason ? (
+            // Boxed coach-message treatment mirroring EntryThread —
+            // warning tint instead of primary. Sits inside the
+            // flex-1 content column so it wraps cleanly and doesn't
+            // push the row layout.
+            <div className="min-w-0 rounded-md border border-[color:var(--color-warning)]/30 border-l-[3px] border-l-[color:var(--color-warning)]/70 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-sm leading-relaxed">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]/90">
+                Coach's read
+              </div>
+              <div className="whitespace-pre-wrap break-words text-white/90">
+                {assumption.rubric_reason}
+              </div>
+            </div>
+          ) : null}
           <AutoTextarea
             ref={textareaRef}
             value={draft}

@@ -232,10 +232,16 @@ function WorryItem({
           ) : null}
         </div>
         {needsMoreDepth && worry?.rubric_reason ? (
-          // Rubric's one-line "what to sharpen" from the last save.
-          <p className="text-xs text-[color:var(--color-warning)]/90 pl-6 italic leading-relaxed">
-            Coach's read: {worry.rubric_reason}
-          </p>
+          // Boxed coach-message treatment mirroring EntryThread —
+          // warning tint instead of primary.
+          <div className="min-w-0 rounded-md border border-[color:var(--color-warning)]/30 border-l-[3px] border-l-[color:var(--color-warning)]/70 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-sm leading-relaxed">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]/90">
+              Coach's read
+            </div>
+            <div className="whitespace-pre-wrap break-words text-white/90">
+              {worry.rubric_reason}
+            </div>
+          </div>
         ) : null}
         {!worry && behavior.coach_worry_draft ? (
           <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">

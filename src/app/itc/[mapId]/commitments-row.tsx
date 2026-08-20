@@ -247,13 +247,18 @@ function CommitmentItem({
           ) : null}
         </div>
         {needsMoreDepth && commitment?.rubric_reason ? (
-          // Rubric's one-line "what to sharpen" from the last save.
-          // Populated by scoreCommitmentDepth on every save; surfaced
-          // here so the coachee sees WHAT specifically is off, not
-          // just a generic "needs work" badge.
-          <p className="text-xs text-[color:var(--color-warning)]/90 pl-6 italic leading-relaxed">
-            Coach's read: {commitment.rubric_reason}
-          </p>
+          // Boxed coach-message treatment mirroring EntryThread —
+          // warning tint instead of primary. Populated by
+          // scoreCommitmentDepth on every save so the coachee sees
+          // WHAT to sharpen, not just that something is off.
+          <div className="min-w-0 rounded-md border border-[color:var(--color-warning)]/30 border-l-[3px] border-l-[color:var(--color-warning)]/70 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-sm leading-relaxed">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]/90">
+              Coach's read
+            </div>
+            <div className="whitespace-pre-wrap break-words text-white/90">
+              {commitment.rubric_reason}
+            </div>
+          </div>
         ) : null}
         <div className="flex items-baseline gap-2 text-xs text-[color:var(--color-text-muted)]/70 pl-6">
           <span>behavior:</span>
