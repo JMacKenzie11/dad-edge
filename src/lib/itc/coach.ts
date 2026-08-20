@@ -806,25 +806,22 @@ export function ensureThenAfterIfClause(text: string): string {
  */
 const AssumptionDraftSlotsSchema = z.object({
   /** The specific act the coachee would do differently — the counter-
-   *  move the assumption predicts a bad outcome from. 3-12 words.
+   *  move the assumption predicts a bad outcome from. 2-6 words.
    *  Server prefixes "if I " so write it as a bare verb phrase without
-   *  the "if I" prefix. Example: "stay in the room while she's angry"
-   *  or "listen and admit she's right" or "stop protecting her from
-   *  seeing my failures". */
-  antecedent_act: z.string().min(5).max(90),
+   *  the "if I" prefix. Example: "stay in the room" or "listen and
+   *  admit she's right" or "stop protecting her". */
+  antecedent_act: z.string().min(5).max(50),
   /** The observable tell — what would happen in the world if the
-   *  assumption's prediction were true. 3-10 words. A behavior he'd
+   *  assumption's prediction were true. 2-5 words. A behavior he'd
    *  exhibit ("I'd lose control"), a reaction from another person
    *  ("she'd pull away"), or a specific felt state ("I'd feel the
-   *  shame"). NOT a meta-verdict like "I'd prove" or "I'd realize".
-   *  Server assembles as ", then <tell>". */
-  consequent_tell: z.string().min(3).max(65),
+   *  shame"). NOT a meta-verdict like "I'd prove" or "I'd realize". */
+  consequent_tell: z.string().min(3).max(40),
   /** The identity landing — what the tell confirms about who he is.
-   *  3-10 words. Anchored in the coachee's own commitment language
+   *  2-6 words. Anchored in the coachee's own commitment language
    *  when possible ("the husband who hurts her", "not good enough for
-   *  her", "the man she can't trust"). Server assembles as " and
-   *  <identity>". */
-  consequent_identity: z.string().min(3).max(65),
+   *  her", "the man she can't trust"). */
+  consequent_identity: z.string().min(3).max(50),
   /** 1-based indices into the commitments list passed to the prompt.
    *  At least one — a draft covering nothing is useless. */
   commitment_indices: z.array(z.number().int().min(1)).min(1),
@@ -892,12 +889,20 @@ You do NOT return a full sentence. You return three slots per draft — antecede
 
 You never write "I assume that", "if I", "then", or the connecting "and". The server writes those. You never write the trailing period. The server writes that. Focus entirely on the semantic content of each slot.
 
-Per-slot word budgets (schema-enforced — drafts violating these get rejected):
-  - antecedent_act: 3–12 words. Bare verb phrase.
-  - consequent_tell: 3–10 words. Observable event.
-  - consequent_identity: 3–10 words. Identity landing.
+## HARD CAP: 20 words per assembled draft. Non-negotiable.
 
-Assembled sentence lands at 15–25 words worst case. Kegan/Lahey average is ~15 words — that's your target center. Cut before submitting.
+The server rejects any assembled draft over 20 words. Rejected drafts are DROPPED — the coachee doesn't see them and you don't get a retry. So you must budget words carefully.
+
+The connectives ("I assume that if I", "then", "and") are 7 words. That leaves 13 words to distribute across the three slots.
+
+Per-slot targets:
+  - **antecedent_act: 2–6 words.** Bare verb phrase. Terse.
+  - **consequent_tell: 2–5 words.** Observable event, terse.
+  - **consequent_identity: 2–6 words.** Identity landing, terse.
+
+Total slot budget: 13 words. Plus 7 connectives = 20-word cap.
+
+Kegan/Lahey's canonical Big Assumptions average ~15 words. Cut modifiers ("actually", "really", "in the moment"), cut articles when possible, cut adjectives. Precision, not paragraph.
 
 ## What each slot must contain
 
@@ -1045,6 +1050,28 @@ export async function draftAssumptionsFromCommitments(input: {
       ),
     }));
 
+    // HARD 20-word cap. Structured slots + per-slot char/word caps
+    // in the schema make over-20 rare but not impossible (long slots
+    // that still fit their individual char limits can combine to
+    // exceed 20 words after assembly). Reject anything over the cap
+    // here — cheaper than firing the rubric LLM call on drafts that
+    // will be trapped by the cap regardless. Coachee sees fewer
+    // drafts rather than over-long ones.
+    const HARD_WORD_CAP = 20;
+    const withinCap = normalized.filter((d) => {
+      const wordCount = d.text.trim().split(/\s+/).length;
+      if (wordCount > HARD_WORD_CAP) {
+        console.warn(
+          '[itc coach] dropping draft over %d words (%d): "%s"',
+          HARD_WORD_CAP,
+          wordCount,
+          d.text,
+        );
+        return false;
+      }
+      return true;
+    });
+
     // Belt-and-suspenders rubric filter. Prompt guidance alone has
     // proven insufficient — the drafter periodically produces drafts
     // that pass Form-First checks (stem, then, atomic) but fail the
@@ -1063,7 +1090,7 @@ export async function draftAssumptionsFromCommitments(input: {
     // return is empty and the UI shows the "Add another Big
     // Assumption" form with no drafts — user writes their own.
     const scored = await Promise.all(
-      normalized.map(async (d) => {
+      withinCap.map(async (d) => {
         try {
           const score = await scoreAssumptionDepth({
             goalText: input.goalText,
