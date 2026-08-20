@@ -1677,12 +1677,15 @@ export async function deliverPrioritizeRecommendationAfterAdvance(
   mapId: string,
   events: TurnEventLog,
 ): Promise<void> {
-  const [map, assumptions, links, commitments] = await Promise.all([
-    getMapById(mapId),
-    listAssumptions(mapId),
-    listAssumptionLinks(mapId),
-    listCommitments(mapId),
-  ]);
+  const [map, assumptions, links, commitments, tests, results] =
+    await Promise.all([
+      getMapById(mapId),
+      listAssumptions(mapId),
+      listAssumptionLinks(mapId),
+      listCommitments(mapId),
+      listTests(mapId),
+      listTestResults(mapId),
+    ]);
   if (!map) return;
   if (assumptions.length === 0) return;
   // Idempotent — don't re-recommend if the coachee already has a
@@ -1696,11 +1699,32 @@ export async function deliverPrioritizeRecommendationAfterAdvance(
     arr.push(l.commitment_id);
     linksByAssumption.set(l.assumption_id, arr);
   }
+  // Build per-assumption test history for C-ε.6: which non-abandoned
+  // tests exist per assumption + the verdict + coachee's own read on
+  // each. Empty array on first visit; populated on repeat visits.
+  const historyByAssumption = new Map<
+    string,
+    Array<{
+      verdict: "held" | "partially_challenged" | "challenged" | null;
+      whatItSaysAboutAssumption: string;
+    }>
+  >();
+  for (const t of tests) {
+    if (t.status === "abandoned") continue;
+    const result = results.find((r) => r.test_id === t.id);
+    const arr = historyByAssumption.get(t.assumption_id) ?? [];
+    arr.push({
+      verdict: result?.assumption_verdict ?? null,
+      whatItSaysAboutAssumption: result?.what_it_says_about_assumption ?? "",
+    });
+    historyByAssumption.set(t.assumption_id, arr);
+  }
   const assumptionsWithCoverage = assumptions.map((a) => ({
     text: a.text,
     commitmentTexts: (linksByAssumption.get(a.id) ?? [])
       .map((cid) => commitmentById.get(cid)?.text)
       .filter((t): t is string => Boolean(t)),
+    testHistory: historyByAssumption.get(a.id) ?? [],
   }));
 
   const recommendation = await recommendAssumptionToTest({

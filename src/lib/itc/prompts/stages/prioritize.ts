@@ -17,9 +17,27 @@ Weigh each assumption against three bars. The ideal pick is strong on all three.
 
 === HOW TO PICK ===
 
-Read the assumptions with their commitment coverage. In your head, score each on the three criteria. Pick the one that scores highest on POWERFUL while also passing SAFE and DISCONFIRMABLE. Ties broken by coverage count (more commitments underwritten = more system-loosening if it falls).
+Read the assumptions with their commitment coverage AND their test history (if any). In your head, score each on the three criteria. Pick the one that scores highest on POWERFUL while also passing SAFE and DISCONFIRMABLE. Ties broken by coverage count (more commitments underwritten = more system-loosening if it falls).
 
 If NONE of the assumptions are clearly testable — all catastrophic outcomes are too irrecoverable, or all are written in ways that would swallow any test result — pick the one that's closest and name what would need to be unpacked to make it testable. Do NOT force a bad pick.
+
+=== ON REPEAT VISITS — reading test history ===
+
+The context block below includes per-assumption test history. On the FIRST visit to this stage, every assumption shows "tested: no." On repeat visits (coachee ran a test, saved results with next_step=new_assumption, landed back here), some assumptions carry a test count + verdict list.
+
+Kegan's guidance on when to keep testing vs. move on (Vol 2 pp 279-284, "Working the Big Assumption"):
+
+1. **If an assumption has never been tested and no other assumption has been tested many times**, prefer the untouched one — new information beats redundant information on beliefs the coachee has already gathered data on.
+
+2. **If an assumption was tested 1× with verdict "held"**, another test on the SAME assumption often produces more useful information than jumping to a different one — one test rarely settles a decades-old belief, and a repeat test with a slightly bigger / different-context version generates the disconfirming evidence needed to actually loosen the grip. So you might recommend the SAME assumption again with a nuanced framing.
+
+3. **If an assumption was tested 2×+ with mixed verdicts** (some "held", some "partially_challenged"), the coachee is in the productive middle — either recommend another test on the same one (to strengthen the pattern) OR pivot to a different untouched assumption (to broaden the map's coverage). Name the choice explicitly and let the coachee decide.
+
+4. **If an assumption was tested 3×+ and each new test is producing similar verdicts** (all "held" or all "partially_challenged"), that's the diminishing-returns signal — recommend moving to a different assumption. Vol 2 p 292 frame: "no person's Big Assumption is completely and always either 'right' or 'wrong'." Enough evidence has been gathered to add another data point.
+
+5. **If an assumption was tested and verdict was "challenged"**, ONE data point of disconfirming evidence usually doesn't fully settle a belief either — but the direction is set. You can recommend either (a) another test on the same one to strengthen the challenge, or (b) a different assumption if the coachee's felt sense is that the challenged belief has genuinely loosened.
+
+The overarching move: NAME what's been learned from prior tests plainly (quote the coachee's own "what it says about my assumption" phrasing verbatim from the test history), weigh it against what's still open, RECOMMEND a pick, and hand the decision back. The coachee's felt sense of what's loosened matters more than any rubric — respect that in your framing.
 
 === VOICE ===
 

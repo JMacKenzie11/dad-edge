@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { ItcAssumption } from "@/lib/itc/maps";
+import type {
+  ItcAssumption,
+  ItcAssumptionVerdict,
+  ItcTest,
+  ItcTestResult,
+} from "@/lib/itc/maps";
 import { selectAssumptionForTesting } from "../actions";
 
 /**
@@ -19,10 +24,49 @@ import { selectAssumptionForTesting } from "../actions";
 export function PrioritizePicker({
   mapId,
   assumptions,
+  tests,
+  results,
 }: {
   mapId: string;
   assumptions: ItcAssumption[];
+  /** All tests on the map. Used to show test-history badges per
+   *  assumption on repeat visits (C-ε.6). Abandoned tests are
+   *  excluded from the count. */
+  tests: ItcTest[];
+  /** All test results on the map. Used to summarize the most recent
+   *  verdict per assumption. */
+  results: ItcTestResult[];
 }) {
+  // Build per-assumption test history: count of non-abandoned tests
+  // and the most recent verdict recorded.
+  const historyByAssumption = new Map<
+    string,
+    {
+      testCount: number;
+      lastVerdict: ItcAssumptionVerdict | null;
+    }
+  >();
+  const testsByAssumption = new Map<string, ItcTest[]>();
+  for (const t of tests) {
+    if (t.status === "abandoned") continue;
+    const arr = testsByAssumption.get(t.assumption_id) ?? [];
+    arr.push(t);
+    testsByAssumption.set(t.assumption_id, arr);
+  }
+  for (const [assumptionId, ts] of testsByAssumption.entries()) {
+    const testIds = new Set(ts.map((t) => t.id));
+    const relevantResults = results.filter((r) => testIds.has(r.test_id));
+    // Latest result first (results already sorted by created_at ascending
+    // in listTestResults; we reverse to newest-first).
+    const sorted = relevantResults
+      .slice()
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    historyByAssumption.set(assumptionId, {
+      testCount: ts.length,
+      lastVerdict: sorted[0]?.assumption_verdict ?? null,
+    });
+  }
+
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [optimisticPick, setOptimisticPick] = useState<string | null>(null);
@@ -83,6 +127,21 @@ export function PrioritizePicker({
                   </span>
                   <div className="flex-1 space-y-1">
                     <div className="text-sm leading-relaxed">{a.text}</div>
+                    {(() => {
+                      const h = historyByAssumption.get(a.id);
+                      if (!h || h.testCount === 0) return null;
+                      const verdictLabel = h.lastVerdict
+                        ? VERDICT_LABEL[h.lastVerdict]
+                        : "no result recorded yet";
+                      return (
+                        <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-text-muted)]/80">
+                          Tested {h.testCount}×
+                          {h.lastVerdict
+                            ? ` · Last verdict: ${verdictLabel}`
+                            : null}
+                        </div>
+                      );
+                    })()}
                     {isSelected ? (
                       <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-primary)]/80">
                         Selected for testing
@@ -101,3 +160,9 @@ export function PrioritizePicker({
     </div>
   );
 }
+
+const VERDICT_LABEL: Record<ItcAssumptionVerdict, string> = {
+  held: "Held",
+  partially_challenged: "Partially challenged",
+  challenged: "Challenged",
+};

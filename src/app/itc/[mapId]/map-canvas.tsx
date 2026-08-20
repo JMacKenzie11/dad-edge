@@ -379,6 +379,8 @@ export function MapCanvas({
               <PrioritizePicker
                 mapId={map.id}
                 assumptions={assumptions}
+                tests={tests}
+                results={testResults}
               />
             ) : null}
           </Section>

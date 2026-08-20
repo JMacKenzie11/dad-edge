@@ -1117,6 +1117,18 @@ export async function recommendAssumptionToTest(input: {
   assumptionsWithCoverage: Array<{
     text: string;
     commitmentTexts: string[];
+    /** Per-assumption test history — populated on repeat visits to
+     *  prioritize (C-ε.6). Empty array on first visit. The coach's
+     *  reasoning reads this: which assumptions have been tested, how
+     *  many times, and what the verdicts were. This lets the second-
+     *  visit recommendation weigh "diminishing returns" (Vol 2 pp
+     *  279-284) against "still untouched" (has never been tested).
+     *  Kegan's authentic move: name what's been learned, weigh it
+     *  against what's still open, recommend accordingly. */
+    testHistory: Array<{
+      verdict: "held" | "partially_challenged" | "challenged" | null;
+      whatItSaysAboutAssumption: string;
+    }>;
   }>;
 }): Promise<{ pickedIndex: number; prose: string } | null> {
   const started = Date.now();
@@ -1131,7 +1143,19 @@ export async function recommendAssumptionToTest(input: {
                 .map((c, ci) => `        ${ci + 1}. ${c}`)
                 .join("\n")
             : "        (no commitments linked)";
-        return `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments:\n${coverage}`;
+        // Test history block — empty on first visit, populated on
+        // repeat visits. The prompt reads this to weigh "already
+        // tested, keep going or move on" vs. "still untouched."
+        const history =
+          a.testHistory.length === 0
+            ? "     tested: no (this assumption has never been tested yet)"
+            : `     tested: ${a.testHistory.length}× — verdicts:\n${a.testHistory
+                .map(
+                  (h, hi) =>
+                    `        ${hi + 1}. ${h.verdict ?? "no verdict"} — coachee's read: "${(h.whatItSaysAboutAssumption ?? "").slice(0, 200)}"`,
+                )
+                .join("\n")}`;
+        return `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments:\n${coverage}\n${history}`;
       })
       .join("\n\n");
 
