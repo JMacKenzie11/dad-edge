@@ -1143,6 +1143,42 @@ export async function markWalkthroughDelivered(mapId: string): Promise<void> {
   if (error) throw new Error(`markWalkthroughDelivered: ${error.message}`);
 }
 
+/**
+ * Reset walkthrough_delivered to false. Used by the client-triggered
+ * regenerateWalkthrough action so the subsequent
+ * deliverWalkthroughAfterAdvance call doesn't short-circuit on
+ * "already delivered."
+ */
+export async function markWalkthroughNotDelivered(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_maps")
+    .update({ walkthrough_delivered: false })
+    .eq("id", mapId);
+  if (error) throw new Error(`markWalkthroughNotDelivered: ${error.message}`);
+}
+
+/**
+ * Delete every itc_messages row matching the (map, surface, stage,
+ * entry_ref) tuple. Used by regenerate flows (walkthrough, drafts,
+ * prioritize recommendation) that need to clear the previous
+ * coach-authored artifact before writing a fresh one — otherwise the
+ * new one would render alongside the stale one.
+ */
+export async function deleteStageNoteMessages(input: {
+  mapId: string;
+  stage: ItcStage;
+}): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_messages")
+    .delete()
+    .eq("map_id", input.mapId)
+    .eq("surface", "stage_note")
+    .eq("stage_at_creation", input.stage);
+  if (error) throw new Error(`deleteStageNoteMessages: ${error.message}`);
+}
+
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase

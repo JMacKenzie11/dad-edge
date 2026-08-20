@@ -20,6 +20,7 @@ import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
 import { AssumptionsRow } from "./assumptions-row";
 import { BehaviorsRow } from "./behaviors-row";
+import { RegenerateWalkthroughButton } from "./regenerate-walkthrough-button";
 import { CoachDock } from "./coach-dock";
 import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
@@ -382,7 +383,11 @@ export function MapCanvas({
             active={map.current_stage === "immune_system"}
             liveIntro={liveIntroFor("immune_system")}
             stageNotes={immuneSystemNotes}
-          />
+          >
+            {immuneSystemNotes.length > 0 ? (
+              <RegenerateWalkthroughButton mapId={map.id} />
+            ) : null}
+          </Section>
         ) : null}
 
         {stageIndex(map.current_stage) >= stageIndex("prioritize") ? (

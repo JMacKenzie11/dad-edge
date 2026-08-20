@@ -49,7 +49,9 @@ import {
   clearSelectedAssumption,
   listWorries,
   markTestAbandoned,
+  deleteStageNoteMessages,
   markWalkthroughDelivered,
+  markWalkthroughNotDelivered,
   recordTestResult,
   saveAssumptionDrafts,
   saveImprovementGoal,
@@ -1684,6 +1686,54 @@ export async function ensureWalkthroughDelivered(
       reason: err instanceof Error ? err.message : "Could not deliver.",
     };
   }
+}
+
+const regenerateWalkthroughSchema = z.object({
+  map_id: z.string().uuid(),
+});
+
+/**
+ * Client-triggered walkthrough regenerate. The walkthrough quotes
+ * goal, behaviors, worries, commitments, and assumptions verbatim;
+ * if the coachee edits any of those after the walkthrough was first
+ * delivered, the persuasion is speaking to the pre-edit map. This
+ * lets the coachee wipe the old walkthrough and get a fresh one
+ * against current map state.
+ *
+ * Behavior:
+ *   1. Delete every stage_note message tagged stage_at_creation=
+ *      immune_system so the old walkthrough disappears.
+ *   2. Reset walkthrough_delivered=false so the delivery hook doesn't
+ *      short-circuit.
+ *   3. Fire deliverWalkthroughAfterAdvance — writes a fresh stage_note
+ *      and flips walkthrough_delivered back to true.
+ */
+export async function regenerateWalkthrough(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = regenerateWalkthroughSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await deleteStageNoteMessages({
+      mapId: loaded.map.id,
+      stage: "immune_system",
+    });
+    await markWalkthroughNotDelivered(loaded.map.id);
+    const events = new TurnEventLog(loaded.map.id, 0);
+    await deliverWalkthroughAfterAdvance(loaded.map.id, events);
+    await events.flush();
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not regenerate.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
 }
 
 /**
