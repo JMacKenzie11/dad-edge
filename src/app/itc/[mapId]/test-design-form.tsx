@@ -80,6 +80,13 @@ export function TestDesignForm({
    * want. If they've made unsaved edits, a confirm dialog protects
    * against blowing them away.
    */
+  /**
+   * Fires the LLM to produce a new draft. For "another" and "safer"
+   * the server rotates / steps the type — client sends the CURRENT
+   * type and mode, server derives the target type deterministically
+   * (see actions.ts ANOTHER_ROTATION / SAFER_LADDER). No prompt-
+   * shaping instructions for variation — variation is architectural.
+   */
   function regenerate(mode: "initial" | "another" | "safer") {
     const hasEdits =
       (test?.assumption_says ?? assumption.text) !== assumptionSays ||
@@ -89,27 +96,58 @@ export function TestDesignForm({
     if (hasEdits) {
       const msg =
         mode === "safer"
-          ? "You'll lose your current edits. Get a safer draft anyway?"
+          ? "You'll lose your current edits. Get a safer version anyway?"
           : mode === "another"
             ? "You'll lose your current edits. Get another draft anyway?"
-            : "You'll lose your current edits. Change type and regenerate anyway?";
+            : "You'll lose your current edits. Change type and get a new draft anyway?";
       if (!confirm(msg)) return;
     }
+    fireRegenerate(mode, testType);
+  }
+
+  function onTypeChange(newType: ItcTestType) {
+    if (newType === testType) return;
+    // Same edits-confirm dialog as regenerate() — the type change
+    // discards the current draft in favor of a fresh one of the
+    // chosen type.
+    const hasEdits =
+      (test?.assumption_says ?? assumption.text) !== assumptionSays ||
+      (test?.behavior_change ?? "") !== behaviorChange ||
+      (test?.data_to_collect ?? "") !== dataToCollect ||
+      (test?.in_order_to_find_out ?? "") !== inOrderToFindOut;
+    if (hasEdits) {
+      if (
+        !confirm(
+          "You'll lose your current edits. Change type and get a new draft anyway?",
+        )
+      ) {
+        return;
+      }
+    }
+    setTestType(newType);
+    // Fire the regenerate with the NEW type; mode "initial" so the
+    // server just uses the passed type (no rotation).
+    fireRegenerate("initial", newType);
+  }
+
+  /**
+   * Shared regenerate dispatcher. Extracted so the confirm-edits
+   * dialog can be reused from both button-driven regenerates and
+   * the type-dropdown-change path.
+   */
+  function fireRegenerate(
+    mode: "initial" | "another" | "safer",
+    typeToSend: ItcTestType,
+  ) {
     setError(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
-    fd.set("test_type", testType);
+    fd.set("test_type", typeToSend);
     fd.set("mode", mode);
-    // Include the current form state as "prior draft" so the LLM can
-    // produce a materially different / safer version.
-    fd.set("prior_assumption_says", assumptionSays);
-    fd.set("prior_behavior_change", behaviorChange);
-    fd.set("prior_data_to_collect", dataToCollect);
-    fd.set("prior_in_order_to_find_out", inOrderToFindOut);
     startRegen(async () => {
       const res = await regenerateTestDraft(fd);
       if (!res.ok) {
-        setError(res.reason ?? "Could not regenerate.");
+        setError(res.reason ?? "Could not get a new draft.");
         return;
       }
       // Update local form state; user still has to Save to persist.
@@ -122,36 +160,10 @@ export function TestDesignForm({
     });
   }
 
-  function onTypeChange(newType: ItcTestType) {
-    if (newType === testType) return;
-    setTestType(newType);
-    // Type change triggers an implicit regenerate — the whole test
-    // shape hinges on the type, so keeping the old drafts around
-    // when the type changes reads as broken. Uses "initial" mode
-    // with the new type constraint (LLM produces a fresh test in
-    // that shape rather than mutating the prior one).
-    setTimeout(() => {
-      // Defer so setTestType commits and regenerate reads the new type.
-      const fd = new FormData();
-      fd.set("map_id", mapId);
-      fd.set("test_type", newType);
-      fd.set("mode", "initial");
-      setError(null);
-      startRegen(async () => {
-        const res = await regenerateTestDraft(fd);
-        if (!res.ok) {
-          setError(res.reason ?? "Could not regenerate.");
-          return;
-        }
-        setTestType(res.draft.testType);
-        setAssumptionSays(res.draft.assumptionSays);
-        setBehaviorChange(res.draft.behaviorChange);
-        setDataToCollect(res.draft.dataToCollect);
-        setInOrderToFindOut(res.draft.inOrderToFindOut);
-        setTargetDate(res.draft.targetDate);
-      });
-    }, 0);
-  }
+  // Data mining is the safest test type — nothing to step down to.
+  // Client hides "Give me a safer version" in that state so the
+  // coachee doesn't hit an error dialog.
+  const canGoSafer = testType !== "data_mining";
 
   function save() {
     setError(null);
@@ -229,35 +241,52 @@ export function TestDesignForm({
           <option value="thought_experiment">Thought experiment (imagine, don't act)</option>
         </select>
         <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
-          Changing the type gets you a fresh draft in that shape.
+          Changing the type gets you a fresh draft of that kind.
         </span>
       </label>
 
       {/* Regenerate row — sit right under the type dropdown so the
           coachee sees the "get another draft" affordances at the top
-          of the form, not buried after the fields. */}
+          of the form, not buried after the fields. Safer button is
+          hidden when the coachee is already at data_mining (nothing
+          to step down to). */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => regenerate("another")}
           disabled={pending || regenPending}
           className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title="Ask the coach for a materially different draft on this same assumption"
+          title="Ask the coach for a different kind of test on the same assumption"
         >
-          {regenPending ? "…" : "Give me another draft"}
+          Give me another draft
         </button>
-        <button
-          type="button"
-          onClick={() => regenerate("safer")}
-          disabled={pending || regenPending}
-          className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title="Ask the coach for a lower-stakes / smaller-scope version of this draft"
-        >
-          {regenPending ? "…" : "Give me a safer version"}
-        </button>
+        {canGoSafer ? (
+          <button
+            type="button"
+            onClick={() => regenerate("safer")}
+            disabled={pending || regenPending}
+            className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+            title="Ask the coach for a lower-stakes version of this test"
+          >
+            Give me a safer version
+          </button>
+        ) : null}
+        {regenPending ? (
+          <span className="flex items-center gap-2 text-xs text-[color:var(--color-primary)]/90">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[color:var(--color-primary)]/40 border-t-[color:var(--color-primary)]" />
+            The coach is writing a new draft…
+          </span>
+        ) : null}
       </div>
 
-      <div className="space-y-3">
+      {/* Form fields — dim + block interaction during regeneration
+          so the coachee can visibly see the draft is being replaced. */}
+      <div
+        className={
+          "space-y-3 transition-opacity " +
+          (regenPending ? "opacity-40 pointer-events-none" : "")
+        }
+      >
         <Field
           label="My Big Assumption Says"
           hint="Verbatim from the map, sharpened with what it specifically predicts."

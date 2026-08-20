@@ -1409,13 +1409,19 @@ const TestDraftSchema = z.object({
  * Form-First-pure: coach returns METADATA (four fields + type +
  * target_date); server-orchestrated persistence.
  */
-export type TestDraftMode = "initial" | "another" | "safer";
 export type TestType =
   | "data_mining"
   | "observation"
   | "thought_experiment"
   | "behavioral";
 
+/**
+ * Draft a single test of a given type. Variation between drafts is
+ * handled server-side by picking a different `testType` on each call
+ * (see ANOTHER_ROTATION / SAFER_LADDER in actions.ts). This helper
+ * has ONE job: write a well-formed test of the specified type. No
+ * "produce something different" instructions to be ignored.
+ */
 export async function draftTestForAssumption(input: {
   goalText: string;
   assumptionText: string;
@@ -1427,26 +1433,12 @@ export async function draftTestForAssumption(input: {
    *  ("within about a week"). Server passes; helper doesn't
    *  hard-code so tests can override. */
   todayIso: string;
-  /** Draft mode. "initial" is the first draft on advance to
-   *  test_design. "another" produces a materially different test than
-   *  priorDraft. "safer" produces a smaller / lower-stakes / more-
-   *  contained version of priorDraft. */
-  mode?: TestDraftMode;
-  /** If provided, constrains the draft to this test_type. Set when
-   *  the coachee has picked a specific type via the dropdown and
-   *  wants the draft in that shape. Ignored when mode="initial" and
-   *  omitted — LLM picks the fitting type. */
+  /** Constrain the draft to this test_type. The LLM MUST produce a
+   *  test that matches this type's structural shape (see the "four
+   *  test types" section in prompts/stages/test-design.ts). If
+   *  omitted, LLM picks whichever type fits best (used for the very
+   *  first draft on advance to test_design). */
   testType?: TestType;
-  /** Prior draft snapshot — required when mode is "another" or
-   *  "safer" so the LLM can produce a materially different (or
-   *  materially smaller) version. Ignored when mode="initial". */
-  priorDraft?: {
-    testType: TestType;
-    assumptionSays: string;
-    behaviorChange: string;
-    dataToCollect: string;
-    inOrderToFindOut: string;
-  };
 }): Promise<{
   testType: TestType;
   assumptionSays: string;
@@ -1456,7 +1448,6 @@ export async function draftTestForAssumption(input: {
   targetDate: string;
 } | null> {
   const started = Date.now();
-  const mode = input.mode ?? "initial";
   try {
     const commitmentsBlock = input.underwrittenCommitments
       .map(
@@ -1468,48 +1459,8 @@ export async function draftTestForAssumption(input: {
       "./prompts/stages/test-design"
     );
 
-    // Mode-specific prompt shaping. Server writes this instead of
-    // stuffing more rules into the base TEST_DESIGN_STAGE prompt.
-    const modeInstruction = (() => {
-      if (mode === "another" && input.priorDraft) {
-        return [
-          `MODE: another (produce a MATERIALLY DIFFERENT test from the prior draft below).`,
-          ``,
-          `The coachee has seen this draft and wants to see a different angle. Vary at least one of: the specific behavior in "So I Will" (different act or different moment); the observable data being collected; the test type. Keep it grounded in the SAME assumption. Do NOT produce a near-duplicate.`,
-          ``,
-          `PRIOR DRAFT (produce something different):`,
-          `  test_type: ${input.priorDraft.testType}`,
-          `  My Big Assumption Says: ${input.priorDraft.assumptionSays}`,
-          `  So I Will: ${input.priorDraft.behaviorChange}`,
-          `  And Collect the Following Data: ${input.priorDraft.dataToCollect}`,
-          `  In Order to Find Out Whether: ${input.priorDraft.inOrderToFindOut}`,
-        ].join("\n");
-      }
-      if (mode === "safer" && input.priorDraft) {
-        return [
-          `MODE: safer (produce a SMALLER, LOWER-STAKES version of the prior draft below).`,
-          ``,
-          `The coachee sees the prior draft as too big or too risky. Produce a version that clearly loosens the safety dimension of SMART:`,
-          `  - Smaller scope (test once instead of over a week, or in one specific moment vs. any moment)`,
-          `  - Lower stakes (the worst-case outcome is more livable)`,
-          `  - More contained (fewer people involved, or a lower-charge situation)`,
-          `  - Consider stepping down the test type: behavioral → observation → thought_experiment, if that makes it safer while still gathering information about the assumption.`,
-          ``,
-          `Do NOT make it so small it stops testing the belief. The point is to lower stakes while keeping the test informative.`,
-          ``,
-          `PRIOR DRAFT (produce a safer version):`,
-          `  test_type: ${input.priorDraft.testType}`,
-          `  My Big Assumption Says: ${input.priorDraft.assumptionSays}`,
-          `  So I Will: ${input.priorDraft.behaviorChange}`,
-          `  And Collect the Following Data: ${input.priorDraft.dataToCollect}`,
-          `  In Order to Find Out Whether: ${input.priorDraft.inOrderToFindOut}`,
-        ].join("\n");
-      }
-      return `MODE: initial (pre-draft a first-pass test for the assumption below).`;
-    })();
-
     const typeConstraint = input.testType
-      ? `\n\nTest type: this draft MUST be of type "${input.testType}". Design the test in that shape.`
+      ? `\n\nTest type: this draft MUST be of type "${input.testType}". Read the "four test types" section carefully — the test's structural shape is defined by the type. Do NOT produce a test of a different shape and re-label it. Match the shape of the requested type.`
       : "";
 
     const { object } = await generateObject({
@@ -1517,7 +1468,7 @@ export async function draftTestForAssumption(input: {
       schema: TestDraftSchema,
       system: TEST_DESIGN_STAGE,
       prompt: [
-        modeInstruction + typeConstraint,
+        `Draft one test of the specified type for the assumption below.${typeConstraint}`,
         ``,
         `Today's date (ISO): ${input.todayIso}`,
         `Target date must be in the future, on or within about a week from today.`,
@@ -1529,7 +1480,7 @@ export async function draftTestForAssumption(input: {
         `Competing commitments this assumption underwrites (Column 4):`,
         commitmentsBlock || "  (none)",
         ``,
-        `Draft the four-field test now. Return the structured object.`,
+        `Fill all four fields and return the structured object.`,
       ].join("\n"),
       maxOutputTokens: 1200,
     });
@@ -1544,15 +1495,13 @@ export async function draftTestForAssumption(input: {
     };
   } catch (err) {
     console.warn(
-      "[itc coach] draftTestForAssumption failed (mode=%s): %s",
-      mode,
+      "[itc coach] draftTestForAssumption failed: %s",
       err instanceof Error ? err.message : String(err),
     );
     return null;
   } finally {
     console.warn(
-      "[itc timing] draft kind=test mode=%s ms=%d",
-      mode,
+      "[itc timing] draft kind=test ms=%d",
       Date.now() - started,
     );
   }

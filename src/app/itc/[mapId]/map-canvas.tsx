@@ -459,58 +459,27 @@ export function MapCanvas({
                   </p>
                 );
               }
+              // Compact "reminder" — just the move + target date.
+              // The full four fields live in the test-design section
+              // above; the coachee can scroll back if they need them.
+              // Repeating all four here reads as duplication.
               return (
-                <div className="space-y-3">
-                  <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm space-y-2">
-                    <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-                      What you're testing
+                <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm space-y-2">
+                  {activeTest.behavior_change ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)] mb-1">
+                        Your move
+                      </div>
+                      <div className="italic text-white/90 leading-relaxed">
+                        {activeTest.behavior_change}
+                      </div>
                     </div>
-                    {activeTest.assumption_says ? (
-                      <div>
-                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
-                          My Big Assumption Says:{" "}
-                        </span>
-                        <span className="italic text-white/90">
-                          {activeTest.assumption_says}
-                        </span>
-                      </div>
-                    ) : null}
-                    {activeTest.behavior_change ? (
-                      <div>
-                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
-                          So I Will:{" "}
-                        </span>
-                        <span className="italic text-white/90">
-                          {activeTest.behavior_change}
-                        </span>
-                      </div>
-                    ) : null}
-                    {activeTest.data_to_collect ? (
-                      <div>
-                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
-                          And Collect the Following Data:{" "}
-                        </span>
-                        <span className="italic text-white/90">
-                          {activeTest.data_to_collect}
-                        </span>
-                      </div>
-                    ) : null}
-                    {activeTest.in_order_to_find_out ? (
-                      <div>
-                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
-                          In Order to Find Out Whether:{" "}
-                        </span>
-                        <span className="italic text-white/90">
-                          {activeTest.in_order_to_find_out}
-                        </span>
-                      </div>
-                    ) : null}
-                    {activeTest.target_date ? (
-                      <div className="text-xs text-[color:var(--color-text-muted)] pt-1">
-                        Target date: {activeTest.target_date}
-                      </div>
-                    ) : null}
-                  </div>
+                  ) : null}
+                  {activeTest.target_date ? (
+                    <div className="text-xs text-[color:var(--color-text-muted)] pt-1">
+                      Target date: {activeTest.target_date}
+                    </div>
+                  ) : null}
                 </div>
               );
             })()}

@@ -252,10 +252,14 @@ These words mark a reply as machine-made to any reader who's spent time online i
 - `landscape`
 - `ecosystem`
 - `structure` (except literal, e.g. "the frame of the wall")
+- `shape` (as product-speak — "the shape of a good X," "in that shape," "match the shape"). Say "the kind of X" or describe the thing itself. Literal shape is fine ("round shape") but abstract shape is product-speak.
+- `format`, `template` (as content descriptors). Say "the way you write it" or describe it directly.
 
 Prefer plain descriptions. "The way you've set this up" beats "your architecture." "The pattern that keeps this in place" beats "the underlying framework."
 
 Inside the ITC tool, one exception: `the immune system` is the framework's own term for what Columns 3, 4, and 5 protect. Fine there. Nowhere else.
+
+**Column labels:** refer to columns by name in coachee-facing output ("your Big Assumptions" not "Column 5"; "your Competing Commitments" not "Column 4"; "your goal" not "Column 1"; "your worries" not "Column 3"). The one exception is the immune-system walkthrough where the guide-canonical top-down chain uses column labels explicitly. Elsewhere, name the thing, not the schema slot.
 
 ### Praise (banned even after acceptance)
 

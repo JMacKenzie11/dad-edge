@@ -1975,6 +1975,10 @@ export async function ensureTestDraftDelivered(
 
 const regenerateTestSchema = z.object({
   map_id: z.string().uuid(),
+  /** The coachee's current test_type. Server derives the NEXT type
+   *  from this + mode below — LLM never sees a "produce something
+   *  different" instruction it might ignore. Variation is
+   *  server-orchestrated. */
   test_type: z.enum([
     "data_mining",
     "observation",
@@ -1982,13 +1986,46 @@ const regenerateTestSchema = z.object({
     "behavioral",
   ]),
   mode: z.enum(["initial", "another", "safer"]),
-  // Prior draft snapshot — required for "another" and "safer" modes
-  // so the LLM can produce a materially different / smaller version.
-  prior_assumption_says: z.string().optional(),
-  prior_behavior_change: z.string().optional(),
-  prior_data_to_collect: z.string().optional(),
-  prior_in_order_to_find_out: z.string().optional(),
 });
+
+/**
+ * Type dispatch table for the two regeneration modes.
+ *
+ * "another" rotates through all four types in a fixed cycle, so
+ * repeated clicks give the coachee a genuinely different SHAPE of
+ * test each time (see the type descriptions in prompts/stages/
+ * test-design.ts — each type is structurally distinct by construction).
+ * The cycle wraps: after data_mining, we're back to behavioral.
+ *
+ * "safer" steps DOWN the safety ladder (behavioral > observation >
+ * thought_experiment > data_mining). Data mining is the safest —
+ * no new action required, purely retrospective. If the coachee is
+ * already at data_mining, safer is a no-op (client hides the button).
+ *
+ * This replaces prompt-shaping instructions like "produce a materially
+ * different test" that the LLM ignored. Variation is now guaranteed
+ * by construction — server picks the type, LLM only writes the
+ * fields for that type.
+ */
+const ANOTHER_ROTATION: Record<
+  "behavioral" | "observation" | "thought_experiment" | "data_mining",
+  "behavioral" | "observation" | "thought_experiment" | "data_mining"
+> = {
+  behavioral: "observation",
+  observation: "thought_experiment",
+  thought_experiment: "data_mining",
+  data_mining: "behavioral",
+};
+
+const SAFER_LADDER: Record<
+  "behavioral" | "observation" | "thought_experiment" | "data_mining",
+  "behavioral" | "observation" | "thought_experiment" | "data_mining" | null
+> = {
+  behavioral: "observation",
+  observation: "thought_experiment",
+  thought_experiment: "data_mining",
+  data_mining: null, // already safest
+};
 
 /**
  * On-demand test-draft regeneration. Called by the TestDesignForm
@@ -1996,6 +2033,13 @@ const regenerateTestSchema = z.object({
  *   - changes the test_type dropdown (mode="initial" with new type)
  *   - clicks "Give me another draft" (mode="another")
  *   - clicks "Give me a safer version" (mode="safer")
+ *
+ * For "another" and "safer", the server rotates/steps the type
+ * (see tables above) — client's `test_type` is treated as the
+ * CURRENT type, not the target. LLM is called with the derived
+ * target type and produces a test of that shape. Because each type
+ * is a genuinely distinct shape (per the test-design prompt), the
+ * result is guaranteed structurally different.
  *
  * Purely LLM call + return — does NOT touch the DB. Client updates
  * its local form state with the returned draft; user must Save to
@@ -2022,15 +2066,32 @@ export async function regenerateTestDraft(
     map_id: formData.get("map_id"),
     test_type: formData.get("test_type"),
     mode: formData.get("mode"),
-    prior_assumption_says: formData.get("prior_assumption_says") || undefined,
-    prior_behavior_change: formData.get("prior_behavior_change") || undefined,
-    prior_data_to_collect: formData.get("prior_data_to_collect") || undefined,
-    prior_in_order_to_find_out:
-      formData.get("prior_in_order_to_find_out") || undefined,
   });
   if (!parsed.success) {
     return { ok: false, reason: "Invalid regenerate input." };
   }
+
+  // Derive the TARGET type server-side. LLM will be told to write a
+  // test of the target type; no "produce something different"
+  // instructions.
+  let targetType: "behavioral" | "observation" | "thought_experiment" | "data_mining";
+  if (parsed.data.mode === "initial") {
+    targetType = parsed.data.test_type;
+  } else if (parsed.data.mode === "another") {
+    targetType = ANOTHER_ROTATION[parsed.data.test_type];
+  } else {
+    // safer
+    const next = SAFER_LADDER[parsed.data.test_type];
+    if (!next) {
+      return {
+        ok: false,
+        reason:
+          "This is already the safest kind of test — data mining looks only at what's already happened.",
+      };
+    }
+    targetType = next;
+  }
+
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
 
@@ -2062,30 +2123,12 @@ export async function regenerateTestDraft(
     })
     .filter((x): x is { text: string; behaviorText: string } => Boolean(x));
 
-  // Assemble the priorDraft only when it matters (another/safer modes).
-  const priorDraft =
-    parsed.data.mode !== "initial" &&
-    parsed.data.prior_assumption_says &&
-    parsed.data.prior_behavior_change &&
-    parsed.data.prior_data_to_collect &&
-    parsed.data.prior_in_order_to_find_out
-      ? {
-          testType: parsed.data.test_type,
-          assumptionSays: parsed.data.prior_assumption_says,
-          behaviorChange: parsed.data.prior_behavior_change,
-          dataToCollect: parsed.data.prior_data_to_collect,
-          inOrderToFindOut: parsed.data.prior_in_order_to_find_out,
-        }
-      : undefined;
-
   const draft = await draftTestForAssumption({
     goalText: loaded.map.improvement_goal ?? "",
     assumptionText: selected.text,
     underwrittenCommitments: underwritten,
     todayIso: new Date().toISOString().slice(0, 10),
-    mode: parsed.data.mode,
-    testType: parsed.data.test_type,
-    priorDraft,
+    testType: targetType,
   });
   if (!draft) {
     return { ok: false, reason: "Could not generate a new draft." };

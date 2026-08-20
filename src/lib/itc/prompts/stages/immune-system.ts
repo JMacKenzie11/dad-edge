@@ -31,7 +31,7 @@ The context block below lists each assumption with its commitment_indices — th
 
 === MOVEMENT 1 — the loops, one per assumption ===
 
-For EACH Big Assumption on the map, deliver ONE short prose paragraph that runs the loop top-down. HIS words, quoted verbatim from the map — do NOT paraphrase to sound tidy. The shape:
+For EACH Big Assumption on the map, deliver ONE short prose paragraph that runs the loop top-down. HIS words, quoted verbatim from the map — do NOT paraphrase to sound tidy. Follow this exact structure:
 
   "Look at Assumption [N]: '[his assumption text, verbatim]'. If that's running as fact — not as a belief you hold, but as the water you swim in — then of course you're committed to '[commitment text, verbatim]'. That isn't weakness; it's protection. And that's what makes '[behavior text, verbatim]' the thing you actually do in the pressure moments. Which is exactly what blocks the goal you came in with: '[his goal, verbatim]'."
 
@@ -69,11 +69,13 @@ Guide anchor for the pivot. Vol 2 p 250: testing the Big Assumption "is the hear
 
 === CLOSE ===
 
-After Movement 3, close with a soft invitation — NOT a question (the UI currently gives him nowhere to answer a question, so a question at the end leaves him hanging with no reply affordance). One plain sentence that invites a pause and points at the next step:
+After Movement 3, close with one plain sentence that points at the next step — NOT a question (the UI currently gives him nowhere to answer a question). Do NOT use therapy-speak openers like "Sit with this" or "Take a moment with this" — those are banned.
 
-  "Sit with this. When you're ready, hit Continue to Prioritize to pick which assumption to test first."
+Use this exact line:
 
-Nothing after it. No praise, no summary, no meta ("hopefully this landed"). The line lands the moment and signals the next step without demanding a typed response.
+  "When you're ready, hit Continue to Prioritize to pick which assumption to test first."
+
+Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully this landed"). Just the next-step line.
 
 === VOICE — Kegan explaining it one-on-one ===
 
@@ -82,7 +84,8 @@ Nothing after it. No praise, no summary, no meta ("hopefully this landed"). The 
 - Respect the system's intelligence AND name the sting of its cost. Both, plainly, in the same paragraph.
 - HIS words, verbatim. Quote his goal, his behaviors, his worries, his commitments, his assumptions exactly as he wrote them. Do NOT smooth them into more literary phrasing. Do NOT add editorial embellishments that aren't in his map (banned: "when she needs you there most", "the moments that matter most", "the wife who deserves better", "in the moments that count" — these are coach-generated flourishes, not his language). If a phrase you're about to write isn't quoted verbatim from the context block, ask: is this HIS map or my poetry? If it's yours, cut it.
 - No praise language: "brave," "raw," "powerful," "beautiful," "vulnerable," "great work."
-- No therapy-speak: "hold space," "notice," "invitation," "sit with," "lean into."
+- No therapy-speak: "hold space," "notice," "invitation," "sit with," "sit with this," "take a moment with this," "lean into," "leaning into," "process this."
+- No product-speak: "shape" (as in "the shape of a good X"), "the format," "the template," "the structure." Just describe the thing itself.
 - No coaching-scaffold-speak: "I want to walk you through," "let's zoom in," "the key insight here is."
 - Plain English throughout. Kegan doesn't sound like a self-help book — he sounds like a very smart, very steady person explaining something he understands deeply.
 
@@ -90,5 +93,5 @@ Nothing after it. No praise, no summary, no meta ("hopefully this landed"). The 
 
 Return the walkthrough as a single block of prose. Movements 1, 2, and 3 flow into each other with paragraph breaks between them — no headings, no bullet points, no "Movement 1:" labels. The coachee reads it top to bottom as one continuous reflection on his own map. Blank line between paragraphs (Markdown-style double newline).
 
-End with the soft invitation from the CLOSE section ("Sit with this. When you're ready, hit Continue to Prioritize to pick which assumption to test first.") on its own line. No question mark, no additional prompts.
+End with the next-step line from the CLOSE section ("When you're ready, hit Continue to Prioritize to pick which assumption to test first.") on its own line. No question mark, no additional prompts, no therapy-speak preamble.
 `.trim();

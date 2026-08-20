@@ -36,7 +36,7 @@ Under each worry the coach has drafted a starting point — review, tap to use, 
   assumptions: () =>
     `Column 5 is the Big Assumptions — the beliefs about how the world works that make every competing commitment in Column 4 feel necessary.
 
-They take an "I assume that if I…, then…" shape and land somewhere catastrophic ("I'd be nothing", "I'd lose them", "I'd fall apart"). To you they don't feel like assumptions — they feel like TRUTH. That's exactly why the immune system runs on autopilot.
+Every one starts with "I assume that if I…, then…" and lands somewhere catastrophic ("I'd be nothing", "I'd lose them", "I'd fall apart"). To you they don't feel like assumptions — they feel like TRUTH. That's exactly why the immune system runs on autopilot.
 
 One assumption often underwrites several commitments, so link each one to every commitment it holds up.
 
