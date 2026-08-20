@@ -67,6 +67,7 @@ import {
   setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
+  updateBehaviorDepth,
   updateBehaviorText,
   updateCommitmentDepth,
   updateWorryDepth,
@@ -75,6 +76,7 @@ import {
 } from "@/lib/itc/maps";
 import {
   scoreAssumptionDepth,
+  scoreBehaviorDepth,
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "@/lib/itc/rubric";
@@ -738,10 +740,50 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
       kind: "behavior",
       text: parsed.data.text.trim(),
       entry_id: behaviorId,
+      attempts: 1,
     },
     { stage: loaded.map.current_stage },
   );
+
+  // Rubric — deterministic pipeline step, same shape as saveWorry.
+  // Score persists even if the coach reaction later fails; the
+  // Continue-to-Worries gate reads directly from depth_score/attempts.
+  let score = 0;
+  try {
+    const scored = await scoreBehaviorDepth({
+      goalText: loaded.map.improvement_goal ?? "",
+      behaviorText: parsed.data.text.trim(),
+    });
+    score = scored.score;
+    await updateBehaviorDepth(behaviorId, score, scored.reason);
+    events.record(
+      "rubric_scored",
+      {
+        kind: "behavior",
+        entry_id: behaviorId,
+        score,
+        attempts: 1,
+        is_concrete_observable: scored.is_concrete_observable,
+        works_against_goal: scored.works_against_goal,
+        is_first_person_action_not_aspiration:
+          scored.is_first_person_action_not_aspiration,
+        reason: scored.reason,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } catch (err) {
+    console.warn(
+      "[itc] addBehavior rubric failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      { where: "addBehavior.rubric", message: err instanceof Error ? err.message : String(err) },
+      { stage: loaded.map.current_stage },
+    );
+  }
   await events.flush();
+
   await awaitReactionOrSwallow(() =>
     fireCoachReaction(
       loaded.map.id,
@@ -774,8 +816,9 @@ export async function updateBehavior(
   const target = existing.find((b) => b.id === parsed.data.behavior_id);
   if (!target) return { ok: false, reason: "Behavior not on this map." };
   const priorText = target.text;
+  let updated: Awaited<ReturnType<typeof updateBehaviorText>>;
   try {
-    await updateBehaviorText(target.id, loaded.map.id, parsed.data.text);
+    updated = await updateBehaviorText(target.id, loaded.map.id, parsed.data.text);
   } catch (err) {
     return {
       ok: false,
@@ -790,11 +833,50 @@ export async function updateBehavior(
       entry_id: target.id,
       prior_text: priorText,
       text: parsed.data.text.trim(),
+      attempts: updated.attempts,
       stage_at_edit: loaded.map.current_stage,
     },
     { stage: loaded.map.current_stage },
   );
+
+  // Rubric — same pipeline step as addBehavior. Re-scores against the
+  // new text; the Continue gate reads the fresh depth_score/attempts.
+  let score = 0;
+  try {
+    const scored = await scoreBehaviorDepth({
+      goalText: loaded.map.improvement_goal ?? "",
+      behaviorText: updated.text,
+    });
+    score = scored.score;
+    await updateBehaviorDepth(updated.id, score, scored.reason);
+    events.record(
+      "rubric_scored",
+      {
+        kind: "behavior",
+        entry_id: updated.id,
+        score,
+        attempts: updated.attempts,
+        is_concrete_observable: scored.is_concrete_observable,
+        works_against_goal: scored.works_against_goal,
+        is_first_person_action_not_aspiration:
+          scored.is_first_person_action_not_aspiration,
+        reason: scored.reason,
+      },
+      { stage: loaded.map.current_stage },
+    );
+  } catch (err) {
+    console.warn(
+      "[itc] updateBehavior rubric failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    events.record(
+      "error",
+      { where: "updateBehavior.rubric", message: err instanceof Error ? err.message : String(err) },
+      { stage: loaded.map.current_stage },
+    );
+  }
   await events.flush();
+
   await awaitReactionOrSwallow(() =>
     fireCoachReaction(
       loaded.map.id,
@@ -3880,6 +3962,23 @@ async function computeAdvanceGate(
           label,
           enabled: false,
           reason: `Consolidate to 5 or fewer behaviors first (${selected.length} on the map).`,
+        };
+      }
+      // Depth gate: mirror of worries/commitments/assumptions — every
+      // selected behavior passes at 3/3 or (2/3 AND attempts >= 2).
+      // Same helper, same escape hatch. Before this, the behaviors
+      // gate only checked count — coachees could bypass real coach
+      // pushback on shallow entries by clicking Continue.
+      const shallow = selected.filter(
+        (b) => !worryPassesDepth(b.depth_score, b.attempts),
+      );
+      if (shallow.length > 0) {
+        return {
+          from,
+          to,
+          label,
+          enabled: false,
+          reason: `${shallow.length} behavior${shallow.length === 1 ? "" : "s"} ${shallow.length === 1 ? "needs" : "need"} more depth.`,
         };
       }
       return { from, to, label, enabled: true, reason: null };

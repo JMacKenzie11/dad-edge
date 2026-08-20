@@ -216,7 +216,7 @@ function CommitmentItem({
       className={
         "rounded-md border bg-black/20 px-4 py-3 " +
         (needsMoreDepth
-          ? "border-[color:var(--color-warning)]/50 "
+          ? "border-[color:var(--color-danger)]/50 "
           : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
@@ -239,7 +239,7 @@ function CommitmentItem({
           <span className="text-sm italic">{worry.text}</span>
           {needsMoreDepth ? (
             <span
-              className="ml-auto rounded-full border border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-warning)]"
+              className="ml-auto rounded-full border border-[color:var(--color-danger)]/60 bg-[color:var(--color-danger)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-danger)]"
               title="This commitment hasn't reached the depth needed to advance to Big Assumptions. Sharpen it (or wait for a second attempt to pass) to clear the gate."
             >
               Needs more depth
@@ -248,11 +248,12 @@ function CommitmentItem({
         </div>
         {needsMoreDepth && commitment?.rubric_reason ? (
           // Boxed coach-message treatment mirroring EntryThread —
-          // warning tint instead of primary. Populated by
-          // scoreCommitmentDepth on every save so the coachee sees
-          // WHAT to sharpen, not just that something is off.
-          <div className="min-w-0 rounded-md border border-[color:var(--color-warning)]/30 border-l-[3px] border-l-[color:var(--color-warning)]/70 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-sm leading-relaxed">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]/90">
+          // danger tint (red) so "you need to change this" reads
+          // unambiguously. Populated by scoreCommitmentDepth on every
+          // save so the coachee sees WHAT to sharpen, not just that
+          // something is off.
+          <div className="min-w-0 rounded-md border border-[color:var(--color-danger)]/30 border-l-[3px] border-l-[color:var(--color-danger)]/70 bg-[color:var(--color-danger)]/[0.08] px-3 py-2 text-sm leading-relaxed">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-danger)]/90">
               One thing to sharpen
             </div>
             <div className="whitespace-pre-wrap break-words text-white/90">

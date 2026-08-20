@@ -24,7 +24,7 @@ export const STAGE_INTROS: Partial<
 > = {
   goal: ({ pillarCode }) => {
     const pillar = PILLAR_BY_CODE[pillarCode];
-    return `Your goal for ${pillar.label} starts "${GOAL_STEM} …". Finish the sentence with something specific YOU'D know you were doing differently, not a vague vow. If you know how you'd finish it, write it. If you want to work it out first, tell me what's on your mind.
+    return `Your goal for ${pillar.label} starts "${GOAL_STEM} …". Finish the sentence with something specific YOU'D know you were doing differently, not a vague vow. Write a rough version in the box below and save it — I'll react and we can sharpen from there.
 
 What a good goal sounds like:
 • Something you keep failing at even though you keep trying. That's the whole point of this map.

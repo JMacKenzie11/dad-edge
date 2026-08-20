@@ -177,6 +177,74 @@ export async function scoreAssumptionDepth(input: {
   }
 }
 
+const BehaviorSchema = z.object({
+  is_concrete_observable: z.boolean(),
+  works_against_goal: z.boolean(),
+  is_first_person_action_not_aspiration: z.boolean(),
+  reason: z.string().min(1).max(400),
+});
+
+export type BehaviorRubricResult = {
+  score: 0 | 1 | 2 | 3;
+  is_concrete_observable: boolean;
+  works_against_goal: boolean;
+  is_first_person_action_not_aspiration: boolean;
+  reason: string;
+};
+
+const BEHAVIOR_SYSTEM = `
+You are a strict rubric for column-2 behaviors in an Immunity to Change map. A real Column 2 entry is a concrete, observable move the coachee himself makes (or fails to make) in the moments that pull him away from his Column 1 goal. Not a feeling, not an identity claim, not aspiration, not something someone else does.
+
+Score three binary criteria. When in doubt, false.
+
+1. is_concrete_observable: A friend on his shoulder could point at this in the moment it happens. Specific, not a vague verb. "I stop talking and look at my phone" passes. "I withdraw" / "I shut down" / "I get defensive" fail — vague on their own. "I feel anxious" fails — that's an inner state, not an observable action.
+
+2. works_against_goal: This move CLEARLY pulls him away from his stated Column 1 goal in the moment it happens. The connection is obvious in one sentence. If explaining the link takes a paragraph, false. General "bad things he does" that don't tie to THIS goal fail.
+
+3. is_first_person_action_not_aspiration: It's what HE actually does or fails to do (present tense), not what he wishes he did, not what he plans to do, not an identity label about himself, not something the other person does. "I need to be more patient" / "I should listen better" / "I want to stop yelling" all fail (aspiration). "I'm a bad listener" / "I'm distant with her" fail (identity claims). "She doesn't respect me" fails (other person). "I don't ask what she needs" passes (first-person not-doing).
+
+Also return a one-line reason (<40 words) explaining what would need to change to raise a failing criterion.
+`.trim();
+
+export async function scoreBehaviorDepth(input: {
+  goalText: string;
+  behaviorText: string;
+}): Promise<BehaviorRubricResult> {
+  const started = Date.now();
+  let scoreForLog: number | null = null;
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: BehaviorSchema,
+      system: BEHAVIOR_SYSTEM,
+      prompt: [
+        `Improvement goal: ${input.goalText || "(not set)"}`,
+        `Proposed behavior: ${input.behaviorText}`,
+      ].join("\n"),
+      maxOutputTokens: 512,
+    });
+    const score =
+      (object.is_concrete_observable ? 1 : 0) +
+      (object.works_against_goal ? 1 : 0) +
+      (object.is_first_person_action_not_aspiration ? 1 : 0);
+    scoreForLog = score;
+    return {
+      score: score as 0 | 1 | 2 | 3,
+      is_concrete_observable: object.is_concrete_observable,
+      works_against_goal: object.works_against_goal,
+      is_first_person_action_not_aspiration:
+        object.is_first_person_action_not_aspiration,
+      reason: object.reason,
+    };
+  } finally {
+    console.warn(
+      "[itc timing] rubric kind=behavior ms=%d score=%s",
+      Date.now() - started,
+      scoreForLog === null ? "error" : `${scoreForLog}/3`,
+    );
+  }
+}
+
 export async function scoreWorryDepth(input: {
   goalText: string;
   behaviorText: string;

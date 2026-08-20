@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcBehavior, ItcMessage } from "@/lib/itc/maps";
+import { worryPassesDepth } from "@/lib/itc/rules";
 import {
   addBehavior,
   removeBehavior,
@@ -366,10 +367,22 @@ function BehaviorItem({
     });
   }
 
+  // Flag behaviors that don't yet clear the advance-gate depth
+  // rubric. Same helper computeAdvanceGate uses — mirroring it in
+  // the UI lets the coachee see WHICH row is holding up "Continue"
+  // instead of just seeing the count in the gate message.
+  const needsMoreDepth = !worryPassesDepth(
+    behavior.depth_score,
+    behavior.attempts,
+  );
+
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-3 py-2 " +
+        "rounded-md border bg-black/20 px-3 py-2 " +
+        (needsMoreDepth
+          ? "border-[color:var(--color-danger)]/50 "
+          : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
     >
@@ -383,10 +396,31 @@ function BehaviorItem({
           />
         </div>
       ) : null}
+      {needsMoreDepth && behavior.rubric_reason ? (
+        // Boxed coach-message treatment mirroring worries/commitments/
+        // assumptions — danger tint so "you need to change this"
+        // reads unambiguously, not the softer warning amber.
+        <div className="mb-2 min-w-0 rounded-md border border-[color:var(--color-danger)]/30 border-l-[3px] border-l-[color:var(--color-danger)]/70 bg-[color:var(--color-danger)]/[0.08] px-3 py-2 text-sm leading-relaxed">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-danger)]/90">
+            One thing to sharpen
+          </div>
+          <div className="whitespace-pre-wrap break-words text-white/90">
+            {behavior.rubric_reason}
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-start gap-3">
         <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.
         </span>
+        {needsMoreDepth ? (
+          <span
+            className="mt-2 rounded-full border border-[color:var(--color-danger)]/60 bg-[color:var(--color-danger)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-danger)] shrink-0"
+            title="This behavior hasn't reached the depth needed to advance. Sharpen it (or wait for a second attempt to pass) to clear the gate."
+          >
+            Needs more depth
+          </span>
+        ) : null}
         <AutoTextarea
           ref={textareaRef}
           value={draft}

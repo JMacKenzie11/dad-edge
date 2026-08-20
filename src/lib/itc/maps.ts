@@ -73,6 +73,18 @@ export type ItcBehavior = {
   text: string;
   source: "user" | "suggested";
   selected: boolean;
+  /** Server rubric score 0-3. Same excavation-loop shape as ItcWorry
+   *  — deterministic Haiku rubric writes this on every save; the
+   *  Continue-to-Worries gate reads it via worryPassesDepth. Null on
+   *  fresh rows until the first rubric pass completes. */
+  depth_score: number | null;
+  /** See ItcWorry.rubric_reason. Short human-readable string from the
+   *  rubric explaining what would raise a failing criterion. Rendered
+   *  by the "One thing to sharpen" UI on shallow rows. */
+  rubric_reason: string | null;
+  /** Number of times this behavior has been saved (add + every edit).
+   *  Powers the 2/3-with-attempts>=2 escape hatch in the gate. */
+  attempts: number;
   /** Coach-drafted worry text for this behavior — populated by the
    *  server pipeline on advance to Column 3. Metadata, not map
    *  content: converts to real worry.text only when the user
@@ -300,7 +312,16 @@ export async function addBehavior(
   const sortOrder = existing.length;
   const { data, error } = await supabase
     .from("itc_behaviors")
-    .insert({ map_id: mapId, text: trimmed, source, sort_order: sortOrder })
+    .insert({
+      map_id: mapId,
+      text: trimmed,
+      source,
+      sort_order: sortOrder,
+      // First save counts as attempt 1 — mirrors upsertWorryForBehavior
+      // so the 2/3-with-attempts>=2 gate escape hatch behaves the same
+      // across all four columns.
+      attempts: 1,
+    })
     .select("*")
     .single();
   if (error || !data) throw new Error(`addBehavior: ${error?.message ?? "no row"}`);
@@ -332,22 +353,65 @@ export function normalizeMapText(text: string): string {
  * Replace the text of an existing behavior in place. Used by the coach's
  * replace_behavior action for consolidation — when the coachee's new
  * phrasing sharpens an existing behavior, swap the text rather than
- * create a duplicate.
+ * create a duplicate. Also called by updateBehavior server action on
+ * inline edits.
+ *
+ * Bumps attempts and clears stale depth_score + rubric_reason so the
+ * caller (updateBehavior) can re-score against the new text. Returns
+ * the updated row so the caller can log/react without a second read.
  */
 export async function updateBehaviorText(
   id: string,
   mapId: string,
   text: string,
-): Promise<void> {
+): Promise<ItcBehavior> {
   const trimmed = text.trim();
   if (trimmed.length < 3) throw new Error("Behavior is too short.");
   const supabase = createSupabaseServiceClient();
+  const existing = await supabase
+    .from("itc_behaviors")
+    .select("attempts")
+    .eq("id", id)
+    .eq("map_id", mapId)
+    .maybeSingle();
+  if (existing.error) throw new Error(`updateBehaviorText lookup: ${existing.error.message}`);
+  if (!existing.data) throw new Error("Behavior not on this map.");
+  const { data, error } = await supabase
+    .from("itc_behaviors")
+    .update({
+      text: trimmed,
+      attempts: (existing.data.attempts ?? 0) + 1,
+      depth_score: null,
+      rubric_reason: null,
+    })
+    .eq("id", id)
+    .eq("map_id", mapId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`updateBehaviorText: ${error?.message ?? "no row"}`);
+  return data as ItcBehavior;
+}
+
+export async function updateBehaviorDepth(
+  behaviorId: string,
+  score: number,
+  reason?: string | null,
+): Promise<void> {
+  if (score < 0 || score > 3 || !Number.isInteger(score)) {
+    throw new Error(`updateBehaviorDepth: score must be int 0-3, got ${score}`);
+  }
+  const supabase = createSupabaseServiceClient();
+  const patch: { depth_score: number; rubric_reason?: string | null } = {
+    depth_score: score,
+  };
+  if (reason !== undefined) {
+    patch.rubric_reason = reason?.trim() || null;
+  }
   const { error } = await supabase
     .from("itc_behaviors")
-    .update({ text: trimmed })
-    .eq("id", id)
-    .eq("map_id", mapId);
-  if (error) throw new Error(`updateBehaviorText: ${error.message}`);
+    .update(patch)
+    .eq("id", behaviorId);
+  if (error) throw new Error(`updateBehaviorDepth: ${error.message}`);
 }
 
 /**
