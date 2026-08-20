@@ -30,7 +30,11 @@ import { mainModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
-import { scoreAssumptionDepth } from "./rubric";
+import {
+  scoreAssumptionDepth,
+  scoreCommitmentDepth,
+  scoreWorryDepth,
+} from "./rubric";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -872,9 +876,16 @@ const WORRY_HARD_WORD_CAP = 20;
  *
  * Form-First-pure: LLM returns METADATA (two slots); server assembles
  * the canonical "I worry that if I ..., ..." sentence and mechanically
- * trims any overshoot via trimAssembledDraft. Coachee reviews, edits,
- * or promotes to real worry.text via saveWorry. Returns null only when
- * the assembled sentence is beyond deterministic rescue.
+ * trims any overshoot via trimAssembledDraft.
+ *
+ * Drafter-rubric alignment: after assembly, the draft is scored with
+ * the same scoreWorryDepth rubric that gates advance. If it fails, one
+ * retry fires with the rubric's `reason` fed back so the drafter can
+ * self-correct against the exact criterion it missed. Prior behavior
+ * was drafter-then-hope: coachee taps "Use this draft" → promotes to
+ * real worry → rubric bounces it as shallow. The retry closes that
+ * loop. Whatever comes back from the retry (or the first draft, if
+ * scoring failed) is returned — no silent drops.
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
@@ -883,23 +894,60 @@ export async function draftWorryForBehavior(input: {
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
-  try {
+  const basePromptLines = [
+    `Pillar: ${pillar.label} (${pillar.domain})`,
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    `Behavior (Column 2): ${input.behaviorText}`,
+    ``,
+    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+  ];
+  async function generateAssembled(promptLines: string[]): Promise<string | null> {
     const { object } = await generateObject({
       model: mainModel(),
       schema: WorryDraftSchema,
       system: DRAFT_WORRY_SYSTEM,
-      prompt: [
-        `Pillar: ${pillar.label} (${pillar.domain})`,
-        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-        `Behavior (Column 2): ${input.behaviorText}`,
-        ``,
-        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
-      ].join("\n"),
+      prompt: promptLines.join("\n"),
       maxOutputTokens: 200,
     });
     const assembled = scrubReply(assembleWorry(object));
     if (!assembled) return null;
     return trimAssembledDraft(assembled, WORRY_HARD_WORD_CAP);
+  }
+  try {
+    const first = await generateAssembled(basePromptLines);
+    if (!first) return null;
+    // Score against the same rubric that gates advance. Fail-open on
+    // rubric error — a transient Haiku hiccup shouldn't strand the
+    // drafter output.
+    let firstScore: Awaited<ReturnType<typeof scoreWorryDepth>> | null = null;
+    try {
+      firstScore = await scoreWorryDepth({
+        goalText: input.goalText,
+        behaviorText: input.behaviorText,
+        worryText: first,
+      });
+    } catch (err) {
+      console.warn(
+        "[itc coach] worry draft rubric score failed, keeping first: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+      return first;
+    }
+    if (firstScore.score >= 3) return first;
+
+    // Rubric flagged a real gap. Retry once with the rubric's reason
+    // as feedback so the drafter self-corrects against the exact
+    // criterion. Return whatever comes back either way — never silent
+    // drop; a slightly-shallow draft the coachee can edit beats no
+    // draft at all.
+    const retry = await generateAssembled([
+      ...basePromptLines,
+      ``,
+      `Your previous draft was: "${first}"`,
+      `The depth rubric rejected it (${firstScore.score}/3). Reason: "${firstScore.reason}"`,
+      `Rewrite the slots so the assembled sentence passes. Preserve intent; fix the flaw the rubric named. Same length target (under 20 words).`,
+    ]);
+    return retry ?? first;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1147,8 +1195,12 @@ const COMMITMENT_HARD_WORD_CAP = 20;
  * Form-First-pure: LLM returns METADATA (two slots); server assembles
  * the canonical "I'm also committed to <active_move> <protective_purpose>."
  * sentence and mechanically trims any overshoot via trimAssembledDraft.
- * Returns null only when the assembled sentence is beyond deterministic
- * rescue.
+ *
+ * Drafter-rubric alignment: after assembly, the draft is scored with
+ * scoreCommitmentDepth. If it fails, one retry fires with the rubric's
+ * `reason` fed back so the drafter self-corrects against the exact
+ * criterion. Whatever comes back is returned — never silent-drop.
+ * Mirrors the pattern in draftWorryForBehavior.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -1156,23 +1208,51 @@ export async function draftCommitmentForWorry(input: {
   worryText: string;
 }): Promise<string | null> {
   const started = Date.now();
-  try {
+  const basePromptLines = [
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    `Behavior (Column 2): ${input.behaviorText}`,
+    `Paired worry (Column 3): ${input.worryText}`,
+    ``,
+    `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
+  ];
+  async function generateAssembled(promptLines: string[]): Promise<string | null> {
     const { object } = await generateObject({
       model: mainModel(),
       schema: CommitmentDraftSchema,
       system: DRAFT_COMMITMENT_SYSTEM,
-      prompt: [
-        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-        `Behavior (Column 2): ${input.behaviorText}`,
-        `Paired worry (Column 3): ${input.worryText}`,
-        ``,
-        `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
-      ].join("\n"),
+      prompt: promptLines.join("\n"),
       maxOutputTokens: 200,
     });
     const assembled = scrubReply(assembleCommitment(object));
     if (!assembled) return null;
     return trimAssembledDraft(assembled, COMMITMENT_HARD_WORD_CAP);
+  }
+  try {
+    const first = await generateAssembled(basePromptLines);
+    if (!first) return null;
+    let firstScore: Awaited<ReturnType<typeof scoreCommitmentDepth>> | null = null;
+    try {
+      firstScore = await scoreCommitmentDepth({
+        goalText: input.goalText,
+        worryText: input.worryText,
+        commitmentText: first,
+      });
+    } catch (err) {
+      console.warn(
+        "[itc coach] commitment draft rubric score failed, keeping first: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+      return first;
+    }
+    if (firstScore.score >= 3) return first;
+    const retry = await generateAssembled([
+      ...basePromptLines,
+      ``,
+      `Your previous draft was: "${first}"`,
+      `The depth rubric rejected it (${firstScore.score}/3). Reason: "${firstScore.reason}"`,
+      `Rewrite the slots so the assembled sentence passes. Preserve intent; fix the flaw the rubric named. Same length target (under 20 words).`,
+    ]);
+    return retry ?? first;
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",

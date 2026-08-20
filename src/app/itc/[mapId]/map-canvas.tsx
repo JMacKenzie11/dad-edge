@@ -786,9 +786,40 @@ function ContinueBar({
         disabled={pending || !gate.enabled}
         title={gate.enabled ? undefined : gate.reason ?? "Not ready to advance."}
         aria-describedby={!gate.enabled && gate.reason ? "advance-gate-reason" : undefined}
+        aria-busy={pending ? "true" : undefined}
         className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
       >
-        {pending ? "…" : gate.label}
+        {pending ? (
+          // Spinner + label instead of a static "…" so the coachee
+          // sees the button is actively working. Advance can take
+          // 5-10s while the server drafts every worry/commitment.
+          <span className="inline-flex items-center gap-2 justify-center">
+            <svg
+              className="h-4 w-4 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeOpacity="0.25"
+                strokeWidth="3"
+              />
+              <path
+                d="M12 2a10 10 0 0 1 10 10"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span>{gate.label}</span>
+          </span>
+        ) : (
+          gate.label
+        )}
       </button>
       {!gate.enabled && gate.reason ? (
         <p

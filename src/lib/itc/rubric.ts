@@ -88,6 +88,12 @@ export async function scoreCommitmentDepth(input: {
         `Proposed commitment: ${input.commitmentText}`,
       ].join("\n"),
       maxOutputTokens: 512,
+      // Rubrics are classifiers, not authors. Low temperature makes
+      // verdicts reproducible — same input yields same score, no
+      // flakiness where the user "removes a period, hits enter, and
+      // it passes." Non-zero to preserve tie-breaking on genuine
+      // borderline calls.
+      temperature: 0.1,
     });
     const score =
       (object.is_self_protective ? 1 : 0) +
@@ -155,6 +161,12 @@ export async function scoreAssumptionDepth(input: {
         `Proposed Big Assumption: ${input.assumptionText}`,
       ].join("\n"),
       maxOutputTokens: 512,
+      // Rubrics are classifiers, not authors. Low temperature makes
+      // verdicts reproducible — same input yields same score, no
+      // flakiness where the user "removes a period, hits enter, and
+      // it passes." Non-zero to preserve tie-breaking on genuine
+      // borderline calls.
+      temperature: 0.1,
     });
     const score =
       (object.has_finished_then ? 1 : 0) +
@@ -222,6 +234,12 @@ export async function scoreBehaviorDepth(input: {
         `Proposed behavior: ${input.behaviorText}`,
       ].join("\n"),
       maxOutputTokens: 512,
+      // Rubrics are classifiers, not authors. Low temperature makes
+      // verdicts reproducible — same input yields same score, no
+      // flakiness where the user "removes a period, hits enter, and
+      // it passes." Non-zero to preserve tie-breaking on genuine
+      // borderline calls.
+      temperature: 0.1,
     });
     const score =
       (object.is_concrete_observable ? 1 : 0) +
@@ -263,6 +281,12 @@ export async function scoreWorryDepth(input: {
         `Proposed worry: ${input.worryText}`,
       ].join("\n"),
       maxOutputTokens: 512,
+      // Rubrics are classifiers, not authors. Low temperature makes
+      // verdicts reproducible — same input yields same score, no
+      // flakiness where the user "removes a period, hits enter, and
+      // it passes." Non-zero to preserve tie-breaking on genuine
+      // borderline calls.
+      temperature: 0.1,
     });
 
     const score =
