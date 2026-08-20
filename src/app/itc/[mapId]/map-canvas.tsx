@@ -422,6 +422,86 @@ export function MapCanvas({
             })()}
           </Section>
         ) : null}
+
+        {stageIndex(map.current_stage) >= stageIndex("test_running") ? (
+          <Section
+            title="Run the test"
+            active={map.current_stage === "test_running"}
+            liveIntro={liveIntroFor("test_running")}
+            stageNotes={
+              map.current_stage === "test_running" ? stageNotes : []
+            }
+          >
+            {(() => {
+              const activeTest =
+                tests
+                  .slice()
+                  .reverse()
+                  .find((t) => t.status !== "abandoned") ?? null;
+              if (!activeTest) {
+                return (
+                  <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+                    Save a test design first.
+                  </p>
+                );
+              }
+              return (
+                <div className="space-y-3">
+                  <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm space-y-2">
+                    <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                      What you're testing
+                    </div>
+                    {activeTest.assumption_says ? (
+                      <div>
+                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
+                          My Big Assumption Says:{" "}
+                        </span>
+                        <span className="italic text-white/90">
+                          {activeTest.assumption_says}
+                        </span>
+                      </div>
+                    ) : null}
+                    {activeTest.behavior_change ? (
+                      <div>
+                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
+                          So I Will:{" "}
+                        </span>
+                        <span className="italic text-white/90">
+                          {activeTest.behavior_change}
+                        </span>
+                      </div>
+                    ) : null}
+                    {activeTest.data_to_collect ? (
+                      <div>
+                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
+                          And Collect the Following Data:{" "}
+                        </span>
+                        <span className="italic text-white/90">
+                          {activeTest.data_to_collect}
+                        </span>
+                      </div>
+                    ) : null}
+                    {activeTest.in_order_to_find_out ? (
+                      <div>
+                        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]/70">
+                          In Order to Find Out Whether:{" "}
+                        </span>
+                        <span className="italic text-white/90">
+                          {activeTest.in_order_to_find_out}
+                        </span>
+                      </div>
+                    ) : null}
+                    {activeTest.target_date ? (
+                      <div className="text-xs text-[color:var(--color-text-muted)] pt-1">
+                        Target date: {activeTest.target_date}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
+          </Section>
+        ) : null}
       </div>
 
       {advanceGate &&

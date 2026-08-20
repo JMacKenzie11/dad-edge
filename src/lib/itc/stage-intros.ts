@@ -52,7 +52,11 @@ Naming them is the first move; testing them is what breaks the immunity.`,
 
 I've drafted a starting version below with all four fields filled in. Read it, change what needs changing, and save when it's the test you actually want to run. When you save, I'll review it against the criteria a good test has to clear.`,
   test_running: () =>
-    `Test is designed. Go run it. Come back with what you observed.`,
+    `The test is designed. Go run it in real life.
+
+You're not trying to succeed or fail — you're gathering information about whether the belief actually holds. Just do the move, notice what happens, and come back when you have observations.
+
+No rush. When you're ready, hit Continue to Results.`,
   results: () =>
     `You ran the test. Tell me what you did, what you observed, and what you make of it.`,
   done: () =>
