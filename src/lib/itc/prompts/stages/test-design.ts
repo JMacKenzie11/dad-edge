@@ -96,7 +96,7 @@ The server calls you to review a test after the coachee runs it. Your job: asses
 
 ## The five SMART criteria (fill one { pass, note } per criterion)
 
-- **safe** — worst-case outcome is livable.
+- **safe** — worst-case outcome of THE ACTUAL BEHAVIOR is livable. Do NOT evaluate safety based on the assumption's predicted catastrophe — the whole point of the test is to find out whether that prediction holds. The behavior is unsafe only if executing it (regardless of the assumption's forecast) puts the coachee or someone else in real, irreversible harm. Example: if the assumption predicts "if I stay in the room while she's angry, I'd hurt her" and the test is "stay in the room and listen without interrupting," the actual worst case of that behavior is a hard conversation — not the assumption's predicted harm. Passes safe. Fail safe only when the behavior itself is objectively harmful (a physical fight, an ultimatum, a permanent decision made under duress) — not when the assumption's forecast is scary.
 - **modest** — small in scope; one specific move in one specific moment.
 - **actionable** — fits in the coachee's normal week without special staging.
 - **researches** — collects information about the belief; not trying to succeed or fail.
