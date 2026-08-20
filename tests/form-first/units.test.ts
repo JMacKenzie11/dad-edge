@@ -483,8 +483,13 @@ describe("chipTargetForStage", () => {
 });
 
 describe("worryPassesDepth (the actual depth gate rule)", () => {
-  it("fails when depth_score is null (never scored)", () => {
-    expect(worryPassesDepth(null, 5)).toBe(false);
+  it("passes when depth_score is null (rubric unavailable — fail-open)", () => {
+    // Null means the rubric never wrote a score (LLM outage, migration
+    // backfill, pre-scoring row state). The rubric is a guard against
+    // shallow entries; when the guard can't run, trust the coachee
+    // rather than stranding him on a Haiku hiccup.
+    expect(worryPassesDepth(null, 0)).toBe(true);
+    expect(worryPassesDepth(null, 5)).toBe(true);
   });
 
   it("fails at 0/3 regardless of attempts", () => {

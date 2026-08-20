@@ -667,6 +667,58 @@ const WorryDraftSchema = z.object({
 });
 
 /**
+ * Deterministic shortener for over-cap assembled draft sentences.
+ * Shared by worry, commitment, and assumption drafters — all three
+ * hit the same LLM-overshoots-word-cap failure mode, and the prior
+ * fix (`917dc54`: one-shot retry with "you overshot, cut it") still
+ * silently dropped drafts when the retry also overshot. Coachee saw
+ * nothing.
+ *
+ * Server-owned structure over LLM-obedience: instead of asking the
+ * model nicely to trim, we mechanically strip patterns the drafter
+ * prompts already call out as filler ("actually", "fully", trailing
+ * "instead of ..." clauses, parenthetical qualifiers) and return the
+ * shortened sentence. Returns null only if the sentence is beyond
+ * mechanical rescue — a rare true LLM sprawl the coachee is better
+ * off not seeing.
+ */
+export function trimAssembledDraft(assembled: string, cap: number): string | null {
+  const wc = (s: string) => s.trim().split(/\s+/).length;
+  let s = assembled.trim();
+  if (wc(s) <= cap) return s;
+
+  // 1. Strip filler modifiers. Every drafter prompt names these as
+  //    banned symptoms of over-writing.
+  s = s
+    .replace(
+      /\b(actually|fully|really|literally|honestly|truly|genuinely|just|even|only|clearly)\b\s*/gi,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .trim();
+  if (wc(s) <= cap) return s;
+
+  // 2. Strip a trailing "instead of ..." clause. Both worry and
+  //    commitment prompts explicitly name this as a redundant tic
+  //    (the counter-move already implies what it's counter to).
+  const insteadIdx = s.toLowerCase().lastIndexOf(" instead of ");
+  if (insteadIdx > 0) {
+    let t = s.slice(0, insteadIdx).trimEnd().replace(/[,;]\s*$/, "");
+    if (!/[.!?]$/.test(t)) t += ".";
+    if (wc(t) <= cap) return t;
+    s = t;
+  }
+
+  // 3. Strip a trailing parenthetical qualifier ("(when she's upset)").
+  const paren = s.replace(/\s*\([^)]*\)(?=[.!?]?\s*$)/, "");
+  if (wc(paren) <= cap) return paren;
+
+  // 4. Beyond mechanical rescue.
+  return null;
+}
+
+/**
  * Server-side assembly of the canonical "I worry that if I ..., ..."
  * sentence from the two LLM slots. Handles the same normalizations as
  * assembleCommitment / assembleAssumption: trims, strips punctuation
@@ -801,13 +853,11 @@ The pillar constrains the domain. A fear that could be pasted onto any pillar is
 Return only the structured slots ({ opposite_move: "...", identity_landing: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
 `.trim();
 
-/** Hard ceiling on assembled worry length. Matches commitments +
- *  assumptions at 20 to keep the whole map tight. Kegan Vol 1
- *  worries run 15-25 words; 20 sits at the low end of canonical and
- *  forces the drafter to trim filler ("actually", "fully",
- *  parenthetical qualifiers). Silently dropped over-cap drafts so
- *  the coachee sees no card rather than a sprawling one — same
- *  pattern as COMMITMENT_HARD_WORD_CAP and the assumption drafter. */
+/** Hard ceiling on assembled worry length. Kegan Vol 1 worries run
+ *  15-25 words; 20 sits at the low end of canonical. Overshoots are
+ *  mechanically trimmed server-side (see trimAssembledDraft) rather
+ *  than silently dropped — prior LLM-obedience approach (retry with
+ *  "you overshot") kept producing null drafts the coachee never saw. */
 const WORRY_HARD_WORD_CAP = 20;
 
 /**
@@ -815,10 +865,10 @@ const WORRY_HARD_WORD_CAP = 20;
  * selected behavior when the coachee advances into the worries stage.
  *
  * Form-First-pure: LLM returns METADATA (two slots); server assembles
- * the canonical "I worry that if I ..., ..." sentence. Coachee reviews,
- * edits, or promotes to real worry.text via saveWorry. Assembled
- * drafts over WORRY_HARD_WORD_CAP are dropped (return null) so the
- * coachee never sees a sprawling worry that dilutes the "yuck".
+ * the canonical "I worry that if I ..., ..." sentence and mechanically
+ * trims any overshoot via trimAssembledDraft. Coachee reviews, edits,
+ * or promotes to real worry.text via saveWorry. Returns null only when
+ * the assembled sentence is beyond deterministic rescue.
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
@@ -827,58 +877,30 @@ export async function draftWorryForBehavior(input: {
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
-  const basePromptLines = [
-    `Pillar: ${pillar.label} (${pillar.domain})`,
-    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-    `Behavior (Column 2): ${input.behaviorText}`,
-    ``,
-    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
-  ];
-  async function attempt(
-    retryContext?: { failedDraft: string; wordCount: number },
-  ): Promise<string | null> {
-    const promptLines = retryContext
-      ? [
-          ...basePromptLines,
-          ``,
-          `Your previous attempt was ${retryContext.wordCount} words (over the 20 cap): "${retryContext.failedDraft}"`,
-          `Cut it down. Kill "actually", "fully", trailing "instead of..." clauses, and any qualifying phrase you can. Preserve the identity landing — that's the whole point. Return slots that assemble under 20 words.`,
-        ]
-      : basePromptLines;
+  try {
     const { object } = await generateObject({
       model: mainModel(),
       schema: WorryDraftSchema,
       system: DRAFT_WORRY_SYSTEM,
-      prompt: promptLines.join("\n"),
-      // Assembled sentence is ~30 tokens; 200 gives headroom for the
-      // schema envelope without inviting sprawl. Was 500, which was
-      // sending "you have room to be verbose" as an implicit signal.
+      prompt: [
+        `Pillar: ${pillar.label} (${pillar.domain})`,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `Behavior (Column 2): ${input.behaviorText}`,
+        ``,
+        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+      ].join("\n"),
       maxOutputTokens: 200,
     });
-    return scrubReply(assembleWorry(object));
-  }
-  try {
-    const first = await attempt();
-    if (!first) return null;
-    const firstCount = first.trim().split(/\s+/).length;
-    if (firstCount <= WORRY_HARD_WORD_CAP) return first;
-    console.warn(
-      '[itc coach] worry draft over cap (%d words), retrying once: "%s"',
-      firstCount,
-      first,
-    );
-    const second = await attempt({ failedDraft: first, wordCount: firstCount });
-    if (!second) return null;
-    const secondCount = second.trim().split(/\s+/).length;
-    if (secondCount > WORRY_HARD_WORD_CAP) {
+    const assembled = scrubReply(assembleWorry(object));
+    if (!assembled) return null;
+    const trimmed = trimAssembledDraft(assembled, WORRY_HARD_WORD_CAP);
+    if (!trimmed) {
       console.warn(
-        '[itc coach] worry draft still over cap after retry (%d words), dropping: "%s"',
-        secondCount,
-        second,
+        '[itc coach] worry draft beyond mechanical trim, dropping: "%s"',
+        assembled,
       );
-      return null;
     }
-    return second;
+    return trimmed;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1114,13 +1136,9 @@ You are naming HIS mechanism in HIS words.
 Return only the structured slots ({ active_move: "...", protective_purpose: "..." }). No prose, no explanation, no meta.
 `.trim();
 
-/** Hard ceiling on assembled commitment length. Structured slots +
- *  per-slot char caps make over-20 rare but not impossible (long
- *  slots that still fit their individual char limits can combine to
- *  exceed 20 words after assembly). Reject anything over the cap so
- *  the coachee sees no card rather than a wordy draft that fails the
- *  reaction coach's rubric. Silently dropped — mirrors the assumption
- *  drafter's HARD_WORD_CAP enforcement. */
+/** Hard ceiling on assembled commitment length. Overshoots are
+ *  mechanically trimmed server-side (see trimAssembledDraft) rather
+ *  than silently dropped. */
 const COMMITMENT_HARD_WORD_CAP = 20;
 
 /**
@@ -1129,10 +1147,9 @@ const COMMITMENT_HARD_WORD_CAP = 20;
  *
  * Form-First-pure: LLM returns METADATA (two slots); server assembles
  * the canonical "I'm also committed to <active_move> <protective_purpose>."
- * sentence. Coachee reviews, edits, or promotes to real commitment.text
- * via saveCommitment. Assembled drafts over COMMITMENT_HARD_WORD_CAP
- * are dropped (return null) so the coachee never sees a wordy draft
- * the reaction coach would reject anyway.
+ * sentence and mechanically trims any overshoot via trimAssembledDraft.
+ * Returns null only when the assembled sentence is beyond deterministic
+ * rescue.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -1140,57 +1157,30 @@ export async function draftCommitmentForWorry(input: {
   worryText: string;
 }): Promise<string | null> {
   const started = Date.now();
-  const basePromptLines = [
-    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-    `Behavior (Column 2): ${input.behaviorText}`,
-    `Paired worry (Column 3): ${input.worryText}`,
-    ``,
-    `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
-  ];
-  async function attempt(
-    retryContext?: { failedDraft: string; wordCount: number },
-  ): Promise<string | null> {
-    const promptLines = retryContext
-      ? [
-          ...basePromptLines,
-          ``,
-          `Your previous attempt was ${retryContext.wordCount} words (over the 20 cap): "${retryContext.failedDraft}"`,
-          `Cut it down. Kill "fully", collapse any double-"so" chains, drop timing/context qualifiers ("when she criticizes me", "in the situation"). Preserve the mechanism-on-the-page — that's the whole point. Return slots that assemble under 20 words.`,
-        ]
-      : basePromptLines;
+  try {
     const { object } = await generateObject({
       model: mainModel(),
       schema: CommitmentDraftSchema,
       system: DRAFT_COMMITMENT_SYSTEM,
-      prompt: promptLines.join("\n"),
-      // Assembled sentence is ~30 tokens; 200 gives headroom for the
-      // schema envelope without inviting sprawl. Was 400.
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `Behavior (Column 2): ${input.behaviorText}`,
+        `Paired worry (Column 3): ${input.worryText}`,
+        ``,
+        `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
+      ].join("\n"),
       maxOutputTokens: 200,
     });
-    return scrubReply(assembleCommitment(object));
-  }
-  try {
-    const first = await attempt();
-    if (!first) return null;
-    const firstCount = first.trim().split(/\s+/).length;
-    if (firstCount <= COMMITMENT_HARD_WORD_CAP) return first;
-    console.warn(
-      '[itc coach] commitment draft over cap (%d words), retrying once: "%s"',
-      firstCount,
-      first,
-    );
-    const second = await attempt({ failedDraft: first, wordCount: firstCount });
-    if (!second) return null;
-    const secondCount = second.trim().split(/\s+/).length;
-    if (secondCount > COMMITMENT_HARD_WORD_CAP) {
+    const assembled = scrubReply(assembleCommitment(object));
+    if (!assembled) return null;
+    const trimmed = trimAssembledDraft(assembled, COMMITMENT_HARD_WORD_CAP);
+    if (!trimmed) {
       console.warn(
-        '[itc coach] commitment draft still over cap after retry (%d words), dropping: "%s"',
-        secondCount,
-        second,
+        '[itc coach] commitment draft beyond mechanical trim, dropping: "%s"',
+        assembled,
       );
-      return null;
     }
-    return second;
+    return trimmed;
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",
@@ -1511,26 +1501,22 @@ export async function draftAssumptionsFromCommitments(input: {
       ),
     }));
 
-    // HARD 20-word cap. Structured slots + per-slot char/word caps
-    // in the schema make over-20 rare but not impossible (long slots
-    // that still fit their individual char limits can combine to
-    // exceed 20 words after assembly). Reject anything over the cap
-    // here — cheaper than firing the rubric LLM call on drafts that
-    // will be trapped by the cap regardless. Coachee sees fewer
-    // drafts rather than over-long ones.
+    // HARD 20-word cap. Overshoots are mechanically trimmed via
+    // trimAssembledDraft rather than silently dropped (prior fix
+    // silently dropped over-cap drafts, coachee saw fewer cards than
+    // the LLM actually produced). Drafts still beyond mechanical
+    // rescue after trim are dropped as a last resort.
     const HARD_WORD_CAP = 20;
-    const withinCap = normalized.filter((d) => {
-      const wordCount = d.text.trim().split(/\s+/).length;
-      if (wordCount > HARD_WORD_CAP) {
+    const withinCap = normalized.flatMap((d) => {
+      const trimmed = trimAssembledDraft(d.text, HARD_WORD_CAP);
+      if (!trimmed) {
         console.warn(
-          '[itc coach] dropping draft over %d words (%d): "%s"',
-          HARD_WORD_CAP,
-          wordCount,
+          '[itc coach] assumption draft beyond mechanical trim, dropping: "%s"',
           d.text,
         );
-        return false;
+        return [];
       }
-      return true;
+      return [{ ...d, text: trimmed }];
     });
 
     // Belt-and-suspenders rubric filter. Prompt guidance alone has
