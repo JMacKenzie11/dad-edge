@@ -3356,7 +3356,14 @@ export async function ensureMapCloseSummaryDelivered(
  * "I'm committed to getting better at test design".
  *
  * Markers:
- * - `test` / `seed` / `demo` — land at assumptions (drafter fires)
+ * - `test worries` — seed behaviors only, land at worries stage.
+ *   Fires the WORRY drafter live on advance so you can iterate on
+ *   its prompt/schema and see current output rather than the fixture.
+ * - `test commitments` — seed behaviors + worries, land at commitments
+ *   stage. Fires the COMMITMENT drafter live on advance so you can
+ *   iterate on it directly.
+ * - `test` / `seed` / `demo` — land at assumptions (assumption
+ *   drafter fires; worries + commitments are fixture text).
  * - `test walkthrough` — land at immune_system (walkthrough fires,
  *   ~15-25s wait)
  * - `test prioritize` — land at prioritize (walkthrough + coach's
@@ -3369,12 +3376,16 @@ export async function ensureMapCloseSummaryDelivered(
  *   test-design edit step. ~35-55s wait.
  */
 type SeedTarget =
+  | "worries"
+  | "commitments"
   | "assumptions"
   | "immune_system"
   | "prioritize"
   | "test_design"
   | "results";
 const TEST_SEED_MARKERS: Record<string, SeedTarget> = {
+  "test worries": "worries",
+  "test commitments": "commitments",
   test: "assumptions",
   "test happy path": "assumptions",
   seed: "assumptions",
@@ -3458,14 +3469,26 @@ async function seedTestMap(
   await supabase.from("itc_behaviors").delete().eq("map_id", mapId);
   await supabase.from("itc_messages").delete().eq("map_id", mapId);
 
-  // Reset map flags + goal + stage.
+  // Reset map flags + goal + stage. Initial stage is chosen based on
+  // the target so the subsequent advanceToStage calls are always
+  // moving forward one column at a time and firing the right drafter
+  // on entry. For "worries" target we land at behaviors and then
+  // advance to worries. For "commitments" we land at worries and
+  // advance to commitments. For every downstream target we land at
+  // commitments (pre-existing behavior) and advance to assumptions.
   const seedGoal =
     "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+  const initialStage: ItcStage =
+    target === "worries"
+      ? "behaviors"
+      : target === "commitments"
+        ? "worries"
+        : "commitments";
   const { error: mapErr } = await supabase
     .from("itc_maps")
     .update({
       improvement_goal: seedGoal,
-      current_stage: "commitments",
+      current_stage: initialStage,
       reveal_delivered: false,
       walkthrough_delivered: false,
     })
@@ -3496,6 +3519,21 @@ async function seedTestMap(
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order);
 
+  // Early-exit for `test worries`: advance behaviors → worries so the
+  // WORRY DRAFTER fires live against the current prompt/schema. Skips
+  // the worry + commitment fixture entirely — the whole point of this
+  // marker is to see what the current worry drafter actually produces.
+  if (target === "worries") {
+    const advW = new FormData();
+    advW.set("map_id", mapId);
+    advW.set("to", "worries");
+    const advWRes = await advanceToStage(advW);
+    if (!advWRes.ok) {
+      return { ok: false, reason: `advance to worries: ${advWRes.reason ?? "unknown"}` };
+    }
+    return { ok: true };
+  }
+
   // Worries — depth 3, attempts 1 (bypasses excavation-loop gate).
   // Fixture text is hand-authored to match what the current worry
   // drafter would produce: under 20 words, "I worry that if I..." stem,
@@ -3521,6 +3559,21 @@ async function seedTestMap(
     .select("id, behavior_id");
   if (wErr || !ws) return { ok: false, reason: `seed worries: ${wErr?.message}` };
   const typedWs = ws as Array<{ id: string; behavior_id: string }>;
+
+  // Early-exit for `test commitments`: advance worries → commitments so
+  // the COMMITMENT DRAFTER fires live against the current prompt/schema.
+  // Skips the commitment fixture entirely — the whole point of this
+  // marker is to see what the current commitment drafter produces.
+  if (target === "commitments") {
+    const advC = new FormData();
+    advC.set("map_id", mapId);
+    advC.set("to", "commitments");
+    const advCRes = await advanceToStage(advC);
+    if (!advCRes.ok) {
+      return { ok: false, reason: `advance to commitments: ${advCRes.reason ?? "unknown"}` };
+    }
+    return { ok: true };
+  }
 
   // Commitments — active-mechanism form, depth 3, attempts 1.
   // Fixture text is hand-authored to match the current commitment
