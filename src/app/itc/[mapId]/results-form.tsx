@@ -132,6 +132,7 @@ export function ResultsForm({
         onChange={setWhatIDid}
         rows={3}
         disabled={pending}
+        placeholder="e.g. Tuesday when she brought up the credit card, I stayed in the room instead of leaving. Let her finish."
       />
 
       <Field
@@ -141,6 +142,7 @@ export function ResultsForm({
         onChange={setDataCollected}
         rows={4}
         disabled={pending}
+        placeholder={`Observable: what they said, what they did, how it ended — the videotape version.\n\nFelt: what came up in you while it was happening.`}
       />
 
       <Field
@@ -150,6 +152,7 @@ export function ResultsForm({
         onChange={setWhatItSays}
         rows={3}
         disabled={pending}
+        placeholder="Which parts of the assumption's prediction actually held? Which didn't? Be specific about what you saw."
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -252,6 +255,7 @@ function Field({
   onChange,
   rows,
   disabled,
+  placeholder,
 }: {
   label: string;
   hint: string;
@@ -259,6 +263,7 @@ function Field({
   onChange: (v: string) => void;
   rows: number;
   disabled: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block space-y-1">
@@ -270,7 +275,8 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         minRows={rows}
         disabled={disabled}
-        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed"
+        placeholder={placeholder}
+        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic"
       />
       <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
         {hint}

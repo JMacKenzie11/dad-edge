@@ -551,10 +551,12 @@ export function MapCanvas({
         map.current_stage === "review" ||
         map.current_stage === "immune_system" ||
         map.current_stage === "prioritize" ||
-        map.current_stage === "test_design" ||
         map.current_stage === "test_running") ? (
         <ContinueBar mapId={map.id} gate={advanceGate} />
       ) : null}
+      {/* test_design uses the TestDesignForm's own "Run the Test" button
+          — save + SMART review + advance-if-ready are one action. The
+          generic ContinueBar hides for that stage. */}
       {/* results stage uses the ResultsForm's own advance buttons
           (routed via next_step: design another test / pick a
           different assumption / close the map). Generic ContinueBar
@@ -613,7 +615,7 @@ function Section({
         "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-5 " +
         (active
           ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
-          : "border-[color:var(--color-border)]")
+          : "border-[color:var(--color-primary)]/25")
       }
     >
       <h3

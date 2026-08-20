@@ -47,16 +47,16 @@ Naming them is the first move; testing them is what breaks the immunity.`,
     `Now the walkthrough. I'm going to show you how the columns interlock, how the behaviors, the worries, the hidden commitments, and the Big Assumptions all protect the same thing.`,
   prioritize: () =>
     `You've mapped the whole immune system. Now: which Big Assumption do you want to test first? The best one to start on is usually the one that, if it turned out not to hold, would loosen the most of the system.`,
-  test_design: () =>
+    test_design: () =>
     `Design a small, safe experiment for the assumption you picked. The point isn't to succeed or fail — it's to gather real information about whether the belief actually holds.
 
-I've drafted a starting version below with all four fields filled in. Read it, change what needs changing, and save when it's the test you actually want to run. When you save, I'll review it against the criteria a good test has to clear.`,
+I've drafted a starting version below with all four fields filled in. Read it, change what needs changing. When you hit Run the Test I'll check it against the criteria a good test has to clear — if it's ready, you'll advance to running it; if not, I'll flag the one thing to tighten.`,
   test_running: () =>
     `The test is designed. Go run it in real life.
 
 You're not trying to succeed or fail — you're gathering information about whether the belief actually holds. Just do the move, notice what happens, and come back when you have observations.
 
-No rush. When you're ready, hit Continue to Results.`,
+No rush. When you're ready, hit Debrief the Test.`,
     results: () =>
     `You ran the test. Now write down what happened.
 

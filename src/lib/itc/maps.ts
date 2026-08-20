@@ -949,8 +949,8 @@ export async function markTestRun(testId: string): Promise<void> {
 }
 
 /**
- * Update an existing test's fields. Used by saveTest when the coachee
- * edits a pre-drafted test in place before saving. Bumps status back
+ * Update an existing test's fields. Used by runTest when the coachee
+ * edits a pre-drafted test in place before running. Bumps status back
  * to "designed" so a coachee who re-edits after running (rare edge)
  * can't skip the fresh coach review.
  */

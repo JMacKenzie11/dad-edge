@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { SmartReview } from "@/lib/itc/coach";
 import type {
   ItcAssumption,
   ItcMessage,
@@ -10,7 +11,7 @@ import type {
 import {
   abandonInFlightTest,
   regenerateTestDraft,
-  saveTest,
+  runTest,
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
@@ -53,6 +54,11 @@ export function TestDesignForm({
   const [pending, startTransition] = useTransition();
   const [regenPending, startRegen] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Latest SMART review from Run the Test. Held in client state only —
+  // not persisted server-side. Populated on needs_work; on ready we've
+  // already advanced (form unmounts) so it never displays. Cleared on
+  // regenerate/type-change since the form is now a fresh draft.
+  const [latestReview, setLatestReview] = useState<SmartReview | null>(null);
   const [testType, setTestType] = useState<ItcTestType>(
     test?.test_type ?? "behavioral",
   );
@@ -140,6 +146,7 @@ export function TestDesignForm({
     typeToSend: ItcTestType,
   ) {
     setError(null);
+    setLatestReview(null); // a new draft is a fresh test — old SMART verdict no longer applies
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("test_type", typeToSend);
@@ -165,7 +172,14 @@ export function TestDesignForm({
   // coachee doesn't hit an error dialog.
   const canGoSafer = testType !== "data_mining";
 
-  function save() {
+  /**
+   * Single-button flow: save this design + fire SMART review + if
+   * verdict is "ready" (or the review LLM failed), advance to
+   * test_running in the same round-trip. On "needs_work" we stay
+   * put — the review lands in the entry thread above the form and
+   * the coachee tightens what was flagged. See actions.ts runTest.
+   */
+  function runIt() {
     setError(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -178,8 +192,18 @@ export function TestDesignForm({
     fd.set("in_order_to_find_out", inOrderToFindOut.trim());
     fd.set("target_date", targetDate);
     startTransition(async () => {
-      const res = await saveTest(fd);
-      if (!res.ok) setError(res.reason ?? "Could not save test.");
+      const res = await runTest(fd);
+      if (!res.ok) {
+        setError(res.reason ?? "Could not save test.");
+        return;
+      }
+      // If advanced === true, the server revalidated the page and
+      // this form is about to unmount (map moved to test_running).
+      // If advanced === false, we stay on test_design and render
+      // the SMART card from res.review at the top of the form.
+      if (!res.advanced) {
+        setLatestReview(res.review);
+      }
     });
   }
 
@@ -213,6 +237,8 @@ export function TestDesignForm({
       {thread.length > 0 && test ? (
         <EntryThread messages={thread} chipTarget="assumption" />
       ) : null}
+
+      {latestReview ? <SmartReviewCard review={latestReview} /> : null}
 
       <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm">
         <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
@@ -341,11 +367,12 @@ export function TestDesignForm({
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           type="button"
-          onClick={save}
+          onClick={runIt}
           disabled={pending || regenPending}
-          className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          className="rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-50"
+          title="Save this design; the coach reviews it against SMART. If it clears, you'll advance to running the test. If not, you'll see what to tighten."
         >
-          {pending ? "Saving…" : "Save this test"}
+          {pending ? "…" : "Run the Test"}
         </button>
         <button
           type="button"
@@ -403,4 +430,90 @@ function defaultTargetDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 7);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The SMART verdict card, rendered when runTest returns needs_work.
+ * All layout / iconography lives here — the LLM never writes
+ * markdown or checkmarks. Each criterion gets a row with a real
+ * icon + label + coach's one-sentence note grounded in the test.
+ * needs_work gets an amber border + "One thing to tighten" callout;
+ * ready gets a green border (though in practice ready cases advance
+ * and this component never displays them — kept for completeness).
+ */
+function SmartReviewCard({ review }: { review: SmartReview }) {
+  const isReady = review.verdict === "ready";
+  const rows: Array<{ key: string; label: string; pass: boolean; note: string }> = [
+    { key: "safe", label: "Safe", pass: review.smart.safe.pass, note: review.smart.safe.note },
+    { key: "modest", label: "Modest", pass: review.smart.modest.pass, note: review.smart.modest.note },
+    {
+      key: "actionable",
+      label: "Actionable this week",
+      pass: review.smart.actionable.pass,
+      note: review.smart.actionable.note,
+    },
+    {
+      key: "researches",
+      label: "Researches the assumption",
+      pass: review.smart.researches.pass,
+      note: review.smart.researches.note,
+    },
+    {
+      key: "tests_belief",
+      label: "Tests the belief",
+      pass: review.smart.tests_belief.pass,
+      note: review.smart.tests_belief.note,
+    },
+  ];
+  const borderClass = isReady
+    ? "border-emerald-500/60 bg-emerald-500/[0.06]"
+    : "border-amber-500/60 bg-amber-500/[0.06]";
+  const badgeClass = isReady
+    ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"
+    : "bg-amber-500/20 text-amber-100 border border-amber-500/40";
+  return (
+    <div className={`rounded-md border-2 ${borderClass} p-4 space-y-3`}>
+      <div className="flex items-center justify-between">
+        <span
+          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest ${badgeClass}`}
+        >
+          {isReady ? "Ready to run" : "Not ready yet"}
+        </span>
+        <span className="text-[11px] uppercase tracking-widest text-[color:var(--color-text-muted)]">
+          Coach review
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {rows.map((row) => (
+          <li key={row.key} className="flex items-start gap-2.5 text-sm leading-relaxed">
+            <span
+              className={
+                "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold " +
+                (row.pass
+                  ? "bg-emerald-500/25 text-emerald-200"
+                  : "bg-red-500/30 text-red-100")
+              }
+              aria-hidden="true"
+            >
+              {row.pass ? "✓" : "✗"}
+            </span>
+            <span>
+              <span className="font-semibold text-white">{row.label}</span>
+              <span className="text-[color:var(--color-text-muted)]"> — {row.note}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {!isReady && review.one_thing_to_tighten ? (
+        <div className="rounded-md border border-amber-500/40 bg-black/30 px-3 py-2 text-sm">
+          <div className="text-[11px] uppercase tracking-widest text-amber-200/90 mb-1 font-semibold">
+            One thing to tighten
+          </div>
+          <div className="text-white/90 leading-relaxed">
+            {review.one_thing_to_tighten}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }

@@ -8,7 +8,6 @@ import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   draftTestForAssumption,
-  draftTestResultForCoachee,
   generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
@@ -20,6 +19,7 @@ import {
   scrubReply,
   type ReactionInput,
   type ReactionOutput,
+  type SmartReview,
 } from "@/lib/itc/coach";
 import {
   addAssumption,
@@ -1398,13 +1398,6 @@ export async function advanceToStage(
   if (target === "test_design") {
     await deliverTestDraftAfterAdvance(loaded.map.id, events);
   }
-  // On entry to results, pre-draft the four debrief field scaffolds
-  // so the coachee edits with their actual observations instead of
-  // starting from a blank form. Idempotent — skips if a result
-  // already exists on the active test.
-  if (target === "results") {
-    await deliverTestResultDraftAfterAdvance(loaded.map.id, events);
-  }
   // On entry to done, generate the Kegan-voice closing summary and
   // persist it as a stage_note. Idempotent — skip if a done stage_note
   // already exists.
@@ -2153,19 +2146,36 @@ const saveTestSchema = z.object({
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+export type RunTestResult =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      /** Structured SMART review from the coach, or null if the LLM
+       *  failed. On null we fail-open and advance — the review is
+       *  advisory, don't block on LLM outage. */
+      review: SmartReview | null;
+      /** Whether the map advanced to test_running. True on
+       *  review.verdict === "ready" OR review === null (LLM failure). */
+      advanced: boolean;
+    };
+
 /**
- * Save a test design (create if no test_id, update if test_id given).
- * After saving, fires the reviewTestDesign LLM helper — the coach's
- * review lands as an entry_thread message anchored to the test row.
+ * Save a test design AND, if the coach's SMART review says it's ready,
+ * advance to test_running in one action. The single button ("Run the
+ * Test") wires here.
  *
- * Gate for advance to test_running only requires the test to exist
- * (test_design gate case in computeAdvanceGate). The coach's review
- * is informational — coachee can edit + re-save or ignore and
- * advance. Kegan-authentic: coach guides, coachee decides.
+ * Flow:
+ *   1. Persist the test (create if no test_id, update if given).
+ *   2. Fire reviewTestDesign — returns structured SMART verdict.
+ *   3. If verdict === "ready" (or the LLM failed — fail-open), advance
+ *      to test_running.
+ *   4. If verdict === "needs_work", return the structured review so
+ *      the client renders the SMART card inline. Skip revalidate so
+ *      client state (the review card + any further edits) survives.
  */
-export async function saveTest(
+export async function runTest(
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<RunTestResult> {
   const parsed = saveTestSchema.safeParse({
     map_id: formData.get("map_id"),
     test_id: formData.get("test_id") || undefined,
@@ -2213,7 +2223,6 @@ export async function saveTest(
     };
   }
 
-  // Fire the coach review. Lands as an entry_thread on the test row.
   const assumptions = await listAssumptions(loaded.map.id);
   const assumption = assumptions.find((a) => a.id === row.assumption_id);
   const events = new TurnEventLog(loaded.map.id, 0);
@@ -2226,8 +2235,16 @@ export async function saveTest(
     },
     { stage: loaded.map.current_stage },
   );
+
+  // Fire the SMART review. Returned as structured data — the client
+  // renders the visual card. NOT persisted as an entry_thread message:
+  // the review is a per-attempt UX affordance, not durable map state.
+  // If the coachee closes the tab and comes back, they hit Run the
+  // Test again and get a fresh review of whatever the test looks like
+  // then.
+  let review: SmartReview | null = null;
   try {
-    const review = await reviewTestDesign({
+    review = await reviewTestDesign({
       goalText: loaded.map.improvement_goal ?? "",
       assumptionText: assumption?.text ?? "",
       test: {
@@ -2240,17 +2257,6 @@ export async function saveTest(
       },
     });
     if (review) {
-      await appendMessage(
-        loaded.map.id,
-        "assistant",
-        review.prose,
-        loaded.map.current_stage,
-        {
-          surface: "entry_thread",
-          entryRefTable: "itc_tests",
-          entryRefId: row.id,
-        },
-      );
       events.record(
         "coach_reaction_sent",
         {
@@ -2263,13 +2269,48 @@ export async function saveTest(
     }
   } catch (err) {
     console.warn(
-      "[itc saveTest] review failed: %s",
+      "[itc runTest] review failed: %s",
       err instanceof Error ? err.message : String(err),
     );
   }
+
+  // Advance to test_running if the SMART review passed, OR if the LLM
+  // failed (fail-open — don't block the coachee's workflow on an LLM
+  // outage). On "needs_work" we stay put; the client renders the SMART
+  // card from the returned review payload.
+  const shouldAdvance = !review || review.verdict === "ready";
+  let advanced = false;
+  if (shouldAdvance) {
+    try {
+      await advanceStage(loaded.map.id, "test_design", "test_running");
+      await appendMessage(
+        loaded.map.id,
+        "system",
+        `[coachee advanced map via Run the Test: test_design → test_running]`,
+        "test_running",
+      );
+      events.record(
+        "stage_advanced",
+        { from: "test_design", to: "test_running" },
+        { stage: "test_running" },
+      );
+      advanced = true;
+    } catch (err) {
+      console.warn(
+        "[itc runTest] advance failed: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
   await events.flush();
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
+  // Only revalidate when we advanced — the page needs to re-render
+  // with the new stage. On needs_work we skip revalidate so the
+  // client's local form state (any further edits + the returned
+  // SMART card) survives until the next Run the Test.
+  if (advanced) {
+    safeRevalidate(`/itc/${loaded.map.id}`);
+  }
+  return { ok: true, review, advanced };
 }
 
 const abandonTestSchema = z.object({
@@ -2325,109 +2366,6 @@ export async function abandonInFlightTest(
 // -------------------------------------------------------------------------
 // Test results (Checkpoint C-ε.3 + C-ε.4 routing)
 // -------------------------------------------------------------------------
-
-/**
- * Pre-draft the four debrief field scaffolds on advance to results.
- * Coachee sees the form pre-populated with bracketed prompts inline;
- * they edit with their actual observations and save. Idempotent —
- * skip if a result already exists on the active test.
- */
-async function deliverTestResultDraftAfterAdvance(
-  mapId: string,
-  events: TurnEventLog,
-): Promise<void> {
-  const [tests, results, assumptions] = await Promise.all([
-    listTests(mapId),
-    listTestResults(mapId),
-    listAssumptions(mapId),
-  ]);
-  const activeTest = tests
-    .slice()
-    .reverse()
-    .find((t) => t.status !== "abandoned");
-  if (!activeTest) return;
-  const existingResult = results.find((r) => r.test_id === activeTest.id);
-  if (existingResult) return;
-  const assumption = assumptions.find((a) => a.id === activeTest.assumption_id);
-  if (!assumption) return;
-
-  const draft = await draftTestResultForCoachee({
-    assumptionText: assumption.text,
-    test: {
-      assumptionSays: activeTest.assumption_says ?? "",
-      behaviorChange: activeTest.behavior_change ?? "",
-      dataToCollect: activeTest.data_to_collect ?? "",
-      inOrderToFindOut: activeTest.in_order_to_find_out ?? "",
-    },
-  });
-  if (!draft) {
-    events.record(
-      "error",
-      {
-        where: "deliverTestResultDraftAfterAdvance",
-        message: "LLM returned null; coachee will fill scaffold from scratch",
-      },
-      { stage: "results" },
-    );
-    return;
-  }
-
-  // Persist the scaffold as the initial result row. Coachee's Save
-  // triggers an update via saveTestResult (updateTestResult).
-  const row = await recordTestResult({
-    testId: activeTest.id,
-    ranOn: new Date().toISOString().slice(0, 10),
-    whatIDid: draft.whatIDid,
-    dataCollected: draft.dataCollected,
-    whatItSaysAboutAssumption: draft.whatItSaysAboutAssumption,
-    assumptionVerdict: draft.assumptionVerdict,
-    nextStep: draft.nextStep,
-  });
-  events.record(
-    "coach_reaction_sent",
-    {
-      kind: "test_result_draft",
-      test_id: activeTest.id,
-      result_id: row.id,
-    },
-    { stage: "results" },
-  );
-}
-
-export async function ensureTestResultDraftDelivered(
-  mapId: string,
-): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
-  try {
-    const map = await getMapById(mapId);
-    if (!map) return { ok: false, reason: "Map not found." };
-    if (map.current_stage !== "results") {
-      return { ok: true, delivered: false };
-    }
-    const tests = await listTests(mapId);
-    const results = await listTestResults(mapId);
-    const active = tests
-      .slice()
-      .reverse()
-      .find((t) => t.status !== "abandoned");
-    if (!active) return { ok: true, delivered: false };
-    if (results.some((r) => r.test_id === active.id)) {
-      return { ok: true, delivered: false };
-    }
-    const events = new TurnEventLog(mapId, 0);
-    await deliverTestResultDraftAfterAdvance(mapId, events);
-    await events.flush();
-    const afterResults = await listTestResults(mapId);
-    return {
-      ok: true,
-      delivered: afterResults.some((r) => r.test_id === active.id),
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not deliver.",
-    };
-  }
-}
 
 const saveTestResultSchema = z.object({
   map_id: z.string().uuid(),

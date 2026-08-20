@@ -1507,19 +1507,40 @@ export async function draftTestForAssumption(input: {
   }
 }
 
+/**
+ * Structured SMART review. LLM writes semantic content only — the
+ * pass/fail flags + one-sentence notes per criterion. The client
+ * renders the visual card (bullets, icons, colored borders). This
+ * matches the "server owns structure, LLM owns semantic content"
+ * pattern — the LLM never writes markdown or formatting characters.
+ */
+const SmartCriterionSchema = z.object({
+  pass: z.boolean(),
+  /** One short sentence grounded in the specific test — not a
+   *  generic definition of the criterion. Under ~140 chars. */
+  note: z.string().min(3).max(240),
+});
 const TestReviewSchema = z.object({
   verdict: z.enum(["ready", "needs_work"]),
-  prose: z.string().min(20).max(1200),
+  smart: z.object({
+    safe: SmartCriterionSchema,
+    modest: SmartCriterionSchema,
+    actionable: SmartCriterionSchema,
+    researches: SmartCriterionSchema,
+    tests_belief: SmartCriterionSchema,
+  }),
+  /** Present iff verdict === "needs_work". One sentence naming the
+   *  single specific edit to make, pointing at the failed criterion. */
+  one_thing_to_tighten: z.string().min(3).max(400).nullable(),
 });
+export type SmartReview = z.infer<typeof TestReviewSchema>;
 
 /**
  * Review a coachee-saved test against the SMART criteria + the
- * "might it re-true?" check. Fires on every save of the test (via
- * saveTest server action). Returns verdict + prose that renders as
- * a coach reaction thread on the test row. Coachee edits and re-saves
- * until verdict === "ready" (which enables the Continue-to-Test-
- * Running gate). Same excavation-loop shape as worries / commitments /
- * assumptions in earlier columns.
+ * "might it re-true?" check. Fires on every runTest action call.
+ * Returns a structured verdict + per-criterion pass/note; the client
+ * renders the visual card. Coachee edits and re-runs until verdict
+ * === "ready", which advances to test_running.
  */
 export async function reviewTestDesign(input: {
   goalText: string;
@@ -1532,7 +1553,7 @@ export async function reviewTestDesign(input: {
     inOrderToFindOut: string;
     targetDate: string;
   };
-}): Promise<{ verdict: "ready" | "needs_work"; prose: string } | null> {
+}): Promise<SmartReview | null> {
   const started = Date.now();
   try {
     const { TEST_DESIGN_STAGE } = await import(
@@ -1557,13 +1578,37 @@ export async function reviewTestDesign(input: {
         `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
         `  Target date: ${input.test.targetDate}`,
         ``,
-        `Return verdict + one-paragraph prose review.`,
+        `Return the structured SMART verdict per the schema. Each SMART criterion gets a pass/fail flag and one short sentence grounded in the SPECIFIC test above (not a generic definition). If verdict is "needs_work", one_thing_to_tighten names the single specific edit to make. If verdict is "ready", one_thing_to_tighten is null.`,
       ].join("\n"),
       maxOutputTokens: 1200,
     });
     return {
       verdict: object.verdict,
-      prose: scrubReply(object.prose),
+      smart: {
+        safe: {
+          pass: object.smart.safe.pass,
+          note: scrubReply(object.smart.safe.note),
+        },
+        modest: {
+          pass: object.smart.modest.pass,
+          note: scrubReply(object.smart.modest.note),
+        },
+        actionable: {
+          pass: object.smart.actionable.pass,
+          note: scrubReply(object.smart.actionable.note),
+        },
+        researches: {
+          pass: object.smart.researches.pass,
+          note: scrubReply(object.smart.researches.note),
+        },
+        tests_belief: {
+          pass: object.smart.tests_belief.pass,
+          note: scrubReply(object.smart.tests_belief.note),
+        },
+      },
+      one_thing_to_tighten: object.one_thing_to_tighten
+        ? scrubReply(object.one_thing_to_tighten)
+        : null,
     };
   } catch (err) {
     console.warn(
@@ -1580,85 +1625,13 @@ export async function reviewTestDesign(input: {
 }
 
 // -------------------------------------------------------------------------
-// draftTestResult + reviewTestResult — coach post-test debrief helpers
+// reviewTestResult — coach post-test debrief helper
 // -------------------------------------------------------------------------
-
-const TestResultDraftSchema = z.object({
-  /** Placeholder scaffold text for what the coachee did in the test.
-   *  Contains bracketed prompts inline that the coachee replaces
-   *  with their actual account. */
-  what_i_did: z.string().min(10).max(600),
-  data_collected: z.string().min(10).max(600),
-  what_it_says_about_assumption: z.string().min(10).max(600),
-  assumption_verdict: z.enum(["held", "partially_challenged", "challenged"]),
-  next_step: z.enum(["new_test", "new_assumption", "map_complete"]),
-});
-
-/**
- * Pre-draft the four debrief fields as scaffolds the coachee edits
- * with their actual observations. Fires once on advance to results
- * (idempotent — skip if a result already exists on the active test).
- * Since the coach doesn't know what actually happened, drafts are
- * lightweight — placeholders + prompts inline, defaults for the
- * two operational fields (partially_challenged / new_test).
- */
-export async function draftTestResultForCoachee(input: {
-  assumptionText: string;
-  test: {
-    assumptionSays: string;
-    behaviorChange: string;
-    dataToCollect: string;
-    inOrderToFindOut: string;
-  };
-}): Promise<{
-  whatIDid: string;
-  dataCollected: string;
-  whatItSaysAboutAssumption: string;
-  assumptionVerdict: "held" | "partially_challenged" | "challenged";
-  nextStep: "new_test" | "new_assumption" | "map_complete";
-} | null> {
-  const started = Date.now();
-  try {
-    const { RESULTS_STAGE } = await import("./prompts/stages/results");
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: TestResultDraftSchema,
-      system: RESULTS_STAGE,
-      prompt: [
-        `MODE: draft (pre-draft the four debrief fields as scaffolds).`,
-        ``,
-        `Big Assumption being tested: ${input.assumptionText}`,
-        ``,
-        `The test that was designed:`,
-        `  My Big Assumption Says: ${input.test.assumptionSays}`,
-        `  So I Will: ${input.test.behaviorChange}`,
-        `  And Collect the Following Data: ${input.test.dataToCollect}`,
-        `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
-        ``,
-        `Return the scaffold. Keep bracketed prompts inline where the coachee will fill in their actual observations.`,
-      ].join("\n"),
-      maxOutputTokens: 1000,
-    });
-    return {
-      whatIDid: scrubReply(object.what_i_did),
-      dataCollected: scrubReply(object.data_collected),
-      whatItSaysAboutAssumption: scrubReply(object.what_it_says_about_assumption),
-      assumptionVerdict: object.assumption_verdict,
-      nextStep: object.next_step,
-    };
-  } catch (err) {
-    console.warn(
-      "[itc coach] draftTestResultForCoachee failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
-  } finally {
-    console.warn(
-      "[itc timing] draft kind=test_result ms=%d",
-      Date.now() - started,
-    );
-  }
-}
+//
+// Debrief scaffolds live in the client form as native HTML placeholders
+// (results-form.tsx). No LLM pre-draft — the scaffolds don't depend on
+// map content, and using placeholder= gives the coachee the correct
+// visual affordance (gray, disappears on focus).
 
 const TestResultReviewSchema = z.object({
   prose: z.string().min(30).max(1500),

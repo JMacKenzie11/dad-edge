@@ -18,7 +18,6 @@ import {
   ensureMapCloseSummaryDelivered,
   ensurePrioritizeRecommendationDelivered,
   ensureTestDraftDelivered,
-  ensureTestResultDraftDelivered,
   ensureWalkthroughDelivered,
   getAdvanceGate,
 } from "../actions";
@@ -68,11 +67,6 @@ export default async function ItcMapPage({
   // pre-drafted test before render.
   if (map.current_stage === "test_design") {
     await ensureTestDraftDelivered(map.id);
-  }
-  // Same recovery pattern for results — if coachee lands there with
-  // a run test and no result scaffold yet, pre-draft one before render.
-  if (map.current_stage === "results") {
-    await ensureTestResultDraftDelivered(map.id);
   }
   // Same recovery pattern for done — if coachee lands there without
   // a closing summary, deliver it before render.
