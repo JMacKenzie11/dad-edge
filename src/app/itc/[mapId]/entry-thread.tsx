@@ -106,8 +106,11 @@ function ThreadMessage({
   );
   return (
     <div className="space-y-2">
-      <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
-        {prose}
+      <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-3 py-2 text-sm leading-relaxed">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-primary)]/90 mb-1">
+          Coach
+        </div>
+        <div className="whitespace-pre-wrap">{prose}</div>
       </div>
       {hasFillChips ? (
         <div className="flex flex-wrap gap-2">

@@ -640,7 +640,10 @@ function Section({
         {title}
       </h3>
       {active && liveIntro ? (
-        <div className="mb-4 rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
+        // Stage intro = static orientation copy (not the coach
+        // speaking). Muted treatment distinguishes it from coach
+        // reactions below, which keep the blue accent + COACH label.
+        <div className="mb-4 rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm italic text-[color:var(--color-text-muted)] leading-relaxed whitespace-pre-wrap">
           {liveIntro}
         </div>
       ) : null}
@@ -676,8 +679,11 @@ function StageNote({
     }
   }
   return (
-    <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
-      {prose}
+    <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-4 py-3 text-base leading-relaxed">
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-primary)]/90 mb-1.5">
+        Coach
+      </div>
+      <div className="whitespace-pre-wrap">{prose}</div>
       {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) && chipTarget ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {chips.refinement ? (

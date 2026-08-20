@@ -564,12 +564,17 @@ function SmartReviewCard({
       note: review.smart.counters_assumption.note,
     },
   ];
+  // Colors: needs_work uses --color-warning (brand orange #ff5f00).
+  // Ready stays emerald green — the brand's --color-success is #0075c9
+  // (same as primary blue), which would visually collide with the
+  // active-section blue treatment. Ready-as-green is an intentional
+  // deviation. Failed criterion icon uses --color-danger (brand red).
   const borderClass = isReady
     ? "border-emerald-500/60 bg-emerald-500/[0.06]"
-    : "border-amber-500/60 bg-amber-500/[0.06]";
+    : "border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/[0.06]";
   const badgeClass = isReady
     ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"
-    : "bg-amber-500/20 text-amber-100 border border-amber-500/40";
+    : "bg-[color:var(--color-warning)]/20 text-[color:var(--color-warning)] border border-[color:var(--color-warning)]/40";
   return (
     <div className={`rounded-md border-2 ${borderClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
@@ -590,7 +595,7 @@ function SmartReviewCard({
                 "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold " +
                 (row.pass
                   ? "bg-emerald-500/25 text-emerald-200"
-                  : "bg-red-500/30 text-red-100")
+                  : "bg-[color:var(--color-danger)]/30 text-[color:var(--color-danger)]")
               }
               aria-hidden="true"
             >
@@ -604,8 +609,8 @@ function SmartReviewCard({
         ))}
       </ul>
       {!isReady && review.one_thing_to_tighten ? (
-        <div className="rounded-md border border-amber-500/40 bg-black/30 px-3 py-2 text-sm">
-          <div className="text-[11px] uppercase tracking-widest text-amber-200/90 mb-1 font-semibold">
+        <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-black/30 px-3 py-2 text-sm">
+          <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-warning)] mb-1 font-semibold">
             One thing to tighten
           </div>
           <div className="text-white/90 leading-relaxed">
@@ -619,7 +624,7 @@ function SmartReviewCard({
             type="button"
             onClick={onRevise}
             disabled={revising}
-            className="rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+            className="rounded-md border border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/15 px-3 py-2 text-sm font-semibold text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/25 disabled:opacity-50"
             title="Let the coach rewrite the test to address the criterion that failed"
           >
             {revising ? "The coach is revising…" : "Have the coach revise this"}
