@@ -15,17 +15,47 @@ import { EntryThread } from "./entry-thread";
 
 /**
  * Results form — the coachee's post-test debrief. Kegan/Lahey four
- * field labels verbatim (My Big Assumption Says is context above the
- * form; three narrative fields to fill; two operational picks —
+ * field labels verbatim (Big Assumption you tested is context above
+ * the form; three narrative fields to fill; two operational picks —
  * verdict + next step). Save fires reviewTestResult LLM; coach's
  * Kegan-voice interpretation lands as an entry_thread on the result
- * row.
+ * row. Successful save also marks the linked tracker mission
+ * completed (server-side; see tracker-link.ts).
  *
- * After save + review, coachee clicks "Continue to what's next" which
- * routes based on the saved next_step (new_test → back to test_design,
- * new_assumption → back to prioritize with test history badges,
- * map_complete → done).
+ * Validation: per-field pre-flight before submit. Empty required
+ * fields highlight with a red border + inline hint. A generic error
+ * only surfaces if the server rejects for a reason the client
+ * couldn't predict.
  */
+
+/** Field IDs used as keys in the per-field error map. */
+type ResultsFieldKey = "what_i_did" | "data_collected" | "what_it_says";
+type FieldErrors = Partial<Record<ResultsFieldKey, string>>;
+
+/** Pure client-side validator. Mirrors the server-side zod schema in
+ *  actions.ts:saveTestResultSchema (min 3 chars per text field) so the
+ *  coachee gets specific per-field feedback instead of a generic
+ *  server-side rejection. */
+function validateResults(input: {
+  whatIDid: string;
+  dataCollected: string;
+  whatItSays: string;
+}): FieldErrors {
+  const errors: FieldErrors = {};
+  if (input.whatIDid.trim().length < 3) {
+    errors.what_i_did = "Say what you actually did — one specific move.";
+  }
+  if (input.dataCollected.trim().length < 3) {
+    errors.data_collected =
+      "Write down what you saw: what people said and did, what came up in you.";
+  }
+  if (input.whatItSays.trim().length < 3) {
+    errors.what_it_says =
+      "One line on what the observations say about the assumption.";
+  }
+  return errors;
+}
+
 export function ResultsForm({
   mapId,
   test,
@@ -47,6 +77,7 @@ export function ResultsForm({
   const [pending, startTransition] = useTransition();
   const [advancing, startAdvance] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saved, setSaved] = useState<boolean>(Boolean(result?.what_i_did));
 
   const [ranOn, setRanOn] = useState(
@@ -68,6 +99,20 @@ export function ResultsForm({
 
   function save() {
     setError(null);
+    const errors = validateResults({ whatIDid, dataCollected, whatItSays });
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      // Also set a summary so screen readers pick it up via the
+      // aria-live region below.
+      const count = Object.keys(errors).length;
+      setError(
+        count === 1
+          ? "One field needs your attention below."
+          : `${count} fields need your attention below.`,
+      );
+      return;
+    }
+    setFieldErrors({});
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("test_id", test.id);
@@ -95,6 +140,19 @@ export function ResultsForm({
       const res = await advanceAfterResults(fd);
       if (!res.ok) setError(res.reason ?? "Could not advance.");
     });
+  }
+
+  /** Clear a specific field's error the moment the user starts
+   *  typing in it — so the red state doesn't linger after they've
+   *  started fixing the problem. */
+  function clearFieldError(key: ResultsFieldKey) {
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   }
 
   return (
@@ -129,30 +187,42 @@ export function ResultsForm({
         label="So in Order to Test it I Changed my Behavior This Way"
         hint="What you actually did. The concrete move. If plan and reality diverged, say so."
         value={whatIDid}
-        onChange={setWhatIDid}
+        onChange={(v) => {
+          setWhatIDid(v);
+          clearFieldError("what_i_did");
+        }}
         rows={3}
         disabled={pending}
         placeholder="e.g. Tuesday when she brought up the credit card, I stayed in the room instead of leaving. Let her finish."
+        error={fieldErrors.what_i_did}
       />
 
       <Field
         label="This is What I Observed Happening"
         hint="Observable: what people said and did. Felt: what came up in you. Not interpretations."
         value={dataCollected}
-        onChange={setDataCollected}
+        onChange={(v) => {
+          setDataCollected(v);
+          clearFieldError("data_collected");
+        }}
         rows={4}
         disabled={pending}
         placeholder={`Observable: what they said, what they did, how it ended. The videotape version.\n\nFelt: what came up in you while it was happening.`}
+        error={fieldErrors.data_collected}
       />
 
       <Field
         label="And This is What it Tells me About my Big Assumption"
         hint="Which aspects of the assumption held? Which didn't? Be specific."
         value={whatItSays}
-        onChange={setWhatItSays}
+        onChange={(v) => {
+          setWhatItSays(v);
+          clearFieldError("what_it_says");
+        }}
         rows={3}
         disabled={pending}
         placeholder="Which parts of the assumption's prediction actually held? Which didn't? Be specific about what you saw."
+        error={fieldErrors.what_it_says}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -223,7 +293,13 @@ export function ResultsForm({
       </div>
 
       {error ? (
-        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-sm text-[color:var(--color-danger)]"
+        >
+          {error}
+        </p>
       ) : null}
     </div>
   );
@@ -259,6 +335,7 @@ function Field({
   rows,
   disabled,
   placeholder,
+  error,
 }: {
   label: string;
   hint: string;
@@ -267,7 +344,12 @@ function Field({
   rows: number;
   disabled: boolean;
   placeholder?: string;
+  /** Per-field validation error. When present, the textarea border
+   *  turns red and the hint text is replaced with the error message
+   *  in danger color. */
+  error?: string;
 }) {
+  const invalid = Boolean(error);
   return (
     <label className="block space-y-1">
       <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
@@ -279,11 +361,23 @@ function Field({
         minRows={rows}
         disabled={disabled}
         placeholder={placeholder}
-        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic"
+        aria-invalid={invalid ? "true" : undefined}
+        className={
+          "w-full rounded-md bg-black/30 px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic border " +
+          (invalid
+            ? "border-[color:var(--color-danger)]"
+            : "border-[color:var(--color-border)]")
+        }
       />
-      <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
-        {hint}
-      </span>
+      {invalid ? (
+        <span className="block text-[11px] text-[color:var(--color-danger)]">
+          {error}
+        </span>
+      ) : (
+        <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
+          {hint}
+        </span>
+      )}
     </label>
   );
 }
