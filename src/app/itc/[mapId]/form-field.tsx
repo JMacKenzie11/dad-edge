@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AutoTextarea } from "./auto-textarea";
 
 /**
@@ -64,6 +65,47 @@ export function FormField({
         </span>
       )}
     </label>
+  );
+}
+
+/**
+ * Two-phase saving indicator. The row-based save actions block on
+ * (a) the DB write and (b) an inline coach reaction LLM call. A
+ * fast typist reads "Saving..." for 3-5 seconds after a one-line
+ * entry and it feels wrong — the write took milliseconds.
+ *
+ * This component shows "Saving..." for the first ~700ms of pending
+ * state, then swaps to "Saved · coach is reading..." — honest about
+ * what the app is actually doing. The threshold is a heuristic
+ * (the actual DB write completion isn't observable client-side)
+ * but it's close enough that the perceived-latency story matches
+ * reality.
+ *
+ * When pending resets to false, the label clears with the pending
+ * state.
+ */
+export function SavingIndicator({
+  pending,
+  className = "text-xs text-[color:var(--color-text-muted)]",
+}: {
+  pending: boolean;
+  className?: string;
+}) {
+  const [phase, setPhase] = useState<"saving" | "reading">("saving");
+  useEffect(() => {
+    if (!pending) {
+      setPhase("saving");
+      return;
+    }
+    setPhase("saving");
+    const t = setTimeout(() => setPhase("reading"), 700);
+    return () => clearTimeout(t);
+  }, [pending]);
+  if (!pending) return null;
+  return (
+    <p className={className}>
+      {phase === "saving" ? "Saving…" : "Saved · coach is reading…"}
+    </p>
   );
 }
 

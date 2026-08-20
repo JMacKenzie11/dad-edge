@@ -15,6 +15,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { SavingIndicator } from "./form-field";
 import { useConfirm } from "./use-confirm";
 
 const FRESH_ROW_MS = 15_000;
@@ -562,9 +563,9 @@ function AssumptionItem({
         </button>
       </div>
       {pending ? (
-        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
-          Saving…
-        </p>
+        <div className="pl-6 mt-1">
+          <SavingIndicator pending={pending} />
+        </div>
       ) : focused ? (
         <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Enter to save · Esc to cancel

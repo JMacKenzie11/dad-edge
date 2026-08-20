@@ -365,7 +365,7 @@ export async function deleteBehavior(
   }
   if ((worries.data ?? []).length > 0) {
     throw new Error(
-      `deleteBehavior: behavior has a paired worry — remove via replace_behavior instead, or return to worries stage first.`,
+      "You wrote a worry paired to this behavior. Clear the worry first, then you can remove the behavior.",
     );
   }
   const { error } = await supabase

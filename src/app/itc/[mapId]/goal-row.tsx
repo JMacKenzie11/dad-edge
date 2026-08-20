@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { GOAL_STEM } from "@/lib/itc/stage";
 import { requestSuggestions, saveGoal } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
+import { SavingIndicator } from "./form-field";
 
 /**
  * Column 1 row — inline-editable at every stage. Goal text is a
@@ -131,9 +132,10 @@ export function GoalRow({
       />
       <div className="flex flex-wrap items-center gap-2">
         {pending ? (
-          <span className="text-sm text-[color:var(--color-text-muted)]">
-            Saving…
-          </span>
+          <SavingIndicator
+            pending={pending}
+            className="text-sm text-[color:var(--color-text-muted)]"
+          />
         ) : focused ? (
           <span className="text-sm text-[color:var(--color-text-muted)]">
             Enter to save · Esc to cancel

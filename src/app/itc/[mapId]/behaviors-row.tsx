@@ -10,6 +10,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { SavingIndicator } from "./form-field";
 import { useConfirm } from "./use-confirm";
 
 const FRESH_ROW_MS = 15_000;
@@ -30,12 +31,18 @@ const MAX_BEHAVIORS = 5;
 export function BehaviorsRow({
   mapId,
   behaviors,
+  behaviorIdsWithWorries,
   nowMs,
   threads,
   isLocked,
 }: {
   mapId: string;
   behaviors: ItcBehavior[];
+  /** Set of behavior ids that have a worry attached (Column 3).
+   *  Passed from the parent so BehaviorItem can disable Remove with
+   *  a coaching-voice tooltip before the coachee tries it and hits
+   *  a server-side rejection. */
+  behaviorIdsWithWorries: Set<string>;
   nowMs: number;
   /** Per-behavior coach reaction threads. Non-empty only when
    *  the behaviors stage is currently active. Rendered above
@@ -69,6 +76,7 @@ export function BehaviorsRow({
               mapId={mapId}
               behavior={b}
               index={i + 1}
+              hasWorry={behaviorIdsWithWorries.has(b.id)}
               fresh={isFresh(b.created_at, nowMs)}
               thread={threads.get(b.id) ?? []}
             />
@@ -243,12 +251,18 @@ function BehaviorItem({
   mapId,
   behavior,
   index,
+  hasWorry,
   fresh,
   thread,
 }: {
   mapId: string;
   behavior: ItcBehavior;
   index: number;
+  /** True if this behavior has a worry attached (Column 3). When
+   *  true, Remove is disabled with a tooltip explaining the
+   *  constraint — better UX than letting the coachee click and hit
+   *  a raw server-side rejection. */
+  hasWorry: boolean;
   fresh: boolean;
   thread: ItcMessage[];
 }) {
@@ -386,17 +400,21 @@ function BehaviorItem({
         <button
           type="button"
           onClick={submitRemove}
-          disabled={pending}
-          title="Remove behavior"
-          className="mt-1 shrink-0 rounded px-2 py-1 text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+          disabled={pending || hasWorry}
+          title={
+            hasWorry
+              ? "You wrote a worry paired to this behavior. Clear the worry first, then you can remove the behavior."
+              : "Remove behavior"
+          }
+          className="mt-1 shrink-0 rounded px-2 py-1 text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-[color:var(--color-text-muted)]"
         >
           Remove
         </button>
       </div>
       {pending ? (
-        <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
-          Saving…
-        </p>
+        <div className="pl-6 mt-1">
+          <SavingIndicator pending={pending} />
+        </div>
       ) : focused ? (
         <p className="pl-6 text-xs text-[color:var(--color-text-muted)] mt-1">
           Enter to save · Esc to cancel

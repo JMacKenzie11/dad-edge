@@ -290,6 +290,9 @@ export function MapCanvas({
           <BehaviorsRow
             mapId={map.id}
             behaviors={behaviors}
+            behaviorIdsWithWorries={
+              new Set(worries.map((w) => w.behavior_id))
+            }
             nowMs={renderedAt}
             threads={behaviorThreads}
             isLocked={isLocked("behaviors")}

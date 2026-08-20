@@ -5,6 +5,7 @@ import type { ItcBehavior, ItcMessage, ItcWorry } from "@/lib/itc/maps";
 import { saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { SavingIndicator } from "./form-field";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -214,9 +215,9 @@ function WorryItem({
         />
       </div>
       {pending ? (
-        <p className="text-xs text-[color:var(--color-text-muted)] pl-6 mt-1">
-          Saving…
-        </p>
+        <div className="pl-6 mt-1">
+          <SavingIndicator pending={pending} />
+        </div>
       ) : focused ? (
         <p className="text-xs text-[color:var(--color-text-muted)] pl-6 mt-1">
           Enter to save · Esc to cancel
