@@ -1380,20 +1380,22 @@ const TestDraftSchema = z.object({
   ]),
   /** Verbatim quote from the assumption's text, sharpened with the
    *  specific prediction the assumption makes about what happens if
-   *  the counter-move runs. */
-  assumption_says: z.string().min(10).max(400),
+   *  the counter-move runs. Max aligned with saveTestSchema (1000)
+   *  so the coach's revise path never fails schema validation on a
+   *  slightly long input the user was allowed to save. */
+  assumption_says: z.string().min(10).max(1000),
   /** The behavior change — one specific move in one specific moment.
    *  Modest, actionable within a week, SAFE, and a real move against
    *  what the assumption dictates. */
-  behavior_change: z.string().min(10).max(400),
+  behavior_change: z.string().min(10).max(1000),
   /** Two kinds: observable data (what would show up on a videotape)
    *  and experiential data (how the coachee felt). Not interpretive
    *  data that requires reading anyone's mind. */
-  data_to_collect: z.string().min(10).max(400),
+  data_to_collect: z.string().min(10).max(1000),
   /** What the coachee hopes to LEARN. Names a specific disconfirmation
    *  condition — what observation would tell them the assumption
    *  doesn't hold. */
-  in_order_to_find_out: z.string().min(10).max(400),
+  in_order_to_find_out: z.string().min(10).max(1000),
   /** ISO YYYY-MM-DD, in the future, within about a week. */
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -1634,6 +1636,17 @@ export async function reviewTestDesign(input: {
  * a wrong-type problem — in which case, keep it anyway (type changes
  * are the user's call via the dropdown).
  */
+export type ReviseTestResult =
+  | {
+      testType: TestType;
+      assumptionSays: string;
+      behaviorChange: string;
+      dataToCollect: string;
+      inOrderToFindOut: string;
+      targetDate: string;
+    }
+  | { error: string };
+
 export async function reviseTestFromReview(input: {
   goalText: string;
   assumptionText: string;
@@ -1648,14 +1661,7 @@ export async function reviseTestFromReview(input: {
     targetDate: string;
   };
   review: SmartReview;
-}): Promise<{
-  testType: TestType;
-  assumptionSays: string;
-  behaviorChange: string;
-  dataToCollect: string;
-  inOrderToFindOut: string;
-  targetDate: string;
-} | null> {
+}): Promise<ReviseTestResult> {
   const started = Date.now();
   try {
     const commitmentsBlock = input.underwrittenCommitments
@@ -1724,11 +1730,12 @@ export async function reviseTestFromReview(input: {
       targetDate: object.target_date,
     };
   } catch (err) {
-    console.warn(
-      "[itc coach] reviseTestFromReview failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[itc coach] reviseTestFromReview failed: %s", message);
+    // Surface the underlying error to the client so we can debug
+    // schema violations, timeouts, etc. from the failure toast
+    // instead of a generic "couldn't produce" black box.
+    return { error: message };
   } finally {
     console.warn(
       "[itc timing] revise kind=test ms=%d",

@@ -2242,8 +2242,11 @@ export async function reviseTestFromCoach(
     },
     review,
   });
-  if (!revised) {
-    return { ok: false, reason: "Coach couldn't produce a revision." };
+  if ("error" in revised) {
+    return {
+      ok: false,
+      reason: `Coach couldn't produce a revision: ${revised.error}`,
+    };
   }
   return { ok: true, draft: revised };
 }
