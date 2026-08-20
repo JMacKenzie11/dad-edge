@@ -49,6 +49,8 @@ import {
   clearSelectedAssumption,
   listWorries,
   markTestAbandoned,
+  clearAssumptionDraftsForMap,
+  clearCommitmentDraftsForMap,
   deleteStageNoteMessages,
   markWalkthroughDelivered,
   markWalkthroughNotDelivered,
@@ -308,17 +310,18 @@ async function fireCoachReaction(
 
 /**
  * Store a coach reaction as an assistant message. Refinement +
- * suggestions land in the message content as an inline JSON footer
- * the client parses out. Format:
+ * suggestions + suggested_pillar land in the message content as an
+ * inline JSON footer the client parses out. Format:
  *
  *   <prose>
  *   ```coach-chips
- *   {"refinement":"...","suggestions":["..","..",".."]}
+ *   {"refinement":"...","suggestions":["..","..",".."],"suggested_pillar":"B"}
  *   ```
  *
  * The chat renderer splits on the fenced block and renders the prose
- * as text + chips as tap-to-fill buttons. Falls back cleanly when
- * the footer is absent.
+ * as text + chips as tap-to-fill buttons + a distinct "Switch to
+ * [Pillar]" action button when suggested_pillar is present. Falls
+ * back cleanly when the footer is absent.
  */
 async function persistReaction(
   mapId: string,
@@ -328,10 +331,15 @@ async function persistReaction(
   anchor: { table: string; id: string } | null,
 ): Promise<string> {
   const parts: string[] = [reaction.reply];
-  if (reaction.refinement || (reaction.suggestions && reaction.suggestions.length > 0)) {
+  const hasChips =
+    reaction.refinement ||
+    (reaction.suggestions && reaction.suggestions.length > 0) ||
+    reaction.suggested_pillar;
+  if (hasChips) {
     const chipPayload = {
       refinement: reaction.refinement,
       suggestions: reaction.suggestions,
+      suggested_pillar: reaction.suggested_pillar,
     };
     parts.push(
       "```coach-chips",
@@ -393,6 +401,79 @@ export async function startMap(formData: FormData): Promise<void> {
 }
 
 const resetMapSchema = z.object({ map_id: z.string().uuid() });
+
+const switchMapPillarSchema = z.object({
+  map_id: z.string().uuid(),
+  pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "N"]),
+});
+
+/**
+ * Swap the current map's pillar in place. Triggered from the coach's
+ * pillar-mismatch reaction when it populates suggested_pillar and the
+ * client renders the "Switch to [Pillar]" action button.
+ *
+ * All child rows (behaviors, worries, commitments, assumptions, tests,
+ * messages) keep their FKs to this map — nothing else changes. The
+ * coachee still needs to reword the goal to fit the new pillar (the
+ * coach will react to the next save).
+ *
+ * Conflict guard: if the coachee already has an in-progress map on
+ * the target pillar, block with a friendly reason. Multiple in-
+ * progress maps per (participant, pillar) would confuse the /itc
+ * landing page's "resume this pillar's map" logic.
+ */
+export async function switchMapPillar(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = switchMapPillarSchema.safeParse({
+    map_id: formData.get("map_id"),
+    pillar_code: formData.get("pillar_code"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  if (loaded.map.pillar_code === parsed.data.pillar_code) {
+    return { ok: true }; // no-op
+  }
+  const target = PILLAR_BY_CODE[parsed.data.pillar_code as PillarCode];
+  // Conflict check.
+  const allMaps = await listMapsForParticipant(loaded.participant.id);
+  const conflict = allMaps.find(
+    (m) =>
+      m.id !== loaded.map.id &&
+      m.status === "in_progress" &&
+      m.pillar_code === parsed.data.pillar_code,
+  );
+  if (conflict) {
+    return {
+      ok: false,
+      reason: `You already have a ${target.label} map in progress. Finish or clear that one first, or reword this goal to fit ${PILLAR_BY_CODE[loaded.map.pillar_code].label}.`,
+    };
+  }
+  try {
+    const supabase = createSupabaseServiceClient();
+    const { error } = await supabase
+      .from("itc_maps")
+      .update({ pillar_code: parsed.data.pillar_code })
+      .eq("id", loaded.map.id);
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not switch pillar.",
+    };
+  }
+  // System message so the coach's next turn sees the switch in
+  // context and reacts appropriately to the newly-mismatched goal.
+  await appendMessage(
+    loaded.map.id,
+    "system",
+    `[coachee switched map pillar: ${loaded.map.pillar_code} → ${parsed.data.pillar_code}. Goal still needs to be reworded to fit the new pillar.]`,
+    loaded.map.current_stage,
+  );
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
 
 export async function resetMap(formData: FormData): Promise<void> {
   const participant = await requireItcParticipant();
@@ -1550,6 +1631,112 @@ async function draftAssumptionsAfterAdvance(
     },
     { stage: "assumptions" },
   );
+}
+
+const regenerateDraftsSchema = z.object({
+  map_id: z.string().uuid(),
+});
+
+/**
+ * Client-triggered regenerate for the coach's Column 4 commitment
+ * drafts. Wipes every draft on worries that don't have a real
+ * commitment yet, then re-fires the drafter against the current
+ * worry text. Real commitments (already accepted) are untouched.
+ *
+ * Why this exists: coachee lands on Column 4, sees the drafts,
+ * goes back to Column 3 and sharpens a worry. The corresponding
+ * draft is still based on the old worry text. This lets them
+ * regenerate without hand-editing.
+ */
+export async function regenerateCommitmentDrafts(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = regenerateDraftsSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await clearCommitmentDraftsForMap(loaded.map.id);
+    const events = new TurnEventLog(loaded.map.id, 0);
+    await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
+    await events.flush();
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not regenerate.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+/**
+ * Client-triggered regenerate for the coach's Column 5 assumption
+ * drafts. Wipes every itc_assumption_drafts row and re-fires the
+ * drafter against the current commitments. Real itc_assumptions
+ * (already accepted) are untouched — the drafter's idempotency
+ * guard on existingAssumptions.length > 0 needs to be bypassed for
+ * this call, so we clear first (drafts) and rely on the same
+ * guard: if the coachee has any accepted assumptions, we skip.
+ * That mirrors the auto-run semantics.
+ *
+ * Actually — for regenerate we WANT to write fresh drafts even if
+ * some accepted assumptions exist (the coachee might have accepted
+ * two and want fresh drafts for the remaining commitments). Bypass
+ * the guard via a direct re-implementation instead of calling the
+ * hook.
+ */
+export async function regenerateAssumptionDrafts(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = regenerateDraftsSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await clearAssumptionDraftsForMap(loaded.map.id);
+    // Re-run the drafter directly (not via draftAssumptionsAfterAdvance
+    // which would short-circuit on existing assumptions).
+    const [commitments, worries] = await Promise.all([
+      listCommitments(loaded.map.id),
+      listWorries(loaded.map.id),
+    ]);
+    if (commitments.length > 0) {
+      const worryById = new Map(worries.map((w) => [w.id, w]));
+      const orderedCommitments = commitments.map((c) => ({
+        id: c.id,
+        text: c.text,
+        worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
+      }));
+      const drafts = await draftAssumptionsFromCommitments({
+        goalText: loaded.map.improvement_goal ?? "",
+        commitments: orderedCommitments.map((c) => ({
+          text: c.text,
+          worry_text: c.worry_text,
+        })),
+      });
+      if (drafts.length > 0) {
+        const toPersist = drafts.map((d) => ({
+          text: d.text,
+          commitment_ids: d.commitment_indices
+            .map((n) => orderedCommitments[n - 1]?.id)
+            .filter((v): v is string => Boolean(v)),
+        }));
+        await saveAssumptionDrafts(loaded.map.id, toPersist);
+      }
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not regenerate.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
 }
 
 /**

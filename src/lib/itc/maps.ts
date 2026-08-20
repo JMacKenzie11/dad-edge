@@ -476,6 +476,58 @@ export async function updateWorryDepth(
  * saveCommitment (either by tapping "Use this draft" in the UI or
  * by typing their own version on top).
  */
+/**
+ * Clear coach_commitment_draft on every worry for a given map that
+ * doesn't have a real commitment yet. Used by regenerateCommitmentDrafts
+ * — coachee wants a fresh set of drafts against the current worry
+ * text after editing worries upstream. Worries with real commitments
+ * are untouched.
+ */
+export async function clearCommitmentDraftsForMap(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { data: commitments, error: cErr } = await supabase
+    .from("itc_commitments")
+    .select("worry_id")
+    .eq("map_id", mapId);
+  if (cErr) throw new Error(`clearCommitmentDraftsForMap: ${cErr.message}`);
+  const worriesWithCommitments = new Set(
+    (commitments ?? []).map((c) => c.worry_id as string),
+  );
+  // Update: null out coach_commitment_draft on worries without a
+  // real commitment. Skip worries that already have one — those
+  // drafts have already been acted on (or discarded) and shouldn't
+  // regenerate.
+  const { data: worries, error: wErr } = await supabase
+    .from("itc_worries")
+    .select("id")
+    .eq("map_id", mapId)
+    .not("coach_commitment_draft", "is", null);
+  if (wErr) throw new Error(`clearCommitmentDraftsForMap worries: ${wErr.message}`);
+  const clearIds = (worries ?? [])
+    .map((w) => w.id as string)
+    .filter((id) => !worriesWithCommitments.has(id));
+  if (clearIds.length === 0) return;
+  const { error: upErr } = await supabase
+    .from("itc_worries")
+    .update({ coach_commitment_draft: null })
+    .in("id", clearIds);
+  if (upErr) throw new Error(`clearCommitmentDraftsForMap update: ${upErr.message}`);
+}
+
+/**
+ * Delete every itc_assumption_drafts row for a map. Used by
+ * regenerateAssumptionDrafts. Real itc_assumptions rows (already
+ * accepted) are untouched.
+ */
+export async function clearAssumptionDraftsForMap(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_assumption_drafts")
+    .delete()
+    .eq("map_id", mapId);
+  if (error) throw new Error(`clearAssumptionDraftsForMap: ${error.message}`);
+}
+
 export async function setWorryCommitmentDraft(
   worryId: string,
   draftText: string,

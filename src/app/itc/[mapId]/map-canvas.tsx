@@ -265,6 +265,7 @@ export function MapCanvas({
                 messages={threadFor("itc_maps", map.id).filter(
                   (m) => m.stage_at_creation === "goal",
                 )}
+                pillarSwitchMapId={map.id}
               />
             </div>
           ) : null}

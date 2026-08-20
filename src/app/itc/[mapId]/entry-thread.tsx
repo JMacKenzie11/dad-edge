@@ -1,7 +1,11 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import type { ChipTarget } from "@/lib/itc/chip-target";
 import type { ItcMessage } from "@/lib/itc/maps";
+import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+import { switchMapPillar } from "../actions";
+import { useConfirm } from "./use-confirm";
 
 /**
  * Inline coaching thread anchored to a specific map entry. Pure
@@ -17,6 +21,7 @@ export function EntryThread({
   messages,
   chipTarget,
   entryId,
+  pillarSwitchMapId,
 }: {
   messages: ItcMessage[];
   /** Which input a refinement/suggestion chip in this thread should
@@ -29,6 +34,13 @@ export function EntryThread({
    *  item's inline input receives the fill. Omit for the goal
    *  thread (single input, unambiguous). */
   entryId?: string;
+  /** When present + the coach's chip payload includes
+   *  suggested_pillar, render a "Switch this map to [Pillar]"
+   *  action button that swaps the map's pillar_code via the
+   *  switchMapPillar server action. Only the goal thread passes
+   *  this — the coach only sets suggested_pillar on cross-pillar
+   *  goal leaks. */
+  pillarSwitchMapId?: string;
 }) {
   if (messages.length === 0) return null;
   return (
@@ -39,6 +51,7 @@ export function EntryThread({
           message={m}
           chipTarget={chipTarget}
           entryId={entryId}
+          pillarSwitchMapId={pillarSwitchMapId}
         />
       ))}
     </div>
@@ -48,6 +61,7 @@ export function EntryThread({
 type ChipPayload = {
   refinement?: string;
   suggestions?: string[];
+  suggested_pillar?: PillarCode;
 };
 
 function extractChipPayload(content: string): {
@@ -69,10 +83,12 @@ function ThreadMessage({
   message,
   chipTarget,
   entryId,
+  pillarSwitchMapId,
 }: {
   message: ItcMessage;
   chipTarget: ChipTarget;
   entryId?: string;
+  pillarSwitchMapId?: string;
 }) {
   if (message.role === "user") {
     return (
@@ -82,21 +98,27 @@ function ThreadMessage({
     );
   }
   const { prose, chips } = extractChipPayload(message.content);
+  const hasFillChips = Boolean(
+    chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0),
+  );
+  const showSwitchPillar = Boolean(
+    chips?.suggested_pillar && pillarSwitchMapId,
+  );
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-[color:var(--color-primary)]/25 border-l-[3px] border-l-[color:var(--color-primary)]/70 bg-[color:var(--color-primary)]/[0.10] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
         {prose}
       </div>
-      {chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0) ? (
+      {hasFillChips ? (
         <div className="flex flex-wrap gap-2">
-          {chips.refinement ? (
+          {chips!.refinement ? (
             <ChipButton
-              value={chips.refinement}
+              value={chips!.refinement}
               target={chipTarget}
               entryId={entryId}
             />
           ) : null}
-          {chips.suggestions?.map((s, i) => (
+          {chips!.suggestions?.map((s, i) => (
             <ChipButton
               key={i}
               value={s}
@@ -106,7 +128,72 @@ function ThreadMessage({
           ))}
         </div>
       ) : null}
+      {showSwitchPillar ? (
+        <SwitchPillarButton
+          mapId={pillarSwitchMapId!}
+          pillarCode={chips!.suggested_pillar!}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * "Switch this map to [Pillar]" action button. Rendered when the
+ * coach's reaction included a suggested_pillar (only fires on
+ * cross-pillar goal leaks). Distinct styling from the fill chips —
+ * this is a state change, not a wording swap.
+ */
+function SwitchPillarButton({
+  mapId,
+  pillarCode,
+}: {
+  mapId: string;
+  pillarCode: PillarCode;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [dialog, confirm] = useConfirm();
+  const target = PILLAR_BY_CODE[pillarCode];
+
+  async function onClick() {
+    const ok = await confirm({
+      title: `Switch this map to ${target.label}?`,
+      body: `Your goal, behaviors, and everything else on this map stay. The pillar label changes to ${target.label} (${target.domain}). You can reword the goal now that the map's on the right pillar.`,
+      confirmLabel: `Switch to ${target.label}`,
+    });
+    if (!ok) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("pillar_code", pillarCode);
+    startTransition(async () => {
+      const res = await switchMapPillar(fd);
+      if (!res.ok) setError(res.reason ?? "Could not switch pillar.");
+    });
+  }
+
+  return (
+    <>
+      {dialog}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={pending}
+          className="rounded-md border border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.15] px-3 py-2 text-sm font-semibold text-white hover:bg-[color:var(--color-primary)]/[0.25] disabled:opacity-50"
+        >
+          {pending
+            ? `Switching to ${target.label}…`
+            : `Switch this map to ${target.label} →`}
+        </button>
+        {error ? (
+          <span className="text-xs text-[color:var(--color-danger)]">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </>
   );
 }
 

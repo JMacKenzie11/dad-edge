@@ -183,6 +183,16 @@ const ReactionSchema = z.object({
    *  can consider. Chips. Same "tap to fill input" affordance.
    *  Omit unless the entry could use several angles. */
   suggestions: z.array(z.string().min(1).max(300)).min(2).max(5).optional(),
+  /** When the coach detects a cross-pillar goal leak (the goal
+   *  clearly belongs on a different BRAVEMAN pillar than the one
+   *  the coachee picked), populate this with the correct pillar
+   *  code. The client renders a "Switch this map to [Pillar]"
+   *  action button. Omit for anything else — this is NOT a place
+   *  to suggest exploring a different pillar generally; only when
+   *  the specific goal reads as unambiguously belonging on a
+   *  different domain. Excludes A2 (derived pillar, not
+   *  user-choose-able). */
+  suggested_pillar: z.enum(["B", "R", "A", "V", "E", "M", "N"]).optional(),
 });
 
 export type ReactionOutput = z.infer<typeof ReactionSchema> & {
@@ -377,7 +387,8 @@ function buildReactionPrompt(input: ReactionInput): string {
           `    - Amplify pillar (business/wealth) + goal about family → wrong pillar (that's Bond or Raise).\n` +
           `    - Vitality/Movement pillar + goal about relationships → wrong pillar.\n` +
           `  Test: after this goal is achieved, would his day-to-day change WITHIN the ${pillar.label} domain (${pillar.domain})? If not, it's the wrong pillar for this goal.\n` +
-          `  When you catch a cross-pillar leak: name it plainly ("that reads as a [correct-pillar-name] goal, but you picked ${pillar.label}. Do you want to switch the map to [correct-pillar-name], or reword the goal to focus on ${pillar.domain}?"). Do NOT approve as Case 3. Do NOT offer a refinement chip that just tweaks wording — the fix is either a different pillar or a different goal.`,
+          `  When you catch a cross-pillar leak: name it plainly ("that reads as a [correct-pillar-name] goal, but you picked ${pillar.label}. Do you want to switch the map to [correct-pillar-name], or reword the goal to focus on ${pillar.domain}?"). Do NOT approve as Case 3. Do NOT offer a refinement chip that just tweaks wording — the fix is either a different pillar or a different goal.\n` +
+          `  ALSO populate the "suggested_pillar" field with the pillar code the goal actually belongs on (B/R/A/V/E/M/N — never A2). The client renders a "Switch this map to [Pillar]" action button from that field. Only set suggested_pillar when the leak is unambiguous; leave it unset for anything else. Pillar codes: B=Bond (marriage/partner), R=Raise (kids), A=Amplify (business/wealth), V=Vitality (mind/body fuel), E=Enjoyment (fun), M=Movement (body), N=Network (relationships with the Boardroom group and others).`,
       );
       // Explicit specificity guard for goals. Repeated failure mode:
       // the model approves role-identity goals ("being a husband",
