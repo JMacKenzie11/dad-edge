@@ -1,0 +1,87 @@
+"use client";
+
+import { AutoTextarea } from "./auto-textarea";
+
+/**
+ * Shared textarea Field with per-field validation styling. Standard
+ * pattern across every ITC form:
+ *   - When error is present: red border, aria-invalid, error text
+ *     replaces the muted hint below the input.
+ *   - When error is absent: normal border + muted italic hint.
+ *
+ * Keeps every form's visual treatment of "this field needs your
+ * attention" identical, so a coachee only has to learn one language
+ * for what red-border-plus-red-text means.
+ */
+export function FormField({
+  label,
+  hint,
+  value,
+  onChange,
+  rows,
+  disabled,
+  placeholder,
+  error,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows: number;
+  disabled: boolean;
+  placeholder?: string;
+  /** Per-field validation error. When present the border turns
+   *  danger red and the hint below is replaced with this message. */
+  error?: string;
+}) {
+  const invalid = Boolean(error);
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
+        {label}
+      </span>
+      <AutoTextarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        minRows={rows}
+        disabled={disabled}
+        placeholder={placeholder}
+        aria-invalid={invalid ? "true" : undefined}
+        className={
+          "w-full rounded-md bg-black/30 px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic border " +
+          (invalid
+            ? "border-[color:var(--color-danger)]"
+            : "border-[color:var(--color-border)]")
+        }
+      />
+      {invalid ? (
+        <span className="block text-[11px] text-[color:var(--color-danger)]">
+          {error}
+        </span>
+      ) : (
+        <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
+          {hint}
+        </span>
+      )}
+    </label>
+  );
+}
+
+/**
+ * Standard top-level form error summary. Renders when there's a
+ * server-side or top-level client-side error to surface. Uses
+ * aria-live="polite" + role="status" so screen readers announce it
+ * when it appears without stealing focus.
+ */
+export function FormErrorSummary({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      className="text-sm text-[color:var(--color-danger)]"
+    >
+      {error}
+    </p>
+  );
+}

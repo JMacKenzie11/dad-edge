@@ -14,8 +14,8 @@ import {
   reviseTestFromCoach,
   runTest,
 } from "../actions";
-import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { FormErrorSummary, FormField } from "./form-field";
 import { useConfirm } from "./use-confirm";
 
 /**
@@ -71,6 +71,9 @@ export function TestDesignForm({
   const [pending, startTransition] = useTransition();
   const [regenPending, startRegen] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<"behavior_change" | "data_to_collect" | "in_order_to_find_out", string>>
+  >({});
   const [confirmDialog, confirm] = useConfirm();
   // Latest SMART review from Run the Test. Held in client state only —
   // not persisted server-side. Populated on needs_work; on ready we've
@@ -246,6 +249,31 @@ export function TestDesignForm({
    */
   function runIt() {
     setError(null);
+    // Client-side per-field validation. Mirrors the server schema
+    // (saveTestSchema in actions.ts, min 3 chars per text field) so
+    // the coachee sees which specific field is empty instead of a
+    // generic server-side rejection.
+    const errs: typeof fieldErrors = {};
+    if (behaviorChange.trim().length < 3) {
+      errs.behavior_change = "What are you going to do differently? One specific move.";
+    }
+    if (dataToCollect.trim().length < 3) {
+      errs.data_to_collect = "What will you look for? Observable + felt.";
+    }
+    if (inOrderToFindOut.trim().length < 3) {
+      errs.in_order_to_find_out = "What would tell you the assumption doesn't hold?";
+    }
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      const count = Object.keys(errs).length;
+      setError(
+        count === 1
+          ? "One field needs your attention below."
+          : `${count} fields need your attention below.`,
+      );
+      return;
+    }
+    setFieldErrors({});
     const fd = new FormData();
     fd.set("map_id", mapId);
     if (test?.id) fd.set("test_id", test.id);
@@ -272,6 +300,21 @@ export function TestDesignForm({
         setLatestReview(res.review);
       }
     });
+  }
+
+  /** Clear a specific field's error once the coachee starts typing.
+   *  Keeps the red state from lingering after they've started fixing
+   *  the problem. */
+  function clearFieldError(
+    key: "behavior_change" | "data_to_collect" | "in_order_to_find_out",
+  ) {
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   }
 
   async function goBackToPrioritize() {
@@ -387,31 +430,43 @@ export function TestDesignForm({
           (regenPending ? "opacity-40 pointer-events-none" : "")
         }
       >
-        <Field
+        <FormField
           label="So I Will (Change my Behavior This Way)"
           hint="One specific move in one specific moment. Modest. Worst case must be livable."
           value={behaviorChange}
-          onChange={setBehaviorChange}
+          onChange={(v) => {
+            setBehaviorChange(v);
+            clearFieldError("behavior_change");
+          }}
           rows={2}
           disabled={pending || regenPending}
+          error={fieldErrors.behavior_change}
         />
 
-        <Field
+        <FormField
           label="And Collect the Following Data"
           hint="Observable (what would show up on a videotape) + felt. Not interpretive."
           value={dataToCollect}
-          onChange={setDataToCollect}
+          onChange={(v) => {
+            setDataToCollect(v);
+            clearFieldError("data_to_collect");
+          }}
           rows={2}
           disabled={pending || regenPending}
+          error={fieldErrors.data_to_collect}
         />
 
-        <Field
+        <FormField
           label="In Order to Find Out Whether"
           hint="What would tell you the assumption doesn't hold. Name the disconfirmation."
           value={inOrderToFindOut}
-          onChange={setInOrderToFindOut}
+          onChange={(v) => {
+            setInOrderToFindOut(v);
+            clearFieldError("in_order_to_find_out");
+          }}
           rows={2}
           disabled={pending || regenPending}
+          error={fieldErrors.in_order_to_find_out}
         />
 
         <label className="block space-y-1">
@@ -450,44 +505,8 @@ export function TestDesignForm({
         </button>
       </div>
 
-      {error ? (
-        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
-      ) : null}
+      <FormErrorSummary error={error} />
     </div>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  value,
-  onChange,
-  rows,
-  disabled,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
-  rows: number;
-  disabled: boolean;
-}) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-        {label}
-      </span>
-      <AutoTextarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        minRows={rows}
-        disabled={disabled}
-        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed"
-      />
-      <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
-        {hint}
-      </span>
-    </label>
   );
 }
 

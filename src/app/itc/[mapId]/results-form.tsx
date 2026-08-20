@@ -10,8 +10,8 @@ import type {
   ItcTestResult,
 } from "@/lib/itc/maps";
 import { advanceAfterResults, saveTestResult } from "../actions";
-import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+import { FormErrorSummary, FormField } from "./form-field";
 
 /**
  * Results form — the coachee's post-test debrief. Kegan/Lahey four
@@ -183,7 +183,7 @@ export function ResultsForm({
         />
       </label>
 
-      <Field
+      <FormField
         label="So in Order to Test it I Changed my Behavior This Way"
         hint="What you actually did. The concrete move. If plan and reality diverged, say so."
         value={whatIDid}
@@ -197,7 +197,7 @@ export function ResultsForm({
         error={fieldErrors.what_i_did}
       />
 
-      <Field
+      <FormField
         label="This is What I Observed Happening"
         hint="Observable: what people said and did. Felt: what came up in you. Not interpretations."
         value={dataCollected}
@@ -211,7 +211,7 @@ export function ResultsForm({
         error={fieldErrors.data_collected}
       />
 
-      <Field
+      <FormField
         label="And This is What it Tells me About my Big Assumption"
         hint="Which aspects of the assumption held? Which didn't? Be specific."
         value={whatItSays}
@@ -292,15 +292,7 @@ export function ResultsForm({
         ) : null}
       </div>
 
-      {error ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-sm text-[color:var(--color-danger)]"
-        >
-          {error}
-        </p>
-      ) : null}
+      <FormErrorSummary error={error} />
     </div>
   );
 }
@@ -327,57 +319,3 @@ function nextStepButtonTitle(nextStep: ItcNextStep): string {
   }
 }
 
-function Field({
-  label,
-  hint,
-  value,
-  onChange,
-  rows,
-  disabled,
-  placeholder,
-  error,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
-  rows: number;
-  disabled: boolean;
-  placeholder?: string;
-  /** Per-field validation error. When present, the textarea border
-   *  turns red and the hint text is replaced with the error message
-   *  in danger color. */
-  error?: string;
-}) {
-  const invalid = Boolean(error);
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-        {label}
-      </span>
-      <AutoTextarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        minRows={rows}
-        disabled={disabled}
-        placeholder={placeholder}
-        aria-invalid={invalid ? "true" : undefined}
-        className={
-          "w-full rounded-md bg-black/30 px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic border " +
-          (invalid
-            ? "border-[color:var(--color-danger)]"
-            : "border-[color:var(--color-border)]")
-        }
-      />
-      {invalid ? (
-        <span className="block text-[11px] text-[color:var(--color-danger)]">
-          {error}
-        </span>
-      ) : (
-        <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
-          {hint}
-        </span>
-      )}
-    </label>
-  );
-}
