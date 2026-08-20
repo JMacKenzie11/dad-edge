@@ -29,6 +29,10 @@ export function GoalRow({
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  // Once suggestions have been requested this session, keep the
+  // "Give me ideas" button disabled. Prevents stacked overlapping
+  // suggestion cards from repeated clicks. Reset on page reload.
+  const [hasAsked, setHasAsked] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const savedRef = useRef(initial);
   const inflightRef = useRef(false);
@@ -91,12 +95,16 @@ export function GoalRow({
 
   function askForIdeas() {
     setError(null);
+    setHasAsked(true);
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("kind", "goal");
     startTransition(async () => {
       const res = await requestSuggestions(fd);
-      if (!res.ok) setError(res.reason ?? "Could not fetch suggestions.");
+      if (!res.ok) {
+        setError(res.reason ?? "Could not fetch suggestions.");
+        setHasAsked(false); // roll back on failure
+      }
     });
   }
 
@@ -144,9 +152,13 @@ export function GoalRow({
         <button
           type="button"
           onClick={askForIdeas}
-          disabled={pending}
+          disabled={pending || hasAsked}
           className="ml-auto rounded-md border border-[color:var(--color-border)] px-4 py-2 text-sm text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title="Ask the coach for options"
+          title={
+            hasAsked
+              ? "Suggestions already offered — refresh the page for a fresh set."
+              : "Ask the coach for options"
+          }
         >
           Give me ideas
         </button>

@@ -8,6 +8,7 @@ import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   draftTestForAssumption,
+  draftWorryForBehavior,
   generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
@@ -51,6 +52,7 @@ import {
   markTestAbandoned,
   clearAssumptionDraftsForMap,
   clearCommitmentDraftsForMap,
+  clearWorryDraftsForMap,
   deleteStageNoteMessages,
   markWalkthroughDelivered,
   markWalkthroughNotDelivered,
@@ -59,6 +61,7 @@ import {
   saveImprovementGoal,
   saveTestDraft,
   setAssumptionSelected,
+  setBehaviorWorryDraft,
   updateTest,
   updateTestResult,
   setWorryCommitmentDraft,
@@ -1476,6 +1479,16 @@ export async function advanceToStage(
     { stage: target },
   );
 
+  // On entry to the worries stage, generate a coach draft worry for
+  // each selected behavior that doesn't already have a real paired
+  // worry. Drafts are metadata: they only become real worry.text when
+  // the user accepts via saveWorry. Column 3 is the depth gate of the
+  // whole map, so the drafter's job is to pre-produce the "yuck" — a
+  // starting worry the coachee can accept, edit, or replace, which
+  // shows the identity-level shape a good worry needs.
+  if (target === "worries") {
+    await draftMissingWorriesAfterAdvance(loaded.map.id, events);
+  }
   // On entry to the commitments stage, generate a coach draft for
   // each worry that doesn't already have one AND has no commitment
   // yet. Per ITC methodology, Column 4 derivation is coach work —
@@ -1523,6 +1536,58 @@ export async function advanceToStage(
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
+}
+
+/**
+ * Populate itc_behaviors.coach_worry_draft for every selected behavior
+ * that (a) has no real paired worry yet and (b) has no draft yet.
+ * Runs on advance to the worries stage. One LLM call per behavior in
+ * parallel so the Continue click doesn't block on N sequential
+ * round-trips. Mirrors the Column 4 commitment-drafter pattern one
+ * column upstream.
+ */
+async function draftMissingWorriesAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, behaviors, worries] = await Promise.all([
+    getMapById(mapId),
+    listBehaviors(mapId),
+    listWorries(mapId),
+  ]);
+  if (!map) return;
+  const behaviorsWithWorries = new Set(worries.map((w) => w.behavior_id));
+  const selected = behaviors.filter((b) => b.selected);
+  const needsDraft = selected.filter(
+    (b) => !behaviorsWithWorries.has(b.id) && !b.coach_worry_draft,
+  );
+  if (needsDraft.length === 0) return;
+
+  const drafted = await Promise.all(
+    needsDraft.map(async (b) => {
+      const draft = await draftWorryForBehavior({
+        goalText: map.improvement_goal ?? "",
+        behaviorText: b.text,
+        pillar: map.pillar_code,
+      });
+      return { behaviorId: b.id, draft };
+    }),
+  );
+
+  await Promise.all(
+    drafted
+      .filter((d): d is { behaviorId: string; draft: string } => Boolean(d.draft))
+      .map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft)),
+  );
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "worry_drafts",
+      behavior_count: needsDraft.length,
+      drafted_count: drafted.filter((d) => d.draft).length,
+    },
+    { stage: "worries" },
+  );
 }
 
 /**
@@ -1669,6 +1734,41 @@ export async function regenerateCommitmentDrafts(
     await clearCommitmentDraftsForMap(loaded.map.id);
     const events = new TurnEventLog(loaded.map.id, 0);
     await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
+    await events.flush();
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not regenerate.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+/**
+ * Client-triggered regenerate for the coach's Column 3 worry drafts.
+ * Wipes every draft on behaviors that don't have a real paired worry,
+ * then re-fires the drafter against the current behavior text. Real
+ * worries (already accepted) are untouched.
+ *
+ * Why this exists: coachee lands on Column 3, sees the drafts, goes
+ * back to Column 2 and sharpens a behavior. The corresponding draft
+ * is still based on the old behavior text. This lets them regenerate
+ * without hand-editing.
+ */
+export async function regenerateWorryDrafts(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = regenerateDraftsSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await clearWorryDraftsForMap(loaded.map.id);
+    const events = new TurnEventLog(loaded.map.id, 0);
+    await draftMissingWorriesAfterAdvance(loaded.map.id, events);
     await events.flush();
   } catch (err) {
     return {

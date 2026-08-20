@@ -65,6 +65,12 @@ export type ItcBehavior = {
   text: string;
   source: "user" | "suggested";
   selected: boolean;
+  /** Coach-drafted worry text for this behavior — populated by the
+   *  server pipeline on advance to Column 3. Metadata, not map
+   *  content: converts to real worry.text only when the user
+   *  explicitly accepts (Use this draft) or types their own. Mirrors
+   *  ItcWorry.coach_commitment_draft one column downstream. */
+  coach_worry_draft: string | null;
   created_at: string;
 };
 
@@ -538,6 +544,52 @@ export async function setWorryCommitmentDraft(
     .update({ coach_commitment_draft: draftText.trim() })
     .eq("id", worryId);
   if (error) throw new Error(`setWorryCommitmentDraft: ${error.message}`);
+}
+
+export async function setBehaviorWorryDraft(
+  behaviorId: string,
+  draftText: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_behaviors")
+    .update({ coach_worry_draft: draftText.trim() })
+    .eq("id", behaviorId);
+  if (error) throw new Error(`setBehaviorWorryDraft: ${error.message}`);
+}
+
+/**
+ * Null out coach_worry_draft on behaviors that don't have a real
+ * paired worry yet. Used by regenerateWorryDrafts so the drafter
+ * refills them against current behavior text after upstream edits.
+ * Behaviors with real worries are untouched (the draft has already
+ * been superseded by user content).
+ */
+export async function clearWorryDraftsForMap(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { data: worries, error: wErr } = await supabase
+    .from("itc_worries")
+    .select("behavior_id")
+    .eq("map_id", mapId);
+  if (wErr) throw new Error(`clearWorryDraftsForMap: ${wErr.message}`);
+  const behaviorsWithWorries = new Set(
+    (worries ?? []).map((w) => w.behavior_id as string),
+  );
+  const { data: behaviors, error: bErr } = await supabase
+    .from("itc_behaviors")
+    .select("id")
+    .eq("map_id", mapId)
+    .not("coach_worry_draft", "is", null);
+  if (bErr) throw new Error(`clearWorryDraftsForMap behaviors: ${bErr.message}`);
+  const clearIds = (behaviors ?? [])
+    .map((b) => b.id as string)
+    .filter((id) => !behaviorsWithWorries.has(id));
+  if (clearIds.length === 0) return;
+  const { error: upErr } = await supabase
+    .from("itc_behaviors")
+    .update({ coach_worry_draft: null })
+    .in("id", clearIds);
+  if (upErr) throw new Error(`clearWorryDraftsForMap update: ${upErr.message}`);
 }
 
 export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {

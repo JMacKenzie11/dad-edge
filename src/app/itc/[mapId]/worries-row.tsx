@@ -6,6 +6,7 @@ import { saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { SavingIndicator } from "./form-field";
+import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -62,23 +63,38 @@ export function WorriesRow({
     );
   }
 
+  // Show the regenerate-drafts button when there's at least one
+  // behavior with a coach draft AND no accepted worry on it yet.
+  // Same conditional as commitments/assumptions rows.
+  const hasRegeneratableDrafts = selected.some(
+    (b) =>
+      Boolean(b.coach_worry_draft) && !worryByBehaviorId.has(b.id),
+  );
+
   return (
-    <ul className="space-y-3 text-base">
-      {selected.map((b, i) => {
-        const w = worryByBehaviorId.get(b.id) ?? null;
-        return (
-          <WorryItem
-            key={b.id}
-            mapId={mapId}
-            behavior={b}
-            index={i + 1}
-            worry={w}
-            fresh={isFresh(w?.created_at, nowMs)}
-            thread={w ? threads.get(w.id) ?? [] : []}
-          />
-        );
-      })}
-    </ul>
+    <div className="space-y-3">
+      <ul className="space-y-3 text-base">
+        {selected.map((b, i) => {
+          const w = worryByBehaviorId.get(b.id) ?? null;
+          return (
+            <WorryItem
+              key={b.id}
+              mapId={mapId}
+              behavior={b}
+              index={i + 1}
+              worry={w}
+              fresh={isFresh(w?.created_at, nowMs)}
+              thread={w ? threads.get(w.id) ?? [] : []}
+            />
+          );
+        })}
+      </ul>
+      {hasRegeneratableDrafts ? (
+        <div className="pt-1">
+          <RegenerateDraftsButton mapId={mapId} kind="worries" />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -136,9 +152,19 @@ function WorryItem({
   }, [worry?.id]);
 
   function commit() {
+    saveText(draft);
+  }
+
+  /**
+   * Save a specific text value directly, bypassing the draft state.
+   * Used by the "Use this draft" button so a click on the coach's
+   * draft card auto-saves — clicking is already the user's explicit
+   * intent, an extra Enter step is friction with no upside.
+   */
+  function saveText(nextText: string) {
     setError(null);
     if (inflightRef.current) return;
-    const text = draft.trim();
+    const text = nextText.trim();
     if (text.length < 3) {
       setError("Add a few more words.");
       setDraft(savedRef.current);
@@ -147,6 +173,7 @@ function WorryItem({
     if (text === savedRef.current.trim()) return;
     const priorSaved = savedRef.current;
     savedRef.current = text; // optimistic — dedupes concurrent commits
+    setDraft(text);
     inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -185,6 +212,24 @@ function WorryItem({
           <span className="text-sm">{behavior.text}</span>
           <span className="text-[color:var(--color-text-muted)]/50">→</span>
         </div>
+        {!worry && behavior.coach_worry_draft ? (
+          <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
+            <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
+              Coach's draft
+            </div>
+            <div className="text-sm italic text-white/90 leading-relaxed">
+              {behavior.coach_worry_draft}
+            </div>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => saveText(behavior.coach_worry_draft ?? "")}
+              className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            >
+              Use this draft
+            </button>
+          </div>
+        ) : null}
         <AutoTextarea
           ref={inputRef}
           value={draft}

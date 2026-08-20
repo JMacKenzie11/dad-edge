@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   regenerateAssumptionDrafts,
   regenerateCommitmentDrafts,
+  regenerateWorryDrafts,
 } from "../actions";
 import { useConfirm } from "./use-confirm";
 
@@ -30,15 +31,24 @@ export function RegenerateDraftsButton({
   mapId: string;
   /** Which drafts to regenerate. Determines the server action and
    *  the copy in the confirm dialog. */
-  kind: "commitments" | "assumptions";
+  kind: "worries" | "commitments" | "assumptions";
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dialog, confirm] = useConfirm();
 
-  const labelKind = kind === "commitments" ? "commitment" : "assumption";
+  const labelKind =
+    kind === "worries"
+      ? "worry"
+      : kind === "commitments"
+        ? "commitment"
+        : "assumption";
   const columnLabel =
-    kind === "commitments" ? "Column 3 worries" : "Column 4 commitments";
+    kind === "worries"
+      ? "Column 2 behaviors"
+      : kind === "commitments"
+        ? "Column 3 worries"
+        : "Column 4 commitments";
 
   async function onClick() {
     const ok = await confirm({
@@ -52,9 +62,11 @@ export function RegenerateDraftsButton({
     fd.set("map_id", mapId);
     startTransition(async () => {
       const action =
-        kind === "commitments"
-          ? regenerateCommitmentDrafts
-          : regenerateAssumptionDrafts;
+        kind === "worries"
+          ? regenerateWorryDrafts
+          : kind === "commitments"
+            ? regenerateCommitmentDrafts
+            : regenerateAssumptionDrafts;
       const res = await action(fd);
       if (!res.ok) setError(res.reason ?? "Could not regenerate.");
     });

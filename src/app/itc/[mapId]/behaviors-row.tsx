@@ -113,6 +113,12 @@ function AddBehaviorForm({
   const [pending, startTransition] = useTransition();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Once suggestions have been requested this session, keep the
+  // "Give me ideas" button disabled. Observed failure: coachees click
+  // it multiple times and end up with stacked overlapping suggestion
+  // cards. Reset on page reload (mount) — an explicit refresh is the
+  // signal that they actually want a fresh set.
+  const [hasAsked, setHasAsked] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -162,12 +168,19 @@ function AddBehaviorForm({
 
   function askForIdeas() {
     setError(null);
+    setHasAsked(true);
     const fd = new FormData();
     fd.set("map_id", mapId);
     fd.set("kind", "behavior");
     startTransition(async () => {
       const res = await requestSuggestions(fd);
-      if (!res.ok) setError(res.reason ?? "Could not fetch suggestions.");
+      if (!res.ok) {
+        setError(res.reason ?? "Could not fetch suggestions.");
+        // Roll back the "asked" latch on failure — if the request
+        // didn't produce suggestions, the user should be able to try
+        // again without a page refresh.
+        setHasAsked(false);
+      }
     });
   }
 
@@ -233,9 +246,13 @@ function AddBehaviorForm({
         <button
           type="button"
           onClick={askForIdeas}
-          disabled={pending}
+          disabled={pending || hasAsked}
           className="ml-auto rounded-md border border-[color:var(--color-border)] px-4 py-2 text-sm text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title="Ask the coach for options"
+          title={
+            hasAsked
+              ? "Suggestions already offered — refresh the page for a fresh set."
+              : "Ask the coach for options"
+          }
         >
           Give me ideas
         </button>

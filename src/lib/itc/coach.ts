@@ -498,7 +498,7 @@ export async function generateSuggestions(
     goal:
       `Each suggestion is a COMPLETE improvement goal, starting with "I'm committed to getting better at…". Specific, personal, first-person, one sentence. Example on Bond: "I'm committed to getting better at staying in the room when my wife brings up something hard instead of shutting down."`,
     behavior:
-      `Each suggestion is a COMPLETE column-2 doing/not-doing — a specific thing the coachee catches himself doing or failing to do in the moment that works against his goal. First-person present, one sentence. Example: "I explain why I'm right for ten minutes instead of asking what she needs."`,
+      `Each suggestion is a COMPLETE column-2 doing/not-doing — a specific thing the coachee catches himself doing or failing to do in the moment that works against his goal. First-person present, one sentence. Every set MUST mix doing AND not-doing: at least one option starting with "I don't…" / "I fail to…" / "I never…" (the omission itself is the behavior), alongside "I [verb]…" options for active moves. All-doing sets miss half the immune system — the failures-to-act are as load-bearing as the active moves. Doing example: "I explain why I'm right for ten minutes instead of asking what she needs." Not-doing example: "I don't look up from my phone when she starts telling me about her day."`,
     worry:
       `Each suggestion is a COMPLETE column-3 worry — first-person felt fear that lands on identity. Example: "That she'll finally see I've been faking it and stop trusting me."`,
     commitment:
@@ -620,6 +620,203 @@ function isQuestionShaped(s: string): boolean {
     /^give me\b/i,
   ];
   return openers.some((re) => re.test(trimmed));
+}
+
+// -------------------------------------------------------------------------
+// draftWorryForBehavior — coach-drafted Column 3 starting text
+// -------------------------------------------------------------------------
+
+/**
+ * Structured-slots schema for the worry drafter. Two slots: the
+ * counter-move the coachee would take if he did the opposite of his
+ * Column 2 behavior, and the identity-level felt fear that lands when
+ * he pictures doing it. Server assembles the canonical Kegan/Lahey
+ * "I worry that if I ..., ..." sentence via assembleWorry.
+ *
+ * Why the counter-move framing (not the current behavior): the
+ * methodology is explicit (Vol 1 p. 13-14; encoded in
+ * prompts/stages/worries.ts): "picture yourself doing the OPPOSITE of
+ * the behavior — what's the worst part of that for you?" Framing the
+ * antecedent as the counter-move surfaces the fear the current
+ * behavior is quietly protecting against.
+ */
+const WorryDraftSchema = z.object({
+  /** The counter-move — what he'd be doing if he did the opposite of
+   *  the Column 2 behavior. Bare verb phrase, first-person present.
+   *  Server prefixes "if I " so write WITHOUT the "if I" prefix.
+   *  3-14 words.
+   *
+   *  For a "doing" behavior (I interrupt her): counter-move is
+   *  "let her finish and not defend myself".
+   *  For a "not-doing" behavior (I don't ask what she needs): counter-
+   *  move is the affirmative form — "asked her what she needs and
+   *  actually listened to the answer".
+   *  Never "stopped [not-doing]" ("if I stopped not-asking her" is
+   *  unreadable). Always affirmative. */
+  opposite_move: z.string().min(5).max(80),
+  /** The felt fear that lands when he pictures doing opposite_move.
+   *  10-140 chars. Identity-level (self-labeling OR role/relational —
+   *  both are ITC-valid; don't force one shape). NOT a practical
+   *  concern.
+   *
+   *  Server appends after "I worry that if I <opposite_move>, ".
+   *  Write it as the sentence continuation — no leading comma, no
+   *  leading "then". Starts with "I'd..." / "she'd..." / whichever
+   *  subject the fear names. Ends without a period (server adds one). */
+  identity_landing: z.string().min(10).max(180),
+});
+
+/**
+ * Server-side assembly of the canonical "I worry that if I ..., ..."
+ * sentence from the two LLM slots. Handles the same normalizations as
+ * assembleCommitment / assembleAssumption: trims, strips punctuation
+ * the template already provides, lowercases first char unless it's a
+ * pronoun "I".
+ */
+export function assembleWorry(slots: {
+  opposite_move: string;
+  identity_landing: string;
+}): string {
+  const move = normalizeSlot(slots.opposite_move);
+  const landing = normalizeSlot(slots.identity_landing);
+  // "I" pronoun after the comma stays capital (normalizeSlot handles that).
+  return `I worry that if I ${move}, ${landing}.`;
+}
+
+const DRAFT_WORRY_SYSTEM = `
+You draft ONE ITC-canonical worry for a coachee's Column 3 map. Your draft is a starting point the coachee will review, accept (one tap), edit, or replace with his own.
+
+This is the depth gate of the whole map. A shallow worry ("she'd be upset", "we'd fall behind") produces a shallow commitment, a shallow assumption, and a test that measures nothing. Your job is to draft the worry that lands at the felt "yuck" — the identity-level fear the Column 2 behavior is quietly protecting him from.
+
+## How this works (structured slots)
+
+You return TWO slots — opposite_move and identity_landing — that fill the blanks in a template the server writes:
+
+    "I worry that if I <opposite_move>, <identity_landing>."
+
+You never write "I worry that", "if I", or the trailing period. The server writes those. Focus entirely on the semantic content of each slot.
+
+## What each slot must contain
+
+### opposite_move
+The counter-move — what he'd be doing if he did the OPPOSITE of the Column 2 behavior. Bare verb phrase, first-person present, no "if I" prefix.
+
+The methodology (Vol 1 p. 13-14) is explicit: to find the worry, picture yourself doing the opposite of the behavior and ask "what's the worst part of that for you?" The opposite IS the antecedent.
+
+  - Doing behavior "I interrupt her when she's upset" → opposite_move: "let her finish and not defend myself".
+  - Doing behavior "I raise my voice when she challenges me" → opposite_move: "stayed calm and heard her out".
+  - Not-doing behavior "I don't ask what she needs" → opposite_move: "asked her what she needs and listened to the answer" (affirmative form — NEVER "stopped not-asking her", that's an unreadable double-negative).
+  - Not-doing behavior "I don't apologize when I'm wrong" → opposite_move: "admitted I was wrong out loud".
+
+3-14 words. Specific enough that he can picture himself doing it in a real moment.
+
+### identity_landing
+The felt fear that lands when he pictures doing opposite_move. This is the whole point. If this slot is shallow, the map is shallow.
+
+**MUST land at identity level.** Two valid shapes — accept whichever fits his goal/behavior more naturally:
+
+  1. **Self-labeling identity**: names a label he'd apply to himself. "I'd have to see I'm not the man I've been pretending to be." / "I'd find out I'm weaker than I let anyone see." / "I'd have to admit I'm a fraud."
+  2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. "she'd finally see I've been failing her all along." / "I'd have to face that I've failed my family as the man they needed." / "she'd stop counting on me and I'd know I earned it."
+
+BOTH are canonical. Do NOT force self-labeling when role/relational fits the coachee's stated goal (e.g., a Bond-pillar goal about his marriage naturally lands relationally).
+
+10-180 chars. Ends without a period (server adds one).
+
+## The "yuck" bar — mandatory
+
+Coachees can't feel a practical concern. They CAN feel identity landings. Every draft must produce a wince. Ask yourself: does this identity_landing describe something a man would rather not admit out loud? If it sounds reasonable, presentable, or noble, it isn't at the yuck rung yet.
+
+### Practical-concern anti-patterns (banned in identity_landing)
+
+Reject any draft where the fear is:
+  - **Event-level**: "she'd get upset" / "we'd have a fight" / "she'd cry" — describes what happens, not what it CONFIRMS.
+  - **Practical/operational**: "we'd fall behind" / "the day would fall apart" / "it'd waste time" — sounds like a project manager, not a fear.
+  - **About her behavior alone**: "she'd walk out" / "she'd stop talking to me" — that's her move, not the meaning it lands for him. If the fear is her leaving, name what her leaving would PROVE about him ("she'd walk out and I'd know I'm the man who couldn't hold this together").
+  - **Vague self-help language**: "I wouldn't feel like myself" / "I'd feel disconnected" / "I wouldn't be authentic" — abstract, doesn't wince.
+  - **Noble/aspirational**: "I wouldn't be the husband she deserves" — sounds like a wedding toast. Replace with the specific self-truth: "she'd see I've never actually been the husband she thought she married".
+
+### Yuck-passing examples (good identity_landing content)
+
+  - "I'd have to see I'm the man who checks out the moment things get hard for her."
+  - "I'd find out she's been holding on longer than I deserved and I've been coasting."
+  - "she'd realize I don't actually know how to love her without performing."
+  - "I'd have to admit I don't have what it takes to be steady when she's not okay."
+  - "I'd have to see I've been the father who's technically present and actually gone."
+
+Notice: each one names a truth about WHO HE IS that landing the counter-move would expose. That's the yuck.
+
+## Preserve his specificity — copy his nouns
+
+You are naming HIS fear in HIS world. Do NOT editorialize the nouns.
+  - His goal mentions "my wife" → your draft says "she" or "my wife", never "my partner" / "the people I love".
+  - His behavior mentions "my kids" → your draft stays with "my kids" / "them", never "my family" (unless he already said family).
+  - His pillar is Bond → the fear is relational (about her/them), not abstract.
+  - His pillar is Vitality → the fear is about his body, health, energy — not "purpose in life".
+  - Never invent new characters or scenarios not implied by his goal + behavior.
+
+## Pillar grounding
+
+The pillar constrains the domain. A fear that could be pasted onto any pillar is too generic.
+  - **B (Bond)**: identity as husband/partner/father in the relationship.
+  - **R (Raise)**: identity as parent — the kind of father his kids will remember him as.
+  - **A (Amplify)**: identity as a man who does or doesn't build the life/work he keeps claiming he'll build.
+  - **V (Vitality)**: identity as a man in a body — how present, energetic, alive he is (or isn't).
+  - **E (Endeavor)**: identity as a man in his work / craft / calling — who he actually is when the pressure is on.
+  - **M (Movement)**: identity as a man who does or doesn't move (fitness, discipline in his body).
+  - **N (Nourishment)**: identity as a man who does or doesn't take care of what he puts into himself.
+
+## Silent derivation
+
+  A. Read the goal and the specific behavior.
+  B. Compute the OPPOSITE of the behavior — the counter-move he'd be doing. Fill opposite_move with that verb phrase.
+  C. Ask: if he actually did opposite_move in a real moment, what would he most fear it would CONFIRM about who he is?
+  D. Fill identity_landing with that felt fear, at the identity rung (self-labeling or role/relational — whichever fits his material). Wince test must pass.
+
+Return only the structured slots ({ opposite_move: "...", identity_landing: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
+`.trim();
+
+/**
+ * Server-side coach-draft generator for Column 3. Called once per
+ * selected behavior when the coachee advances into the worries stage.
+ *
+ * Form-First-pure: LLM returns METADATA (two slots); server assembles
+ * the canonical "I worry that if I ..., ..." sentence. Coachee reviews,
+ * edits, or promotes to real worry.text via saveWorry.
+ */
+export async function draftWorryForBehavior(input: {
+  goalText: string;
+  behaviorText: string;
+  pillar: PillarCode;
+}): Promise<string | null> {
+  const started = Date.now();
+  const pillar = PILLAR_BY_CODE[input.pillar];
+  try {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: WorryDraftSchema,
+      system: DRAFT_WORRY_SYSTEM,
+      prompt: [
+        `Pillar: ${pillar.label} (${pillar.domain})`,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `Behavior (Column 2): ${input.behaviorText}`,
+        ``,
+        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory.`,
+      ].join("\n"),
+      maxOutputTokens: 500,
+    });
+    return scrubReply(assembleWorry(object));
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftWorryForBehavior failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=worry ms=%d",
+      Date.now() - started,
+    );
+  }
 }
 
 // -------------------------------------------------------------------------
