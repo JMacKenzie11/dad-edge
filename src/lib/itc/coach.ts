@@ -594,69 +594,120 @@ function isQuestionShaped(s: string): boolean {
 // draftCommitmentForWorry — coach-drafted Column 4 starting text
 // -------------------------------------------------------------------------
 
+/**
+ * Structured-slots schema for the commitment drafter. Same architectural
+ * pattern as AssumptionDraftSlotsSchema: the LLM returns raw semantic
+ * content (what the coachee is committed to never doing/facing); the
+ * server assembles the canonical Kegan/Lahey sentence via
+ * assembleCommitment. Server owns the "I'm committed to never" prefix
+ * and the terminal period.
+ */
 const CommitmentDraftSchema = z.object({
-  /** "I'm committed to never…" phrasing. Non-noble (would sound
-   *  strange on a productivity blog), first-person, self-protective. */
-  draft: z.string().min(10).max(400),
+  /** The identity-level protective move — the specific thing the
+   *  coachee is committed to NEVER doing/facing that would keep him
+   *  from having to SEE something about who he is. 5-20 words.
+   *
+   *  Server assembles as "I'm committed to never <protective_move>."
+   *  So the LLM writes a bare gerund/verb-phrase that follows "never":
+   *    - "having to see I'm the husband who keeps failing her"
+   *    - "letting her see the parts of me I'd have to disown"
+   *    - "finding out my effort didn't matter"
+   *    - "having to find out I'm the kind of person who fails her"
+   *
+   *  Do NOT write the "I'm committed to never" prefix — server writes
+   *  that. Do NOT write the trailing period — server writes that. */
+  protective_move: z.string().min(10).max(140),
 });
+
+/**
+ * Server-side assembly of the canonical "I'm committed to never ..."
+ * sentence from the single LLM slot. Normalizes: trims, strips
+ * trailing punctuation, lowercases first char (in case the LLM
+ * accidentally capitalized), strips any leading "never " or "having
+ * to " if the LLM redundantly wrote them (server writes "never"
+ * already).
+ */
+export function assembleCommitment(slots: {
+  protective_move: string;
+}): string {
+  // Strip a redundant leading "never " if the LLM wrote it — server
+  // already writes "never" before the slot. Then run through the
+  // shared slot normalizer (which lowercases first char unless it's
+  // pronoun "I").
+  const dedupedNever = slots.protective_move
+    .trim()
+    .replace(/^never\s+/i, "");
+  return `I'm committed to never ${normalizeSlot(dedupedNever)}.`;
+}
 
 const DRAFT_COMMITMENT_SYSTEM = `
 You draft ONE non-noble hidden competing commitment for a coachee's ITC map. This is Column 4 — the self-protective vow that keeps the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
 
-Non-noble is the whole game. A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice." Noble commitments ("I'm committed to being a good listener", "being the best husband I can be") fail immediately — they sound like wedding vows. Non-noble commitments name the SELF-PROTECTIVE MOVE explicitly ("I'm committed to never having to find out my effort didn't matter", "I'm committed to never letting her see the parts of me I'd have to disown").
+## How this works (structured slot)
+
+You do NOT return a full sentence. You return ONE slot — protective_move — that fills the blank in a template the server writes:
+
+    "I'm committed to never <protective_move>."
+
+You never write "I'm committed to never" (server writes it). You never write the trailing period (server writes it). Focus entirely on the semantic content of the protective move.
+
+Schema-enforced budget: protective_move is 10-140 characters (~5-20 words). Assembled sentence lands under 30 words. Precision, not paragraph.
+
+## Non-noble is the whole game
+
+A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice." Noble commitments ("being a good listener", "being the best husband I can be") fail immediately — they sound like wedding vows. Non-noble commitments name the SELF-PROTECTIVE MOVE explicitly.
+
+Right examples of protective_move slot content (bare, no prefix):
+  - "having to find out my effort didn't matter"
+  - "letting her see the parts of me I'd have to disown"
+  - "having to see I'm the kind of husband who keeps failing her"
 
 ## The identity-level bar (mandatory)
 
-There are two rungs on the non-noble ladder, and only the higher one is what Kegan/Lahey actually helps coachees arrive at:
+Two rungs on the non-noble ladder — only the higher one is Kegan-canonical:
 
-  - EVENT-level (weaker, still self-protective — but the coach will push past this): "I'm committed to never having to admit I made the mistake" — protects against a discrete event / feeling of exposure.
-  - IDENTITY-level (canonical): "I'm committed to never having to see I'm the kind of husband who keeps hurting her no matter how hard I try" — protects against a truth about WHO HE IS being confirmed.
+  - **EVENT-level (weaker — the reaction coach will push past this):** "having to admit I made the mistake" — protects against a discrete event.
+  - **IDENTITY-level (canonical):** "having to see I'm the kind of husband who keeps hurting her" — protects against a truth about WHO HE IS being confirmed.
 
-Every draft must land at the identity-level rung. What is the commitment keeping him safe from having to SEE ABOUT HIMSELF? Not "having to admit the fact happened" — "having to face what the fact would confirm about the kind of person he is."
+Every draft must land at the identity-level rung. What is the commitment keeping him safe from having to SEE ABOUT HIMSELF? Not "the fact happened" — "what the fact would confirm about the kind of person he is."
 
-If the fear underneath is "I'm the kind of husband who keeps hurting her," the commitment is not "never having to admit I hurt her" (event-level dodge) — it is "never having to see I'm the kind of husband who keeps hurting her" (identity-level protection).
+## Softening anti-patterns — banned frames in the protective_move slot
 
-## Softening anti-patterns — do NOT use these frames
+These are event-level dodges. Do NOT write:
 
-These are all event-level dodges the drafter has produced before and the reaction coach then had to push past. Ban them:
+  - "having to admit the mistake" / "admitting I was wrong" — event, not pattern.
+  - "letting her see me fail" / "letting her see me make a mistake" — protects visibility of the event, not identity underneath.
+  - "having to face the situation" / "having to have that conversation" — the situation, not the self-truth.
+  - "having to apologize" / "having to say I'm sorry" — the ceremony, not the identity.
 
-  - "never having to admit the mistake" / "never admitting I was wrong" — event, not pattern.
-  - "never letting her see me fail" / "never letting her see me make a mistake" — protects the visibility of the event, not the identity underneath.
-  - "never having to face the situation" / "never having to have that conversation" — the situation, not the self-truth.
-  - "never having to apologize" / "never having to say I'm sorry" — the ceremony, not the identity.
-
-Replace all of these with constructions that name what the moment would CONFIRM about him. "Never having to see I'm the man who…", "never having to find out I'm the kind of person who…", "never letting her prove I'm the husband who…"
+Replace with constructions that name what the moment would CONFIRM about him:
+  - "having to see I'm the man who…"
+  - "having to find out I'm the kind of person who…"
+  - "letting her prove I'm the husband who…"
 
 ## Preserve the coachee's own specificity — copy his nouns
 
 You are naming HIS belief in HIS words. Do NOT editorialize a smoother version.
-  - If his worry says "his wife", the commitment says "his wife". Do NOT substitute "his family", "the people he loves", "his loved ones".
-  - If his worry says "she'd leave", the commitment says "she'd leave". Do NOT reword to "I'd lose everyone" or "I'd be alone".
+  - If his worry says "his wife", the commitment says "his wife". Do NOT substitute "his family" / "the people he loves" / "his loved ones".
+  - If his worry says "she'd leave", the commitment says "she'd leave". Do NOT reword to "I'd lose everyone" / "I'd be alone".
   - If his worry names a specific act ("bringing up the past", "lying"), the commitment stays in that act's shape.
 
-## Three criteria (all must hold)
+## Silent derivation
 
-  1. is_self_protective — the protective flinch is visible. Names what he's keeping himself safe from FEELING or FACING.
-  2. is_first_person — starts with "I'm committed to never…" (or equivalent). Named as his own vow.
-  3. is_not_productivity_platitude — would sound strange on a productivity blog. If it'd fit in a wedding speech, it hasn't landed.
+  A. Read the paired worry. Identify what it would CONFIRM ABOUT HIM AS A PERSON if it came true — not what event would happen, what identity truth would land.
+  B. Fill protective_move with the specific move that prevents having to see / face that identity truth. Land at the identity rung.
 
-## Silent two-step derivation
-
-  A. Read the paired worry. Identify what it would CONFIRM ABOUT HIM as a person if it came true (not just what event would happen — what identity truth would land).
-  B. Draft "I'm committed to never [move that prevents having to see / face that identity truth]." Land at the identity rung — his person, not the event.
-
-Return exactly one draft in the \`draft\` field, starting with "I'm committed to never". No prose, no explanation, no meta. One sentence.
+Return only the structured slot ({ protective_move: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
 `.trim();
 
 /**
  * Server-side coach-draft generator for Column 4. Called once per
  * worry when the coachee advances into the commitments stage.
  *
- * Same architectural class as the depth-scoring rubric: LLM computes
- * a value, the server writes it, the user sees it as a suggestion in
- * the UI. The draft becomes real commitment.text only when the user
- * explicitly accepts (tap "Use this draft") or types their own —
- * never silently.
+ * Form-First-pure: LLM returns METADATA (the protective_move slot);
+ * server assembles the canonical "I'm committed to never ..." sentence.
+ * Coachee reviews, edits, or promotes to real commitment.text via
+ * saveCommitment.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -674,11 +725,11 @@ export async function draftCommitmentForWorry(input: {
         `Behavior (Column 2): ${input.behaviorText}`,
         `Paired worry (Column 3): ${input.worryText}`,
         ``,
-        `Draft the non-noble commitment underneath this worry.`,
+        `Fill protective_move with the identity-level self-protective move underneath this worry.`,
       ].join("\n"),
       maxOutputTokens: 400,
     });
-    return scrubReply(object.draft);
+    return scrubReply(assembleCommitment(object));
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",
@@ -734,127 +785,210 @@ export function ensureThenAfterIfClause(text: string): string {
   );
 }
 
-const AssumptionDraftsSchema = z.object({
-  drafts: z
-    .array(
-      z.object({
-        /** "I assume that if I …, then …" belief the coachee holds as
-         *  truth. The "I assume that" stem makes the epistemic status
-         *  explicit (testable belief, not fact about reality) — that's
-         *  what unlocks the immunity. The server post-processes each
-         *  draft through ensureStem(text, ASSUMPTION_STEM) so a
-         *  compliant model can drop the stem and the server still
-         *  puts it in canonical form. */
-        // Max ~40 words. The prompt targets 15 words (Kegan's average);
-        // 200 chars is a safety-net upper bound to catch runaway
-        // multi-clause chained drafts. Well-formed drafts sit comfortably
-        // under this.
-        text: z.string().min(10).max(200),
-        /** 1-based indices into the commitments list passed to the
-         *  prompt. At least one — a draft covering nothing is useless. */
-        commitment_indices: z.array(z.number().int().min(1)).min(1),
-      }),
-    )
-    .min(1)
-    .max(6),
+/**
+ * Structured-slots schema for the assumption drafter. The LLM produces
+ * three raw semantic ingredients per draft; the server assembles the
+ * canonical sentence via assembleAssumption below.
+ *
+ * Form-First-pure: the LLM contributes only content (what act, what
+ * observable, what identity); the server owns the sentence's shape
+ * (stem, "if I", "then", "and", punctuation, length envelope).
+ *
+ * This replaced a freeform `text: string` schema that was accumulating
+ * enforcement bandaids (ensureStem, ensureThenAfterIfClause, rubric
+ * filter, compression retry). Every one of those bandaids is now
+ * either unnecessary (server writes those tokens) or narrower in
+ * scope (rubric filter still runs but only checks identity-landing
+ * depth, not shape).
+ *
+ * Per-slot word caps enforce total length by construction: assembled
+ * sentence is 15-25 words worst case (stem+connectives=~7 + slots).
+ */
+const AssumptionDraftSlotsSchema = z.object({
+  /** The specific act the coachee would do differently — the counter-
+   *  move the assumption predicts a bad outcome from. 3-12 words.
+   *  Server prefixes "if I " so write it as a bare verb phrase without
+   *  the "if I" prefix. Example: "stay in the room while she's angry"
+   *  or "listen and admit she's right" or "stop protecting her from
+   *  seeing my failures". */
+  antecedent_act: z.string().min(5).max(90),
+  /** The observable tell — what would happen in the world if the
+   *  assumption's prediction were true. 3-10 words. A behavior he'd
+   *  exhibit ("I'd lose control"), a reaction from another person
+   *  ("she'd pull away"), or a specific felt state ("I'd feel the
+   *  shame"). NOT a meta-verdict like "I'd prove" or "I'd realize".
+   *  Server assembles as ", then <tell>". */
+  consequent_tell: z.string().min(3).max(65),
+  /** The identity landing — what the tell confirms about who he is.
+   *  3-10 words. Anchored in the coachee's own commitment language
+   *  when possible ("the husband who hurts her", "not good enough for
+   *  her", "the man she can't trust"). Server assembles as " and
+   *  <identity>". */
+  consequent_identity: z.string().min(3).max(65),
+  /** 1-based indices into the commitments list passed to the prompt.
+   *  At least one — a draft covering nothing is useless. */
+  commitment_indices: z.array(z.number().int().min(1)).min(1),
 });
+type AssumptionDraftSlots = z.infer<typeof AssumptionDraftSlotsSchema>;
+
+const AssumptionDraftsSchema = z.object({
+  drafts: z.array(AssumptionDraftSlotsSchema).min(1).max(6),
+});
+
+/**
+ * Server-side assembly of the canonical "I assume that if I ..., then
+ * ... and ...." sentence from the three LLM-provided slots.
+ *
+ * Normalizes each slot: trims whitespace, strips trailing punctuation
+ * (LLM sometimes writes "lose control." — we'd get double period),
+ * lowercases the first char of act/tell/identity if it accidentally
+ * came capitalized (server writes the sentence-initial capital via
+ * the "I" in "I assume").
+ *
+ * Assembled result runs through scrubReply for final cleanup (dash
+ * normalization, claim-of-action strip). No ensureStem or
+ * ensureThenAfterIfClause needed — the server writes those tokens.
+ */
+export function assembleAssumption(slots: {
+  antecedent_act: string;
+  consequent_tell: string;
+  consequent_identity: string;
+}): string {
+  const act = normalizeSlot(slots.antecedent_act);
+  const tell = normalizeSlot(slots.consequent_tell);
+  const identity = normalizeSlot(slots.consequent_identity);
+  return `I assume that if I ${act}, then ${tell} and ${identity}.`;
+}
+
+/**
+ * Slot-content normalization used by both drafter assemblers.
+ * - Trim whitespace.
+ * - Strip leading `,;:` and trailing `.!?,;:` (LLM sometimes writes
+ *   punctuation the server template already provides).
+ * - Lowercase the first char UNLESS it's a pronoun "I" (single-letter
+ *   I followed by apostrophe/whitespace/end) — that MUST stay capital
+ *   or "I'd" becomes "i'd" which looks wrong in "then i'd lose control".
+ */
+function normalizeSlot(s: string): string {
+  const trimmed = s
+    .trim()
+    .replace(/^[,;:]+/, "")
+    .replace(/[.!?,;:]+$/, "")
+    .trim();
+  // Preserve capital-I pronoun ("I", "I'd", "I'm", "I've", "I'll").
+  // Smart-apostrophe U+2019 also counts.
+  if (/^I(?:['\u2019]|\s|$)/.test(trimmed)) return trimmed;
+  return trimmed.replace(/^./, (c) => c.toLowerCase());
+}
 
 const DRAFT_ASSUMPTIONS_SYSTEM = `
 You cluster a coachee's competing commitments and draft the Big Assumptions underneath them for an ITC map (Column 5). Big Assumptions are beliefs the coachee holds about how the world works that make each hidden commitment in Column 4 feel NECESSARY. To him they don't feel like assumptions — they feel like TRUTH. That's why the immune system runs itself.
 
-## Canonical form (mandatory)
+## How this works (structured slots)
 
-Every draft.text MUST match the shape: "I assume that if I …, then …". Three literal tokens are non-negotiable and must appear in this order in every draft:
-  - "I assume that" — the epistemic-status prefix. Names it as belief, not fact.
-  - "if I" — the antecedent opener. Frames the behavior he'd do differently.
-  - "then" — the consequent opener. Frames what would follow as a PREDICTION, not a diagnosis.
+You do NOT return a full sentence. You return three slots per draft — antecedent_act, consequent_tell, consequent_identity — plus commitment_indices. The SERVER assembles the canonical Kegan/Lahey sentence from your slots:
 
-Do NOT drop the "then". "I assume that if I X, Y" reads as a diagnosis (X reveals Y as an already-true fact). "I assume that if I X, then Y" reads as a prediction (X would cause / lead to Y). Only the second is testable. Kegan/Lahey's canonical form.
+    "I assume that if I [antecedent_act], then [consequent_tell] and [consequent_identity]."
 
-## The bar every draft must clear
+You never write "I assume that", "if I", "then", or the connecting "and". The server writes those. You never write the trailing period. The server writes that. Focus entirely on the semantic content of each slot.
 
-  1. **One catastrophic clause in the consequent.** Land on ONE identity or relational catastrophe — "then I'd be a fraud", "then she'd have no choice but to leave", "then I'd be the husband who hurts his wife". If two different catastrophes come to mind, split them into two drafts. Do NOT chain "…and I'd become X, and she'd Y, and then Z" — a chained draft is untestable because it's unclear which link is the load-bearing belief.
+Per-slot word budgets (schema-enforced — drafts violating these get rejected):
+  - antecedent_act: 3–12 words. Bare verb phrase.
+  - consequent_tell: 3–10 words. Observable event.
+  - consequent_identity: 3–10 words. Identity landing.
 
-  2. **Consequent must have BOTH parts: observable tell AND identity landing.** Not one or the other. Both. Every draft. This is the hardest bar and the one drafts most often miss.
+Assembled sentence lands at 15–25 words worst case. Kegan/Lahey average is ~15 words — that's your target center. Cut before submitting.
 
-     - The **OBSERVABLE TELL** is something the coachee could see, hear, or feel — a behavior he'd exhibit ("I'd lose control"), a reaction from another person ("she'd pull away"), or a specific felt state ("I'd feel the shame"). Without this the belief is untestable — you can't run an experiment on "am I a fraud."
-     - The **IDENTITY LANDING** is what the tell would CONFIRM about who he is — "the husband who hurts her", "not good enough for her", "the man she can't trust". Without this the draft is just a behavioral prediction and it fails BOTH the coach reaction (which will push "what does that prove about you?") AND the depth rubric (which will score it below identity-level and reject it).
+## What each slot must contain
 
-     The template is strict: "then [OBSERVABLE TELL] and [IDENTITY LANDING]". Both slots must be filled. Test each draft yourself before returning it — cover the second half of the consequent with your hand: if what remains is just a behavioral prediction ("I'd lose control", "I'd say something awful", "she'd pull away") with no identity claim following, you have NOT completed the draft. Extend it with the identity landing.
+### antecedent_act
+The specific act the coachee would do differently — the counter-move the assumption predicts a bad outcome from.
 
-     Anchor the identity landing in the coachee's OWN commitment language when possible. If his commitment says "never becoming that guy", the assumption's landing should invoke "that guy" or "the guy I'm terrified I am." If his commitment says "never letting her see I've failed her", the landing should invoke "the husband who fails her" or similar. His identity language is the raw material for your consequent's back half.
+  - Bare verb phrase. Do NOT prefix with "if I" — the server writes that.
+  - 3–12 words. Specific enough that the coachee could actually do it this week.
+  - Wrong (with prefix): "if I stay in the room while she's angry"
+  - Right (bare): "stay in the room while she's angry"
 
-     Draft is rejected server-side (via scoreAssumptionDepth) if the identity landing is missing — you don't get to hand the coachee a draft that will fail the gate.
+Right examples: "stay in the room while she's angry" / "listen and admit she's right" / "stop protecting her from seeing my failures" / "show her the worst of me" / "keep admitting I'm wrong"
 
-  3. **Land in identity/relationship/worth — NOT practical outcome.** "It would be awkward" or "we'd fall behind" is a practical concern, not a Big Assumption.
+### consequent_tell
+An OBSERVABLE event — something the coachee could see, hear, or feel in real life if the assumption were true. This is the testability slot.
 
-  4. **First-person felt, in HIS voice.**
+  - A behavior he'd exhibit: "I'd lose control" / "I'd shut down"
+  - A reaction from another person: "she'd pull away" / "she'd stop trusting me" / "she'd show me I've been hurting her"
+  - A specific felt state: "I'd feel the shame" / "I'd flood with the same old fear"
 
-  5. **Preserve the coachee's own specificity — copy his nouns.** This rule was violated in prior drafts; enforce it strictly.
-     - If his worry says "his wife", the assumption says "his wife". Do NOT substitute "his family", "the people he loves", "anyone he cares about", "his loved ones".
-     - If his worry says "she'd leave", the assumption says "she'd leave". Do NOT reword to "I'd end up alone" or "I'd lose everyone".
-     - If his worry says "I'd lose control", the assumption says "I'd lose control". Do NOT reword to "I'd become someone I don't recognize".
-     - If his commitment says "admit she's right", the assumption says "admit she's right". Do NOT add "completely" or any other intensifier he didn't use.
-     You are naming HIS belief in HIS words. You are not editorializing a smoother, more literary, or more universal version.
+Banned in this slot (META-LANGUAGE — these are self-verdicts, not observable events; drafts containing these are rejected server-side):
+  - "I'd prove" / "I'd confirm" / "I'd realize" / "I'd finally know" / "I'd see that I'm"
 
-  6. **Ban meta-language self-verdicts in the consequent.** Do NOT write "I'd prove", "I'd confirm", "I'd realize", "I'd finally know", "I'd see that I'm" — these are META descriptions of what would become KNOWN to him as fact, not observable events. They collapse the belief into a self-verdict he can find evidence for internally without ever running a real test. Replace with an observable-in-the-world tell (behavior, reaction, felt state) and let the identity claim ride on top of that tell. Wrong: "then I'd prove I'm the husband who hurts her." Right: "then she'd tell me how many times I've hurt her and I'd have to face I really am that husband." The felt-shame version is fine ("then I'd feel the shame that lands it"), because feeling shame IS an observable event — but "prove", "realize", "confirm" as self-directed verbs are not.
+Do NOT start the tell with "then" — the server writes that.
 
-  7. **Ban unfalsifiable global qualifiers.** Do NOT include "no matter what I do", "no matter what", "always", "every time", "in every situation", "for good" in the consequent. These make the belief unfalsifiable by any single interaction — even if the test goes well, the coachee can dismiss it as one exception ("that's just one time, I still X every other time"). The consequent must name something that could turn out NOT to happen in ONE specific real-world interaction. Wrong: "then I'd prove I'm the husband who hurts her no matter what I do." Right: "then she'd tell me I've been hurting her." The right version can be falsified in a single conversation. Note: negation like "never" inside the coachee's OWN nouns (a commitment saying "I'm committed to never letting her see...") is fine — the ban is on universals in the CONSEQUENT that make the outcome unfalsifiable.
+### consequent_identity
+What the tell CONFIRMS about who he is. Anchored in the coachee's own commitment language when possible.
 
-  8. **Do NOT re-stem the worry.** The most common drafter failure: taking the paired worry and swapping "worry that" → "assume that" + injecting "then" — producing a draft that IS the worry with a canonical prefix. The worry and the Big Assumption are different objects. The worry is a felt fear ("I worry that if X, Y-catastrophic-chain"). The assumption is the belief UNDERNEATH the worry — the taken-as-truth claim that MAKES the worry feel warranted. Derivation:
-      - Isolate the ONE atomic testable belief inside the worry's chained clauses. If the worry is "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife", the atomic belief is either "I can't handle her anger without losing control" (about the behavior) OR "if I show her the worst of me, she couldn't stay" (about her response). Pick ONE.
-      - Make the antecedent NAME the specific act (not just repeat the worry's if-clause).
-      - Make the consequent ONE observable + ONE identity landing (not the worry's chain).
-     Wrong shape: worry = "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife" → assumption = "I assume that if I stay in the room, then I'd lose it and say something awful, and I'd be the husband who hurts his wife" (verbatim worry with prefix swap).
-     Right shape: assumption = "I assume that if I stay in the room while she's angry, then I'd lose control and say something I can't take back." One clean atomic testable belief distilled from the worry — not the worry re-stemmed.
+  - Right: "the husband who hurts her" / "not good enough for her" / "the man she can't trust" / "the guy I'm terrified I am" / "not the husband she deserves"
+  - Anchor to HIS words: if his commitment says "never becoming that guy", write "that guy" or "the guy I'm terrified I am" here.
 
-  9. **Aim for ~15–20 words WITH both consequent parts included.** Kegan/Lahey's canonical Big Assumptions in *Immunity to Change* average ~15 words. Your target: 15–20 words with BOTH the observable tell AND the identity landing (per rule 2). 20+ is a smell you're carrying extra modifiers or chained clauses. 25+ is nearly always the worry re-stemmed. Precision, not paragraph. When in doubt, tighten the antecedent (drop "actually" / "in the moment" / "really") — but NEVER drop the identity landing to hit a word count.
+Do NOT start with "and" — the server writes that.
 
-     Canonical shapes (study these — they are your templates):
-     - "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her." (19 words: tell "lose control" + landing "husband who hurts her")
-     - "I assume that if I show her the worst of me, then she'd pull away and I'd know I'm not enough." (17 words: relational tell + landing)
-     - "I assume that if I stop protecting her from my failures, then she'd finally see I'm not the husband she deserves." (18 words: tell "she'd see" + landing "not the husband she deserves")
-     - "I assume that if I keep admitting I'm wrong, then she'd stop trusting me and I'd be the man she can't rely on." (19 words: tell "stop trusting" + landing "the man she can't rely on")
+Banned qualifiers in this slot (unfalsifiable universals — these make the belief impossible to test with a single interaction):
+  - "no matter what I do" / "no matter what" / "always" / "every time" / "for good"
 
-     Every canonical shape has: "I assume that if I" + [act] + ", then" + [tell] + [and-connector] + [identity landing]. Match this shape.
+## Preserve the coachee's own specificity — copy his nouns
+
+This is a hard rule, non-negotiable:
+
+  - If his worry says "his wife", write "his wife". Do NOT substitute "his family" / "the people he loves" / "anyone he cares about" / "his loved ones".
+  - If his worry says "she'd leave", write "she'd leave". Do NOT reword to "I'd end up alone".
+  - If his worry says "I'd lose control", write "I'd lose control". Do NOT reword to "I'd become someone I don't recognize".
+  - If his commitment says "admit she's right", write "admit she's right". Do NOT add "completely" or any other intensifier he didn't use.
+
+You are naming HIS belief in HIS words. You are not editorializing a smoother, more literary, or more universal version.
+
+## Do NOT re-stem the worry
+
+The most common drafter failure: taking the paired worry (a chained "I worry that if X, Y, and Z, and W" sentence) and copying its shape into the assumption slots verbatim. That produces re-stemmed worries, not distilled beliefs.
+
+The worry and the Big Assumption are different objects. The worry is a felt fear with piled-up catastrophic clauses. The assumption is the ONE atomic belief UNDERNEATH the worry — the taken-as-truth claim that makes the worry feel warranted.
+
+To decompose a worry into slots:
+  - Read the worry's chained catastrophes.
+  - Identify ONE atomic testable belief inside it. If the worry is "if I stay in the room, I'd lose it and say something awful, and I'd be the husband who hurts his wife", the atomic belief is either "I can't handle her anger without losing control" (about him) OR "if I show her the worst, she couldn't stay" (about her). Pick ONE.
+  - Fill antecedent_act with the specific act (not "if I stay in the room" verbatim — decompose to "stay in the room while she's angry" — sharper and shorter).
+  - Fill consequent_tell with the observable IF the belief were true.
+  - Fill consequent_identity with the identity claim underneath.
+
+Wrong shape (worry re-stemmed into slots): antecedent_act="stay in the room instead of walking out", consequent_tell="I'd lose control and say something awful", consequent_identity="be the husband who hurts his wife". → assembled = "I assume that if I stay in the room instead of walking out, then I'd lose control and say something awful and be the husband who hurts his wife." That's the worry with prefix swap. 30 words. Rejected.
+
+Right shape: antecedent_act="stay in the room while she's angry", consequent_tell="I'd lose control", consequent_identity="be the husband who hurts her". → assembled = "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her." Atomic. 22 words. Passes.
 
 ## Clustering — shared-root FIRST, split only as fallback
 
 Kegan/Lahey's methodology explicitly favors finding ONE Big Assumption that underwrites MULTIPLE competing commitments when a genuine shared root exists — that's evidence you've found a deep assumption vs. a surface one. Many-to-many is the target when it's real.
 
-BUT: a fake cluster is worse than a split. Coverage is determined by the ANTECEDENT ONLY — not by keywords in your consequent.
+BUT: a fake cluster is worse than a split. Coverage is determined by the ANTECEDENT ONLY — not by keywords in your consequent slots.
 
-**The cluster-coverage test (mandatory before you list a commitment_index):**
+The cluster-coverage test (mandatory before you list a commitment_index):
 
-  1. Read the antecedent — the "if I ..." clause.
-  2. For EACH commitment you're about to link, ask: "Would this coachee actually perform the act named in the antecedent under this commitment's protective vow?"
+  1. Read your antecedent_act.
+  2. For EACH commitment you're about to link, ask: "Would this coachee actually perform the act named in antecedent_act under this commitment's protective vow?"
   3. If yes for all — cluster under one draft.
   4. If yes for only some — split. Do NOT list commitment_indices for the ones that don't fit.
 
-**The consequent-keyword trap — do NOT do this:**
+The consequent-keyword trap — do NOT do this: if your consequent_tell contains a phrase that ALSO appears in a commitment's paired worry, that is NOT evidence the antecedent covers that commitment. That is just a shared FEAR downstream. The antecedent (the ACT) must fit independently.
 
-If your consequent contains a phrase like "I'd lose it" or "hurt her" or "not good enough," and one of the commitments' paired worries also mentions "lose it" or "hurt her" or "not good enough" — that is NOT evidence the antecedent covers that commitment. That is just a shared FEAR downstream. The antecedent (the ACT) must fit, independently of what fears the consequent names.
-
-**Worked example of the trap:**
-
-Antecedent: "if I actually listen to her and admit she's right".
-Consequent contains: "then I'd lose it and be the husband who hurts her".
-Commitment #3's paired worry mentions "losing it" and "hurting his wife."
-Wrong move: linking this draft to #3 because the consequent-keyword matches.
-Right move: check the antecedent independently — does #3's commitment involve listening and admitting? No, #3 is about walking out. So the antecedent DOESN'T fit #3. Do not link. If #3 needs coverage, draft a second assumption whose antecedent names the walking-out move.
-
-**A cluster with a wrong link is worse than a smaller cluster with no wrong links.** A wrong link produces an assumption the coachee can't actually test — the antecedent doesn't describe an act she'd perform under that commitment, so the "test" is empty.
+A cluster with a wrong link is worse than a smaller cluster with no wrong links.
 
 ## Coverage
 
 Every commitment on the input list must be covered by at least one draft. No orphans. Aim for FEWER drafts (2–4 is typical for a whole map); six is a ceiling, not a target.
 
-## Silent two-step derivation
+## Silent derivation
 
-  A. Read goal + commitments together. Ask: is there ONE catastrophic belief that, if provisionally suspended, would loosen ALL these commitments? If yes → one cluster.
-  B. For each cluster (or standalone commitment), write one draft in "I assume that if I …, then …" form. Include the "then". One antecedent. One catastrophic consequent WITH a behavioral or relational tell. HIS words, HIS nouns.
+  A. Read goal + commitments together. Is there ONE catastrophic belief that, if provisionally suspended, would loosen ALL these commitments? If yes → one cluster.
+  B. For each cluster (or standalone commitment), fill the three slots. Use HIS words, HIS nouns. Aim for the assembled sentence to land under 20 words.
 
-Return only drafts. No prose, no meta, no explanation. Every draft.text starts with "I assume that if I" and contains the word "then" between antecedent and consequent.
+Return only structured drafts (the three slots + commitment_indices per draft). No prose, no meta, no explanation, no wrapping sentence — the server writes that.
 `.trim();
 
 /**
@@ -891,17 +1025,20 @@ export async function draftAssumptionsFromCommitments(input: {
       maxOutputTokens: 1200,
     });
     // Clamp indices to the input range so a hallucinated index can't
-    // land a link pointing at nothing. Also pipe each draft through:
-    //   - scrubReply: dash/claim/comma-space cleanup
-    //   - ensureStem: canonical "I assume that" prefix
-    //   - ensureThenAfterIfClause: canonical "then" between antecedent
-    //     and consequent (predictive frame, not diagnostic)
-    // so a compliant model that drops either token still lands here in
-    // canonical Kegan/Lahey form.
+    // land a link pointing at nothing. Each draft's sentence is
+    // assembled server-side from the three slots the LLM returned —
+    // no more ensureStem or ensureThenAfterIfClause needed (the server
+    // wrote the stem, "if I", "then", "and" tokens itself). scrubReply
+    // still runs on the assembled sentence for dash / claim-of-action
+    // normalization.
     const max = input.commitments.length;
     const normalized = object.drafts.map((d) => ({
-      text: ensureThenAfterIfClause(
-        ensureStem(scrubReply(d.text), ASSUMPTION_STEM),
+      text: scrubReply(
+        assembleAssumption({
+          antecedent_act: d.antecedent_act,
+          consequent_tell: d.consequent_tell,
+          consequent_identity: d.consequent_identity,
+        }),
       ),
       commitment_indices: d.commitment_indices.filter(
         (n) => n >= 1 && n <= max,

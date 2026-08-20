@@ -17,6 +17,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  assembleAssumption,
+  assembleCommitment,
   ensureThenAfterIfClause,
   scrubReply,
   scrubReplyLight,
@@ -167,6 +169,129 @@ describe("scrubReplyLight", () => {
     // Should still have exactly two paragraph breaks between three
     // movements.
     expect(light.match(/\n\n/g)?.length).toBe(2);
+  });
+});
+
+describe("assembleAssumption (structured slots → canonical sentence)", () => {
+  it("assembles the canonical Kegan/Lahey shape from three slots", () => {
+    // The whole architectural point: the LLM writes only the semantic
+    // content (act, tell, identity); the server writes the stem, "if
+    // I", "then", "and", punctuation. This is what makes the sentence
+    // shape unrepresentable-if-wrong (no possible LLM output can
+    // produce a compound-consequent chained draft).
+    expect(
+      assembleAssumption({
+        antecedent_act: "stay in the room while she's angry",
+        consequent_tell: "I'd lose control",
+        consequent_identity: "be the husband who hurts her",
+      }),
+    ).toBe(
+      "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her.",
+    );
+  });
+
+  it("strips trailing punctuation the LLM might redundantly write", () => {
+    // Common LLM slip: writes "lose control." — with server assembly
+    // that would produce "then I'd lose control. and be the husband..."
+    // Normalize by stripping any trailing .,!?;: from each slot.
+    expect(
+      assembleAssumption({
+        antecedent_act: "stay in the room.",
+        consequent_tell: "I'd lose control.",
+        consequent_identity: "be the husband who hurts her.",
+      }),
+    ).toBe(
+      "I assume that if I stay in the room, then I'd lose control and be the husband who hurts her.",
+    );
+  });
+
+  it("lowercases the first char of each slot (server writes the sentence-initial cap)", () => {
+    // If the LLM accidentally sentence-cases a slot ("Stay in the
+    // room"), the assembled output would have "if I Stay in the
+    // room" which reads wrong. Normalize to lowercase first char.
+    expect(
+      assembleAssumption({
+        antecedent_act: "Stay in the room while she's angry",
+        consequent_tell: "I'd lose control",
+        consequent_identity: "Be the husband who hurts her",
+      }),
+    ).toBe(
+      "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her.",
+    );
+  });
+
+  it("assembled length is bounded — worst-case slots produce ≤ 40 words", () => {
+    // Per-slot schema caps (12/10/10 words) + connectives (7) put
+    // the assembled sentence at ~40 words worst case. Real Kegan-
+    // canonical drafts land at 15-25.
+    const maxOut = assembleAssumption({
+      antecedent_act: "one two three four five six seven eight nine ten eleven twelve",
+      consequent_tell: "one two three four five six seven eight nine ten",
+      consequent_identity: "one two three four five six seven eight nine ten",
+    });
+    expect(maxOut.split(/\s+/).length).toBeLessThanOrEqual(40);
+  });
+
+  it("cannot produce compound-consequent chained drafts (structural guarantee)", () => {
+    // The old freeform-text drafter kept producing "then I'd X and I'd
+    // Y, and I'd Z, and she'd W" chains. With the structured schema
+    // there's exactly ONE tell slot and ONE identity slot — chaining
+    // is impossible at the shape level (any "and" between tell +
+    // identity is the server-written one). This test is a sanity
+    // demonstration, not an assertion of the schema constraint.
+    const out = assembleAssumption({
+      antecedent_act: "stay",
+      consequent_tell: "I'd lose control",
+      consequent_identity: "be the husband who hurts her",
+    });
+    // Exactly ONE " and " in the output (the server-written one).
+    expect(out.match(/ and /g)?.length).toBe(1);
+  });
+});
+
+describe("assembleCommitment (structured slot → canonical sentence)", () => {
+  it("assembles 'I'm committed to never <slot>.'", () => {
+    expect(
+      assembleCommitment({
+        protective_move: "having to see I'm the husband who keeps failing her",
+      }),
+    ).toBe(
+      "I'm committed to never having to see I'm the husband who keeps failing her.",
+    );
+  });
+
+  it("strips a redundant leading 'never' if the LLM wrote it", () => {
+    // The server writes "never" as part of the prefix. If the LLM
+    // redundantly writes "never" at the start of the slot, we'd get
+    // "I'm committed to never never having to see..." — normalize
+    // by stripping any leading "never ".
+    expect(
+      assembleCommitment({
+        protective_move: "never having to see I'm the failing husband",
+      }),
+    ).toBe(
+      "I'm committed to never having to see I'm the failing husband.",
+    );
+  });
+
+  it("strips trailing punctuation the LLM might redundantly write", () => {
+    expect(
+      assembleCommitment({
+        protective_move: "letting her see the parts of me I'd have to disown.",
+      }),
+    ).toBe(
+      "I'm committed to never letting her see the parts of me I'd have to disown.",
+    );
+  });
+
+  it("lowercases the first char of the slot", () => {
+    expect(
+      assembleCommitment({
+        protective_move: "Having to find out my effort didn't matter",
+      }),
+    ).toBe(
+      "I'm committed to never having to find out my effort didn't matter.",
+    );
   });
 });
 
