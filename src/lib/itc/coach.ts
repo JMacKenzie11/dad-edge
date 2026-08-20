@@ -267,6 +267,7 @@ export async function generateCoachReaction(
 
 function buildReactionPrompt(input: ReactionInput): string {
   const { kind, text, pairedText, depthScore, attempts } = input.justAdded;
+  const pillar = PILLAR_BY_CODE[input.pillar];
   const isDepthStage =
     kind === "worry" || kind === "commitment" || kind === "assumption";
   const pairedLabel =
@@ -364,6 +365,20 @@ function buildReactionPrompt(input: ReactionInput): string {
       "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
     );
     if (kind === "goal") {
+      // Explicit pillar-fit guard. The generic Case-1 rule about
+      // "wrong pillar" is too easy for the model to skip when the
+      // goal is otherwise well-formed. This makes the check
+      // mandatory and gives concrete cross-pillar leak examples.
+      parts.push(
+        `GOAL-SPECIFIC PILLAR CHECK (do not skip): the goal MUST be about the domain of the pillar the coachee picked (${pillar.label} = ${pillar.domain}). If the goal is about someone or something outside that domain, it is CASE 1 — push back plainly and ask him to either switch the pillar or reword the goal.\n` +
+          `  Common cross-pillar leaks to catch:\n` +
+          `    - Raise pillar (kids) + goal about wife/spouse → wrong pillar (that's Bond).\n` +
+          `    - Bond pillar (marriage/partner) + goal about kids → wrong pillar (that's Raise).\n` +
+          `    - Amplify pillar (business/wealth) + goal about family → wrong pillar (that's Bond or Raise).\n` +
+          `    - Vitality/Movement pillar + goal about relationships → wrong pillar.\n` +
+          `  Test: after this goal is achieved, would his day-to-day change WITHIN the ${pillar.label} domain (${pillar.domain})? If not, it's the wrong pillar for this goal.\n` +
+          `  When you catch a cross-pillar leak: name it plainly ("that reads as a [correct-pillar-name] goal, but you picked ${pillar.label}. Do you want to switch the map to [correct-pillar-name], or reword the goal to focus on ${pillar.domain}?"). Do NOT approve as Case 3. Do NOT offer a refinement chip that just tweaks wording — the fix is either a different pillar or a different goal.`,
+      );
       // Explicit specificity guard for goals. Repeated failure mode:
       // the model approves role-identity goals ("being a husband",
       // "being a good father") as Case 3 because they're technically
