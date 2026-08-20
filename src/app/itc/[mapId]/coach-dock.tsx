@@ -69,7 +69,7 @@ export function CoachDock({
       </button>
       {open ? (
         <aside
-          className="fixed bottom-20 right-4 z-50 flex flex-col w-[92vw] max-w-md h-[70vh] rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-2xl"
+          className="fixed bottom-20 right-4 z-50 flex flex-col w-[92vw] max-w-lg h-[75vh] rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-2xl"
           role="dialog"
           aria-label="Ask the coach"
         >
@@ -95,11 +95,15 @@ export function CoachDock({
                 key={m.id}
                 className={
                   m.role === "user"
-                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm leading-relaxed"
-                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[color:var(--color-primary)]/25 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+                    : "mr-auto w-full rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-3 py-3 text-sm leading-relaxed"
                 }
               >
-                {m.content}
+                {m.role === "assistant" ? (
+                  <ProseParagraphs text={m.content} />
+                ) : (
+                  m.content
+                )}
               </li>
             ))}
             {pending ? (
@@ -138,5 +142,33 @@ export function CoachDock({
         </aside>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Splits coach prose on paragraph breaks and renders each block as a
+ * <p> with visible spacing. Deterministic, server-owned rendering:
+ * even if the LLM produces a wall (one giant paragraph), we render
+ * exactly one paragraph. If the LLM uses \n\n between paragraphs,
+ * we render them as spaced blocks — no reliance on whitespace-pre-
+ * wrap to visually separate blocks.
+ *
+ * Prose over ~3 sentences was rendering as a dense wall in the
+ * narrow dock drawer even with pre-wrap. Splitting on \n\n and
+ * spacing paragraphs makes long responses skimmable.
+ */
+function ProseParagraphs({ text }: { text: string }) {
+  const paragraphs = text
+    .split(/\n\s*\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  return (
+    <div className="space-y-2.5">
+      {paragraphs.map((p, i) => (
+        <p key={i} className="whitespace-pre-wrap">
+          {p}
+        </p>
+      ))}
+    </div>
   );
 }
