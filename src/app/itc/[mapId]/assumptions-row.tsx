@@ -8,6 +8,7 @@ import type {
   ItcCommitment,
   ItcMessage,
 } from "@/lib/itc/maps";
+import { worryPassesDepth } from "@/lib/itc/rules";
 import {
   dismissAssumptionDraft,
   removeAssumption,
@@ -476,10 +477,22 @@ function AssumptionItem({
     });
   }
 
+  // Flag assumptions that don't yet clear the advance-gate depth
+  // rubric. Same helper computeAdvanceGate uses — mirroring it in
+  // the UI lets the coachee see WHICH row is holding up "Continue"
+  // instead of just seeing the count in the gate message.
+  const needsMoreDepth = !worryPassesDepth(
+    assumption.depth_score,
+    assumption.attempts,
+  );
+
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 " +
+        "rounded-md border bg-black/20 px-4 py-3 " +
+        (needsMoreDepth
+          ? "border-[color:var(--color-warning)]/50 "
+          : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
     >
@@ -497,6 +510,14 @@ function AssumptionItem({
         <span className="mt-2 text-sm text-[color:var(--color-text-muted)] shrink-0">
           {index}.
         </span>
+        {needsMoreDepth ? (
+          <span
+            className="mt-2 rounded-full border border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-warning)] shrink-0"
+            title="This assumption hasn't reached the depth needed to advance. Sharpen it (or wait for a second attempt to pass) to clear the gate."
+          >
+            Needs more depth
+          </span>
+        ) : null}
         <div className="flex-1 space-y-2">
           <AutoTextarea
             ref={textareaRef}

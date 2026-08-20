@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcBehavior, ItcMessage, ItcWorry } from "@/lib/itc/maps";
+import { worryPassesDepth } from "@/lib/itc/rules";
 import { saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
@@ -190,10 +191,20 @@ function WorryItem({
     });
   }
 
+  // Flag rows whose worry doesn't yet clear the advance-gate depth
+  // rubric. Same helper computeAdvanceGate uses — mirroring it in
+  // the UI lets the coachee see WHICH row is holding up "Continue"
+  // instead of just seeing the count in the gate message.
+  const needsMoreDepth =
+    worry !== null && !worryPassesDepth(worry.depth_score, worry.attempts);
+
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 " +
+        "rounded-md border bg-black/20 px-4 py-3 " +
+        (needsMoreDepth
+          ? "border-[color:var(--color-warning)]/50 "
+          : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
     >
@@ -207,10 +218,18 @@ function WorryItem({
         </div>
       ) : null}
       <div className="flex flex-col gap-2">
-        <div className="flex items-baseline gap-2 text-[color:var(--color-text-muted)]/80">
+        <div className="flex flex-wrap items-baseline gap-2 text-[color:var(--color-text-muted)]/80">
           <span className="text-sm shrink-0">{index}.</span>
           <span className="text-sm">{behavior.text}</span>
           <span className="text-[color:var(--color-text-muted)]/50">→</span>
+          {needsMoreDepth ? (
+            <span
+              className="ml-auto rounded-full border border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-warning)]"
+              title="This worry hasn't reached the depth needed to advance. Sharpen it (or wait for a second attempt to pass) to clear the gate."
+            >
+              Needs more depth
+            </span>
+          ) : null}
         </div>
         {!worry && behavior.coach_worry_draft ? (
           <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">

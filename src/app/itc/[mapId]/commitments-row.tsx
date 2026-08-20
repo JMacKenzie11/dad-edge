@@ -7,6 +7,7 @@ import type {
   ItcMessage,
   ItcWorry,
 } from "@/lib/itc/maps";
+import { worryPassesDepth } from "@/lib/itc/rules";
 import { saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
@@ -200,10 +201,23 @@ function CommitmentItem({
     });
   }
 
+  // Flag rows whose commitment doesn't yet clear the advance-gate
+  // depth rubric. computeAdvanceGate uses the same worryPassesDepth
+  // helper — mirroring it in the UI lets the coachee see WHICH row
+  // is holding up "Continue" without having to guess. The gate
+  // message alone ("1 commitment needs more depth") gives the count
+  // but never the identity.
+  const needsMoreDepth =
+    commitment !== null &&
+    !worryPassesDepth(commitment.depth_score, commitment.attempts);
+
   return (
     <li
       className={
-        "rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 " +
+        "rounded-md border bg-black/20 px-4 py-3 " +
+        (needsMoreDepth
+          ? "border-[color:var(--color-warning)]/50 "
+          : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
     >
@@ -223,6 +237,14 @@ function CommitmentItem({
             worry:
           </span>
           <span className="text-sm italic">{worry.text}</span>
+          {needsMoreDepth ? (
+            <span
+              className="ml-auto rounded-full border border-[color:var(--color-warning)]/60 bg-[color:var(--color-warning)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-warning)]"
+              title="This commitment hasn't reached the depth needed to advance to Big Assumptions. Sharpen it (or wait for a second attempt to pass) to clear the gate."
+            >
+              Needs more depth
+            </span>
+          ) : null}
         </div>
         <div className="flex items-baseline gap-2 text-xs text-[color:var(--color-text-muted)]/70 pl-6">
           <span>behavior:</span>
