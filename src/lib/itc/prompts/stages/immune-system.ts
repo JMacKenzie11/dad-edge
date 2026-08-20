@@ -51,6 +51,8 @@ After the last assumption's loop lands, zoom out. Adapted from Kegan/Lahey (gas/
 
 Say the "one foot on the gas, one foot on the brake" phrase VERBATIM. That metaphor is the load-bearing image from the methodology — the guides use it repeatedly (Vol 1 pp vi, 3, 13, 17) — and it's the sentence coachees remember a year later.
 
+When you say the gas/brake sentence, frame the goal explicitly as the "Big Commitment" (Kegan's canonical Column 1 term). Example wording: "You have one foot on the gas — your Big Commitment (that goal, '[his goal, verbatim]', is what you're publicly committed to) — and one foot on the brake, the hidden competing commitments." This makes the Big Commitment vs Competing Commitments tension unmissable, which is the whole point of Movement 2. Do NOT call the goal "Column 1"; say "Big Commitment" the way you say "Big Assumption."
+
 QUOTE THE WORRIES VERBATIM in Movement 2. Do NOT paraphrase them into new prose ("the exact fears that you're fundamentally failing her, that you can't be trusted not to hurt her..."). That drift breaks the Kegan rule that HIS language must carry the emotional load-bearing moments. Reach back into the worry-box list from the context block and quote each worry inside quotation marks. If the map has fewer than 3 worries, quote what's there.
 
 Note on "self-protection" wording: the guides consistently frame Column 4 commitments and Column 2 behaviors as "self-protection" (Vol 1 p 13: "get to a more essential form of self-protection"; Vol 1 p 27: "To get a more essential form of self-protection"; Vol 1 p iv: "core principles of self-protection"). Prefer that phrase over "anxiety-management system," which is not the guide's operative term in the Coach's Guide.
@@ -71,11 +73,12 @@ Guide anchor for the pivot. Vol 2 p 250: testing the Big Assumption "is the hear
 
 After Movement 3, close with one plain sentence that points at the next step — NOT a question (the UI currently gives him nowhere to answer a question). Do NOT use therapy-speak openers like "Sit with this" or "Take a moment with this" — those are banned.
 
-Use this exact line:
+Use these two lines, in this order, on their own paragraph:
 
+  "If you want to talk any of this through, you can ask the coach at the bottom-right anytime."
   "When you're ready, pick which assumption to test first."
 
-Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully this landed"). Do NOT reference the button label or use UI verbs like "hit" or "click". Just the next-step line naming the intent.
+Nothing before them, nothing after them. No praise, no summary, no meta ("hopefully this landed"). Do NOT reference the button label or use UI verbs like "hit" or "click". "Ask the coach at the bottom-right" is describing where the affordance lives — that's a naming-the-thing exception, not UI narration, because the coachee has no other way to know that quiet floating button is the way to open a conversation about the walkthrough.
 
 === VOICE — Kegan explaining it one-on-one ===
 
@@ -93,5 +96,5 @@ Nothing before it, nothing after it. No praise, no summary, no meta ("hopefully 
 
 Return the walkthrough as a single block of prose. Movements 1, 2, and 3 flow into each other with paragraph breaks between them — no headings, no bullet points, no "Movement 1:" labels. The coachee reads it top to bottom as one continuous reflection on his own map. Blank line between paragraphs (Markdown-style double newline).
 
-End with the next-step line from the CLOSE section ("When you're ready, pick which assumption to test first.") on its own line. No question mark, no additional prompts, no therapy-speak preamble, no UI verbs, no button-label references.
+End with the two CLOSE lines from the CLOSE section on their own paragraph (the "ask the coach at the bottom-right" line followed by the "pick which assumption to test first" line). No question marks, no additional prompts, no therapy-speak preamble, no UI verbs beyond the "ask the coach at the bottom-right" phrase.
 `.trim();

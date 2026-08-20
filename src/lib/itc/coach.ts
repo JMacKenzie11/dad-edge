@@ -157,7 +157,10 @@ export async function generateCoachChat(input: ChatInput): Promise<ChatOutput> {
       messages,
       maxOutputTokens: 2048,
     });
-    return { reply: scrubReply(text), durationMs: Date.now() - started };
+    return {
+      reply: ensureParagraphs(scrubReply(text)),
+      durationMs: Date.now() - started,
+    };
   } catch (err) {
     console.warn(
       "[itc coach chat] failure: %s",
@@ -264,7 +267,10 @@ export async function generateCoachReaction(
         ],
         maxOutputTokens: 800,
       });
-      return { reply: scrubReply(text), durationMs: Date.now() - started };
+      return {
+        reply: ensureParagraphs(scrubReply(text)),
+        durationMs: Date.now() - started,
+      };
     } catch (err2) {
       console.warn(
         "[itc coach reaction] prose fallback also failed: %s",
@@ -1254,8 +1260,10 @@ export async function generateImmuneSystemWalkthrough(input: {
     // truncate at the first mention of "big assumptions", "worry box",
     // "competing commitments", etc., which the walkthrough is
     // explicitly ABOUT. That's the bug that caused the walkthrough to
-    // appear to "generate nothing" in the UI.
-    return scrubReplyLight(text);
+    // appear to "generate nothing" in the UI. ensureParagraphs is a
+    // backstop for when the model doesn't insert \n\n between the
+    // three movements even though the prompt tells it to.
+    return ensureParagraphs(scrubReplyLight(text));
   } catch (err) {
     console.warn(
       "[itc coach] generateImmuneSystemWalkthrough failed: %s",
@@ -1377,7 +1385,7 @@ export async function recommendAssumptionToTest(input: {
     const pickedIndex = Math.max(1, Math.min(max, object.picked_index));
     return {
       pickedIndex,
-      prose: scrubReplyLight(object.prose),
+      prose: ensureParagraphs(scrubReplyLight(object.prose)),
     };
   } catch (err) {
     console.warn(
@@ -1844,7 +1852,7 @@ export async function reviewTestResult(input: {
       ].join("\n"),
       maxOutputTokens: 1500,
     });
-    return { prose: scrubReply(object.prose) };
+    return { prose: ensureParagraphs(scrubReply(object.prose)) };
   } catch (err) {
     console.warn(
       "[itc coach] reviewTestResult failed: %s",
@@ -1920,7 +1928,7 @@ export async function generateMapCloseSummary(input: {
       ].join("\n"),
       maxOutputTokens: 2000,
     });
-    return scrubReplyLight(text);
+    return ensureParagraphs(scrubReplyLight(text));
   } catch (err) {
     console.warn(
       "[itc coach] generateMapCloseSummary failed: %s",
@@ -2061,4 +2069,47 @@ export function scrubReplyLight(text: string): string {
     .replace(/([.!?])[ \t]*\1/g, "$1")
     .trim();
   return cleaned;
+}
+
+/**
+ * Post-process coach prose to guarantee paragraph breaks. The preamble
+ * tells the model to use \n\n between beats for anything over ~3
+ * sentences, but the model isn't reliable at it. This is a
+ * deterministic backstop:
+ *
+ *   - If the text already has \n\n, respect them and return as-is.
+ *   - If the text has fewer than 4 sentences, return as-is.
+ *   - Otherwise, split into sentences and group into paragraphs of
+ *     ~3 sentences each, joined with \n\n.
+ *
+ * Applied to the long-form generation paths (dock chat, walkthrough,
+ * results review, closing summary, prioritize recommendation) — not
+ * to entry-level reactions (those are 1-2 sentences and paragraph-
+ * breaking would over-fragment them).
+ */
+export function ensureParagraphs(
+  text: string,
+  { sentencesPerParagraph = 3, minSentencesToSplit = 4 }: {
+    sentencesPerParagraph?: number;
+    minSentencesToSplit?: number;
+  } = {},
+): string {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return trimmed;
+  // Already has paragraph breaks — trust them.
+  if (/\n\s*\n/.test(trimmed)) return trimmed;
+  // Split on sentence boundaries. Look for . / ! / ? followed by
+  // whitespace and a capital letter or opening quote. Avoids splitting
+  // on abbreviations like "Dr." because those aren't followed by a
+  // capital + word boundary in normal prose.
+  const sentences = trimmed
+    .split(/(?<=[.!?])\s+(?=[A-Z"“])/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (sentences.length < minSentencesToSplit) return trimmed;
+  const groups: string[] = [];
+  for (let i = 0; i < sentences.length; i += sentencesPerParagraph) {
+    groups.push(sentences.slice(i, i + sentencesPerParagraph).join(" "));
+  }
+  return groups.join("\n\n");
 }
