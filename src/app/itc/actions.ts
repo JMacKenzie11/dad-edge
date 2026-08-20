@@ -1874,9 +1874,16 @@ async function deliverTestDraftAfterAdvance(
   if (!map) return;
   const selected = assumptions.find((a) => a.selected_for_testing);
   if (!selected) return;
-  // Idempotent: skip if a designed/run test already exists on this map.
-  const activeTest = tests.find((t) => t.status !== "abandoned");
-  if (activeTest) return;
+  // Idempotent: skip only if there's an in-flight "designed" test.
+  // "run" tests are complete (a result was saved) and shouldn't block
+  // a fresh draft — that's precisely the results → new_test flow.
+  // "abandoned" tests never block. Filter to selected assumption so
+  // tests from an earlier assumption don't block a fresh draft when
+  // the coachee's picked a different one via prioritize.
+  const inFlightTest = tests.find(
+    (t) => t.status === "designed" && t.assumption_id === selected.id,
+  );
+  if (inFlightTest) return;
 
   // Build "commitments this assumption underwrites" with their paired
   // behavior for the LLM's Vol 2 p 271 option-2 reasoning.
@@ -2766,14 +2773,21 @@ export async function advanceAfterResults(
 
   try {
     if (nextStep === "new_test") {
-      // Advance to test_design with the same assumption selected.
-      // The test-draft hook fires and produces a fresh draft; the
-      // just-completed test row stays as history.
-      const fd = new FormData();
-      fd.set("map_id", loaded.map.id);
-      fd.set("to", "test_design");
-      const res = await advanceToStage(fd);
-      if (!res.ok) return res;
+      // Backward transition (results → test_design). Can't use
+      // advanceToStage — its gate check computes results → done as
+      // the natural forward path, so requesting test_design as target
+      // fails "gate.to !== target". Call advanceStage directly
+      // (canTransitionTo allows backward moves) and fire the
+      // test-draft delivery hook by hand.
+      await advanceStage(loaded.map.id, loaded.map.current_stage, "test_design");
+      const events = new TurnEventLog(loaded.map.id, 0);
+      events.record(
+        "stage_advanced",
+        { from: loaded.map.current_stage, to: "test_design" },
+        { stage: "test_design" },
+      );
+      await deliverTestDraftAfterAdvance(loaded.map.id, events);
+      await events.flush();
     } else if (nextStep === "new_assumption") {
       // Clear the current selection so the prioritize picker re-fires
       // fresh. Revert stage. Coach recommendation runs again with
