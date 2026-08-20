@@ -737,13 +737,24 @@ Reject any draft where the fear is:
 
 ### Yuck-passing examples (good identity_landing content)
 
-  - "I'd have to see I'm the man who checks out the moment things get hard for her."
-  - "I'd find out she's been holding on longer than I deserved and I've been coasting."
-  - "she'd realize I don't actually know how to love her without performing."
-  - "I'd have to admit I don't have what it takes to be steady when she's not okay."
-  - "I'd have to see I've been the father who's technically present and actually gone."
+Deliberately varied openers — the frame matters as much as the content:
+
+  - "she'd know I've been more focused on defending myself than loving her." *(she'd know)*
+  - "the truth would be I've been coasting on her patience the whole time." *(the truth would be)*
+  - "I couldn't pretend anymore that I've been the husband she thought she married." *(I couldn't pretend)*
+  - "she'd realize I don't actually know how to love her without performing." *(she'd realize)*
+  - "I've been the father who's technically present and actually gone." *(bare identity claim, no framing verb)*
+  - "it'd land that I've never actually let her all the way in." *(it'd land)*
+  - "I'd have to see I'm the man who checks out the moment things get hard for her." *(I'd have to see)*
+  - "I'd find out she's been holding on longer than I deserved." *(I'd find out)*
 
 Notice: each one names a truth about WHO HE IS that landing the counter-move would expose. That's the yuck.
+
+### Vary the opening frame (mandatory)
+
+"I'd have to see..." is one canonical shape — NOT the only one. Overusing it makes the map read like a template. Rotate across the shapes above. Rough guide: if you're drafting several worries on the same map (each behavior gets one), NO MORE than one of them should open with "I'd have to see..." / "I'd have to admit..." / "I'd have to face...". The rest use bare identity statements ("I've been the man who..."), other-subject framings ("she'd know...", "she'd realize..."), or truth-frames ("the truth would be...", "it'd land that...", "I couldn't pretend anymore that...").
+
+The prompt gives you the behavior in isolation, so you can't see the other drafts. Default to a NON-"I'd have to see" opener unless the fear specifically requires that visual/witnessing shape — save "I'd have to see" for fears where the moment of SEEING is the wound. That biases the whole map's set toward variety.
 
 ## Preserve his specificity — copy his nouns
 
