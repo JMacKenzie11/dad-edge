@@ -924,7 +924,11 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
       worryText: row.text,
     });
     score = scored.score;
-    await updateWorryDepth(row.id, score);
+    // Persist reason too — surfaced by the "Needs more depth" UI so
+    // the coachee sees WHAT to sharpen instead of just that something
+    // is off. Only shown on shallow rows; passing rows get null from
+    // the UI's perspective (badge doesn't render).
+    await updateWorryDepth(row.id, score, scored.reason);
     events.record(
       "rubric_scored",
       {
@@ -1044,7 +1048,8 @@ export async function saveCommitment(
       commitmentText: row.text,
     });
     score = scored.score;
-    await updateCommitmentDepth(row.id, score);
+    // Persist reason too — surfaced by the "Needs more depth" UI.
+    await updateCommitmentDepth(row.id, score, scored.reason);
     events.record(
       "rubric_scored",
       {
@@ -1210,7 +1215,8 @@ export async function saveAssumption(
       assumptionText: row.text,
     });
     score = scored.score;
-    await updateAssumptionDepth(row.id, score);
+    // Persist reason too — surfaced by the "Needs more depth" UI.
+    await updateAssumptionDepth(row.id, score, scored.reason);
     events.record(
       "rubric_scored",
       {

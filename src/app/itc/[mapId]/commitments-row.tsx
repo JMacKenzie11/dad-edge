@@ -246,6 +246,15 @@ function CommitmentItem({
             </span>
           ) : null}
         </div>
+        {needsMoreDepth && commitment?.rubric_reason ? (
+          // Rubric's one-line "what to sharpen" from the last save.
+          // Populated by scoreCommitmentDepth on every save; surfaced
+          // here so the coachee sees WHAT specifically is off, not
+          // just a generic "needs work" badge.
+          <p className="text-xs text-[color:var(--color-warning)]/90 pl-6 italic leading-relaxed">
+            Coach's read: {commitment.rubric_reason}
+          </p>
+        ) : null}
         <div className="flex items-baseline gap-2 text-xs text-[color:var(--color-text-muted)]/70 pl-6">
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>

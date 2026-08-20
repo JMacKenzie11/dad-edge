@@ -21,6 +21,12 @@ export type ItcCommitment = {
   worry_id: string;
   text: string;
   depth_score: number | null;
+  /** Human-readable one-line explanation from the rubric run for this
+   *  row's current text. Populated on every save alongside depth_score.
+   *  Surfaced in the "Needs more depth" UI so the coachee sees WHAT
+   *  specifically to sharpen. Null on legacy rows saved before this
+   *  field existed (treat as "no specific feedback yet"). */
+  rubric_reason: string | null;
   attempts: number;
   created_at: string;
 };
@@ -31,6 +37,8 @@ export type ItcAssumption = {
   sort_order: number;
   text: string;
   depth_score: number | null;
+  /** See ItcCommitment.rubric_reason. */
+  rubric_reason: string | null;
   attempts: number;
   selected_for_testing: boolean;
   created_at: string;
@@ -82,6 +90,8 @@ export type ItcWorry = {
   behavior_id: string;
   text: string;
   depth_score: number | null;
+  /** See ItcCommitment.rubric_reason. */
+  rubric_reason: string | null;
   attempts: number;
   /** Coach-drafted commitment text for this worry — populated by
    *  the server pipeline on advance to Column 4. Metadata, not map
@@ -436,8 +446,9 @@ export async function upsertWorryForBehavior(
       .update({
         text: trimmed,
         attempts: (existing.attempts ?? 0) + 1,
-        // Clear stale score; caller re-scores immediately.
+        // Clear stale score + reason; caller re-scores immediately.
         depth_score: null,
+        rubric_reason: null,
       })
       .eq("id", existing.id)
       .select("*")
@@ -462,14 +473,21 @@ export async function upsertWorryForBehavior(
 export async function updateWorryDepth(
   worryId: string,
   score: number,
+  reason?: string | null,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateWorryDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
+  const patch: { depth_score: number; rubric_reason?: string | null } = {
+    depth_score: score,
+  };
+  if (reason !== undefined) {
+    patch.rubric_reason = reason?.trim() || null;
+  }
   const { error } = await supabase
     .from("itc_worries")
-    .update({ depth_score: score })
+    .update(patch)
     .eq("id", worryId);
   if (error) throw new Error(`updateWorryDepth: ${error.message}`);
 }
@@ -633,7 +651,9 @@ export async function upsertCommitmentForWorry(
       .update({
         text: trimmed,
         attempts: (existing.attempts ?? 0) + 1,
+        // Clear stale score + reason; caller re-scores immediately.
         depth_score: null,
+        rubric_reason: null,
       })
       .eq("id", existing.id)
       .select("*")
@@ -658,14 +678,21 @@ export async function upsertCommitmentForWorry(
 export async function updateCommitmentDepth(
   commitmentId: string,
   score: number,
+  reason?: string | null,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateCommitmentDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
+  const patch: { depth_score: number; rubric_reason?: string | null } = {
+    depth_score: score,
+  };
+  if (reason !== undefined) {
+    patch.rubric_reason = reason?.trim() || null;
+  }
   const { error } = await supabase
     .from("itc_commitments")
-    .update({ depth_score: score })
+    .update(patch)
     .eq("id", commitmentId);
   if (error) throw new Error(`updateCommitmentDepth: ${error.message}`);
 }
@@ -749,6 +776,11 @@ export async function updateAssumptionText(
       text: trimmed,
       attempts: (existing.data.attempts ?? 0) + 1,
       depth_score: null,
+      // Clear the previous rubric reason too — it's about the old text,
+      // so leaving it stale would tell the coachee to sharpen something
+      // that no longer describes what's on the page. The next save's
+      // rubric run will repopulate against the new text.
+      rubric_reason: null,
     })
     .eq("id", id)
     .eq("map_id", mapId)
@@ -761,14 +793,21 @@ export async function updateAssumptionText(
 export async function updateAssumptionDepth(
   assumptionId: string,
   score: number,
+  reason?: string | null,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateAssumptionDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
+  const patch: { depth_score: number; rubric_reason?: string | null } = {
+    depth_score: score,
+  };
+  if (reason !== undefined) {
+    patch.rubric_reason = reason?.trim() || null;
+  }
   const { error } = await supabase
     .from("itc_assumptions")
-    .update({ depth_score: score })
+    .update(patch)
     .eq("id", assumptionId);
   if (error) throw new Error(`updateAssumptionDepth: ${error.message}`);
 }

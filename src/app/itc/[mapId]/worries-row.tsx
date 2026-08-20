@@ -231,6 +231,12 @@ function WorryItem({
             </span>
           ) : null}
         </div>
+        {needsMoreDepth && worry?.rubric_reason ? (
+          // Rubric's one-line "what to sharpen" from the last save.
+          <p className="text-xs text-[color:var(--color-warning)]/90 pl-6 italic leading-relaxed">
+            Coach's read: {worry.rubric_reason}
+          </p>
+        ) : null}
         {!worry && behavior.coach_worry_draft ? (
           <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
             <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">

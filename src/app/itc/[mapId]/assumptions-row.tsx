@@ -535,6 +535,12 @@ function AssumptionItem({
             Needs more depth
           </span>
         ) : null}
+        {needsMoreDepth && assumption.rubric_reason ? (
+          // Rubric's one-line "what to sharpen" from the last save.
+          <p className="mt-2 text-xs text-[color:var(--color-warning)]/90 italic leading-relaxed shrink-0 basis-full">
+            Coach's read: {assumption.rubric_reason}
+          </p>
+        ) : null}
         <div className="flex-1 space-y-2">
           <AutoTextarea
             ref={textareaRef}
