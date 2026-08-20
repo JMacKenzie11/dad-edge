@@ -25,6 +25,7 @@ import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
 import { PrioritizePicker } from "./prioritize-picker";
+import { ResultsForm } from "./results-form";
 import { TestDesignForm } from "./test-design-form";
 import { WorriesRow } from "./worries-row";
 
@@ -502,6 +503,57 @@ export function MapCanvas({
             })()}
           </Section>
         ) : null}
+
+        {stageIndex(map.current_stage) >= stageIndex("results") ? (
+          <Section
+            title="Debrief the test"
+            active={map.current_stage === "results"}
+            liveIntro={liveIntroFor("results")}
+            stageNotes={
+              map.current_stage === "results" ? stageNotes : []
+            }
+          >
+            {(() => {
+              const activeTest =
+                tests
+                  .slice()
+                  .reverse()
+                  .find((t) => t.status !== "abandoned") ?? null;
+              const activeAssumption = activeTest
+                ? assumptions.find((a) => a.id === activeTest.assumption_id) ??
+                  null
+                : null;
+              const activeResult = activeTest
+                ? testResults
+                    .slice()
+                    .reverse()
+                    .find((r) => r.test_id === activeTest.id) ?? null
+                : null;
+              if (!activeTest || !activeAssumption) {
+                return (
+                  <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+                    Run a test first.
+                  </p>
+                );
+              }
+              const resultThread =
+                activeResult
+                  ? threadsByAnchor.get(
+                      `itc_test_results:${activeResult.id}`,
+                    ) ?? []
+                  : [];
+              return (
+                <ResultsForm
+                  mapId={map.id}
+                  test={activeTest}
+                  assumption={activeAssumption}
+                  result={activeResult}
+                  thread={resultThread}
+                />
+              );
+            })()}
+          </Section>
+        ) : null}
       </div>
 
       {advanceGate &&
@@ -510,10 +562,13 @@ export function MapCanvas({
         map.current_stage === "immune_system" ||
         map.current_stage === "prioritize" ||
         map.current_stage === "test_design" ||
-        map.current_stage === "test_running" ||
-        map.current_stage === "results") ? (
+        map.current_stage === "test_running") ? (
         <ContinueBar mapId={map.id} gate={advanceGate} />
       ) : null}
+      {/* results stage uses the ResultsForm's own advance buttons
+          (routed via next_step: design another test / pick a
+          different assumption / close the map). Generic ContinueBar
+          would conflict — hidden here. */}
 
       {tests.length > 0 ? (
         <TestsPanel

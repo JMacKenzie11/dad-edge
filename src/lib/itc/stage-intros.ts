@@ -57,8 +57,14 @@ I've drafted a starting version below with all four fields filled in. Read it, c
 You're not trying to succeed or fail — you're gathering information about whether the belief actually holds. Just do the move, notice what happens, and come back when you have observations.
 
 No rush. When you're ready, hit Continue to Results.`,
-  results: () =>
-    `You ran the test. Tell me what you did, what you observed, and what you make of it.`,
+    results: () =>
+    `You ran the test. Now write down what happened.
+
+The form below is pre-scaffolded — replace the bracketed prompts with your actual observations. Two kinds of data: what people said and did (the videotape version), and what came up in you (the felt version). Not interpretations.
+
+Then a verdict — held / partially challenged / challenged. One test rarely fully overturns a belief, so partially challenged is often the honest read. And a next step — another test on this same assumption, a different assumption, or close the map for now.
+
+I'll review after you save.`,
   done: () =>
     `Your map stays here. Come back anytime you want to design another test, revisit an assumption, or work on a different pillar.`,
 };

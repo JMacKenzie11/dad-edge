@@ -1367,6 +1367,158 @@ export async function reviewTestDesign(input: {
 }
 
 // -------------------------------------------------------------------------
+// draftTestResult + reviewTestResult — coach post-test debrief helpers
+// -------------------------------------------------------------------------
+
+const TestResultDraftSchema = z.object({
+  /** Placeholder scaffold text for what the coachee did in the test.
+   *  Contains bracketed prompts inline that the coachee replaces
+   *  with their actual account. */
+  what_i_did: z.string().min(10).max(600),
+  data_collected: z.string().min(10).max(600),
+  what_it_says_about_assumption: z.string().min(10).max(600),
+  assumption_verdict: z.enum(["held", "partially_challenged", "challenged"]),
+  next_step: z.enum(["new_test", "new_assumption", "map_complete"]),
+});
+
+/**
+ * Pre-draft the four debrief fields as scaffolds the coachee edits
+ * with their actual observations. Fires once on advance to results
+ * (idempotent — skip if a result already exists on the active test).
+ * Since the coach doesn't know what actually happened, drafts are
+ * lightweight — placeholders + prompts inline, defaults for the
+ * two operational fields (partially_challenged / new_test).
+ */
+export async function draftTestResultForCoachee(input: {
+  assumptionText: string;
+  test: {
+    assumptionSays: string;
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+  };
+}): Promise<{
+  whatIDid: string;
+  dataCollected: string;
+  whatItSaysAboutAssumption: string;
+  assumptionVerdict: "held" | "partially_challenged" | "challenged";
+  nextStep: "new_test" | "new_assumption" | "map_complete";
+} | null> {
+  const started = Date.now();
+  try {
+    const { RESULTS_STAGE } = await import("./prompts/stages/results");
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: TestResultDraftSchema,
+      system: RESULTS_STAGE,
+      prompt: [
+        `MODE: draft (pre-draft the four debrief fields as scaffolds).`,
+        ``,
+        `Big Assumption being tested: ${input.assumptionText}`,
+        ``,
+        `The test that was designed:`,
+        `  My Big Assumption Says: ${input.test.assumptionSays}`,
+        `  So I Will: ${input.test.behaviorChange}`,
+        `  And Collect the Following Data: ${input.test.dataToCollect}`,
+        `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
+        ``,
+        `Return the scaffold. Keep bracketed prompts inline where the coachee will fill in their actual observations.`,
+      ].join("\n"),
+      maxOutputTokens: 1000,
+    });
+    return {
+      whatIDid: scrubReply(object.what_i_did),
+      dataCollected: scrubReply(object.data_collected),
+      whatItSaysAboutAssumption: scrubReply(object.what_it_says_about_assumption),
+      assumptionVerdict: object.assumption_verdict,
+      nextStep: object.next_step,
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftTestResultForCoachee failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=test_result ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+const TestResultReviewSchema = z.object({
+  prose: z.string().min(30).max(1500),
+});
+
+/**
+ * Kegan-voice review of the coachee's post-test debrief. Fires on
+ * every save of the test result via saveTestResult server action.
+ * Prose lands as entry_thread on the test result row so the coachee
+ * can read it as they consider whether their verdict + next_step
+ * actually match the data.
+ */
+export async function reviewTestResult(input: {
+  goalText: string;
+  assumptionText: string;
+  test: {
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+  };
+  result: {
+    whatIDid: string;
+    dataCollected: string;
+    whatItSaysAboutAssumption: string;
+    verdict: "held" | "partially_challenged" | "challenged";
+    nextStep: "new_test" | "new_assumption" | "map_complete";
+  };
+}): Promise<{ prose: string } | null> {
+  const started = Date.now();
+  try {
+    const { RESULTS_STAGE } = await import("./prompts/stages/results");
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: TestResultReviewSchema,
+      system: RESULTS_STAGE,
+      prompt: [
+        `MODE: review (interpret the coachee's saved debrief against the assumption's specific prediction).`,
+        ``,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `Big Assumption being tested: ${input.assumptionText}`,
+        ``,
+        `Test design:`,
+        `  So I Will: ${input.test.behaviorChange}`,
+        `  And Collect the Following Data: ${input.test.dataToCollect}`,
+        `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
+        ``,
+        `The coachee's saved debrief:`,
+        `  So in Order to Test it I Changed my Behavior This Way: ${input.result.whatIDid}`,
+        `  This is What I Observed Happening: ${input.result.dataCollected}`,
+        `  And This is What it Tells me About my Big Assumption: ${input.result.whatItSaysAboutAssumption}`,
+        `  Verdict: ${input.result.verdict}`,
+        `  Next step: ${input.result.nextStep}`,
+        ``,
+        `Return one to two short paragraphs of Kegan-voice interpretation.`,
+      ].join("\n"),
+      maxOutputTokens: 1500,
+    });
+    return { prose: scrubReply(object.prose) };
+  } catch (err) {
+    console.warn(
+      "[itc coach] reviewTestResult failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] review kind=test_result ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

@@ -8,12 +8,14 @@ import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   draftTestForAssumption,
+  draftTestResultForCoachee,
   generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
   generateSuggestions,
   recommendAssumptionToTest,
   reviewTestDesign,
+  reviewTestResult,
   scrubReply,
   type ReactionInput,
   type ReactionOutput,
@@ -42,14 +44,17 @@ import {
   listMessages,
   listTestResults,
   listTests,
+  clearSelectedAssumption,
   listWorries,
   markTestAbandoned,
   markWalkthroughDelivered,
+  recordTestResult,
   saveAssumptionDrafts,
   saveImprovementGoal,
   saveTestDraft,
   setAssumptionSelected,
   updateTest,
+  updateTestResult,
   setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
@@ -1392,6 +1397,13 @@ export async function advanceToStage(
   if (target === "test_design") {
     await deliverTestDraftAfterAdvance(loaded.map.id, events);
   }
+  // On entry to results, pre-draft the four debrief field scaffolds
+  // so the coachee edits with their actual observations instead of
+  // starting from a blank form. Idempotent — skips if a result
+  // already exists on the active test.
+  if (target === "results") {
+    await deliverTestResultDraftAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -2112,6 +2124,324 @@ export async function abandonInFlightTest(
     { stage: "prioritize" },
   );
   await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+// -------------------------------------------------------------------------
+// Test results (Checkpoint C-ε.3 + C-ε.4 routing)
+// -------------------------------------------------------------------------
+
+/**
+ * Pre-draft the four debrief field scaffolds on advance to results.
+ * Coachee sees the form pre-populated with bracketed prompts inline;
+ * they edit with their actual observations and save. Idempotent —
+ * skip if a result already exists on the active test.
+ */
+async function deliverTestResultDraftAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [tests, results, assumptions] = await Promise.all([
+    listTests(mapId),
+    listTestResults(mapId),
+    listAssumptions(mapId),
+  ]);
+  const activeTest = tests
+    .slice()
+    .reverse()
+    .find((t) => t.status !== "abandoned");
+  if (!activeTest) return;
+  const existingResult = results.find((r) => r.test_id === activeTest.id);
+  if (existingResult) return;
+  const assumption = assumptions.find((a) => a.id === activeTest.assumption_id);
+  if (!assumption) return;
+
+  const draft = await draftTestResultForCoachee({
+    assumptionText: assumption.text,
+    test: {
+      assumptionSays: activeTest.assumption_says ?? "",
+      behaviorChange: activeTest.behavior_change ?? "",
+      dataToCollect: activeTest.data_to_collect ?? "",
+      inOrderToFindOut: activeTest.in_order_to_find_out ?? "",
+    },
+  });
+  if (!draft) {
+    events.record(
+      "error",
+      {
+        where: "deliverTestResultDraftAfterAdvance",
+        message: "LLM returned null; coachee will fill scaffold from scratch",
+      },
+      { stage: "results" },
+    );
+    return;
+  }
+
+  // Persist the scaffold as the initial result row. Coachee's Save
+  // triggers an update via saveTestResult (updateTestResult).
+  const row = await recordTestResult({
+    testId: activeTest.id,
+    ranOn: new Date().toISOString().slice(0, 10),
+    whatIDid: draft.whatIDid,
+    dataCollected: draft.dataCollected,
+    whatItSaysAboutAssumption: draft.whatItSaysAboutAssumption,
+    assumptionVerdict: draft.assumptionVerdict,
+    nextStep: draft.nextStep,
+  });
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "test_result_draft",
+      test_id: activeTest.id,
+      result_id: row.id,
+    },
+    { stage: "results" },
+  );
+}
+
+export async function ensureTestResultDraftDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (map.current_stage !== "results") {
+      return { ok: true, delivered: false };
+    }
+    const tests = await listTests(mapId);
+    const results = await listTestResults(mapId);
+    const active = tests
+      .slice()
+      .reverse()
+      .find((t) => t.status !== "abandoned");
+    if (!active) return { ok: true, delivered: false };
+    if (results.some((r) => r.test_id === active.id)) {
+      return { ok: true, delivered: false };
+    }
+    const events = new TurnEventLog(mapId, 0);
+    await deliverTestResultDraftAfterAdvance(mapId, events);
+    await events.flush();
+    const afterResults = await listTestResults(mapId);
+    return {
+      ok: true,
+      delivered: afterResults.some((r) => r.test_id === active.id),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
+}
+
+const saveTestResultSchema = z.object({
+  map_id: z.string().uuid(),
+  test_id: z.string().uuid(),
+  result_id: z.string().uuid().optional(),
+  ran_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  what_i_did: z.string().min(3).max(2000),
+  data_collected: z.string().min(3).max(2000),
+  what_it_says_about_assumption: z.string().min(3).max(2000),
+  assumption_verdict: z.enum(["held", "partially_challenged", "challenged"]),
+  next_step: z.enum(["new_test", "new_assumption", "map_complete"]),
+});
+
+/**
+ * Save the coachee's post-test debrief. Creates via recordTestResult
+ * if no result_id, updates via updateTestResult if given. Fires the
+ * reviewTestResult LLM helper after; Kegan-voice interpretation
+ * lands as entry_thread on the result row.
+ *
+ * C-ε.4 routing: does NOT auto-advance the stage — the coachee sees
+ * the coach's interpretation, then clicks Continue. The Continue
+ * gate's target stage depends on next_step (see computeAdvanceGate).
+ */
+export async function saveTestResult(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = saveTestResultSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_id: formData.get("test_id"),
+    result_id: formData.get("result_id") || undefined,
+    ran_on: formData.get("ran_on"),
+    what_i_did: formData.get("what_i_did"),
+    data_collected: formData.get("data_collected"),
+    what_it_says_about_assumption: formData.get("what_it_says_about_assumption"),
+    assumption_verdict: formData.get("assumption_verdict"),
+    next_step: formData.get("next_step"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid result input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  let row;
+  try {
+    if (parsed.data.result_id) {
+      row = await updateTestResult({
+        resultId: parsed.data.result_id,
+        ranOn: parsed.data.ran_on,
+        whatIDid: parsed.data.what_i_did,
+        dataCollected: parsed.data.data_collected,
+        whatItSaysAboutAssumption: parsed.data.what_it_says_about_assumption,
+        assumptionVerdict: parsed.data.assumption_verdict,
+        nextStep: parsed.data.next_step,
+      });
+    } else {
+      row = await recordTestResult({
+        testId: parsed.data.test_id,
+        ranOn: parsed.data.ran_on,
+        whatIDid: parsed.data.what_i_did,
+        dataCollected: parsed.data.data_collected,
+        whatItSaysAboutAssumption: parsed.data.what_it_says_about_assumption,
+        assumptionVerdict: parsed.data.assumption_verdict,
+        nextStep: parsed.data.next_step,
+      });
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not save result.",
+    };
+  }
+
+  const [tests, assumptions] = await Promise.all([
+    listTests(loaded.map.id),
+    listAssumptions(loaded.map.id),
+  ]);
+  const test = tests.find((t) => t.id === row.test_id);
+  const assumption = test
+    ? assumptions.find((a) => a.id === test.assumption_id)
+    : undefined;
+
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    parsed.data.result_id ? "entry_edited" : "entry_added",
+    {
+      kind: "test_result",
+      entry_id: row.id,
+      verdict: row.assumption_verdict,
+      next_step: row.next_step,
+    },
+    { stage: loaded.map.current_stage },
+  );
+  try {
+    if (test && assumption) {
+      const review = await reviewTestResult({
+        goalText: loaded.map.improvement_goal ?? "",
+        assumptionText: assumption.text,
+        test: {
+          behaviorChange: test.behavior_change ?? "",
+          dataToCollect: test.data_to_collect ?? "",
+          inOrderToFindOut: test.in_order_to_find_out ?? "",
+        },
+        result: {
+          whatIDid: row.what_i_did ?? "",
+          dataCollected: row.data_collected ?? "",
+          whatItSaysAboutAssumption: row.what_it_says_about_assumption ?? "",
+          verdict: row.assumption_verdict ?? "partially_challenged",
+          nextStep: row.next_step ?? "new_test",
+        },
+      });
+      if (review) {
+        await appendMessage(
+          loaded.map.id,
+          "assistant",
+          review.prose,
+          loaded.map.current_stage,
+          {
+            surface: "entry_thread",
+            entryRefTable: "itc_test_results",
+            entryRefId: row.id,
+          },
+        );
+        events.record(
+          "coach_reaction_sent",
+          {
+            kind: "test_result_review",
+            result_id: row.id,
+          },
+          { stage: loaded.map.current_stage },
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "[itc saveTestResult] review failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+/**
+ * C-ε.4 routing. After the coachee reviews their saved result, they
+ * click Continue. This action reads the saved result's next_step and
+ * routes the stage accordingly:
+ *
+ *   new_test         → advance back to test_design (clears the
+ *                      abandoned/run test's active status by advancing;
+ *                      coachee lands with a fresh test-draft on the
+ *                      same assumption). Existing tests stay on the
+ *                      map for history.
+ *   new_assumption   → clear selected_for_testing on all assumptions
+ *                      and revert to prioritize. The picker re-fires
+ *                      with test-history badges (C-ε.6).
+ *   map_complete     → advance to done.
+ */
+const advanceAfterResultsSchema = z.object({
+  map_id: z.string().uuid(),
+  result_id: z.string().uuid(),
+});
+export async function advanceAfterResults(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = advanceAfterResultsSchema.safeParse({
+    map_id: formData.get("map_id"),
+    result_id: formData.get("result_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid advance input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  const results = await listTestResults(loaded.map.id);
+  const result = results.find((r) => r.id === parsed.data.result_id);
+  if (!result) return { ok: false, reason: "Result not found." };
+  const nextStep = result.next_step ?? "new_test";
+
+  try {
+    if (nextStep === "new_test") {
+      // Advance to test_design with the same assumption selected.
+      // The test-draft hook fires and produces a fresh draft; the
+      // just-completed test row stays as history.
+      const fd = new FormData();
+      fd.set("map_id", loaded.map.id);
+      fd.set("to", "test_design");
+      const res = await advanceToStage(fd);
+      if (!res.ok) return res;
+    } else if (nextStep === "new_assumption") {
+      // Clear the current selection so the prioritize picker re-fires
+      // fresh. Revert stage. Coach recommendation runs again with
+      // the just-completed test as history context (C-ε.6).
+      await clearSelectedAssumption(loaded.map.id);
+      await advanceStage(loaded.map.id, loaded.map.current_stage, "prioritize");
+    } else if (nextStep === "map_complete") {
+      // Advance to done. Skips test_running / results / done gates
+      // because done accepts any prior stage as "from".
+      const fd = new FormData();
+      fd.set("map_id", loaded.map.id);
+      fd.set("to", "done");
+      const res = await advanceToStage(fd);
+      if (!res.ok) return res;
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not advance.",
+    };
+  }
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }

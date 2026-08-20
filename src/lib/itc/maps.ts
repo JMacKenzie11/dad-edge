@@ -1025,6 +1025,39 @@ export async function listTestResults(
  * inserting a second (would happen if the coach re-fires
  * record_test_results across turns).
  */
+/**
+ * Update an existing test result. Used by saveTestResult when the
+ * coachee edits their debrief in place after saving. The coach
+ * re-reviews after the update (via the excavation-loop pattern
+ * shared with test-design).
+ */
+export async function updateTestResult(input: {
+  resultId: string;
+  ranOn: string;
+  whatIDid: string;
+  dataCollected: string;
+  whatItSaysAboutAssumption: string;
+  assumptionVerdict: ItcAssumptionVerdict;
+  nextStep: ItcNextStep;
+}): Promise<ItcTestResult> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_test_results")
+    .update({
+      ran_on: input.ranOn,
+      what_i_did: input.whatIDid.trim(),
+      data_collected: input.dataCollected.trim(),
+      what_it_says_about_assumption: input.whatItSaysAboutAssumption.trim(),
+      assumption_verdict: input.assumptionVerdict,
+      next_step: input.nextStep,
+    })
+    .eq("id", input.resultId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`updateTestResult: ${error?.message ?? "no row"}`);
+  return data as ItcTestResult;
+}
+
 export async function recordTestResult(input: {
   testId: string;
   ranOn: string;
