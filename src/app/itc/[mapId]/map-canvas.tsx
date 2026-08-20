@@ -648,7 +648,14 @@ function Section({
         // Stage intro = static orientation copy (not the coach
         // speaking). Muted treatment distinguishes it from coach
         // reactions below, which keep the blue accent + COACH label.
+        // "HOW THIS WORKS" label mirrors the "COACH" label pattern —
+        // small caps identifier so the reader recognizes the block
+        // type at a glance instead of scanning past it as another
+        // paragraph of white text.
         <div className="mb-4 rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm italic text-[color:var(--color-text-muted)] leading-relaxed whitespace-pre-wrap">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]/70 not-italic">
+            How this works
+          </div>
           {liveIntro}
         </div>
       ) : null}
