@@ -698,17 +698,18 @@ You never write "I worry that", "if I", or the trailing period. The server write
 
 ## LENGTH BAR (mandatory)
 
-Kegan-canonical worries are 15-25 words. Your target for the ASSEMBLED sentence: **15-25 words**. Hard ceiling: 30. The server drops anything over 30 words silently — the coachee sees no card for that behavior. Don't lose the draft to sprawl.
+Kegan-canonical worries are 15-25 words but drafts should sit at the low end of canonical to leave room for the coachee to sharpen. Your target for the ASSEMBLED sentence: **12-18 words**. Hard ceiling: 20. The server drops anything over 20 words silently — the coachee sees no card for that behavior. Don't lose the draft to sprawl.
 
-Per-slot targets:
-- **opposite_move: 3-8 words.** Terse counter-move.
-- **identity_landing: 8-16 words.** Terse identity landing.
+Per-slot targets (assembled template is 5 words: "I worry that if I"):
+- **opposite_move: 3-6 words.** Terse counter-move.
+- **identity_landing: 5-10 words.** Terse identity landing.
 
 Symptoms of over-writing you must strip:
 - **"Fully" as a modifier** — "I'd have to FULLY see..." cuts to "I'd have to see...".
 - **"Actually" as a modifier** — "she'd know I've been more focused on defending myself than ACTUALLY loving her" cuts to "than loving her".
 - **Double "and" chains** — "I'd have to see I'm the man who X and I've been Y and I've failed Z" — pick ONE identity truth. Adding more dilutes the wince.
 - **Over-qualifying opposite_move** — "let her finish speaking without interrupting or defending myself IN THE MOMENT WHEN SHE'S CLEARLY UPSET" cuts to "let her finish speaking".
+- **"Instead of..." clauses** — "asked her what she needs INSTEAD OF EXPLAINING MYSELF FIRST" cuts to "asked her what she needs". The opposite_move IS already the counter to the behavior; naming what it's counter to is redundant.
 
 ## What each slot must contain
 
@@ -717,24 +718,24 @@ The counter-move — what he'd be doing if he did the OPPOSITE of the Column 2 b
 
 The methodology (Vol 1 p. 13-14) is explicit: to find the worry, picture yourself doing the opposite of the behavior and ask "what's the worst part of that for you?" The opposite IS the antecedent.
 
-  - Doing behavior "I interrupt her when she's upset" → opposite_move: "let her finish and not defend myself".
+  - Doing behavior "I interrupt her when she's upset" → opposite_move: "let her finish speaking".
   - Doing behavior "I raise my voice when she challenges me" → opposite_move: "stayed calm and heard her out".
-  - Not-doing behavior "I don't ask what she needs" → opposite_move: "asked her what she needs and listened to the answer" (affirmative form — NEVER "stopped not-asking her", that's an unreadable double-negative).
-  - Not-doing behavior "I don't apologize when I'm wrong" → opposite_move: "admitted I was wrong out loud".
+  - Not-doing behavior "I don't ask what she needs" → opposite_move: "asked her what she needs" (affirmative form — NEVER "stopped not-asking her", that's an unreadable double-negative).
+  - Not-doing behavior "I don't apologize when I'm wrong" → opposite_move: "admitted I was wrong".
 
-3-14 words. Specific enough that he can picture himself doing it in a real moment.
+3-6 words. Specific enough that he can picture himself doing it in a real moment. Don't over-qualify (skip "in the moment", "when she's upset" — the behavior implies the moment).
 
 ### identity_landing
 The felt fear that lands when he pictures doing opposite_move. This is the whole point. If this slot is shallow, the map is shallow.
 
 **MUST land at identity level.** Two valid shapes — accept whichever fits his goal/behavior more naturally:
 
-  1. **Self-labeling identity**: names a label he'd apply to himself. "I'd have to see I'm not the man I've been pretending to be." / "I'd find out I'm weaker than I let anyone see." / "I'd have to admit I'm a fraud."
-  2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. "she'd finally see I've been failing her all along." / "I'd have to face that I've failed my family as the man they needed." / "she'd stop counting on me and I'd know I earned it."
+  1. **Self-labeling identity**: names a label he'd apply to himself. "I'd have to see I'm not the man I've pretended to be." / "I'd find out I'm weaker than I let on." / "I'd have to admit I'm a fraud."
+  2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. "she'd see I've been failing her all along." / "I'd have to face I've failed my family." / "she'd stop counting on me and I'd know I earned it."
 
 BOTH are canonical. Do NOT force self-labeling when role/relational fits the coachee's stated goal (e.g., a Bond-pillar goal about his marriage naturally lands relationally).
 
-10-180 chars. Ends without a period (server adds one).
+5-10 words. Ends without a period (server adds one).
 
 ## The "yuck" bar — mandatory
 
@@ -749,20 +750,20 @@ Reject any draft where the fear is:
   - **Vague self-help language**: "I wouldn't feel like myself" / "I'd feel disconnected" / "I wouldn't be authentic" — abstract, doesn't wince.
   - **Noble/aspirational**: "I wouldn't be the husband she deserves" — sounds like a wedding toast. Replace with the specific self-truth: "she'd see I've never actually been the husband she thought she married".
 
-### Yuck-passing examples (good identity_landing content)
+### Yuck-passing examples (good identity_landing content, under 10 words each)
 
 Deliberately varied openers — the frame matters as much as the content:
 
-  - "she'd know I've been more focused on defending myself than loving her." *(she'd know)*
-  - "the truth would be I've been coasting on her patience the whole time." *(the truth would be)*
-  - "I couldn't pretend anymore that I've been the husband she thought she married." *(I couldn't pretend)*
-  - "she'd realize I don't actually know how to love her without performing." *(she'd realize)*
-  - "I've been the father who's technically present and actually gone." *(bare identity claim, no framing verb)*
-  - "it'd land that I've never actually let her all the way in." *(it'd land)*
-  - "I'd have to see I'm the man who checks out the moment things get hard for her." *(I'd have to see)*
+  - "she'd know I've been defending myself, not loving her." *(she'd know)*
+  - "the truth would be I've been coasting on her patience." *(the truth would be)*
+  - "I couldn't pretend I've been the husband she thought." *(I couldn't pretend)*
+  - "she'd realize I don't know how to love her without performing." *(she'd realize)*
+  - "I've been the father who's technically present and gone." *(bare identity claim)*
+  - "it'd land that I've never let her all the way in." *(it'd land)*
+  - "I'd have to see I'm the man who checks out when it counts." *(I'd have to see)*
   - "I'd find out she's been holding on longer than I deserved." *(I'd find out)*
 
-Notice: each one names a truth about WHO HE IS that landing the counter-move would expose. That's the yuck.
+Notice: each one names a truth about WHO HE IS that landing the counter-move would expose. That's the yuck. None use "actually", "fully", or trailing "instead of" clauses — those are the filler tics that push drafts over the cap.
 
 ### Vary the opening frame (mandatory)
 
@@ -800,14 +801,14 @@ The pillar constrains the domain. A fear that could be pasted onto any pillar is
 Return only the structured slots ({ opposite_move: "...", identity_landing: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
 `.trim();
 
-/** Hard ceiling on assembled worry length. Kegan Vol 1 worry
- *  examples run 15-25 words; the schema's per-slot char caps allow
- *  up to ~48 assembled words worst case (5 template + 13 from
- *  opposite_move at max + 30 from identity_landing at max). Cap at
- *  30 to force conciseness. Silently dropped over-cap drafts so the
- *  coachee sees no card rather than a sprawling one — same pattern
- *  as COMMITMENT_HARD_WORD_CAP and the assumption drafter. */
-const WORRY_HARD_WORD_CAP = 30;
+/** Hard ceiling on assembled worry length. Matches commitments +
+ *  assumptions at 20 to keep the whole map tight. Kegan Vol 1
+ *  worries run 15-25 words; 20 sits at the low end of canonical and
+ *  forces the drafter to trim filler ("actually", "fully",
+ *  parenthetical qualifiers). Silently dropped over-cap drafts so
+ *  the coachee sees no card rather than a sprawling one — same
+ *  pattern as COMMITMENT_HARD_WORD_CAP and the assumption drafter. */
+const WORRY_HARD_WORD_CAP = 20;
 
 /**
  * Server-side coach-draft generator for Column 3. Called once per
@@ -836,7 +837,7 @@ export async function draftWorryForBehavior(input: {
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         `Behavior (Column 2): ${input.behaviorText}`,
         ``,
-        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 30 words — Kegan-canonical worries run 15-25.`,
+        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
       ].join("\n"),
       maxOutputTokens: 500,
     });
