@@ -543,7 +543,7 @@ function AssumptionItem({
             // push the row layout.
             <div className="min-w-0 rounded-md border border-[color:var(--color-warning)]/30 border-l-[3px] border-l-[color:var(--color-warning)]/70 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-sm leading-relaxed">
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]/90">
-                Coach's read
+                One thing to sharpen
               </div>
               <div className="whitespace-pre-wrap break-words text-white/90">
                 {assumption.rubric_reason}

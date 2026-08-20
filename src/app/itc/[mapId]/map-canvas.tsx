@@ -646,17 +646,38 @@ function Section({
       </h3>
       {active && liveIntro ? (
         // Stage intro = static orientation copy (not the coach
-        // speaking). Muted treatment distinguishes it from coach
-        // reactions below, which keep the blue accent + COACH label.
-        // "HOW THIS WORKS" label mirrors the "COACH" label pattern —
-        // small caps identifier so the reader recognizes the block
-        // type at a glance instead of scanning past it as another
-        // paragraph of white text.
-        <div className="mb-4 rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm italic text-[color:var(--color-text-muted)] leading-relaxed whitespace-pre-wrap">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]/70 not-italic">
-            How this works
+        // speaking). Distinct visual treatment so the reader
+        // recognizes the block type at a glance:
+        //   - Left accent bar in muted grey (coach messages use
+        //     primary blue at /70; using text-muted here keeps
+        //     the two visually separated)
+        //   - Slight surface lift + inner border for a "card"
+        //     feel that stands out from the row backgrounds
+        //   - "HOW THIS WORKS" label as a small icon-adjacent
+        //     header with brand-primary color for contrast
+        //   - Body text at white/85 (not italic, not muted grey)
+        //     so it's actually readable, not something to scan past
+        <div className="mb-4 overflow-hidden rounded-md border border-[color:var(--color-primary)]/20 border-l-[3px] border-l-[color:var(--color-primary)]/60 bg-[color:var(--color-surface)] shadow-sm">
+          <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-primary)]/[0.04] px-4 py-2">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-[color:var(--color-primary)]/90">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3.5 w-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a1 1 0 0 0 0 2v3a1 1 0 0 0 1 1h1a1 1 0 1 0 0-2v-3a1 1 0 0 0-1-1H9Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              How this works
+            </div>
           </div>
-          {liveIntro}
+          <div className="px-4 py-3 text-sm leading-relaxed text-white/85 whitespace-pre-wrap">
+            {liveIntro}
+          </div>
         </div>
       ) : null}
       {notesToShow.length > 0 ? (

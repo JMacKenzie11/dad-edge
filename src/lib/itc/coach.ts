@@ -450,7 +450,7 @@ function buildReactionPrompt(input: ReactionInput): string {
       "- Do NOT ask 'ready to move on?', 'ready for the worry box?', 'want to move to X?', or any variant. He'll advance himself when he sees the button.\n" +
       "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
       "- The rubric, scores, and attempts count are internal — never reference them in prose. Do not tell him 'you're at 2 out of 3' or 'attempt 3'.\n" +
-      "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain read against the criteria.\n" +
+      "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain check against the criteria.\n" +
       "- VARY YOUR OPENING PHRASING. You have no memory of prior reactions, but coachees read all three (or five) of yours in sequence on the page. If every reaction opens with \"That's the [X]...\" or \"Yeah. That's...\" or \"Right. That's...\", it reads as a template, not a response. Reach for less-common openers by default. Reserve \"That's the [X]...\" for AT MOST ONE reaction per map — treat it as a scarce resource.\n" +
       "- LEAVE `suggestions` EMPTY. Reactions never carry a multi-item suggestions menu — that's what the 'Give me ideas' button generates in a separate call. If you think he'd benefit from options, that's a signal to end your reaction with a question, not to hand him a menu.\n" +
       "- `refinement` is optional; only include when it's a genuine one-line sharpening of what he wrote (Case 2 / depth-score 2 only).",
@@ -1779,7 +1779,7 @@ export async function recommendAssumptionToTest(input: {
             : `     tested: ${a.testHistory.length}× — verdicts:\n${a.testHistory
                 .map(
                   (h, hi) =>
-                    `        ${hi + 1}. ${h.verdict ?? "no verdict"} — coachee's read: "${(h.whatItSaysAboutAssumption ?? "").slice(0, 200)}"`,
+                    `        ${hi + 1}. ${h.verdict ?? "no verdict"} — coachee's take: "${(h.whatItSaysAboutAssumption ?? "").slice(0, 200)}"`,
                 )
                 .join("\n")}`;
         return `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments:\n${coverage}\n${history}`;
