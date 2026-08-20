@@ -835,109 +835,178 @@ export async function draftWorryForBehavior(input: {
 // -------------------------------------------------------------------------
 
 /**
- * Structured-slots schema for the commitment drafter. Same architectural
- * pattern as AssumptionDraftSlotsSchema: the LLM returns raw semantic
- * content (what the coachee is committed to never doing/facing); the
- * server assembles the canonical Kegan/Lahey sentence via
- * assembleCommitment. Server owns the "I'm committed to never" prefix
- * and the terminal period.
+ * Structured-slots schema for the commitment drafter. Two slots:
+ * the ACTIVE MECHANISM a part of him is running (verb-forward, the
+ * move visible on the page), and the SELF-PROTECTIVE PURPOSE it
+ * serves (what identity truth about HIM this move keeps hidden).
+ * Server assembles the canonical Kegan/Lahey commitment sentence via
+ * assembleCommitment.
+ *
+ * Why two slots (was one, forcing "I'm committed to never X"): the
+ * single-slot template biased every draft toward the AVOIDANCE frame
+ * ("never having to see I'm the man who X"), which the reaction coach
+ * correctly rejects as "still noble" — it names what he doesn't want
+ * to BE, not what a part of him is actively DOING to prevent the
+ * confrontation. The commitments stage prompt's calibration pair
+ * spells this out: "never being the one who's the problem" is WRONG;
+ * "keeping her past mistakes available so mine are never the only
+ * thing on the table" is RIGHT. The two-slot shape forces the active
+ * mechanism onto the page — the SAME rubric the reaction coach applies.
  */
 const CommitmentDraftSchema = z.object({
-  /** The identity-level protective move — the specific thing the
-   *  coachee is committed to NEVER doing/facing that would keep him
-   *  from having to SEE something about who he is. 5-20 words.
+  /** The ACTIVE PROTECTIVE MECHANISM — the verb-forward, first-person
+   *  present-participle move a part of him is DOING to prevent the
+   *  confrontation the worry fears. 5-15 words.
    *
-   *  Server assembles as "I'm committed to never <protective_move>."
-   *  So the LLM writes a bare gerund/verb-phrase that follows "never":
-   *    - "having to see I'm the husband who keeps failing her"
-   *    - "letting her see the parts of me I'd have to disown"
-   *    - "finding out my effort didn't matter"
-   *    - "having to find out I'm the kind of person who fails her"
+   *  Server prefixes "I'm committed to " so write WITHOUT the prefix,
+   *  WITHOUT "never", WITHOUT "not".
    *
-   *  Do NOT write the "I'm committed to never" prefix — server writes
-   *  that. Do NOT write the trailing period — server writes that. */
-  protective_move: z.string().min(10).max(140),
+   *  Right (verb-forward, mechanism visible):
+   *    - "keeping her past mistakes available"
+   *    - "staying in the room and defending myself"
+   *    - "explaining my side before she finishes"
+   *    - "making sure I'm always the one who's right"
+   *    - "pre-empting her disappointment"
+   *    - "over-preparing so I can't be caught off-guard"
+   *
+   *  BANNED (identity-aversion frames — reaction coach rejects these):
+   *    - "never being the one who's the problem"
+   *    - "never having to see I'm the man who…"
+   *    - "not being the husband who fails her"
+   *    - "avoiding vulnerability" (abstract, no mechanism) */
+  active_move: z.string().min(10).max(100),
+  /** The SELF-PROTECTIVE PURPOSE — what this active_move keeps him
+   *  from having to face about HIMSELF (never about her). Starts with
+   *  "so" (the purpose clause). 10-150 chars.
+   *
+   *  Server appends after active_move with a space, then adds the
+   *  terminal period.
+   *
+   *  Right (self-protection, identity-level):
+   *    - "so mine are never the only thing on the table"
+   *    - "so I never have to face I've been coasting on her patience"
+   *    - "so I don't have to sit with what I'm actually capable of"
+   *    - "so I never have to admit she's been holding it together"
+   *
+   *  BANNED — the "protecting HER not HIM" test (hardest to catch):
+   *    - "so I don't hurt her" — protecting her, not him
+   *    - "so I don't burden her" — same
+   *    - "so I don't make things worse" — same
+   *    - "so she doesn't get upset" — same
+   *    - "so we don't fall apart" — protecting the relationship, not the self */
+  protective_purpose: z.string().min(10).max(150),
 });
 
 /**
- * Server-side assembly of the canonical "I'm committed to never ..."
- * sentence from the single LLM slot. Normalizes: trims, strips
- * trailing punctuation, lowercases first char (in case the LLM
- * accidentally capitalized), strips any leading "never " or "having
- * to " if the LLM redundantly wrote them (server writes "never"
- * already).
+ * Server-side assembly of the canonical commitment sentence from the
+ * two LLM slots. Produces:
+ *
+ *   "I'm committed to <active_move> <protective_purpose>."
+ *
+ * The server no longer auto-injects "never" (that biased every draft
+ * toward the noble avoidance frame). The active_move slot IS the
+ * mechanism; the protective_purpose slot names what it protects.
+ * normalizeSlot handles trim, leading/trailing punctuation, and
+ * first-char casing (preserves capital "I" pronoun).
  */
 export function assembleCommitment(slots: {
-  protective_move: string;
+  active_move: string;
+  protective_purpose: string;
 }): string {
-  // Strip a redundant leading "never " if the LLM wrote it — server
-  // already writes "never" before the slot. Then run through the
-  // shared slot normalizer (which lowercases first char unless it's
-  // pronoun "I").
-  const dedupedNever = slots.protective_move
-    .trim()
-    .replace(/^never\s+/i, "");
-  return `I'm committed to never ${normalizeSlot(dedupedNever)}.`;
+  const move = normalizeSlot(slots.active_move);
+  const purpose = normalizeSlot(slots.protective_purpose);
+  return `I'm committed to ${move} ${purpose}.`;
 }
 
 const DRAFT_COMMITMENT_SYSTEM = `
-You draft ONE non-noble hidden competing commitment for a coachee's ITC map. This is Column 4 — the self-protective vow that keeps the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
+You draft ONE non-noble hidden competing commitment for a coachee's ITC map. This is Column 4 — the self-protective mechanism a part of him is running to keep the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
 
-## How this works (structured slot)
+**CRITICAL — this is the whole game:** your draft MUST pass the rubric the reaction coach applies on the same map. If it doesn't pass, we've built you wrong. The reaction coach rejects drafts that read as "I'm committed to never being the man who X" or "I'm committed to never having to see Y" as STILL NOBLE — they name what he doesn't want to BE, not what a part of him is actively DOING to stay safe. Do not produce those.
 
-You do NOT return a full sentence. You return ONE slot — protective_move — that fills the blank in a template the server writes:
+## How this works (structured slots)
 
-    "I'm committed to never <protective_move>."
+You return TWO slots — active_move and protective_purpose — that fill blanks in a template the server writes:
 
-You never write "I'm committed to never" (server writes it). You never write the trailing period (server writes it). Focus entirely on the semantic content of the protective move.
+    "I'm committed to <active_move> <protective_purpose>."
 
-Schema-enforced budget: protective_move is 10-140 characters (~5-20 words). Assembled sentence lands under 30 words. Precision, not paragraph.
+You never write "I'm committed to". You never write "never" as the opening word — the mechanism is what a part of him is DOING, not what he's avoiding. You never write the terminal period.
 
-## Non-noble is the whole game
+## Two-step derivation (mandatory — run this silently for every draft)
 
-A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice." Noble commitments ("being a good listener", "being the best husband I can be") fail immediately — they sound like wedding vows. Non-noble commitments name the SELF-PROTECTIVE MOVE explicitly.
+1. **Name the CONFRONTATION.** Read the paired worry. What is the specific ACT — the thing he'd have to DO — that would produce the fear the worry names? Not the fear itself. The ACT that would produce it.
+   - Worry: "I worry that if I listen to her without bringing up what she's done before, I'd have to see I'm the man who's been using her past against her."
+   - Confrontation: LISTENING WITHOUT SCOREKEEPING.
+   - Worry: "I worry that if I stay in the room and listen to her without defending myself, I'd have to see I'm the man who's been running away."
+   - Confrontation: STAYING AND LISTENING WITHOUT DEFENDING.
 
-Right examples of protective_move slot content (bare, no prefix):
-  - "having to find out my effort didn't matter"
-  - "letting her see the parts of me I'd have to disown"
-  - "having to see I'm the kind of husband who keeps failing her"
+2. **Fill active_move with the specific protective move that prevents that confrontation.** Verb-forward (keeping, staying, explaining, making sure, over-preparing, deflecting, disqualifying), first-person present participle, observable — a friend watching him could spot it in the moment.
+   - Confrontation: LISTENING WITHOUT SCOREKEEPING → active_move: "keeping her past mistakes available"
+   - Confrontation: STAYING AND LISTENING WITHOUT DEFENDING → active_move: "staying in the room but explaining why I'm right"
 
-## The identity-level bar (mandatory)
+3. **Fill protective_purpose with the SELF-protection this mechanism gives him.** Starts with "so". Names what a part of HIM is being protected from having to face about HIMSELF.
 
-Two rungs on the non-noble ladder — only the higher one is Kegan-canonical:
+## Calibration pair (this is the bar — match this quality)
 
-  - **EVENT-level (weaker — the reaction coach will push past this):** "having to admit I made the mistake" — protects against a discrete event.
-  - **IDENTITY-level (canonical):** "having to see I'm the kind of husband who keeps hurting her" — protects against a truth about WHO HE IS being confirmed.
+  Worry: "I worry that if I stop bringing up her past mistakes, I'll always be the one who's the problem in this marriage."
+  WRONG draft (noble — reads as wedding vow, mechanism hidden):
+    "I'm committed to never being the one who's the problem in this marriage."
+  RIGHT draft (non-noble — mechanism on the page):
+    active_move: "keeping her past mistakes available"
+    protective_purpose: "so mine are never the only thing on the table"
+  Assembled: "I'm committed to keeping her past mistakes available so mine are never the only thing on the table."
 
-Every draft must land at the identity-level rung. What is the commitment keeping him safe from having to SEE ABOUT HIMSELF? Not "the fact happened" — "what the fact would confirm about the kind of person he is."
+Second calibration pair:
+  Worry: "I worry that if I stay in the room and listen to her without defending myself, I'd have to see I'm the man who's been running away the moment she needed me to stay."
+  WRONG draft (still noble — names what he doesn't want to BE):
+    "I'm committed to never having to see I'm the man who abandons her when she needs me most."
+  RIGHT draft (active mechanism on the page):
+    active_move: "staying in the room but keeping the exit open in my head"
+    protective_purpose: "so I never have to fully feel what it's like to be needed and stay"
+  Assembled: "I'm committed to staying in the room but keeping the exit open in my head so I never have to fully feel what it's like to be needed and stay."
 
-## Softening anti-patterns — banned frames in the protective_move slot
+Notice: both RIGHT drafts name what a part of him is DOING (the mechanism), followed by what that doing keeps him from having to face. Every draft you write clears this bar or gets rewritten.
 
-These are event-level dodges. Do NOT write:
+## Three checks — run silently before returning
 
-  - "having to admit the mistake" / "admitting I was wrong" — event, not pattern.
-  - "letting her see me fail" / "letting her see me make a mistake" — protects visibility of the event, not identity underneath.
-  - "having to face the situation" / "having to have that conversation" — the situation, not the self-truth.
-  - "having to apologize" / "having to say I'm sorry" — the ceremony, not the identity.
+1. **Wince test.** Read the assembled sentence in your head. Would it appear on a LinkedIn post, in a wedding speech, or on a good-partner blog? If yes, it's noble. Rewrite. A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice."
 
-Replace with constructions that name what the moment would CONFIRM about him:
-  - "having to see I'm the man who…"
-  - "having to find out I'm the kind of person who…"
-  - "letting her prove I'm the husband who…"
+2. **Verb-vs-noun rule.** Is active_move VERB-forward (keeping, staying, explaining, making sure, pre-empting, deflecting, over-preparing, disqualifying) or NOUN-forward (being, becoming, staying-as, remaining)? Non-noble is verb-forward. Rewrite noun-forward.
+
+3. **Protecting HIM vs. protecting HER.** Read protective_purpose. Does it name what a part of HIM is protected from feeling/facing? Or does it read as restraint on her behalf ("so I don't hurt her," "so I don't burden her")? If it reads as protecting HER, rewrite so the frame flips to self-preservation. Same act, different frame. (Guides also recognize loyalty/dishonor as valid self-protection — "not wanting to be like her father," "disappointing my family" — those count when framed as identity, not as protecting the other person.)
+
+## Banned frames
+
+In active_move (these are all identity-aversion, no mechanism):
+  - "never being [X]" / "never becoming [Y]" — noun-forward, hides mechanism
+  - "never having to see [Z]" / "never having to admit [Z]" — avoidance frame, no active move
+  - "not being the [X] who [Y]" — same failure
+  - "avoiding [X]" / "not doing [Y]" — names omission, not the active move
+  - "letting her [X]" — describes what he lets happen to her, not what he does
+
+If your first draft opens with any of these, you did NOT run the two-step derivation. Do it again. What ACT is a part of him actually running? That's the mechanism.
+
+In protective_purpose:
+  - "so I don't hurt her" / "so I don't burden her" / "so I don't make things worse"
+  - "so she doesn't get upset" / "so she stays"
+  - "so we don't fall apart"
+
+If the purpose reads mature/honorable/restrained, it's noble. Flip to self-preservation.
 
 ## Preserve the coachee's own specificity — copy his nouns
 
-You are naming HIS belief in HIS words. Do NOT editorialize a smoother version.
-  - If his worry says "his wife", the commitment says "his wife". Do NOT substitute "his family" / "the people he loves" / "his loved ones".
-  - If his worry says "she'd leave", the commitment says "she'd leave". Do NOT reword to "I'd lose everyone" / "I'd be alone".
-  - If his worry names a specific act ("bringing up the past", "lying"), the commitment stays in that act's shape.
+You are naming HIS mechanism in HIS words.
+  - If his worry says "her past", the commitment says "her past" (not "old grievances", "history", "what happened before").
+  - If his worry says "she" / "my wife", the commitment stays with the same noun (not "my partner", "the people I love", "my family").
+  - If his worry names a specific act ("scripting the questions", "bringing up her past mistakes", "shutting down"), the commitment stays inside that act's shape — the mechanism is the ACTIVE FORM of that same terrain.
 
-## Silent derivation
+## Silent derivation checklist
 
-  A. Read the paired worry. Identify what it would CONFIRM ABOUT HIM AS A PERSON if it came true — not what event would happen, what identity truth would land.
-  B. Fill protective_move with the specific move that prevents having to see / face that identity truth. Land at the identity rung.
+  A. Read the paired worry. What is the CONFRONTATION — the specific ACT that would produce the fear?
+  B. What move does a part of him do to prevent that confrontation? Fill active_move (verb-forward, mechanism visible).
+  C. What self-truth does this move keep him from having to face? Fill protective_purpose (self-protection, identity-level, starts with "so").
+  D. Run wince test + verb-vs-noun + protecting-HIM checks. If any fail, rewrite before returning.
 
-Return only the structured slot ({ protective_move: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
+Return only the structured slots ({ active_move: "...", protective_purpose: "..." }). No prose, no explanation, no meta.
 `.trim();
 
 /**
