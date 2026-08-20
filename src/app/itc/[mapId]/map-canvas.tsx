@@ -591,14 +591,12 @@ export function MapCanvas({
           different assumption / close the map). Generic ContinueBar
           would conflict — hidden here. */}
 
-      {tests.length > 0 ? (
-        <TestsPanel
-          tests={tests}
-          results={testResults}
-          assumptions={assumptions}
-          stage={map.current_stage}
-        />
-      ) : null}
+      {/* TestsPanel removed — the per-stage Sections (Design the test /
+          Run the test / Debrief the test) render the same information
+          in a less cramped layout, and the panel's inline label-value
+          rows were showing up as visually crushed. History browsing
+          for multi-cycle tests can come back as a dedicated affordance
+          later if needed. */}
 
       <CoachDock mapId={map.id} messages={dockMessages} />
     </div>

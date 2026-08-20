@@ -8,6 +8,7 @@ import type {
   ItcTestType,
 } from "@/lib/itc/maps";
 import { abandonInFlightTest, saveTest } from "../actions";
+import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 
 /**
@@ -242,12 +243,12 @@ function Field({
       <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
         {label}
       </span>
-      <textarea
+      <AutoTextarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        rows={rows}
+        minRows={rows}
         disabled={disabled}
-        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed"
+        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm leading-relaxed"
       />
       <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
         {hint}

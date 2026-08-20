@@ -13,6 +13,7 @@ import {
   removeAssumption,
   saveAssumption,
 } from "../actions";
+import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
@@ -192,11 +193,11 @@ function AddAssumptionForm({
 
   return (
     <div className="space-y-2 rounded-md border border-dashed border-[color:var(--color-border)] bg-black/10 p-3">
-      <textarea
+      <AutoTextarea
         ref={inputRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={2}
+        minRows={2}
         disabled={pending}
         placeholder="I assume that if I…, then…"
         onKeyDown={(e) => {
@@ -206,7 +207,7 @@ function AddAssumptionForm({
             submit();
           }
         }}
-        className="w-full resize-none rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
+        className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
       />
       <div className="flex flex-wrap gap-2">
         {commitments.map((c, i) => {
@@ -483,7 +484,7 @@ function AssumptionItem({
           {index}.
         </span>
         <div className="flex-1 space-y-2">
-          <textarea
+          <AutoTextarea
             ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -506,10 +507,10 @@ function AssumptionItem({
                 e.currentTarget.blur();
               }
             }}
-            rows={2}
+            minRows={2}
             disabled={pending}
             className={
-              "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
+              "w-full rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
               (focused
                 ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
                 : "bg-transparent border border-[color:var(--color-border)] hover:bg-black/20 hover:border-[color:var(--color-text-muted)] cursor-text")

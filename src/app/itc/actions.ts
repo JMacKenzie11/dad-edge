@@ -3002,13 +3002,16 @@ async function computeAdvanceGate(
     from === "assumptions"
       ? "immune_system"
       : (ITC_STAGES[ITC_STAGES.indexOf(from) + 1] as ItcStage);
-  // The assumptions → immune_system transition is the reveal moment
-  // (Kegan's "gas + brake" walkthrough). The button label makes what
-  // happens next feel like a payoff, not another chore.
+  // Special-case button labels where the generic "Continue to ${label}"
+  // reads confusingly or misses an emotional beat.
   const label =
     to === "immune_system"
       ? "Show Me What's Going On"
-      : `Continue to ${STAGE_LABELS[to]}`;
+      : to === "test_running"
+        ? "Go Run the Test"
+        : to === "results"
+          ? "Debrief the Test"
+          : `Continue to ${STAGE_LABELS[to]}`;
 
   switch (from) {
     case "goal": {

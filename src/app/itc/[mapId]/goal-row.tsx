@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { GOAL_STEM } from "@/lib/itc/stage";
 import { requestSuggestions, saveGoal } from "../actions";
+import { AutoTextarea } from "./auto-textarea";
 
 /**
  * Column 1 row — inline-editable at every stage. Goal text is a
@@ -100,7 +101,7 @@ export function GoalRow({
 
   return (
     <div className="space-y-3">
-      <textarea
+      <AutoTextarea
         ref={inputRef}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -118,11 +119,11 @@ export function GoalRow({
             e.currentTarget.blur();
           }
         }}
-        rows={3}
+        minRows={3}
         disabled={pending}
         placeholder={`${GOAL_STEM} …`}
         className={
-          "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
+          "w-full rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
           (focused
             ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
             : "bg-transparent border border-[color:var(--color-border)] hover:bg-black/20 hover:border-[color:var(--color-text-muted)] cursor-text")

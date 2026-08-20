@@ -8,6 +8,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { saveCommitment } from "../actions";
+import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
@@ -225,7 +226,7 @@ function CommitmentItem({
             </button>
           </div>
         ) : null}
-        <textarea
+        <AutoTextarea
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -243,11 +244,11 @@ function CommitmentItem({
               e.currentTarget.blur();
             }
           }}
-          rows={2}
+          minRows={2}
           disabled={pending}
           placeholder="I'm committed to never…"
           className={
-            "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
+            "w-full rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
               : "bg-transparent border border-[color:var(--color-border)] hover:bg-black/20 hover:border-[color:var(--color-text-muted)] cursor-text")

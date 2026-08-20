@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcBehavior, ItcMessage, ItcWorry } from "@/lib/itc/maps";
 import { saveWorry } from "../actions";
+import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 
 const FRESH_ROW_MS = 15_000;
@@ -183,7 +184,7 @@ function WorryItem({
           <span className="text-sm">{behavior.text}</span>
           <span className="text-[color:var(--color-text-muted)]/50">→</span>
         </div>
-        <textarea
+        <AutoTextarea
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -201,11 +202,11 @@ function WorryItem({
               e.currentTarget.blur();
             }
           }}
-          rows={2}
+          minRows={2}
           disabled={pending}
           placeholder="What are you afraid would happen if you did the opposite?"
           className={
-            "w-full resize-none rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
+            "w-full rounded-md px-3 py-2 text-base leading-relaxed transition-colors " +
             (focused
               ? "bg-black/30 border border-[color:var(--color-primary)]/60 outline-none"
               : "bg-transparent border border-[color:var(--color-border)] hover:bg-black/20 hover:border-[color:var(--color-text-muted)] cursor-text")
