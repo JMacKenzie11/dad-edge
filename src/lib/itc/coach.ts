@@ -827,32 +827,58 @@ export async function draftWorryForBehavior(input: {
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
-  try {
+  const basePromptLines = [
+    `Pillar: ${pillar.label} (${pillar.domain})`,
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    `Behavior (Column 2): ${input.behaviorText}`,
+    ``,
+    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+  ];
+  async function attempt(
+    retryContext?: { failedDraft: string; wordCount: number },
+  ): Promise<string | null> {
+    const promptLines = retryContext
+      ? [
+          ...basePromptLines,
+          ``,
+          `Your previous attempt was ${retryContext.wordCount} words (over the 20 cap): "${retryContext.failedDraft}"`,
+          `Cut it down. Kill "actually", "fully", trailing "instead of..." clauses, and any qualifying phrase you can. Preserve the identity landing — that's the whole point. Return slots that assemble under 20 words.`,
+        ]
+      : basePromptLines;
     const { object } = await generateObject({
       model: mainModel(),
       schema: WorryDraftSchema,
       system: DRAFT_WORRY_SYSTEM,
-      prompt: [
-        `Pillar: ${pillar.label} (${pillar.domain})`,
-        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-        `Behavior (Column 2): ${input.behaviorText}`,
-        ``,
-        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
-      ].join("\n"),
-      maxOutputTokens: 500,
+      prompt: promptLines.join("\n"),
+      // Assembled sentence is ~30 tokens; 200 gives headroom for the
+      // schema envelope without inviting sprawl. Was 500, which was
+      // sending "you have room to be verbose" as an implicit signal.
+      maxOutputTokens: 200,
     });
-    const assembled = scrubReply(assembleWorry(object));
-    const wordCount = assembled.trim().split(/\s+/).length;
-    if (wordCount > WORRY_HARD_WORD_CAP) {
+    return scrubReply(assembleWorry(object));
+  }
+  try {
+    const first = await attempt();
+    if (!first) return null;
+    const firstCount = first.trim().split(/\s+/).length;
+    if (firstCount <= WORRY_HARD_WORD_CAP) return first;
+    console.warn(
+      '[itc coach] worry draft over cap (%d words), retrying once: "%s"',
+      firstCount,
+      first,
+    );
+    const second = await attempt({ failedDraft: first, wordCount: firstCount });
+    if (!second) return null;
+    const secondCount = second.trim().split(/\s+/).length;
+    if (secondCount > WORRY_HARD_WORD_CAP) {
       console.warn(
-        '[itc coach] dropping worry draft over %d words (%d): "%s"',
-        WORRY_HARD_WORD_CAP,
-        wordCount,
-        assembled,
+        '[itc coach] worry draft still over cap after retry (%d words), dropping: "%s"',
+        secondCount,
+        second,
       );
       return null;
     }
-    return assembled;
+    return second;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1114,32 +1140,57 @@ export async function draftCommitmentForWorry(input: {
   worryText: string;
 }): Promise<string | null> {
   const started = Date.now();
-  try {
+  const basePromptLines = [
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    `Behavior (Column 2): ${input.behaviorText}`,
+    `Paired worry (Column 3): ${input.worryText}`,
+    ``,
+    `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
+  ];
+  async function attempt(
+    retryContext?: { failedDraft: string; wordCount: number },
+  ): Promise<string | null> {
+    const promptLines = retryContext
+      ? [
+          ...basePromptLines,
+          ``,
+          `Your previous attempt was ${retryContext.wordCount} words (over the 20 cap): "${retryContext.failedDraft}"`,
+          `Cut it down. Kill "fully", collapse any double-"so" chains, drop timing/context qualifiers ("when she criticizes me", "in the situation"). Preserve the mechanism-on-the-page — that's the whole point. Return slots that assemble under 20 words.`,
+        ]
+      : basePromptLines;
     const { object } = await generateObject({
       model: mainModel(),
       schema: CommitmentDraftSchema,
       system: DRAFT_COMMITMENT_SYSTEM,
-      prompt: [
-        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-        `Behavior (Column 2): ${input.behaviorText}`,
-        `Paired worry (Column 3): ${input.worryText}`,
-        ``,
-        `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
-      ].join("\n"),
-      maxOutputTokens: 400,
+      prompt: promptLines.join("\n"),
+      // Assembled sentence is ~30 tokens; 200 gives headroom for the
+      // schema envelope without inviting sprawl. Was 400.
+      maxOutputTokens: 200,
     });
-    const assembled = scrubReply(assembleCommitment(object));
-    const wordCount = assembled.trim().split(/\s+/).length;
-    if (wordCount > COMMITMENT_HARD_WORD_CAP) {
+    return scrubReply(assembleCommitment(object));
+  }
+  try {
+    const first = await attempt();
+    if (!first) return null;
+    const firstCount = first.trim().split(/\s+/).length;
+    if (firstCount <= COMMITMENT_HARD_WORD_CAP) return first;
+    console.warn(
+      '[itc coach] commitment draft over cap (%d words), retrying once: "%s"',
+      firstCount,
+      first,
+    );
+    const second = await attempt({ failedDraft: first, wordCount: firstCount });
+    if (!second) return null;
+    const secondCount = second.trim().split(/\s+/).length;
+    if (secondCount > COMMITMENT_HARD_WORD_CAP) {
       console.warn(
-        '[itc coach] dropping commitment draft over %d words (%d): "%s"',
-        COMMITMENT_HARD_WORD_CAP,
-        wordCount,
-        assembled,
+        '[itc coach] commitment draft still over cap after retry (%d words), dropping: "%s"',
+        secondCount,
+        second,
       );
       return null;
     }
-    return assembled;
+    return second;
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",
