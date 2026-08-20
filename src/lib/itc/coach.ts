@@ -949,13 +949,13 @@ You never write "I'm also committed to". You never write "never" as the opening 
 
 ## LENGTH BAR (mandatory)
 
-Kegan-canonical commitments are short and punchy. Vol 1 examples average 10-15 words. Your target for the ASSEMBLED sentence: **12-20 words**. Hard ceiling: 25.
+Kegan-canonical commitments are short and punchy. Vol 1 examples average 10-15 words. Your target for the ASSEMBLED sentence: **12-18 words**. Hard ceiling: 20. Non-negotiable.
 
 Per-slot targets:
 - **active_move: 3-8 words.** Terse verb phrase.
 - **protective_purpose: 4-12 words.** Terse purpose clause starting with "so".
 
-If your first draft is longer than 20 words, cut. Symptoms of over-writing you must strip out before returning:
+If your first draft is longer than 18 words, cut. Symptoms of over-writing you must strip out before returning:
 - **"Fully" as a modifier** — "so I never have to FULLY face…" — cut it. "so I never have to face…" is stronger. "Fully" is a filler tic.
 - **Double-"so" chains** — "so I don't have to hear X so I never have to face Y" — pick ONE. The commitment names ONE self-protection, not a cascade.
 - **Over-contextualization in active_move** — "keeping her past mistakes available WHEN SHE CRITICIZES ME" cuts to "keeping her past mistakes available". "Staying in the situation BUT SLIPPING IN SMALL CLARIFICATIONS ABOUT WHAT REALLY HAPPENED" cuts to "staying but relitigating". Kill the qualifiers.
@@ -991,9 +991,9 @@ If your first draft is longer than 20 words, cut. Symptoms of over-writing you m
   WRONG (still noble — names what he doesn't want to BE):
     "I'm also committed to never having to see I'm the man who abandons her when she needs me most."
   RIGHT (active mechanism, punchy):
-    active_move: "staying in the room but rehearsing my exit"
-    protective_purpose: "so I never have to be needed and still stay"
-  Assembled (19 words): "I'm also committed to staying in the room but rehearsing my exit so I never have to be needed and still stay."
+    active_move: "keeping one foot out the door"
+    protective_purpose: "so I never have to be needed and stay"
+  Assembled (16 words): "I'm also committed to keeping one foot out the door so I never have to be needed and stay."
 
 **Pair 3** (short and punchy — canonical length):
   Worry: "I worry that if I admit I'm wrong, she'd see I've been the man who lies to protect himself."
