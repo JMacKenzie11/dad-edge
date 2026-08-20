@@ -423,11 +423,13 @@ export function TestDesignForm({
       </div>
 
       {/* Form fields — dim + block interaction during regeneration
-          so the coachee can visibly see the draft is being replaced. */}
+          AND during Run the Test so the coachee can visibly see
+          something is happening (regenerate replaces the draft; Run
+          fires the SMART review). */}
       <div
         className={
           "space-y-3 transition-opacity " +
-          (regenPending ? "opacity-40 pointer-events-none" : "")
+          (regenPending || pending ? "opacity-40 pointer-events-none" : "")
         }
       >
         <FormField

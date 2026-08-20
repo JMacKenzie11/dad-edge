@@ -115,18 +115,20 @@ export function MapCanvas({
     [messages],
   );
   // Prioritize stage_notes — same always-visible pattern as the
-  // walkthrough. The coach's pick recommendation stays visible after
-  // the coachee advances into test_design so they can refer back to
-  // the reasoning.
-  const prioritizeNotes = useMemo(
-    () =>
-      messages.filter(
-        (m) =>
-          m.surface === "stage_note" &&
-          m.stage_at_creation === "prioritize",
-      ),
-    [messages],
-  );
+  // walkthrough. Only the MOST RECENT one renders: on second visits
+  // (after a test cycle with next_step=new_assumption), the
+  // recommendation regenerates against the updated test history and
+  // the previous recommendation is stale (may still reference an
+  // assumption that's already been tested). Filter to the freshest.
+  const prioritizeNotes = useMemo(() => {
+    const all = messages.filter(
+      (m) =>
+        m.surface === "stage_note" &&
+        m.stage_at_creation === "prioritize",
+    );
+    if (all.length === 0) return all;
+    return [all[all.length - 1]];
+  }, [messages]);
   // Done stage_notes — the closing summary. Always visible once the
   // coachee has reached done. Same pattern as immune_system +
   // prioritize.

@@ -91,7 +91,6 @@ function ThreadMessage({
         <div className="flex flex-wrap gap-2">
           {chips.refinement ? (
             <ChipButton
-              label={`Use: "${chips.refinement}"`}
               value={chips.refinement}
               target={chipTarget}
               entryId={entryId}
@@ -100,7 +99,6 @@ function ThreadMessage({
           {chips.suggestions?.map((s, i) => (
             <ChipButton
               key={i}
-              label={s}
               value={s}
               target={chipTarget}
               entryId={entryId}
@@ -113,12 +111,10 @@ function ThreadMessage({
 }
 
 function ChipButton({
-  label,
   value,
   target,
   entryId,
 }: {
-  label: string;
   value: string;
   target: ChipTarget;
   entryId?: string;
@@ -135,9 +131,10 @@ function ChipButton({
       type="button"
       onClick={handleClick}
       className="rounded-full border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-white hover:bg-[color:var(--color-primary)]/20"
-      title="Use this in the input"
+      title="Tap to use in the input"
     >
-      {label}
+      {value}
+      <span className="sr-only"> (tap to use in the input above)</span>
     </button>
   );
 }

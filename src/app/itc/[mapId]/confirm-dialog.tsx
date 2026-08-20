@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Styled confirm dialog. Replaces native window.confirm() everywhere
@@ -12,21 +13,15 @@ import { useEffect, useId, useRef } from "react";
  *   - Keyboard-accessible focus trap + Escape to cancel.
  *   - Screen-reader accessible via role="alertdialog".
  *
- * Renders as a fixed overlay when `open`. Controlled component:
- * caller owns open/close state.
+ * Renders via createPortal to document.body. Without the portal, a
+ * `position: fixed` overlay gets scoped to the nearest ancestor with
+ * a transform / filter / will-change (creating a new containing
+ * block for fixed elements — classic CSS gotcha). The page header
+ * has such an ancestor, so the Clear-map dialog was appearing
+ * offset near the top of the viewport instead of centered. Portal
+ * escapes that.
  *
- * Usage:
- *   const [confirmOpen, setConfirmOpen] = useState(false);
- *   ...
- *   <ConfirmDialog
- *     open={confirmOpen}
- *     title="Remove behavior?"
- *     body="You wrote a worry paired to this behavior."
- *     confirmLabel="Remove"
- *     onConfirm={() => { setConfirmOpen(false); doRemove(); }}
- *     onCancel={() => setConfirmOpen(false)}
- *     destructive
- *   />
+ * Controlled component: caller owns open/close state.
  */
 export function ConfirmDialog({
   open,
@@ -54,6 +49,10 @@ export function ConfirmDialog({
   const confirmRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const bodyId = useId();
+  // Portal target — document.body isn't available during SSR, so we
+  // wait for mount before rendering the portal.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -72,9 +71,9 @@ export function ConfirmDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, destructive, onCancel]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70"
       onClick={onCancel}
@@ -124,6 +123,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
