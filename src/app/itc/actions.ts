@@ -3497,10 +3497,15 @@ async function seedTestMap(
     .sort((a, b) => a.sort_order - b.sort_order);
 
   // Worries — depth 3, attempts 1 (bypasses excavation-loop gate).
+  // Fixture text is hand-authored to match what the current worry
+  // drafter would produce: under 20 words, "I worry that if I..." stem,
+  // identity-level landing (self-labeling or role/relational). Update
+  // whenever the drafter's shape/length rules shift so test-mode
+  // reflects the current production output.
   const worryTextsByBehavior = [
-    "I worry that if I actually listen and admit she's right, it proves I'm the kind of husband who can't stop doing things that hurt her.",
-    "I worry that if I stop lying and own it, admitting I'm wrong again and again means I'm not good enough for her.",
-    "I worry that if I stay in the room instead of walking out, I'd lose it and say something awful, and I'd be the husband who hurts his wife.",
+    "I worry that if I let her past rest, I'd have to see mine is the pattern.",
+    "I worry that if I admitted I was wrong, she'd know I'm not enough for her.",
+    "I worry that if I stayed and heard her out, I'd become the husband who hurts her.",
   ];
   const { data: ws, error: wErr } = await supabase
     .from("itc_worries")
@@ -3517,11 +3522,16 @@ async function seedTestMap(
   if (wErr || !ws) return { ok: false, reason: `seed worries: ${wErr?.message}` };
   const typedWs = ws as Array<{ id: string; behavior_id: string }>;
 
-  // Commitments — identity-level, depth 3, attempts 1.
+  // Commitments — active-mechanism form, depth 3, attempts 1.
+  // Fixture text is hand-authored to match the current commitment
+  // drafter's output shape: starts with "I'm also committed to",
+  // under 20 words, active mechanism + protective purpose ("so I
+  // never have to X"). Update whenever the drafter's shape/length
+  // rules shift so test-mode reflects production output.
   const commitmentTextsByBehaviorIdx = [
-    "I'm committed to never having to see I'm the husband who keeps failing her no matter how hard I try.",
-    "I'm committed to never letting her see how many times I've gotten it wrong.",
-    "I'm committed to never staying in the room long enough to find out I can handle her anger without becoming that guy.",
+    "I'm also committed to keeping her past on the table so mine never stands alone.",
+    "I'm also committed to slipping in small clarifications so I never hear the lie land.",
+    "I'm also committed to walking out before I lose it so I never find out I can handle it.",
   ];
   const worriesByBehaviorId = new Map(typedWs.map((w) => [w.behavior_id, w]));
   const { error: cErr } = await supabase.from("itc_commitments").insert(
