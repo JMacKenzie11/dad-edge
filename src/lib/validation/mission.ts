@@ -37,6 +37,12 @@ const CONCRETE_VERBS = new Set([
 export type MissionValidationInput = {
   description: string;
   target_date: string; // YYYY-MM-DD
+  /** Bypass the CONCRETE_VERBS + vague-pattern checks for missions
+   *  authored by the ITC coach (created_by='itc'). ITC test behaviors
+   *  like "stay in the room during the next argument" don't fit the
+   *  verb list but are already validated by SMART on the ITC side.
+   *  The min-length + real-date checks still apply. */
+  bypassConcreteness?: boolean;
 };
 
 export type MissionValidationResult =
@@ -46,6 +52,7 @@ export type MissionValidationResult =
 export function validateMissionConcreteness({
   description,
   target_date,
+  bypassConcreteness = false,
 }: MissionValidationInput): MissionValidationResult {
   const desc = description.trim();
   if (desc.length < 8) {
@@ -57,6 +64,10 @@ export function validateMissionConcreteness({
   const parsedDate = new Date(`${target_date}T00:00:00`);
   if (Number.isNaN(parsedDate.getTime())) {
     return { ok: false, reason: "That date isn't real." };
+  }
+
+  if (bypassConcreteness) {
+    return { ok: true };
   }
 
   for (const pat of VAGUE_PATTERNS) {

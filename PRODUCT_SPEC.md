@@ -573,7 +573,51 @@ Two operating principles have driven every architectural decision on the ITC sid
 
 ---
 
-## 17. ITC Auth Migration Path
+## 17. ITC ↔ Tracker Link
+
+The ITC map isn't an isolated coaching artifact — an ITC improvement goal mirrors to the main-app `quarterly_goals`, and every ITC test mirrors to `missions`. Coaching work counts against the same weekly caps, composite score, and A2 pillar as the rest of the app; the man has one integrated accountability record.
+
+Wiring lives in `src/lib/itc/tracker-link.ts`; called from the ITC server actions. Failure policy: tracker-link failures never block the ITC action — a save that couldn't mirror gets logged, the ITC UX proceeds, and the next re-save retries.
+
+### Identity bridge
+
+`ensureUserForItcParticipant()` in `src/lib/itc/auth-bridge.ts` lazily bridges `itc_participants → public.users` on the first tracker-touching action:
+1. If `participant.user_id` already set → return.
+2. Match by normalized email against existing `public.users` → link and return.
+3. Otherwise create an `auth.users` row (via admin API, `email_confirm: true`) → trigger inserts `public.users` → patch to `subscription_status='comped'` + `onboarding_step=7` (so an ITC-only coachee who later touches the main app passes the entitlement gate and skips onboarding).
+
+### Sync points
+
+- **Save goal** → `syncItcGoalToTracker`. Creates a `quarterly_goals` row in the current quarter (`focus_area = pillar_code`, `description = goal_text verbatim`, including the `"I'm committed to getting better at …"` stem). Stores the id on `itc_maps.quarterly_goal_id`. Edits update the linked goal in place.
+- **Run the Test** → `createMissionForItcTest`. After SMART passes, mirrors the test as a `planned` mission (`created_by='itc'`, `target_date = test.target_date`, `pillar_code = map.pillar_code`, `quarterly_goal_id = map.quarterly_goal_id`). Application-level pre-flight cap check (15/week total, 5/bucket) — if the coachee is at cap, `runTest` returns a friendly reason and does NOT advance to `test_running`. Test row stays saved so no work is lost.
+- **Save result** → `markMissionCompletedForItcTest`. Any verdict counts — the mission was "run the test," not "reach a specific outcome." Sets `completed_late` based on `ran_on` vs. `target_date`.
+- **Abandon in-flight test** → `abandonMissionForItcTest`. Marks linked mission `abandoned` only if it was still `planned` — completed/missed/rolled_over stay as-is.
+- **Reset map** → `cascadeItcMapClear`. Abandons the linked `quarterly_goal` and every linked `planned` mission; leaves completed/missed/rolled_over missions alone (they represent real historical work).
+
+### Concreteness bypass
+
+The application-level `validateMissionConcreteness` (`src/lib/validation/mission.ts`) takes an optional `bypassConcreteness` flag. Missions authored by the ITC coach (`created_by='itc'`) bypass the `CONCRETE_VERBS` + vague-pattern checks — ITC test behaviors like "stay in the room during the next argument" don't fit the "call/take/book" verb list but are already validated by SMART. Min-length and real-date checks still apply.
+
+### Cap enforcement
+
+ITC missions DO count against the same weekly caps as user-created missions. This is deliberate — an ITC test is real work and should compete for slot with other missions. If the cap is hit, the coachee gets a plain-English reason ("You're at your mission cap for the week...") from Run the Test and can resolve it on `/missions` before returning. The DB trigger `enforce_mission_weekly_cap` (updated to exclude `abandoned` from the count) is the backstop.
+
+### No-community fallback
+
+ITC-only coachees who haven't joined a `communities` row can still use the ITC UX. Their goal mirrors to `quarterly_goals`; their tests do NOT mirror to missions (which require `community_id NOT NULL`). Once they join a community, future tests mirror normally. Retroactive backfill of past tests is out of scope.
+
+### Migration
+
+Migration `20260820000001_itc_tracker_link.sql`:
+- Adds `itc_participants.user_id` (nullable, unique).
+- Adds `itc_maps.quarterly_goal_id` and `itc_tests.mission_id` (nullable FKs).
+- Adds `'abandoned'` to `mission_status`.
+- Adds `'itc'` to `mission_creator`.
+- Updates `enforce_mission_weekly_cap` to exclude both `rolled_over` and `abandoned` from the count.
+
+---
+
+## 18. ITC Auth Migration Path
 
 Current ITC login (`src/app/itc/login/`) is email + `1111` demo password. Sets a session cookie tied to `itc_participants.id`. Deliberately isolated from the main app auth (see `src/lib/itc/participant.ts:13-15`: "Never touches public.users").
 

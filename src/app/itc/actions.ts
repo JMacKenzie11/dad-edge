@@ -73,6 +73,14 @@ import {
 } from "@/lib/itc/rubric";
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
+import {
+  abandonMissionForItcTest,
+  cascadeItcMapClear,
+  checkMissionCapForItcTest,
+  createMissionForItcTest,
+  markMissionCompletedForItcTest,
+  syncItcGoalToTracker,
+} from "@/lib/itc/tracker-link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   ASSUMPTION_STEM,
@@ -390,6 +398,12 @@ export async function resetMap(formData: FormData): Promise<void> {
   if (!parsed.success) redirect("/itc");
   const map = await getMapForParticipant(parsed.data.map_id, participant.id);
   if (!map) redirect("/itc");
+  // Cascade to the tracker BEFORE deleting the map (so the linked
+  // goal + planned mission ids can still be read from itc_maps /
+  // itc_tests). Abandons the linked quarterly_goal and any linked
+  // 'planned' mission; leaves completed/missed/rolled_over missions
+  // alone so the man's real history stays intact.
+  await cascadeItcMapClear(map.id);
   await deleteMap(map.id, participant.id);
   redirect("/itc");
 }
@@ -532,6 +546,16 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
       reason: err instanceof Error ? err.message : "Could not save goal.",
     };
   }
+  // Mirror to the tracker as a quarterly_goal. Fire-and-forget:
+  // failures are logged inside syncItcGoalToTracker and don't block
+  // the ITC save. The ITC map is the source of truth for ITC UX;
+  // the tracker is a downstream mirror.
+  await syncItcGoalToTracker({
+    participantId: loaded.participant.id,
+    mapId: loaded.map.id,
+    pillarCode: loaded.map.pillar_code,
+    goalText: withStem,
+  });
   const events = new TurnEventLog(loaded.map.id, 0);
   if (isEdit) {
     events.record(
@@ -2509,6 +2533,24 @@ export async function runTest(
   const shouldAdvance = !review || review.verdict === "ready";
   let advanced = false;
   if (shouldAdvance) {
+    // Mirror the test to the tracker as a planned mission BEFORE
+    // advancing. If the coachee is at their weekly mission cap, block
+    // the advance with a friendly reason — the test design stays
+    // saved so they don't lose their work.
+    const missionResult = await createMissionForItcTest({
+      mapId: loaded.map.id,
+      testId: row.id,
+      participantId: loaded.participant.id,
+      pillarCode: loaded.map.pillar_code,
+      behaviorChange: row.behavior_change ?? "",
+      targetDate: row.target_date ?? "",
+    });
+    if (!missionResult.ok) {
+      // Cap-hit or link error. Do NOT advance; return the reason so
+      // the client shows the error. Test row remains saved.
+      await events.flush();
+      return { ok: false, reason: missionResult.reason };
+    }
     try {
       await advanceStage(loaded.map.id, "test_design", "test_running");
       await appendMessage(
@@ -2565,6 +2607,10 @@ export async function abandonInFlightTest(
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
   try {
     await markTestAbandoned(parsed.data.test_id, loaded.map.id);
+    // Mirror to tracker: mark the linked mission 'abandoned' (only
+    // if it was still 'planned' — completed / missed missions stay
+    // as-is, real history).
+    await abandonMissionForItcTest(parsed.data.test_id);
     // Revert stage back to prioritize. canTransitionTo allows
     // backward moves; advanceStage doesn't fire the recommendation
     // hook on a backward transition because deliverPrioritize... is
@@ -2731,6 +2777,14 @@ export async function saveTestResult(
       err instanceof Error ? err.message : String(err),
     );
   }
+  // Mirror to tracker: mark the linked mission 'completed'. Any
+  // verdict counts — the mission was "run the test", not "reach a
+  // specific outcome". Idempotent + no-op if the test has no linked
+  // mission (ITC-only user without a community).
+  await markMissionCompletedForItcTest({
+    testId: row.test_id,
+    ranOn: row.ran_on ?? new Date().toISOString().slice(0, 10),
+  });
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
