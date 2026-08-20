@@ -696,6 +696,20 @@ You return TWO slots — opposite_move and identity_landing — that fill the bl
 
 You never write "I worry that", "if I", or the trailing period. The server writes those. Focus entirely on the semantic content of each slot.
 
+## LENGTH BAR (mandatory)
+
+Kegan-canonical worries are 15-25 words. Your target for the ASSEMBLED sentence: **15-25 words**. Hard ceiling: 30. The server drops anything over 30 words silently — the coachee sees no card for that behavior. Don't lose the draft to sprawl.
+
+Per-slot targets:
+- **opposite_move: 3-8 words.** Terse counter-move.
+- **identity_landing: 8-16 words.** Terse identity landing.
+
+Symptoms of over-writing you must strip:
+- **"Fully" as a modifier** — "I'd have to FULLY see..." cuts to "I'd have to see...".
+- **"Actually" as a modifier** — "she'd know I've been more focused on defending myself than ACTUALLY loving her" cuts to "than loving her".
+- **Double "and" chains** — "I'd have to see I'm the man who X and I've been Y and I've failed Z" — pick ONE identity truth. Adding more dilutes the wince.
+- **Over-qualifying opposite_move** — "let her finish speaking without interrupting or defending myself IN THE MOMENT WHEN SHE'S CLEARLY UPSET" cuts to "let her finish speaking".
+
 ## What each slot must contain
 
 ### opposite_move
@@ -786,13 +800,24 @@ The pillar constrains the domain. A fear that could be pasted onto any pillar is
 Return only the structured slots ({ opposite_move: "...", identity_landing: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
 `.trim();
 
+/** Hard ceiling on assembled worry length. Kegan Vol 1 worry
+ *  examples run 15-25 words; the schema's per-slot char caps allow
+ *  up to ~48 assembled words worst case (5 template + 13 from
+ *  opposite_move at max + 30 from identity_landing at max). Cap at
+ *  30 to force conciseness. Silently dropped over-cap drafts so the
+ *  coachee sees no card rather than a sprawling one — same pattern
+ *  as COMMITMENT_HARD_WORD_CAP and the assumption drafter. */
+const WORRY_HARD_WORD_CAP = 30;
+
 /**
  * Server-side coach-draft generator for Column 3. Called once per
  * selected behavior when the coachee advances into the worries stage.
  *
  * Form-First-pure: LLM returns METADATA (two slots); server assembles
  * the canonical "I worry that if I ..., ..." sentence. Coachee reviews,
- * edits, or promotes to real worry.text via saveWorry.
+ * edits, or promotes to real worry.text via saveWorry. Assembled
+ * drafts over WORRY_HARD_WORD_CAP are dropped (return null) so the
+ * coachee never sees a sprawling worry that dilutes the "yuck".
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
@@ -811,11 +836,22 @@ export async function draftWorryForBehavior(input: {
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         `Behavior (Column 2): ${input.behaviorText}`,
         ``,
-        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory.`,
+        `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 30 words — Kegan-canonical worries run 15-25.`,
       ].join("\n"),
       maxOutputTokens: 500,
     });
-    return scrubReply(assembleWorry(object));
+    const assembled = scrubReply(assembleWorry(object));
+    const wordCount = assembled.trim().split(/\s+/).length;
+    if (wordCount > WORRY_HARD_WORD_CAP) {
+      console.warn(
+        '[itc coach] dropping worry draft over %d words (%d): "%s"',
+        WORRY_HARD_WORD_CAP,
+        wordCount,
+        assembled,
+      );
+      return null;
+    }
+    return assembled;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1051,14 +1087,25 @@ You are naming HIS mechanism in HIS words.
 Return only the structured slots ({ active_move: "...", protective_purpose: "..." }). No prose, no explanation, no meta.
 `.trim();
 
+/** Hard ceiling on assembled commitment length. Structured slots +
+ *  per-slot char caps make over-20 rare but not impossible (long
+ *  slots that still fit their individual char limits can combine to
+ *  exceed 20 words after assembly). Reject anything over the cap so
+ *  the coachee sees no card rather than a wordy draft that fails the
+ *  reaction coach's rubric. Silently dropped — mirrors the assumption
+ *  drafter's HARD_WORD_CAP enforcement. */
+const COMMITMENT_HARD_WORD_CAP = 20;
+
 /**
  * Server-side coach-draft generator for Column 4. Called once per
  * worry when the coachee advances into the commitments stage.
  *
- * Form-First-pure: LLM returns METADATA (the protective_move slot);
- * server assembles the canonical "I'm committed to never ..." sentence.
- * Coachee reviews, edits, or promotes to real commitment.text via
- * saveCommitment.
+ * Form-First-pure: LLM returns METADATA (two slots); server assembles
+ * the canonical "I'm also committed to <active_move> <protective_purpose>."
+ * sentence. Coachee reviews, edits, or promotes to real commitment.text
+ * via saveCommitment. Assembled drafts over COMMITMENT_HARD_WORD_CAP
+ * are dropped (return null) so the coachee never sees a wordy draft
+ * the reaction coach would reject anyway.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -1076,11 +1123,22 @@ export async function draftCommitmentForWorry(input: {
         `Behavior (Column 2): ${input.behaviorText}`,
         `Paired worry (Column 3): ${input.worryText}`,
         ``,
-        `Fill protective_move with the identity-level self-protective move underneath this worry.`,
+        `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
       ].join("\n"),
       maxOutputTokens: 400,
     });
-    return scrubReply(assembleCommitment(object));
+    const assembled = scrubReply(assembleCommitment(object));
+    const wordCount = assembled.trim().split(/\s+/).length;
+    if (wordCount > COMMITMENT_HARD_WORD_CAP) {
+      console.warn(
+        '[itc coach] dropping commitment draft over %d words (%d): "%s"',
+        COMMITMENT_HARD_WORD_CAP,
+        wordCount,
+        assembled,
+      );
+      return null;
+    }
+    return assembled;
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",
