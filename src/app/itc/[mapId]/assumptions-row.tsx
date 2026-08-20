@@ -16,6 +16,7 @@ import {
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { SavingIndicator } from "./form-field";
+import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "./use-confirm";
 
 const FRESH_ROW_MS = 15_000;
@@ -78,9 +79,12 @@ export function AssumptionsRow({
     <div className="space-y-3">
       {drafts.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
-            Coach's drafts
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
+              Coach's drafts
+            </p>
+            <RegenerateDraftsButton mapId={mapId} kind="assumptions" />
+          </div>
           {drafts.map((d) => (
             <DraftCard
               key={d.id}

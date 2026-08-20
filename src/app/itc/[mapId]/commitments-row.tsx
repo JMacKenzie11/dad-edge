@@ -11,6 +11,7 @@ import { saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { SavingIndicator } from "./form-field";
+import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -68,24 +69,42 @@ export function CommitmentsRow({
     );
   }
 
+  // Show the regenerate-drafts button when there's at least one
+  // worry with a coach draft AND no accepted commitment on it yet.
+  // If every worry has a real commitment, the drafts are done work
+  // and there's nothing to regenerate. If no worries have drafts,
+  // the drafter never ran (rare — LLM failure on advance).
+  const hasRegeneratableDrafts = worries.some(
+    (w) =>
+      Boolean(w.coach_commitment_draft) &&
+      !commitmentByWorryId.has(w.id),
+  );
+
   return (
-    <ul className="space-y-3 text-base">
-      {worries.map((w, i) => {
-        const c = commitmentByWorryId.get(w.id) ?? null;
-        return (
-          <CommitmentItem
-            key={w.id}
-            mapId={mapId}
-            worry={w}
-            behaviorText={behaviorById.get(w.behavior_id)?.text ?? "(behavior)"}
-            index={i + 1}
-            commitment={c}
-            fresh={isFresh(c?.created_at, nowMs)}
-            thread={c ? threads.get(c.id) ?? [] : []}
-          />
-        );
-      })}
-    </ul>
+    <div className="space-y-3">
+      <ul className="space-y-3 text-base">
+        {worries.map((w, i) => {
+          const c = commitmentByWorryId.get(w.id) ?? null;
+          return (
+            <CommitmentItem
+              key={w.id}
+              mapId={mapId}
+              worry={w}
+              behaviorText={behaviorById.get(w.behavior_id)?.text ?? "(behavior)"}
+              index={i + 1}
+              commitment={c}
+              fresh={isFresh(c?.created_at, nowMs)}
+              thread={c ? threads.get(c.id) ?? [] : []}
+            />
+          );
+        })}
+      </ul>
+      {hasRegeneratableDrafts ? (
+        <div className="pt-1">
+          <RegenerateDraftsButton mapId={mapId} kind="commitments" />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
