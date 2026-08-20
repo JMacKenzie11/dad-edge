@@ -16,6 +16,7 @@ import {
   recommendAssumptionToTest,
   reviewTestDesign,
   reviewTestResult,
+  reviseTestFromReview,
   scrubReply,
   type ReactionInput,
   type ReactionOutput,
@@ -2127,6 +2128,124 @@ export async function regenerateTestDraft(
     return { ok: false, reason: "Could not generate a new draft." };
   }
   return { ok: true, draft };
+}
+
+const reviseTestFromCoachSchema = z.object({
+  map_id: z.string().uuid(),
+  test_type: z.enum([
+    "data_mining",
+    "observation",
+    "thought_experiment",
+    "behavioral",
+  ]),
+  /** The exact current form fields the coachee has in the UI. We
+   *  pass them from the client rather than reading from DB because
+   *  the coachee may have edited without saving before hitting the
+   *  revise button. The LLM revises what's on screen, not a stale
+   *  DB row. */
+  assumption_says: z.string().min(3).max(1000),
+  behavior_change: z.string().min(3).max(1000),
+  data_to_collect: z.string().min(3).max(1000),
+  in_order_to_find_out: z.string().min(3).max(1000),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** The SMART review verdict that surfaced this fix path — serialized
+   *  from the client's state (never persisted server-side). Server
+   *  passes it to reviseTestFromReview so the LLM sees exactly which
+   *  criteria failed + the one_thing_to_tighten sentence. */
+  review_json: z.string().min(2),
+});
+
+/**
+ * Client-triggered "Have the coach revise this" — the coachee saw a
+ * needs_work SMART verdict on the SMART card and asked the coach to
+ * revise the test from that specific feedback. Does NOT persist —
+ * the revised fields land in client form state; the coachee reviews
+ * them and then hits Run the Test again for a fresh SMART pass.
+ */
+export async function reviseTestFromCoach(
+  formData: FormData,
+): Promise<
+  | {
+      ok: true;
+      draft: {
+        testType: "data_mining" | "observation" | "thought_experiment" | "behavioral";
+        assumptionSays: string;
+        behaviorChange: string;
+        dataToCollect: string;
+        inOrderToFindOut: string;
+        targetDate: string;
+      };
+    }
+  | { ok: false; reason: string }
+> {
+  const parsed = reviseTestFromCoachSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_type: formData.get("test_type"),
+    assumption_says: formData.get("assumption_says"),
+    behavior_change: formData.get("behavior_change"),
+    data_to_collect: formData.get("data_to_collect"),
+    in_order_to_find_out: formData.get("in_order_to_find_out"),
+    target_date: formData.get("target_date"),
+    review_json: formData.get("review_json"),
+  });
+  if (!parsed.success) {
+    return { ok: false, reason: "Invalid revise input." };
+  }
+  let review: SmartReview;
+  try {
+    review = JSON.parse(parsed.data.review_json) as SmartReview;
+  } catch {
+    return { ok: false, reason: "Could not parse review payload." };
+  }
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  const [assumptions, links, commitments, behaviors, worries] =
+    await Promise.all([
+      listAssumptions(loaded.map.id),
+      listAssumptionLinks(loaded.map.id),
+      listCommitments(loaded.map.id),
+      listBehaviors(loaded.map.id),
+      listWorries(loaded.map.id),
+    ]);
+  const selected = assumptions.find((a) => a.selected_for_testing);
+  if (!selected) {
+    return { ok: false, reason: "No assumption is selected for testing." };
+  }
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const underwritten = links
+    .filter((l) => l.assumption_id === selected.id)
+    .map((l) => {
+      const commitment = commitmentById.get(l.commitment_id);
+      const worry = commitment ? worryById.get(commitment.worry_id) : null;
+      const behavior = worry ? behaviorById.get(worry.behavior_id) : null;
+      return commitment && behavior
+        ? { text: commitment.text, behaviorText: behavior.text }
+        : null;
+    })
+    .filter((x): x is { text: string; behaviorText: string } => Boolean(x));
+
+  const revised = await reviseTestFromReview({
+    goalText: loaded.map.improvement_goal ?? "",
+    assumptionText: selected.text,
+    underwrittenCommitments: underwritten,
+    todayIso: new Date().toISOString().slice(0, 10),
+    currentTest: {
+      testType: parsed.data.test_type,
+      assumptionSays: parsed.data.assumption_says,
+      behaviorChange: parsed.data.behavior_change,
+      dataToCollect: parsed.data.data_to_collect,
+      inOrderToFindOut: parsed.data.in_order_to_find_out,
+      targetDate: parsed.data.target_date,
+    },
+    review,
+  });
+  if (!revised) {
+    return { ok: false, reason: "Coach couldn't produce a revision." };
+  }
+  return { ok: true, draft: revised };
 }
 
 const saveTestSchema = z.object({

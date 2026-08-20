@@ -1624,6 +1624,119 @@ export async function reviewTestDesign(input: {
   }
 }
 
+/**
+ * Revise a test using the SMART feedback the coach just returned.
+ * The coachee clicked "Have the coach revise this" on the SMART card.
+ * Different from draftTestForAssumption: we're not writing from
+ * scratch, we're targeted-editing the current test to fix the
+ * specific criteria that failed. Preserve what worked; change what
+ * didn't. Keep the same test_type unless the failure is fundamentally
+ * a wrong-type problem — in which case, keep it anyway (type changes
+ * are the user's call via the dropdown).
+ */
+export async function reviseTestFromReview(input: {
+  goalText: string;
+  assumptionText: string;
+  underwrittenCommitments: Array<{ text: string; behaviorText: string }>;
+  todayIso: string;
+  currentTest: {
+    testType: TestType;
+    assumptionSays: string;
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+    targetDate: string;
+  };
+  review: SmartReview;
+}): Promise<{
+  testType: TestType;
+  assumptionSays: string;
+  behaviorChange: string;
+  dataToCollect: string;
+  inOrderToFindOut: string;
+  targetDate: string;
+} | null> {
+  const started = Date.now();
+  try {
+    const commitmentsBlock = input.underwrittenCommitments
+      .map(
+        (c, i) =>
+          `  ${i + 1}. commitment: ${c.text}\n     paired behavior: ${c.behaviorText}`,
+      )
+      .join("\n");
+    const { TEST_DESIGN_STAGE } = await import(
+      "./prompts/stages/test-design"
+    );
+    // Render the SMART verdict as prompt text so the model sees exactly
+    // what failed + the one-sentence fix directive. Server-owned
+    // rendering — the LLM never re-parses the structured object.
+    const smartLines = [
+      `  safe: ${input.review.smart.safe.pass ? "PASS" : "FAIL"} — ${input.review.smart.safe.note}`,
+      `  modest: ${input.review.smart.modest.pass ? "PASS" : "FAIL"} — ${input.review.smart.modest.note}`,
+      `  actionable: ${input.review.smart.actionable.pass ? "PASS" : "FAIL"} — ${input.review.smart.actionable.note}`,
+      `  researches: ${input.review.smart.researches.pass ? "PASS" : "FAIL"} — ${input.review.smart.researches.note}`,
+      `  tests_belief: ${input.review.smart.tests_belief.pass ? "PASS" : "FAIL"} — ${input.review.smart.tests_belief.note}`,
+    ].join("\n");
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: TestDraftSchema,
+      system: TEST_DESIGN_STAGE,
+      prompt: [
+        `Revise the coachee's current test to address the SMART failures below. This is targeted editing — preserve what worked, change what didn't. Do NOT write from scratch.`,
+        ``,
+        `Keep test_type as "${input.currentTest.testType}" — type changes are the coachee's call via the dropdown, not yours.`,
+        ``,
+        `Today's date (ISO): ${input.todayIso}`,
+        `Target date must be in the future, on or within about a week from today.`,
+        ``,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Big Assumption being tested (Column 5): ${input.assumptionText}`,
+        ``,
+        `Competing commitments this assumption underwrites (Column 4):`,
+        commitmentsBlock || "  (none)",
+        ``,
+        `Current test the coachee saved:`,
+        `  test_type: ${input.currentTest.testType}`,
+        `  My Big Assumption Says: ${input.currentTest.assumptionSays}`,
+        `  So I Will: ${input.currentTest.behaviorChange}`,
+        `  And Collect the Following Data: ${input.currentTest.dataToCollect}`,
+        `  In Order to Find Out Whether: ${input.currentTest.inOrderToFindOut}`,
+        `  Target date: ${input.currentTest.targetDate}`,
+        ``,
+        `Your last SMART review of this test:`,
+        `  verdict: ${input.review.verdict}`,
+        smartLines,
+        input.review.one_thing_to_tighten
+          ? `  one_thing_to_tighten: ${input.review.one_thing_to_tighten}`
+          : ``,
+        ``,
+        `Return the revised test as the full structured object. Fields that were fine can stay identical; fields tied to a FAIL criterion must change to address it. The revised test must clear every SMART criterion.`,
+      ].join("\n"),
+      maxOutputTokens: 1200,
+    });
+    return {
+      testType: input.currentTest.testType, // pinned — user owns type via dropdown
+      assumptionSays: scrubReply(object.assumption_says),
+      behaviorChange: scrubReply(object.behavior_change),
+      dataToCollect: scrubReply(object.data_to_collect),
+      inOrderToFindOut: scrubReply(object.in_order_to_find_out),
+      targetDate: object.target_date,
+    };
+  } catch (err) {
+    console.warn(
+      "[itc coach] reviseTestFromReview failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] revise kind=test ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
 // -------------------------------------------------------------------------
 // reviewTestResult — coach post-test debrief helper
 // -------------------------------------------------------------------------

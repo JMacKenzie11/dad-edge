@@ -11,10 +11,22 @@ import type {
 import {
   abandonInFlightTest,
   regenerateTestDraft,
+  reviseTestFromCoach,
   runTest,
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
+
+/**
+ * Feature flag. The "Give me a safer version" toolbar button is hidden
+ * behind this flag while we try the SMART-driven "Have the coach revise
+ * this" path (which subsumes the safer-version affordance for the case
+ * where a test fails on safety/modesty). Flip to true if we want the
+ * pre-run safer path back — the underlying server-side SAFER_LADDER is
+ * still wired. See the discussion in the ITC commit that introduced
+ * reviseTestFromCoach for the UX rationale.
+ */
+const SHOW_SAFER_BUTTON = false;
 
 /**
  * Test design form. Renders the four Kegan/Lahey worksheet fields
@@ -173,6 +185,45 @@ export function TestDesignForm({
   const canGoSafer = testType !== "data_mining";
 
   /**
+   * "Have the coach revise this" — fired from the SmartReviewCard when
+   * verdict is needs_work. Sends the current on-screen form fields
+   * (not the DB row — coachee may have edited without saving) plus
+   * the SMART review payload to the server. Coach returns revised
+   * slots targeted at the failed criteria; client updates form state
+   * and clears the SMART card (the revision is a new test that needs
+   * a fresh review on the next Run the Test).
+   */
+  function reviseFromCoach() {
+    if (!latestReview) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("test_type", testType);
+    fd.set("assumption_says", assumptionSays.trim());
+    fd.set("behavior_change", behaviorChange.trim());
+    fd.set("data_to_collect", dataToCollect.trim());
+    fd.set("in_order_to_find_out", inOrderToFindOut.trim());
+    fd.set("target_date", targetDate);
+    fd.set("review_json", JSON.stringify(latestReview));
+    startRegen(async () => {
+      const res = await reviseTestFromCoach(fd);
+      if (!res.ok) {
+        setError(res.reason ?? "Coach couldn't revise.");
+        return;
+      }
+      setTestType(res.draft.testType);
+      setAssumptionSays(res.draft.assumptionSays);
+      setBehaviorChange(res.draft.behaviorChange);
+      setDataToCollect(res.draft.dataToCollect);
+      setInOrderToFindOut(res.draft.inOrderToFindOut);
+      setTargetDate(res.draft.targetDate);
+      // The old SMART verdict is stale now — coachee needs to hit
+      // Run the Test again to score the revised version.
+      setLatestReview(null);
+    });
+  }
+
+  /**
    * Single-button flow: save this design + fire SMART review + if
    * verdict is "ready" (or the review LLM failed), advance to
    * test_running in the same round-trip. On "needs_work" we stay
@@ -238,7 +289,13 @@ export function TestDesignForm({
         <EntryThread messages={thread} chipTarget="assumption" />
       ) : null}
 
-      {latestReview ? <SmartReviewCard review={latestReview} /> : null}
+      {latestReview ? (
+        <SmartReviewCard
+          review={latestReview}
+          onRevise={reviseFromCoach}
+          revising={regenPending}
+        />
+      ) : null}
 
       <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm">
         <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
@@ -286,7 +343,7 @@ export function TestDesignForm({
         >
           Give me another draft
         </button>
-        {canGoSafer ? (
+        {SHOW_SAFER_BUTTON && canGoSafer ? (
           <button
             type="button"
             onClick={() => regenerate("safer")}
@@ -441,7 +498,20 @@ function defaultTargetDate(): string {
  * ready gets a green border (though in practice ready cases advance
  * and this component never displays them — kept for completeness).
  */
-function SmartReviewCard({ review }: { review: SmartReview }) {
+function SmartReviewCard({
+  review,
+  onRevise,
+  revising,
+}: {
+  review: SmartReview;
+  /** Called when the coachee clicks "Have the coach revise this".
+   *  Undefined disables the button — used when the parent doesn't
+   *  want the affordance (e.g., a future read-only surface). */
+  onRevise?: () => void;
+  /** Parent's regenerate-in-flight signal. Disables the button and
+   *  swaps its label to a "working…" state. */
+  revising?: boolean;
+}) {
   const isReady = review.verdict === "ready";
   const rows: Array<{ key: string; label: string; pass: boolean; note: string }> = [
     { key: "safe", label: "Safe", pass: review.smart.safe.pass, note: review.smart.safe.note },
@@ -512,6 +582,22 @@ function SmartReviewCard({ review }: { review: SmartReview }) {
           <div className="text-white/90 leading-relaxed">
             {review.one_thing_to_tighten}
           </div>
+        </div>
+      ) : null}
+      {!isReady && onRevise ? (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onRevise}
+            disabled={revising}
+            className="rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+            title="Let the coach rewrite the test to address the criterion that failed"
+          >
+            {revising ? "The coach is revising…" : "Have the coach revise this"}
+          </button>
+          <span className="text-xs text-[color:var(--color-text-muted)]/80">
+            or edit the fields yourself and hit Run the Test again
+          </span>
         </div>
       ) : null}
     </div>
