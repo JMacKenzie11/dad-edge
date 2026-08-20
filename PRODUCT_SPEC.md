@@ -1,6 +1,6 @@
 # BRAVE MAN OS — Product Specification
 
-_Snapshot of current app behavior as of 2026-08-11. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
+_Snapshot of current app behavior as of 2026-08-20. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
 
 ---
 
@@ -136,9 +136,11 @@ Cron
 | Path | File | Purpose |
 |------|------|---------|
 | `/itc` | `src/app/itc/page.tsx` | Landing — pick a BRAVE MAN pillar to start a new map, or resume any in-progress / prior map. |
-| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Two-pane workspace: chat with the coach on the left, live 4-column ITC map on the right. Chat resets to the current stage's turns; the map shows all state. |
-| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map viewer (admins only). Read all maps + per-turn diagnostic events (`itc_turn_events`). |
-| `/itc/login`, `/itc/logout` | `src/app/itc/login/`, `src/app/itc/logout/` | Separate email/password auth for Boardroom coachees (distinct from the member-app session). |
+| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of four surfaces (stage note, entry thread, focus, dock). A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
+| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Lists all maps. |
+| `/itc/admin/[mapId]` | `src/app/itc/admin/[mapId]/page.tsx` | Per-map viewer with full transcript + turn events (`itc_turn_events`) for coach debugging. |
+| `/itc/login` | `src/app/itc/login/page.tsx` | Separate email/password auth for Boardroom coachees (distinct from the member-app session). Demo login uses password `1111` behind an `itcDemoAuthEnabled()` flag; production will migrate to full auth (see §17). |
+| `/itc/logout` | `src/app/itc/logout/route.ts` | Clears the ITC session cookie, redirects to `/itc/login`. |
 
 ---
 
@@ -444,120 +446,146 @@ _Note on pillar semantics: only the labels (Bond, Raise, Amplify, Vitality, Enjo
 
 The ITC ("Immunity to Change") coach is a distinct sub-app at `/itc/*` that walks a Boardroom man through building a Kegan/Lahey 4-column map plus a designed test. Source is `src/app/itc/*` and `src/lib/itc/*`.
 
+### Form-First architecture
+
+The previous version of this app used a two-region chat + map layout with tool-call proposal cards. That's been retired. The current architecture is **Form-First**: **the coach LLM never writes state**. Every map mutation is a server action initiated by the coachee via a form. The LLM's job is limited to producing metadata — either narrative prose (walkthrough, review, recommendation) or structured semantic slots (schema-validated Zod objects) that the server uses to draft content the coachee then confirms, edits, or discards.
+
+Design principle: **server owns structure, LLM owns semantic content.** When the LLM keeps producing formatting drift or ignoring rules, the fix is to move structure out of the prompt and into the server — not to add another prompt rule.
+
+Consequences:
+- No proposal cards, no `itc_action_proposals` table (dropped 2026-08-18), no tool-call framework.
+- No forced tool choice, no rubric recovery loop, no premature-advance stripping — those problems disappear when the LLM isn't authoring state.
+- No `ITC_PIPELINE` env flag; the legacy pipeline is gone.
+
 ### Stage machine (12 stages)
 
 `goal → behaviors → worries → commitments → assumptions → review → immune_system → prioritize → test_design → test_running → results → done`
 
-Defined in `src/lib/itc/stage.ts`. Forward transitions are gated (`advanceStage()` in `maps.ts`) — can't move to `worries` without at least one selected behavior, can't reach `prioritize` until `walkthrough_delivered = true`, and so on. Backward transitions are always allowed so the coachee can revisit earlier columns.
+Defined in `src/lib/itc/stage.ts`. Forward transitions are gated (`canTransitionTo()`); backward transitions are always allowed. `assumptions → immune_system` is a legal jump — `review` remains as a name for backward compat but is skipped in the natural forward flow.
 
-### Two-region UI
+### Single-column canvas
 
-The map screen splits into two regions of roughly equal width.
+`/itc/[mapId]` is a full-width single-column canvas (`src/app/itc/[mapId]/map-canvas.tsx`). Each stage is a `Section` component. As the map advances, earlier sections stay visible (read-only summaries of what's been done) and the active section owns the interactive form for that column. All non-active sections have a soft blue outline (`--color-primary` at 25%); the active section gets a full-opacity blue border, bg tint, and highlighted header so the coachee always knows where they are.
 
-**Left — chat pane.** Coach messages, coachee messages, and proposal cards under coach messages. At the bottom, above the message input, a single **Continue to [next]** button. The button is enabled when the current column's preconditions are met (goal set / ≥1 behavior / every behavior has a worry / etc.); when disabled, it shows the specific reason ("Add at least one behavior first").
+A single **Continue to [next]** button lives at the bottom of the canvas and is server-computed from `computeAdvanceGate()` — enabled only when the current stage's invariants are met, with a plain-English reason ("Add at least one behavior first") when disabled. Exceptions: `test_design` hides the ContinueBar entirely (the form owns advance via the "Run the Test" button); `results` uses its own advance buttons routed by `next_step`.
 
-**Right — map pane.** Read-only visualization of the current state, laid out as five horizontal rows (goal, behaviors, worry box, commitments, big assumptions). Each behavior row has small `Edit` and `Remove` icons for quick typo fixes without going through the coach; the goal row has an `Edit` icon. Test design / results render in a separate panel below the five rows when active. No add-form controls anywhere on the map — content lands via chat cards, never via a map-side input.
+### Four coach surfaces
 
-### Two-model pipeline
+Coach output renders in one of four surfaces, distinguished by the `surface` column on `itc_messages`:
 
-Every coachee message runs through `runCoachTurnForMap()` in `src/app/itc/actions.ts`.
+1. **`stage_note`** — persistent, pinned at the top of a stage section. Examples: the immune-system walkthrough, the prioritize recommendation, the done closing summary. Some (walkthrough / prioritize / done) stay visible on their section forever; most filter to the current stage.
+2. **`entry_thread`** — anchored to a specific map entry via `entry_ref_table` + `entry_ref_id`. Coach reactions to a saved worry / commitment / test land here, rendered inline beneath the entry.
+3. **`dock`** — messages in the floating "Ask the coach" drawer (bottom-right). Never render on the main canvas.
+4. **`focus`** — reserved for future set-piece flows.
 
-1. **Coach LLM** (Anthropic Sonnet via `@ai-sdk/anthropic`) — sees the preamble + current-stage prompt + prior transcript + current map state. Produces two things in one response: prose the coachee reads, and native tool calls the API validates against schemas. State changes ONLY happen through tool calls.
-2. **Rubric LLM** (Anthropic Haiku via `generateObject`) — invoked from inside worry and assumption tool executors to score the depth of the proposed content. See `src/lib/itc/rubric.ts`.
+### Coach helpers (all metadata-only)
 
-Both models are behind an `ITC_PROMPT_CACHE` env flag that marks the static preamble as `cacheControl: ephemeral` for Anthropic's 5-minute prompt cache.
+All coach LLM calls live in `src/lib/itc/coach.ts`. Each returns either a structured Zod object or narrative prose — never state. Server actions in `src/app/itc/actions.ts` decide what to do with the metadata.
 
-### Native tool use (state changes)
+**Reaction / conversation:**
+- `generateCoachChat` — free-form Q&A reply, prose only (used by the CoachDock).
+- `generateCoachReaction` — inline reaction to a just-saved entry (worry / commitment / etc.). Returns `{ reply, refinement?, suggestions? }` — the `refinement` chip is a one-line sharper version the coachee can tap to fill an input; `suggestions` is 4-5 grounded options. Chips are cosmetic; a missing chip degrades to plain prose, an entry never fails to land.
+- `generateSuggestions` — "Give me ideas" trigger. Returns 4-5 grounded options for the current column.
 
-Every map mutation is a schema-validated tool call. No prose parsing, no marker syntax, no extractor. Defined in `src/lib/itc/coach-tools.ts`; run from `src/lib/itc/coach-turn-tools.ts`.
+**Structured drafters (server-assembled content):**
+- `draftCommitmentForWorry` — writes a competing commitment from a worry + behavior. Returns semantic slots; server template assembles the final sentence with the canonical stem.
+- `draftAssumptionsFromCommitments` — returns 2-6 assumption drafts as slots (antecedent + consequent). Server assembles each with `I assume that if I …, then …` structure. Hard 20-word cap enforced schema-side + post-processing filter.
+- `draftTestForAssumption` — pre-drafts a Kegan-voiced test for the selected assumption. Server pins `testType` when the caller specifies it (see server-owned variation below).
+- `reviseTestFromReview` — targeted test revision from a SMART review. Returns full test slots; server ignores `testType` (pinned to what the coachee already has via the dropdown). Backed by a **self-verify loop** in the server action: after each revision, immediately re-run `reviewTestDesign`; if verdict is still `needs_work`, feed the new review back into another revise pass. Cap: 3 total attempts. Returns final draft + its verdict so the client updates both form fields and the SMART card in one round-trip.
 
-**Content tools** (become `itc_action_proposals` cards under the assistant message):
-`propose_goal`, `propose_behavior`, `propose_behavior_replacement`, `remove_behavior`, `propose_worry`, `propose_commitments_batch`, `propose_assumption`, `recommend_assumption`, `select_assumption`, `save_test_design`, `record_test_results`.
+**Set-piece prose (walkthrough / recommendation / summaries):**
+- `generateImmuneSystemWalkthrough` — the top-down three-movement Kegan/Lahey walkthrough of the coachee's own map. Persists as a `stage_note` on the immune_system section, always visible.
+- `recommendAssumptionToTest` — the coach's Vol 2 p 268-anchored recommendation of which assumption to test first. Pre-selects the recommended assumption; coachee can override.
+- `generateMapCloseSummary` — Kegan-voice closing summary on advance to `done`.
 
-**Immediate tools** (apply server-side, no card):
-`mark_walkthrough_delivered`, `mark_reveal_delivered`.
+**Structured review:**
+- `reviewTestDesign` — SMART verdict as structured data: `{ verdict: "ready" | "needs_work", smart: { safe, modest, actionable, researches, counters_assumption: { pass, note } }, one_thing_to_tighten }`. LLM writes semantic content only; the client renders the visual card (icons, borders, layout). Never persisted — the review is a per-attempt UX affordance, not durable map state.
+- `reviewTestResult` — Kegan-voice interpretation of the coachee's post-test debrief. Persists as `entry_thread` on the result row.
 
-**No `advance_stage` tool.** Stage transitions are exclusively user-initiated via the Continue button. This keeps the LLM completely out of the stage-transition loop. The button's server action (`advanceMapStage`) is gated by the same invariants the coach turn's `getAdvanceGate()` returns for the UI's enabled/disabled state.
+### Server-owned variation
 
-### Forced tool choice on candidate entries
+The "Give me another draft" and (currently hidden) "safer version" affordances on test-design don't use prompt-shaped variation. The server owns the target `testType` via two rotation tables in `src/app/itc/actions.ts`:
 
-Prompt-only instructions ("fire propose_behavior when the coachee names a behavior") did not hold reliably. When the coachee's message looks like a candidate entry on a content stage, the coach turn runs with `toolChoice: { type: "tool", toolName: <target> }` — the model is forced to fire the tool. See `forcedToolChoiceFor()` in `coach-turn-tools.ts`.
+- **`ANOTHER_ROTATION`** — cycles through the four test types (`behavioral → observation → thought_experiment → data_mining → behavioral`). The coachee clicks "Give me another draft"; server picks the next type deterministically; LLM writes a fresh draft of that type.
+- **`SAFER_LADDER`** — steps down the stakes ladder (`behavioral > observation > thought_experiment > data_mining`; `data_mining` maps to null and the button hides). Currently gated behind `SHOW_SAFER_BUTTON=false` — the SMART-driven "Have the coach revise this" path subsumes the safer affordance because the coach revises with actual feedback data rather than guessing.
 
-Detection heuristic (deterministic, no LLM):
-- Message doesn't end with `?`.
-- Doesn't contain suggestion-asking phrases (`suggest`, `example`, `give me some`, `can you`, `any ideas`, etc.).
-- Doesn't start with an inner-state opener (`I feel`, `I think`, `I want`, `I need`, `I worry`, `I hope`, `I wish`, `I know`, `I love`, `I hate`, `I understand`, `I remember`, `I imagine`, `I assume`, `I am`, etc.).
-- Contains a first-person + verb pattern.
-- ≥ 15 characters.
+This pattern is why the LLM produces genuinely different drafts each click instead of near-duplicates: the LLM sees a hard type constraint, not a soft "give me something different" instruction.
 
-Currently forced only for **behaviors stage → propose_behavior**. Worries, commitments, and assumptions need a `behavior_index` / `commitment_indices` resolver before their force can fire safely; scheduled for the next iteration.
+### Run the Test flow (single-button save + review + advance)
 
-When force is active, `stopWhen` caps at one step (otherwise the auto-choice second step hallucinates a duplicate item). If the model returns no visible prose after the forced tool call (spent everything on tool arguments), `cannedForcedReply()` fills in a plain framing line from the queued proposal's content so the card gets a natural intro.
+`test_design`'s "Run the Test" button collapses save + SMART review + conditional advance into one action (`runTest` in `actions.ts`):
 
-### Multi-step + rubric recovery
+1. Persist the test.
+2. Fire `reviewTestDesign` → structured SMART verdict.
+3. If verdict is `ready` (or the LLM failed — fail-open), advance to `test_running`.
+4. If verdict is `needs_work`, stay on `test_design`; return the SMART payload so the client renders the review card inline at the top of the section (green border on ready, amber on needs_work, with a "One thing to tighten" callout).
 
-`generateText` runs with `stopWhen: stepCountIs(2)` on auto-choice turns, giving one recovery step after a rubric rejection. Worry and assumption tool executors run their depth rubrics BEFORE queueing a proposal — rejected proposals never become cards. The tool result returned to the model says what failed and instructs an in-turn recovery: the coach's step-2 reply must be prose only, ending in exactly one excavation question. Cap: one rubric rejection per turn (`scope.rejectionsCount` in `coach-tools.ts`).
+The SMART card is client state only — never persisted. On successful advance, it disappears with the form. On needs_work, it stays until the coachee's next action (edit fields + Run again, or "Have the coach revise this" for a targeted rewrite).
 
-Rubric rejection and recovery are invisible plumbing. The coachee never sees "score," "rejected," "not deep enough," or any reference to validation — enforced by both the voice doc and defensive post-generation stripping.
+### Immune-system walkthrough
 
-### Post-generation guards
+On advance into `immune_system`, `deliverWalkthroughAfterAdvance` fires `generateImmuneSystemWalkthrough` and persists the result as a `stage_note` with `stage_at_creation=immune_system`. The walkthrough runs top-down: one loop per Big Assumption (assumption → underwritten commitments → paired behaviors → the goal it blocks), then a whole-system "gas and brake" summary, then the pivot to testing. Guide anchors: Vol 1 pp 4, 17 (top-down loop shape); Vol 1 pp vi, 3, 13 (gas/brake image); Vol 2 pp 250-252 (test-the-assumption pivot). Structure and prompt detail live in `src/lib/itc/prompts/stages/immune-system.ts`.
 
-Two deterministic passes on the coach's visible reply text before it's persisted:
+### Coach Dock
 
-1. **Em-dash strip.** `—` and `–` and `--` are converted to `, ` (or `,` at end-of-word). Preamble bans them; model ignores; strip catches.
-2. **Premature-advance strip.** When a content proposal is queued in the same turn, cut the reply at the first "Locked" (coach claiming acceptance the coachee hasn't given), "Column N" (where N > current column), or stage-specific next-stage exposition (`the behaviors`, `worry box`, `hidden commitment`, `Big Assumption`, `the walkthrough`). Keeps the acknowledgment paragraph; drops premature jumps. See `stripPrematureAdvance()` in `coach-turn-tools.ts`.
-
-### Cards (the deterministic lock)
-
-Tool calls produce `itc_action_proposals` rows tied to the assistant message that fired them. UI: `src/app/itc/[mapId]/proposal-cards.tsx`. States: `pending → locked | edited_locked | rejected | stale`. Server actions in `src/app/itc/actions.ts`:
-
-- `acceptProposal` — runs the underlying `CoachAction` through `applyCoachAction()` (same rubric / dedup / stage-guard path). Marks `locked`.
-- `editAndAcceptProposal` — validates the coachee-edited payload against `CoachActionSchema`, guards `action_type` match, applies. Marks `edited_locked` and stores both original + edited payloads for audit.
-- `rejectProposal` — marks `rejected` and appends a `[coachee passed on X proposal]` system message so the coach's next turn sees the rejection and adjusts.
-
-Panel-side row-level Edit/Remove on behaviors go through `refineBehavior` / `removeBehavior` server actions, which also append `[coachee <verb> via map]` system messages so the coach's next turn stays synced with the map.
-
-### Application (server-side)
-
-`applyCoachAction()` in `actions.ts` is the single entry point for every state-change write. It:
-
-- Enforces stage guards via `ACTION_ALLOWED_STAGES` + `autoCascadeToActionStage()` (walks the stage machine one legal step at a time to reach the action's required stage before applying, so ordering within a batch doesn't matter).
-- Re-runs depth rubrics for content actions that carry them (defense-in-depth against a forced-tool call bypassing the pre-queue rubric).
-- Dedups on normalized text (`normalizeMapText()` in `maps.ts`) — refuses second exact-text rows and surfaces a `[dedup]` system message so the coach doesn't re-fire.
-- Records diagnostic events to `itc_turn_events` via `TurnEventLog` (bulk INSERT per turn).
-
-### Stage advance + intro seeding
-
-`advanceMapStage(mapId, to)` server action runs the invariant check for the target stage, calls `advanceStage()` in `maps.ts`, and if the destination stage has no assistant messages yet, seeds a canned intro from `STAGE_INTROS`. The intro is what the coachee sees first on the fresh column, with no UI narration and no LLM call.
+`src/app/itc/[mapId]/coach-dock.tsx` is the floating "Ask the coach" drawer. Free-form Q&A back-channel — never writes map state (Layout Amendment §4). Every dock message calls `loadCoachContext(mapId)` first, so the LLM sees the full map (stage, goal, all four columns, tests, results) and the entire transcript before answering. Context-aware Q&A, not a generic chatbot.
 
 ### Data model
 
+- `itc_participants` — separate identity table for Boardroom coachees. Email unique, normalized. See §17 for migration path to full auth.
 - `itc_maps` — one per (participant, pillar). `current_stage`, `improvement_goal`, `reveal_delivered`, `walkthrough_delivered`, `status`.
-- `itc_messages` — chat transcript. `stage_at_creation` tags each message so the UI can filter to the current stage. System messages (`[coachee saved goal via map]`, `[coachee accepted X proposal]`, `[action rejected]`, `[dedup]`) never render to the coachee but stay in the coach's next-turn context.
-- `itc_behaviors`, `itc_worries`, `itc_worry_attempts`, `itc_commitments`, `itc_assumptions`, `itc_assumption_commitments` — the four columns plus the many-to-many link table between assumptions and commitments.
-- `itc_tests`, `itc_test_results` — designed and completed tests. Verdict is three-way (`held | partially_challenged | challenged`) per ITC's non-binary framing.
-- `itc_action_proposals` — pending / resolved cards. `payload` is a validated `CoachAction`; `edited_payload` stores the coachee's edit for audit.
-- `itc_turn_events` — per-turn structured diagnostic log (LLM attempts, dedup skips, action applies, rubric rejections, same-turn recoveries, timing summary).
+- `itc_messages` — chat transcript. `surface` (`stage_note` | `entry_thread` | `dock` | `focus`), `stage_at_creation`, optional `entry_ref_table` + `entry_ref_id` for thread anchoring. System messages (e.g., `[coachee advanced map via Run the Test: test_design → test_running]`) never render to the coachee but stay in the coach's next-turn context.
+- `itc_behaviors`, `itc_worries`, `itc_worry_attempts`, `itc_commitments`, `itc_commitment_attempts`, `itc_assumptions`, `itc_assumption_commitments` — the four columns plus attempt logs plus the many-to-many link between assumptions and commitments.
+- `itc_commitment_drafts`, `itc_assumption_drafts` — server-generated draft metadata rows (from the on-advance draft hooks) that the coachee turns into real entries via save actions. Not first-class map content; wiped or filtered out once the coachee acts.
+- `itc_tests`, `itc_test_results` — designed and completed tests. Test status: `designed | run | abandoned`. Result verdict: three-way (`held | partially_challenged | challenged`).
+- `itc_turn_events` — per-turn structured diagnostic log (LLM attempts, dedup skips, stage advances, coach reactions, timing summaries).
 
-All tables enforce RLS; server writes go through `createSupabaseServiceClient()` with participant-scoping enforced in application code (see `getMapForParticipant`, `loadProposalForParticipant`).
+All tables enforce RLS; server writes go through `createSupabaseServiceClient()` with participant-scoping enforced in application code (`getMapForParticipant` and friends).
 
 ### Voice and tone
 
 `docs/coach-voice-and-tone.md` is loaded once at module init (`src/lib/itc/prompts/preamble.ts`) and prepended to every coach turn. Single source of truth for language rules. Highlights:
 
-- No em dashes (defensive strip catches misses).
-- No UI narration (`paste`, `click`, `tap`, `hit`, `input`, `the card below`, `the button` — banned).
-- No validation/rubric references (`rejected`, `score`, `not deep enough` — banned; rejection recovery reads as coaching, not error handling).
-- No praise words (`great`, `perfectly`, `beautifully`, `that's been added to your map` — banned).
-- Full substitution table for jargon (`internalize` → `the rules you've been running on`, `regulate` → concrete behavior, etc.).
-- Contractions everywhere, active voice, Anglo-Saxon over Latinate, no crutch words (`very`, `really`, `truly`), no AI-signature vocabulary (`delve`, `tapestry`, `resonate`, `elevate`, `leverage`, `robust`, `profound`).
+- **No em dashes** (defensive strip catches misses).
+- **No UI narration** (`paste`, `click`, `tap`, `hit`, `input`, `the card below`, `the button` — banned).
+- **No praise language** (`brave`, `raw`, `powerful`, `beautifully`, `you did great` — banned).
+- **No therapy-speak** (`hold space`, `notice`, `invitation`, `sit with`, `lean into`, `process this` — banned).
+- **No product-speak** in coach-facing prose (`shape`, `the format`, `the template`, `the structure` — banned; describe the thing itself).
+- **Column labels by name, not number** (`your Big Assumptions` not `Column 5`; `your Competing Commitments` not `Column 4`).
+- **Assumption, not belief** — Kegan's canonical term is "Big Assumption"; "belief" as a synonym has been retired throughout schema, prompts, and UI. The SMART criterion is `counters_assumption` (renders as "Counters the assumption").
+- Full substitution table for jargon; contractions everywhere; Anglo-Saxon over Latinate; no crutch words (`very`, `really`, `truly`); no AI-signature vocabulary (`delve`, `tapestry`, `resonate`, `elevate`, `leverage`, `robust`, `profound`).
 
-Adaptation rulings for how the two guides (`Assets/Voice and Tone/voice-and-style.md`, `Assets/Voice and Tone/writing-craft.md`) apply inside the app live in `docs/app-voice-adaptation.md`.
-
-### Legacy paths
-
-The marker-parser + extractor pipeline still exists behind `ITC_PIPELINE=legacy` env flag. Default is `tools` (the current pipeline). Deletion of the legacy branch is deferred until the persona test harness (`tests/itc-sessions/`) is complete and green.
+Adaptation rulings for how the two source guides (`Assets/Voice and Tone/voice-and-style.md`, `Assets/Voice and Tone/writing-craft.md`) apply inside the app live in `docs/app-voice-adaptation.md`.
 
 ### Test harness
 
-Persona sessions run through the real pipeline against a seeded test participant + map. Record/replay wrapper in `tests/itc-sessions/recorder.ts` uses sequence-based keying (each LLM call is call #N; fixture stores `{ tag, response }` in order). Record mode captures the real LLM; replay mode serves stored responses with no network. Six planned personas (straightforward, eager agreer, rejector, editor, panel typist, vague one) each with assertions on final map state, turn events, and coach reply invariants. Three landed as of this writing (eager agreer, rejector, panel typist); three pending.
+`tests/form-first/` runs the current pipeline against the real DB with the real LLM (Anthropic Sonnet). Not persona-based — the earlier record/replay session harness was retired with the tool-call pipeline. Current suite has ~125 tests across regression + integration flows; run via `npm run test:itc`.
+
+---
+
+## 16. Product Decisions Reference (ITC)
+
+Two operating principles have driven every architectural decision on the ITC side:
+
+**No bandaids.** When the LLM produces wrong output, refactor the LLM/server boundary before adding a prompt rule or post-processor. Concrete applications shipped: assumption/commitment drafters moved to structured slots with server-side sentence assembly; regenerate variation moved to server-side type-rotation tables; SMART review moved to structured data with client-rendered layout; single "Run the Test" button collapses save + review + advance; "Have the coach revise this" self-verifies in a server-side loop instead of asking the coachee to click three times. Memory: `~/.claude/projects/…/memory/feedback_no_bandaids.md`.
+
+**Two-model separation for competing jobs.** When one LLM was doing both conversation and state extraction, both degraded. The split-conversation-from-state-extraction pattern was validated as the right call; reach for it when a single call is drifting between two competing responsibilities.
+
+---
+
+## 17. ITC Auth Migration Path
+
+Current ITC login (`src/app/itc/login/`) is email + `1111` demo password. Sets a session cookie tied to `itc_participants.id`. Deliberately isolated from the main app auth (see `src/lib/itc/participant.ts:13-15`: "Never touches public.users").
+
+Migration to full auth (`/login` + Supabase Auth + entitlements) is non-destructive because:
+- All ITC data FKs to `itc_participants.id`, a stable UUID that never changes.
+- `email` is normalized (trim + lowercase, unique) — a reliable join key.
+
+Recommended migration:
+1. Ship full auth (magic link via Supabase Auth is already used by the member app).
+2. Add nullable `user_id` column to `itc_participants` FK'd to `auth.users`.
+3. One-time backfill: for each ITC participant, find the auth user with matching normalized email; set `user_id`.
+4. Update `requireItcParticipant()` to resolve via `user_id = current_auth_user.id` instead of the demo session cookie.
+5. Retire `/itc/login` and the `1111` shortcut.
+
+Watch-outs: email typos in current ITC rows (needs admin cleanup or a "claim my ITC data" flow), users who sign up with a different email than they used for ITC (same claim flow), canonical form for case + plus-tags.
