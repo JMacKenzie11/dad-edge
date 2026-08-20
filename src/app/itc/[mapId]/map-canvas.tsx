@@ -179,7 +179,10 @@ export function MapCanvas({
 
   const liveIntroFor = (stage: ItcStage): string | undefined => {
     if (stage !== map.current_stage) return undefined;
-    return STAGE_INTROS[stage]?.({ goal: map.improvement_goal });
+    return STAGE_INTROS[stage]?.({
+      goal: map.improvement_goal,
+      pillarCode: map.pillar_code,
+    });
   };
 
   // A column is LOCKED when the coachee hasn't advanced into it
@@ -249,6 +252,7 @@ export function MapCanvas({
         <Section
           title="1. Improvement goal"
           active={map.current_stage === "goal"}
+          liveIntro={liveIntroFor("goal")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "goal" ? stageNotes : []}
           unattachedCoachNotes={
@@ -266,6 +270,7 @@ export function MapCanvas({
                   (m) => m.stage_at_creation === "goal",
                 )}
                 pillarSwitchMapId={map.id}
+                currentPillarCode={map.pillar_code}
               />
             </div>
           ) : null}

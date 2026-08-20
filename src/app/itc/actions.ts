@@ -385,18 +385,8 @@ export async function startMap(formData: FormData): Promise<void> {
   if (samePillarInProgress) redirect(`/itc/${samePillarInProgress.id}`);
 
   const map = await createMap(participant.id, parsed.data.pillar_code as PillarCode);
-  const pillar = PILLAR_BY_CODE[map.pillar_code];
-  await appendMessage(
-    map.id,
-    "assistant",
-    `Your goal for ${pillar.label} starts "${GOAL_STEM} …". If you know how you'd finish it, write it. If you want to work it out first, tell me what's on your mind.`,
-    "goal",
-    {
-      surface: "stage_note",
-      entryRefTable: "itc_maps",
-      entryRefId: map.id,
-    },
-  );
+  // No persisted goal intro — the client renders STAGE_INTROS.goal live
+  // with the current pillar_code so it stays correct after a pillar swap.
   redirect(`/itc/${map.id}`);
 }
 
@@ -471,6 +461,24 @@ export async function switchMapPillar(
     `[coachee switched map pillar: ${loaded.map.pillar_code} → ${parsed.data.pillar_code}. Goal still needs to be reworded to fit the new pillar.]`,
     loaded.map.current_stage,
   );
+  // Re-run the coach against the existing goal in the new pillar
+  // context. Without this, the goal text is unchanged so saveGoal
+  // won't fire (client-side dedup on unchanged text), and the coach
+  // never gets a chance to say "still not an ITC-shaped goal for
+  // [new pillar]". Only fires if there's a goal to react to.
+  if (loaded.map.improvement_goal) {
+    // Re-read the map so context reflects the new pillar_code.
+    const refreshed = await getMapById(loaded.map.id);
+    if (refreshed) {
+      await awaitReactionOrSwallow(() =>
+        fireCoachReaction(
+          refreshed.id,
+          { kind: "goal", text: refreshed.improvement_goal ?? "" },
+          { table: "itc_maps", id: refreshed.id },
+        ),
+      );
+    }
+  }
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }

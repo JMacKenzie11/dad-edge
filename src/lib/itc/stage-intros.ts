@@ -1,20 +1,31 @@
-import type { ItcStage } from "./stage";
+import { GOAL_STEM, type ItcStage } from "./stage";
+import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+
+export type StageIntroCtx = {
+  goal: string | null;
+  pillarCode: PillarCode;
+};
 
 /**
  * Client-rendered stage intros. Never persisted, never LLM-generated
  * — pure static text with live map-state interpolation at render time.
  *
  * Persisted stage-note messages used to carry a snapshot of the goal
- * baked into their prose. When the goal changed, the stored copy went
- * stale and there was no way to refresh it. Interpolating from live
- * state at render time eliminates the whole class of stale-quote bugs.
+ * (and, for the goal stage, the pillar label) baked into their prose.
+ * When the goal or pillar changed, the stored copy went stale and there
+ * was no way to refresh it. Interpolating from live state at render
+ * time eliminates the whole class of stale-quote bugs.
  *
  * Voice rules apply here: no em dashes, no "Column N" (name the thing
  * itself), no UI verbs ("hit", "click"), "assumption" not "belief".
  */
 export const STAGE_INTROS: Partial<
-  Record<ItcStage, (ctx: { goal: string | null }) => string>
+  Record<ItcStage, (ctx: StageIntroCtx) => string>
 > = {
+  goal: ({ pillarCode }) => {
+    const pillar = PILLAR_BY_CODE[pillarCode];
+    return `Your goal for ${pillar.label} starts "${GOAL_STEM} …". If you know how you'd finish it, write it. If you want to work it out first, tell me what's on your mind.`;
+  },
   behaviors: ({ goal }) =>
     `The behaviors you actually do, or fail to do, in the moments that work against ${
       goal ? `"${goal}"` : "your goal"
@@ -95,6 +106,12 @@ export const LEGACY_INTRO_PREFIXES: readonly string[] = [
   "Test is designed",
   "You ran the test",
   "Your map stays here",
+  // The goal-stage intro used to be persisted with the pillar label
+  // baked in at map creation. After switchMapPillar, the persisted
+  // copy would say "Your goal for Bond starts…" while the actual
+  // pillar was Movement. Filtered so the live-interpolated version
+  // (STAGE_INTROS.goal) is the only copy the user sees.
+  "Your goal for ",
 ];
 
 export function isLegacyCannedIntro(content: string): boolean {

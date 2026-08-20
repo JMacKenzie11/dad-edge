@@ -22,6 +22,7 @@ export function EntryThread({
   chipTarget,
   entryId,
   pillarSwitchMapId,
+  currentPillarCode,
 }: {
   messages: ItcMessage[];
   /** Which input a refinement/suggestion chip in this thread should
@@ -41,6 +42,12 @@ export function EntryThread({
    *  this — the coach only sets suggested_pillar on cross-pillar
    *  goal leaks. */
   pillarSwitchMapId?: string;
+  /** Passed alongside pillarSwitchMapId so the switch button can
+   *  suppress itself once the map has already been swapped to the
+   *  suggested pillar. Old coach messages keep their suggested_pillar
+   *  chip forever; without this check the button lingers as a stale
+   *  "Switch this map to Movement →" when the map is already Movement. */
+  currentPillarCode?: PillarCode;
 }) {
   if (messages.length === 0) return null;
   return (
@@ -52,6 +59,7 @@ export function EntryThread({
           chipTarget={chipTarget}
           entryId={entryId}
           pillarSwitchMapId={pillarSwitchMapId}
+          currentPillarCode={currentPillarCode}
         />
       ))}
     </div>
@@ -84,11 +92,13 @@ function ThreadMessage({
   chipTarget,
   entryId,
   pillarSwitchMapId,
+  currentPillarCode,
 }: {
   message: ItcMessage;
   chipTarget: ChipTarget;
   entryId?: string;
   pillarSwitchMapId?: string;
+  currentPillarCode?: PillarCode;
 }) {
   if (message.role === "user") {
     return (
@@ -102,7 +112,9 @@ function ThreadMessage({
     chips && (chips.refinement || (chips.suggestions?.length ?? 0) > 0),
   );
   const showSwitchPillar = Boolean(
-    chips?.suggested_pillar && pillarSwitchMapId,
+    chips?.suggested_pillar &&
+      pillarSwitchMapId &&
+      chips.suggested_pillar !== currentPillarCode,
   );
   return (
     <div className="space-y-2">
