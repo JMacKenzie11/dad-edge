@@ -127,6 +127,17 @@ export function MapCanvas({
       ),
     [messages],
   );
+  // Done stage_notes — the closing summary. Always visible once the
+  // coachee has reached done. Same pattern as immune_system +
+  // prioritize.
+  const doneNotes = useMemo(
+    () =>
+      messages.filter(
+        (m) =>
+          m.surface === "stage_note" && m.stage_at_creation === "done",
+      ),
+    [messages],
+  );
   const dockMessages = useMemo(
     () => messages.filter((m) => m.surface === "dock"),
     [messages],
@@ -555,6 +566,14 @@ export function MapCanvas({
               );
             })()}
           </Section>
+        ) : null}
+
+        {map.current_stage === "done" ? (
+          <Section
+            title="Closing the map"
+            active
+            stageNotes={doneNotes}
+          />
         ) : null}
       </div>
 

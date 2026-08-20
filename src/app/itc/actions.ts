@@ -12,6 +12,7 @@ import {
   generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
+  generateMapCloseSummary,
   generateSuggestions,
   recommendAssumptionToTest,
   reviewTestDesign,
@@ -1404,6 +1405,12 @@ export async function advanceToStage(
   if (target === "results") {
     await deliverTestResultDraftAfterAdvance(loaded.map.id, events);
   }
+  // On entry to done, generate the Kegan-voice closing summary and
+  // persist it as a stage_note. Idempotent — skip if a done stage_note
+  // already exists.
+  if (target === "done") {
+    await deliverMapCloseSummaryAfterAdvance(loaded.map.id, events);
+  }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
@@ -2470,16 +2477,141 @@ export async function advanceAfterResults(
   return { ok: true };
 }
 
+// -------------------------------------------------------------------------
+// Done stage (Checkpoint C-ε.5)
+// -------------------------------------------------------------------------
+
 /**
- * Dev-only test-seed detection. Recognizes goals like
- * "I'm committed to getting better at test" (or "test happy path",
- * "seed", "demo"). Trailing punctuation is tolerated.
- *
- * Intentionally distinct from the drafter's Case-2 rejection paths:
- * these phrases would ordinarily fail the goal-specificity bar
- * (they're not specific coachable goals), so they don't collide
- * with any real coachee input.
+ * Generate the Kegan-voice closing summary on advance to done.
+ * Reads the full map + all non-abandoned tests + their results and
+ * asks the LLM to reflect what was learned, what stays open, and
+ * invite the coachee to come back. Persists as a stage_note anchored
+ * to itc_maps with stage_at_creation=done. Idempotent — skip if a
+ * done stage_note already exists.
  */
+async function deliverMapCloseSummaryAfterAdvance(
+  mapId: string,
+  events: TurnEventLog,
+): Promise<void> {
+  const [map, assumptions, tests, results, existingNotes] =
+    await Promise.all([
+      getMapById(mapId),
+      listAssumptions(mapId),
+      listTests(mapId),
+      listTestResults(mapId),
+      listMessages(mapId),
+    ]);
+  if (!map) return;
+  const already = existingNotes.some(
+    (m) =>
+      m.surface === "stage_note" &&
+      m.stage_at_creation === "done" &&
+      m.role === "assistant",
+  );
+  if (already) return;
+
+  const historyByAssumption = new Map<
+    string,
+    Array<{
+      whatIDid: string;
+      dataCollected: string;
+      whatItSaysAboutAssumption: string;
+      verdict: "held" | "partially_challenged" | "challenged" | null;
+    }>
+  >();
+  for (const t of tests) {
+    if (t.status === "abandoned") continue;
+    const result = results.find((r) => r.test_id === t.id);
+    if (!result) continue;
+    const arr = historyByAssumption.get(t.assumption_id) ?? [];
+    arr.push({
+      whatIDid: result.what_i_did ?? "",
+      dataCollected: result.data_collected ?? "",
+      whatItSaysAboutAssumption: result.what_it_says_about_assumption ?? "",
+      verdict: result.assumption_verdict ?? null,
+    });
+    historyByAssumption.set(t.assumption_id, arr);
+  }
+  const assumptionsWithHistory = assumptions.map((a) => ({
+    text: a.text,
+    testHistory: historyByAssumption.get(a.id) ?? [],
+  }));
+
+  const prose = await generateMapCloseSummary({
+    goalText: map.improvement_goal ?? "",
+    assumptionsWithHistory,
+  });
+  if (!prose) {
+    events.record(
+      "error",
+      {
+        where: "deliverMapCloseSummaryAfterAdvance",
+        message: "LLM returned null; no closing summary rendered",
+      },
+      { stage: "done" },
+    );
+    return;
+  }
+  await appendMessage(mapId, "assistant", prose, "done", {
+    surface: "stage_note",
+    entryRefTable: "itc_maps",
+    entryRefId: mapId,
+  });
+  events.record(
+    "coach_reaction_sent",
+    {
+      kind: "map_close_summary",
+      length: prose.length,
+      assumption_count: assumptions.length,
+      tested_count: assumptionsWithHistory.filter(
+        (a) => a.testHistory.length > 0,
+      ).length,
+    },
+    { stage: "done" },
+  );
+}
+
+export async function ensureMapCloseSummaryDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (map.current_stage !== "done") {
+      return { ok: true, delivered: false };
+    }
+    const existingNotes = await listMessages(mapId);
+    if (
+      existingNotes.some(
+        (m) =>
+          m.surface === "stage_note" &&
+          m.stage_at_creation === "done" &&
+          m.role === "assistant",
+      )
+    ) {
+      return { ok: true, delivered: false };
+    }
+    const events = new TurnEventLog(mapId, 0);
+    await deliverMapCloseSummaryAfterAdvance(mapId, events);
+    await events.flush();
+    const after = await listMessages(mapId);
+    return {
+      ok: true,
+      delivered: after.some(
+        (m) =>
+          m.surface === "stage_note" &&
+          m.stage_at_creation === "done" &&
+          m.role === "assistant",
+      ),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
+}
+
 /**
  * Menu of dev-only test-seed markers. Each seeds the map through a
  * different stage so testing / iterating on a specific downstream

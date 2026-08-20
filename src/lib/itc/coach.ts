@@ -1543,6 +1543,82 @@ export async function reviewTestResult(input: {
 }
 
 // -------------------------------------------------------------------------
+// generateMapCloseSummary — coach closing beat on advance to done
+// -------------------------------------------------------------------------
+
+const MapCloseSummarySchema = z.object({
+  prose: z.string().min(50).max(3000),
+});
+
+/**
+ * Kegan-voice closing summary for the Done stage. Fires once on
+ * advance to done (idempotent — skip if a done stage_note already
+ * exists). Reads the full map + test history and produces a 3-5
+ * paragraph reflection on what was learned, what's still open, and
+ * a plain invitation to come back.
+ *
+ * Form-First-pure: returns prose; server persists as a stage_note
+ * anchored to itc_maps with stage_at_creation=done.
+ */
+export async function generateMapCloseSummary(input: {
+  goalText: string;
+  assumptionsWithHistory: Array<{
+    text: string;
+    testHistory: Array<{
+      whatIDid: string;
+      dataCollected: string;
+      whatItSaysAboutAssumption: string;
+      verdict: "held" | "partially_challenged" | "challenged" | null;
+    }>;
+  }>;
+}): Promise<string | null> {
+  const started = Date.now();
+  try {
+    const assumptionsBlock = input.assumptionsWithHistory
+      .map((a, i) => {
+        const history =
+          a.testHistory.length === 0
+            ? "     tested: no"
+            : `     tested: ${a.testHistory.length}× — details:\n${a.testHistory
+                .map(
+                  (h, hi) =>
+                    `        Test ${hi + 1}:\n          What I did: ${h.whatIDid}\n          Data collected: ${h.dataCollected}\n          What it says about my assumption: ${h.whatItSaysAboutAssumption}\n          Verdict: ${h.verdict ?? "no verdict"}`,
+                )
+                .join("\n")}`;
+        return `  ${i + 1}. ${a.text}\n${history}`;
+      })
+      .join("\n\n");
+
+    const { DONE_STAGE } = await import("./prompts/stages/done");
+    const { text } = await generateText({
+      model: mainModel(),
+      system: DONE_STAGE,
+      prompt: [
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        ``,
+        `Big Assumptions (Column 5) with test history:`,
+        assumptionsBlock || "  (none)",
+        ``,
+        `Write the closing summary now. 3-5 short paragraphs, blank line between each.`,
+      ].join("\n"),
+      maxOutputTokens: 2000,
+    });
+    return scrubReplyLight(text);
+  } catch (err) {
+    console.warn(
+      "[itc coach] generateMapCloseSummary failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] summary kind=done ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // scrubReply — defensive text cleanup on any visible coach output
 // -------------------------------------------------------------------------
 

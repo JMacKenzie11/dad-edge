@@ -66,7 +66,7 @@ Then a verdict — held / partially challenged / challenged. One test rarely ful
 
 I'll review after you save.`,
   done: () =>
-    `Your map stays here. Come back anytime you want to design another test, revisit an assumption, or work on a different pillar.`,
+    `You've closed the map for now. The coach's closing summary is below.`,
 };
 
 /**
