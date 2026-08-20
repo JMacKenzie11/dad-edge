@@ -3530,7 +3530,7 @@ async function seedTestMap(
   // rules shift so test-mode reflects production output.
   const commitmentTextsByBehaviorIdx = [
     "I'm also committed to keeping her past on the table so mine never stands alone.",
-    "I'm also committed to slipping in small clarifications so I never hear the lie land.",
+    "I'm also committed to hiding how often I get it wrong so she never sees I'm not enough.",
     "I'm also committed to walking out before I lose it so I never find out I can handle it.",
   ];
   const worriesByBehaviorId = new Map(typedWs.map((w) => [w.behavior_id, w]));
