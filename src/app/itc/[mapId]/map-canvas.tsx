@@ -25,6 +25,7 @@ import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
 import { PrioritizePicker } from "./prioritize-picker";
+import { TestDesignForm } from "./test-design-form";
 import { WorriesRow } from "./worries-row";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
@@ -379,6 +380,46 @@ export function MapCanvas({
                 assumptions={assumptions}
               />
             ) : null}
+          </Section>
+        ) : null}
+
+        {stageIndex(map.current_stage) >= stageIndex("test_design") ? (
+          <Section
+            title="Design the test"
+            active={map.current_stage === "test_design"}
+            liveIntro={liveIntroFor("test_design")}
+            stageNotes={
+              map.current_stage === "test_design" ? stageNotes : []
+            }
+          >
+            {(() => {
+              const activeAssumption =
+                assumptions.find((a) => a.selected_for_testing) ?? null;
+              const activeTest =
+                tests
+                  .slice()
+                  .reverse()
+                  .find((t) => t.status !== "abandoned") ?? null;
+              if (!activeAssumption) {
+                return (
+                  <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+                    Pick an assumption to test first (Column 5 above).
+                  </p>
+                );
+              }
+              const testThread =
+                activeTest
+                  ? threadsByAnchor.get(`itc_tests:${activeTest.id}`) ?? []
+                  : [];
+              return (
+                <TestDesignForm
+                  mapId={map.id}
+                  test={activeTest}
+                  assumption={activeAssumption}
+                  thread={testThread}
+                />
+              );
+            })()}
           </Section>
         ) : null}
       </div>

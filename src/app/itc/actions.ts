@@ -489,14 +489,13 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
 
   // Dev-only test-seed escape hatch. Typing one of the recognized
-  // goals (e.g., "I'm committed to getting better at test") wipes the
-  // map's current state and seeds the full happy-path fixture up
-  // through commitments, then advances to the assumptions stage —
-  // which fires the assumption drafter so you land ready to review
-  // drafts and click Continue → walkthrough. Faster than typing the
-  // whole map by hand for every iteration.
-  if (isTestSeedGoal(parsed.data.text)) {
-    const res = await seedTestMap(loaded.map.id);
+  // goals (e.g., "I'm committed to getting better at test" or
+  // "test design" or "test results") wipes the map's current state
+  // and seeds the fixture through the target stage. See TEST_SEED_MARKERS
+  // for the menu.
+  const seedTarget = isTestSeedGoal(parsed.data.text);
+  if (seedTarget) {
+    const res = await seedTestMap(loaded.map.id, seedTarget);
     if (!res.ok) return res;
     safeRevalidate(`/itc/${loaded.map.id}`);
     return { ok: true };
@@ -2127,17 +2126,55 @@ export async function abandonInFlightTest(
  * (they're not specific coachable goals), so they don't collide
  * with any real coachee input.
  */
-const TEST_SEED_MARKERS = ["test", "test happy path", "seed", "demo"] as const;
-function isTestSeedGoal(text: string): boolean {
+/**
+ * Menu of dev-only test-seed markers. Each seeds the map through a
+ * different stage so testing / iterating on a specific downstream
+ * stage doesn't require typing through the whole flow.
+ *
+ * Trigger: type the full stem + marker as the goal. E.g.,
+ * "I'm committed to getting better at test design".
+ *
+ * Markers:
+ * - `test` / `seed` / `demo` — land at assumptions (drafter fires)
+ * - `test walkthrough` — land at immune_system (walkthrough fires,
+ *   ~15-25s wait)
+ * - `test prioritize` — land at prioritize (walkthrough + coach's
+ *   assumption-recommendation fire, ~25-40s wait)
+ * - `test design` — land at test_design (walkthrough + recommendation
+ *   + test-draft all fire, ~35-55s wait). This is "seed slow" — the
+ *   full pre-test happy path in one go.
+ * - `test results` — land at results with a saved test (all upstream
+ *   + a canned test row on the pre-selected assumption). Skips the
+ *   test-design edit step. ~35-55s wait.
+ */
+type SeedTarget =
+  | "assumptions"
+  | "immune_system"
+  | "prioritize"
+  | "test_design"
+  | "results";
+const TEST_SEED_MARKERS: Record<string, SeedTarget> = {
+  test: "assumptions",
+  "test happy path": "assumptions",
+  seed: "assumptions",
+  demo: "assumptions",
+  "test walkthrough": "immune_system",
+  "test prioritize": "prioritize",
+  "test design": "test_design",
+  "test slow": "test_design",
+  "test results": "results",
+};
+function isTestSeedGoal(text: string): SeedTarget | null {
   const stem = GOAL_STEM.toLowerCase();
   const normalized = text
     .trim()
     .replace(/[\u2018\u2019\u02BC]/g, "'")
     .replace(/[.!?]+$/, "")
     .toLowerCase();
-  return TEST_SEED_MARKERS.some(
-    (marker) => normalized === `${stem} ${marker}`,
-  );
+  for (const [marker, target] of Object.entries(TEST_SEED_MARKERS)) {
+    if (normalized === `${stem} ${marker}`) return target;
+  }
+  return null;
 }
 
 /**
@@ -2152,7 +2189,10 @@ function isTestSeedGoal(text: string): boolean {
  * Destructive by design. Only reached via the isTestSeedGoal path;
  * a real coachee typing a real goal never touches this.
  */
-async function seedTestMap(mapId: string): Promise<ActionResult> {
+async function seedTestMap(
+  mapId: string,
+  target: SeedTarget,
+): Promise<ActionResult> {
   const supabase = createSupabaseServiceClient();
 
   // Wipe existing state. Delete children before parents where FK
@@ -2181,6 +2221,17 @@ async function seedTestMap(mapId: string): Promise<ActionResult> {
       .in("assumption_id", assumptionIds.map((a) => a.id));
   }
   await supabase.from("itc_assumptions").delete().eq("map_id", mapId);
+  // Wipe tests + results (cascade via test_id FK on results).
+  const testIds = (
+    await supabase.from("itc_tests").select("id").eq("map_id", mapId)
+  ).data as Array<{ id: string }> | null;
+  if (testIds && testIds.length > 0) {
+    await supabase
+      .from("itc_test_results")
+      .delete()
+      .in("test_id", testIds.map((t) => t.id));
+  }
+  await supabase.from("itc_tests").delete().eq("map_id", mapId);
   await supabase.from("itc_commitments").delete().eq("map_id", mapId);
   await supabase.from("itc_worries").delete().eq("map_id", mapId);
   await supabase.from("itc_behaviors").delete().eq("map_id", mapId);
@@ -2266,16 +2317,148 @@ async function seedTestMap(mapId: string): Promise<ActionResult> {
   );
   if (cErr) return { ok: false, reason: `seed commitments: ${cErr.message}` };
 
-  // Advance to assumptions. This uses the normal server action so
-  // the assumption drafter fires on the transition — you land on the
-  // assumptions stage with coach's drafts already populated, exactly
-  // as if you'd walked the map by hand.
-  const advFd = new FormData();
-  advFd.set("map_id", mapId);
-  advFd.set("to", "assumptions");
-  const advRes = await advanceToStage(advFd);
-  if (!advRes.ok) return { ok: false, reason: `advance to assumptions: ${advRes.reason ?? "unknown"}` };
+  // First advance: to assumptions (fires assumption drafter).
+  const advA = new FormData();
+  advA.set("map_id", mapId);
+  advA.set("to", "assumptions");
+  const advARes = await advanceToStage(advA);
+  if (!advARes.ok) {
+    return { ok: false, reason: `advance to assumptions: ${advARes.reason ?? "unknown"}` };
+  }
+  if (target === "assumptions") return { ok: true };
 
+  // For targets past assumptions we need real saved assumptions with
+  // commitment coverage — the walkthrough / recommendation / test-draft
+  // pipelines all read from itc_assumptions + links, not from the
+  // draft table. Seed 2 canonical clustered assumptions directly.
+  const seededCommitments = (
+    await supabase.from("itc_commitments").select("id, worry_id").eq("map_id", mapId)
+  ).data as Array<{ id: string; worry_id: string }> | null;
+  const canonicalAssumptions = [
+    {
+      text: "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.",
+      // Covers commitments #1 (listening) and #2 (lying) — shared root.
+      commitmentIndices: [0, 1],
+    },
+    {
+      text: "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her.",
+      // Covers commitment #3 (walking out).
+      commitmentIndices: [2],
+    },
+  ];
+  const seededAssumptionIds: string[] = [];
+  for (let i = 0; i < canonicalAssumptions.length; i++) {
+    const { data: aRow, error: aErr } = await supabase
+      .from("itc_assumptions")
+      .insert({
+        map_id: mapId,
+        text: canonicalAssumptions[i].text,
+        depth_score: 3,
+        attempts: 1,
+        sort_order: i,
+      })
+      .select("id")
+      .single();
+    if (aErr || !aRow) {
+      return { ok: false, reason: `seed assumption ${i}: ${aErr?.message}` };
+    }
+    seededAssumptionIds.push((aRow as { id: string }).id);
+    for (const cIdx of canonicalAssumptions[i].commitmentIndices) {
+      const commitment = seededCommitments?.[cIdx];
+      if (!commitment) continue;
+      const { error: lErr } = await supabase
+        .from("itc_assumption_commitments")
+        .insert({
+          assumption_id: (aRow as { id: string }).id,
+          commitment_id: commitment.id,
+        });
+      if (lErr) {
+        return { ok: false, reason: `seed link ${i}: ${lErr.message}` };
+      }
+    }
+  }
+  // Wipe the assumption drafts the drafter just generated — they'd
+  // duplicate the seeded canonical ones we just wrote.
+  const wipeDraftIds = (
+    await supabase
+      .from("itc_assumption_drafts")
+      .select("id")
+      .eq("map_id", mapId)
+  ).data as Array<{ id: string }> | null;
+  if (wipeDraftIds && wipeDraftIds.length > 0) {
+    await supabase
+      .from("itc_assumption_draft_commitments")
+      .delete()
+      .in("draft_id", wipeDraftIds.map((d) => d.id));
+    await supabase
+      .from("itc_assumption_drafts")
+      .delete()
+      .eq("map_id", mapId);
+  }
+
+  // Advance to immune_system (fires walkthrough).
+  const advI = new FormData();
+  advI.set("map_id", mapId);
+  advI.set("to", "immune_system");
+  const advIRes = await advanceToStage(advI);
+  if (!advIRes.ok) {
+    return { ok: false, reason: `advance to immune_system: ${advIRes.reason ?? "unknown"}` };
+  }
+  if (target === "immune_system") return { ok: true };
+
+  // Advance to prioritize (fires recommendation + pre-selects).
+  const advP = new FormData();
+  advP.set("map_id", mapId);
+  advP.set("to", "prioritize");
+  const advPRes = await advanceToStage(advP);
+  if (!advPRes.ok) {
+    return { ok: false, reason: `advance to prioritize: ${advPRes.reason ?? "unknown"}` };
+  }
+  if (target === "prioritize") return { ok: true };
+
+  // Advance to test_design (fires test draft on selected assumption).
+  const advTd = new FormData();
+  advTd.set("map_id", mapId);
+  advTd.set("to", "test_design");
+  const advTdRes = await advanceToStage(advTd);
+  if (!advTdRes.ok) {
+    return { ok: false, reason: `advance to test_design: ${advTdRes.reason ?? "unknown"}` };
+  }
+  if (target === "test_design") return { ok: true };
+
+  // Target === "results" — need a saved (run) test. The test-draft
+  // hook above created one; just mark it as run so the results form
+  // is the active surface, then advance through test_running.
+  const activeTest = (
+    await supabase
+      .from("itc_tests")
+      .select("id")
+      .eq("map_id", mapId)
+      .eq("status", "designed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ).data as { id: string } | null;
+  if (activeTest) {
+    await supabase
+      .from("itc_tests")
+      .update({ status: "run" })
+      .eq("id", activeTest.id);
+  }
+  const advTr = new FormData();
+  advTr.set("map_id", mapId);
+  advTr.set("to", "test_running");
+  const advTrRes = await advanceToStage(advTr);
+  if (!advTrRes.ok) {
+    return { ok: false, reason: `advance to test_running: ${advTrRes.reason ?? "unknown"}` };
+  }
+  const advR = new FormData();
+  advR.set("map_id", mapId);
+  advR.set("to", "results");
+  const advRRes = await advanceToStage(advR);
+  if (!advRRes.ok) {
+    return { ok: false, reason: `advance to results: ${advRRes.reason ?? "unknown"}` };
+  }
   return { ok: true };
 }
 
