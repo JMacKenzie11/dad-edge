@@ -425,15 +425,64 @@ const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
   },
 ];
 
+/**
+ * Kegan-canonical identity-landing markers. Drawn verbatim from the
+ * Coach's Guide Vol 1 pp 13-14 and p 27, which enumerate valid
+ * Column-3 identity landing shapes:
+ *
+ *   - Role/relational noun claim ("the husband who X", "someone who
+ *     let people down") — Vol 1 p 14.
+ *   - Self-label ("I'd be a fraud", "not enough", "the kind of
+ *     husband who chose ego over her") — Vol 1 p 14.
+ *   - "Seen as" / "looking like" / "appeared like" — Vol 1 p 13,
+ *     p 27. These are Kegan's own operative vocabulary for the
+ *     external-witness frame.
+ *   - Role failure named by a role-implicating relational verb
+ *     ("failed her", "let her down", "chose myself over her",
+ *     "abandoned her", "hurt her", "brought dishonor to my family").
+ *     Vol 1 p 14 and p 27.
+ *
+ * If none of these markers is present, the landing is likely a
+ * STRATEGY description ("using her mistakes to avoid hearing mine"),
+ * not an identity landing. Strategy descriptions preserve some yuck
+ * but fail Kegan's identity-rung bar (p 13: "keeping the yuk in it
+ * from the fear box"; p 27: "avoid being/looking like someone").
+ * Retry with feedback pointing at the four valid categories.
+ */
+const WORRY_IDENTITY_MARKERS: RegExp[] = [
+  // Role/relational noun — Vol 1 p 14 shape
+  /\b(the|a)\s+(husband|wife|father|dad|mother|mom|man|woman|guy|gal|person|kind|type|one|someone|somebody|parent|partner|spouse|son|daughter|brother|sister)\b/i,
+  // Self-label — Vol 1 p 14 shape
+  /\b(a|the)\s+(fraud|fake|phony|coward|failure|liar|loser|monster|villain|cheat|hypocrite|fool|weakling)\b/i,
+  /\bnot\s+(enough|good\s+enough|worthy|the\s+\w+|a\s+real|a\s+true)\b/i,
+  // "Seen as" / "looking like" / "appeared like" — Vol 1 p 13, p 27
+  /\bseen\s+as\b/i,
+  /\bbe\s+seen\b/i,
+  /\bappeared?\s+(as|like)\b/i,
+  /\blooking\s+like\b/i,
+  /\blook\s+like\b/i,
+  // Role failure — Vol 1 p 14, p 27
+  /\bfailed\s+(as|her|him|them|my|the|at)\b/i,
+  /\blet\s+(her|him|them|down|my)\b/i,
+  /\bbrought\s+dishonor\b/i,
+  /\bchose\s+(myself|me)\s+over\b/i,
+  /\bput\s+(myself|me)\s+(before|ahead\s+of|first)\b/i,
+  /\babandoned\s+(her|him|them|my)\b/i,
+  /\bbetrayed\s+(her|him|them|my)\b/i,
+  /\bhurt\s+(her|him|them|my)\b/i,
+  /\bdisappointed\s+(her|him|them|my)\b/i,
+  // Relational-role verbs directed at a person (past-perfect + "her/him/them")
+  /\b(running|walking\s+out|hiding|checking\s+out|shutting\s+down|shutting\s+her\s+out)\s+(from|on)\s+(her|him|them|my)\b/i,
+];
+
 export function checkWorryLogicalConsistency(input: {
   behaviorText: string;
   oppositeMove: string;
   identityLanding: string;
 }): ConsistencyResult {
-  // Blacklist first: interior scaffolding fails regardless of whether
-  // a revealer marker is also present. "I'd have to admit I've been
-  // running" has the "I've been" marker but the "I'd have to admit"
-  // scaffolding is exactly what the voice rules ban.
+  // Layer 1: interior scaffolding blacklist. "I'd have to admit
+  // I've been running" has the "I've been" marker but the "I'd have
+  // to admit" scaffolding is exactly what the voice rules ban.
   for (const ban of WORRY_INTERIOR_SCAFFOLDING_BANS) {
     if (ban.pattern.test(input.identityLanding)) {
       return {
@@ -443,21 +492,38 @@ export function checkWorryLogicalConsistency(input: {
     }
   }
 
-  // Whitelist: at least one revealer marker required. Catches bare
+  // Layer 2: past-tense revealer whitelist. Catches bare
   // present-tense "I'm the [X-er]" / "I'm a [X]" inversions.
-  const hasMarker = WORRY_REVEALER_MARKERS.some((re) =>
+  const hasRevealerMarker = WORRY_REVEALER_MARKERS.some((re) =>
     re.test(input.identityLanding),
   );
-  if (hasMarker) {
+  if (!hasRevealerMarker) {
     return {
-      consistent: true,
-      reason: "past-tense revealer framing detected",
+      consistent: false,
+      reason:
+        "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
     };
   }
+
+  // Layer 3: identity-rung whitelist. Catches strategy-level
+  // landings ("using her mistakes to avoid hearing mine") that
+  // preserve some yuck but don't reach role/self-label/seen-as
+  // identity per Kegan Vol 1 pp 13-14, p 27.
+  const hasIdentityMarker = WORRY_IDENTITY_MARKERS.some((re) =>
+    re.test(input.identityLanding),
+  );
+  if (!hasIdentityMarker) {
+    return {
+      consistent: false,
+      reason:
+        "Identity landing describes a strategy or maneuver, not an identity. Per Kegan/Lahey Vol 1 pp 13-14 and p 27, Column-3 landings must reach one of four canonical shapes: (a) a role/relational noun claim (\"she'd see I've been the husband who never let a word she said land\"), (b) a self-label (\"she'd know I'm a fraud\", \"the truth would come out that I've never been enough\"), (c) a \"seen as\" / \"looking like\" framing (\"she'd have seen me as the man who chose ego over her\"), or (d) an explicit role-failure verb toward her/him/them (\"she'd see I've been choosing myself over her\", \"I've been the man who let her down all along\"). Rewrite so the landing names WHO he'd be judged as, not the tactical maneuver he's been running.",
+    };
+  }
+
   return {
-    consistent: false,
+    consistent: true,
     reason:
-      "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
+      "past-tense revealer + identity-rung markers detected (Kegan-canonical shape)",
   };
 }
 
