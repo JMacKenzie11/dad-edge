@@ -182,7 +182,7 @@ function AddAssumptionForm({
       return;
     }
     if (linkedIds.length === 0) {
-      setError("Link at least one commitment this assumption holds up.");
+      setError("Link at least one competing commitment this assumption holds up.");
       return;
     }
     const fd = new FormData();
@@ -250,7 +250,7 @@ function AddAssumptionForm({
                   : "border-[color:var(--color-border)] bg-black/20 text-[color:var(--color-text-muted)] hover:text-white")
               }
             >
-              holds up #{i + 1}
+              holds up competing commitment #{i + 1}
             </button>
           );
         })}
@@ -335,7 +335,7 @@ function DraftCard({
       {coverageLabels.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 text-xs text-[color:var(--color-text-muted)]">
           <span className="uppercase tracking-widest opacity-70">
-            holds up
+            holds up competing commitment{coverageLabels.length === 1 ? "" : "s"}
           </span>
           {coverageLabels.map((n) => (
             <span

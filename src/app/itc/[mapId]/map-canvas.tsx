@@ -250,7 +250,7 @@ export function MapCanvas({
 
       <div className="space-y-4">
         <Section
-          title="1. Improvement goal"
+          title="1. Improvement goal (Big Commitment)"
           active={map.current_stage === "goal"}
           liveIntro={liveIntroFor("goal")}
           chipTarget={chipTargetForStage(map.current_stage)}
