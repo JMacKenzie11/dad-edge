@@ -481,19 +481,58 @@ export async function listWorries(mapId: string): Promise<ItcWorry[]> {
 }
 
 /**
+ * Every worry stored in the map MUST start with "I worry that..." so
+ * the whole map reads with the same voice. Two failure paths were
+ * letting non-conforming worries through: (a) the coach chat LLM
+ * occasionally violates the prompt rule and emits "I fear being X"
+ * inside a <<propose_worry>> marker; (b) coachees can type freely in
+ * the worry form. Enforcing the shape at the DB boundary catches
+ * both.
+ *
+ * If the incoming text already starts with "I worry", pass through.
+ * Otherwise transform the known near-synonym stems ("I fear...",
+ * "I'm afraid..."), or as a last resort prepend "I worry that ".
+ */
+export function normalizeWorryPrefix(text: string): string {
+  const s = text.trim();
+  if (!s) return s;
+  if (/^I worry\b/i.test(s)) return s;
+  const transforms: Array<[RegExp, string]> = [
+    [/^I fear being /i, "I worry that I'd be "],
+    [/^I['’`]m afraid of being /i, "I worry that I'd be "],
+    [/^I fear that /i, "I worry that "],
+    [/^I['’`]m afraid that /i, "I worry that "],
+    [/^I fear /i, "I worry that "],
+    [/^I['’`]m afraid /i, "I worry that "],
+    [/^My (fear|worry) is that /i, "I worry that "],
+    [/^My (fear|worry) is /i, "I worry that "],
+    [/^What I('m| am) afraid of is /i, "I worry that "],
+  ];
+  for (const [pattern, repl] of transforms) {
+    if (pattern.test(s)) return s.replace(pattern, repl);
+  }
+  const first = s.charAt(0);
+  const body = first === "I" ? s : first.toLowerCase() + s.slice(1);
+  return `I worry that ${body}`;
+}
+
+/**
  * Insert-or-update the worry paired to a behavior. One worry per
  * behavior (pairing rule). Increments `attempts` on every save so
  * the Continue gate can grant a pass at depth_score=2 after two
  * honest attempts. `depth_score` is left null here — the caller
  * (saveWorry server action) runs the rubric and stores the score
  * via updateWorryDepth in a second step.
+ *
+ * Text is normalized through normalizeWorryPrefix on the way in so
+ * every stored worry starts with "I worry that...".
  */
 export async function upsertWorryForBehavior(
   mapId: string,
   behaviorId: string,
   text: string,
 ): Promise<{ row: ItcWorry; isEdit: boolean }> {
-  const trimmed = text.trim();
+  const trimmed = normalizeWorryPrefix(text.trim());
   if (trimmed.length < 3) throw new Error("Worry is too short.");
   const supabase = createSupabaseServiceClient();
   const lookup = await supabase

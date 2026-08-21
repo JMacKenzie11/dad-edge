@@ -42,34 +42,34 @@ Return your judgment as three booleans plus one short reason (under 40 words) ex
 `.trim();
 
 const CommitmentSchema = z.object({
-  is_self_protective: z.boolean(),
-  is_first_person: z.boolean(),
-  is_not_productivity_platitude: z.boolean(),
+  is_first_person_never_vow: z.boolean(),
+  mirrors_worry_identity: z.boolean(),
+  is_specific_not_generic: z.boolean(),
   reason: z.string().min(1).max(400),
 });
 
 export type CommitmentRubricResult = {
   score: 0 | 1 | 2 | 3;
-  is_self_protective: boolean;
-  is_first_person: boolean;
-  is_not_productivity_platitude: boolean;
+  is_first_person_never_vow: boolean;
+  mirrors_worry_identity: boolean;
+  is_specific_not_generic: boolean;
   reason: string;
 };
 
 const COMMITMENT_SYSTEM = `
-You are a strict rubric for column-4 hidden competing commitments in an Immunity to Change map. A commitment must read as SELF-PROTECTION, not as sensible productivity advice. It should sound like the man keeping himself safe from the paired worry, not like a virtuous vow or a business-book platitude.
+You are a strict rubric for column-4 hidden competing commitments in an Immunity to Change map. This app uses the INTRODUCTORY FORM (Kegan Vol 1 pp 26-27): the paired worry's identity/outcome content is mirrored directly into an "I'm also committed to never..." vow. You score whether the commitment does that transformation correctly.
 
 Score three binary criteria. When in doubt, false.
 
-1. is_self_protective: The commitment names what he's keeping himself safe from — a protective flinch is visible. "I'm committed to never having to find out that my effort didn't matter" is self-protective. "I'm committed to always having a real plan" is not — that's a productivity platitude.
+1. is_first_person_never_vow: The commitment starts with "I'm also committed to never" (or an accepted variant like "I'm committed to never" — "also" preferred but not strictly required) and names a first-person vow. Positive-aspiration form ("I'm committed to being the best husband") fails — that's a Column 1 goal, not a competing commitment.
 
-2. is_first_person: Starts with "I'm committed to" (or equivalent) and names something the man himself commits to, not a general principle, not a rule for other people, not framed as advice.
+2. mirrors_worry_identity: The vow names the identity or outcome the paired worry fears. Worry says "I fear being the guy who's defensive" → vow says "being the guy who's defensive" (or a clear paraphrase preserving the same identity). Worry says "I worry I'd look incompetent in front of my team" → vow says "looking incompetent in front of my team". If the commitment jumps to an identity/outcome the worry doesn't name, false.
 
-3. is_not_productivity_platitude: The commitment would sound STRANGE on a productivity blog or in a corporate meeting — a stranger reading it would think "that's a weird thing to admit," not "that's good advice." A noble-sounding vow ("I'm committed to being the best husband I can be") fails this; it's socially acceptable and doesn't reveal a hidden flinch.
+3. is_specific_not_generic: The vow keeps the coachee's specific nouns and context. "Never being a bad husband" fails (too generic). "Never being the husband who can't let things go" passes (specific role + specific behavior). "Never failing" fails (generic). "Never failing my family as the provider" passes (specific role + specific stakes).
 
 Also return a one-line reason (<40 words) explaining what would need to change to raise a false criterion to true.
 
-When your reason includes an example rewrite, use the CANONICAL Column-4 stem: **"I'm also committed to..."** (with "also"). Column 4 competing commitments always take "also" because they COMPETE with the coachee's primary Column-1 goal ("I'm committed to getting better at X"). Dropping "also" turns the competing commitment into a bare commitment that reads as if it stands alone — losing the diagnostic tension the map is designed to surface.
+When your reason includes an example rewrite, use the CANONICAL Column-4 stem: **"I'm also committed to never..."**. Column 4 competing commitments always take "also" because they COMPETE with the coachee's primary Column-1 goal ("I'm committed to getting better at X"). Dropping "also" turns the competing commitment into a bare commitment that reads as if it stands alone — losing the diagnostic tension the map is designed to surface.
 `.trim();
 
 export async function scoreCommitmentDepth(input: {
@@ -98,15 +98,15 @@ export async function scoreCommitmentDepth(input: {
       temperature: 0.1,
     });
     const score =
-      (object.is_self_protective ? 1 : 0) +
-      (object.is_first_person ? 1 : 0) +
-      (object.is_not_productivity_platitude ? 1 : 0);
+      (object.is_first_person_never_vow ? 1 : 0) +
+      (object.mirrors_worry_identity ? 1 : 0) +
+      (object.is_specific_not_generic ? 1 : 0);
     scoreForLog = score;
     return {
       score: score as 0 | 1 | 2 | 3,
-      is_self_protective: object.is_self_protective,
-      is_first_person: object.is_first_person,
-      is_not_productivity_platitude: object.is_not_productivity_platitude,
+      is_first_person_never_vow: object.is_first_person_never_vow,
+      mirrors_worry_identity: object.mirrors_worry_identity,
+      is_specific_not_generic: object.is_specific_not_generic,
       reason: object.reason,
     };
   } finally {
@@ -594,147 +594,11 @@ export function checkAssumptionLogicalConsistency(input: {
   };
 }
 
-/**
- * Deterministic consistency check for competing commitment drafts.
- * Different failure mode than worries/assumptions — commitments don't
- * have a "reveal" slot per se. What DOES fail here is:
- *
- *   1. Interior-witness verbs in protective_purpose ("so I never have
- *      to face X", "so I never have to see Y"). The commitment names
- *      what he's protecting himself from having to encounter — must
- *      be an OBSERVABLE consequence, not an internal reckoning.
- *   2. Noble-avoidance in protective_purpose ("so I never have to be
- *      the man who X"). This is the drafter's own banned frame in
- *      disguise — same identity-aversion structure, just moved from
- *      active_move to protective_purpose.
- *   3. Abstract mechanism metaphors in active_move ("keeping X loaded",
- *      "keeping one foot out the door", "before she can land it").
- *      Banned by the voice rules; must be a specific physical or
- *      verbal act.
- *
- * Blacklist check (any hit = fail) rather than whitelist because
- * "good" purposes vary widely ("so she can't call me out", "so mine
- * doesn't come up", "so she stops expecting me") — no small set of
- * required markers.
- */
-const COMMITMENT_ACTIVE_MOVE_BANS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\bkeeping\s+.*\b(loaded|available|ready)\b/i, label: "abstract mechanism metaphor ('keeping X loaded/available/ready')" },
-  { pattern: /\bkeeping\s+one\s+foot\b/i, label: "abstract 'keeping one foot out the door' metaphor" },
-  { pattern: /\bbefore\s+.*\bcan\s+land\b/i, label: "metaphorical 'before she can land it'" },
-  { pattern: /\bon\s+the\s+table\b/i, label: "banned metaphor 'on the table'" },
-  { pattern: /\boff\s+the\s+table\b/i, label: "banned metaphor 'off the table'" },
-];
-
-const COMMITMENT_PROTECTIVE_PURPOSE_BANS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\bhave\s+to\s+face\b/i, label: "interior-witness verb 'have to face'" },
-  { pattern: /\bhave\s+to\s+see\b/i, label: "interior-witness verb 'have to see' (about a self-truth)" },
-  { pattern: /\bhave\s+to\s+know\b/i, label: "interior-witness verb 'have to know' (about a self-truth)" },
-  { pattern: /\bhave\s+to\s+feel\b/i, label: "interior-witness verb 'have to feel' (about a self-truth)" },
-  { pattern: /\bhave\s+to\s+admit\b/i, label: "interior-witness verb 'have to admit'" },
-  { pattern: /\bnever\s+have\s+to\s+be\s+the\b/i, label: "noble-avoidance frame 'never have to be the [X]'" },
-  { pattern: /\bnever\s+have\s+to\s+become\b/i, label: "noble-avoidance frame 'never have to become [X]'" },
-  { pattern: /\bland\s+(it|the)\b/i, label: "metaphorical 'land it' / 'land the [X]'" },
-];
-
-/**
- * Stopword set for behavior/commitment content-word extraction.
- * Excludes function words, pronouns, articles, prepositions, and
- * common linking verbs that appear in almost every English sentence
- * and therefore don't carry the behavior's semantic content.
- */
-const CONTENT_EXTRACTION_STOPWORDS = new Set([
-  "a", "an", "the", "to", "of", "in", "on", "at", "by", "for", "with",
-  "and", "or", "but", "if", "when", "where", "what", "who", "why", "how",
-  "instead", "rather", "than", "get", "got", "have", "has", "had", "do",
-  "does", "did", "am", "is", "are", "was", "were", "be", "been", "being",
-  "my", "me", "myself", "her", "him", "them", "his", "she", "he", "they",
-  "this", "that", "these", "those", "it", "its",
-  "up", "down", "out", "over", "off", "from", "into", "so", "just",
-  "any", "all", "some", "no", "not",
-]);
-
-function extractContentWords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z\s']/g, "")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !CONTENT_EXTRACTION_STOPWORDS.has(w));
-}
-
-/**
- * Through-line check: verify the commitment's active_move actually
- * references the Column-2 behavior. Vol 1 p 4 is explicit: the
- * commitment's mechanism IS the Column 2 behavior, phrased as an
- * active protective vow ("how if he protected himself that way, he
- * would behave as he named in Column 2"). When the drafter drifts to
- * an adjacent-but-different mechanism (behavior = "bringing up her
- * past", active_move = "speaking first"), the coachee gets a
- * commitment that doesn't tie back to the specific behavior it's
- * supposed to make visible.
- *
- * Cheap deterministic heuristic: extract content words from both,
- * check for overlap (substring match either direction, catching
- * verb-tense variations like "walk"/"walking", "bring"/"bringing").
- * If no overlap, the drafter has drifted — retry with feedback
- * naming the behavior's key words to preserve.
- */
-function commitmentReferencesBehavior(
-  activeMove: string,
-  behaviorText: string,
-): { references: boolean; keyBehaviorWords: string[] } {
-  const behaviorWords = extractContentWords(behaviorText);
-  const moveWords = extractContentWords(activeMove);
-  const references = behaviorWords.some((bw) =>
-    moveWords.some((mw) => {
-      // Substring match either direction. Catches verb-tense
-      // variations ("walk"/"walking", "bring"/"bringing"/"brought")
-      // and root-word matches ("listen"/"listening"/"listened").
-      const bwRoot = bw.slice(0, Math.min(4, bw.length));
-      const mwRoot = mw.slice(0, Math.min(4, mw.length));
-      return mw.includes(bwRoot) || bw.includes(mwRoot);
-    }),
-  );
-  return { references, keyBehaviorWords: behaviorWords };
-}
-
-export function checkCommitmentLogicalConsistency(input: {
-  activeMove: string;
-  protectivePurpose: string;
-  behaviorText: string;
-}): ConsistencyResult {
-  // Layer 1: abstract mechanism metaphor blacklist
-  for (const ban of COMMITMENT_ACTIVE_MOVE_BANS) {
-    if (ban.pattern.test(input.activeMove)) {
-      return {
-        consistent: false,
-        reason: `active_move contains ${ban.label}. Rewrite as a concrete physical or verbal act a bystander could witness (throwing, walking out, adding, sneaking, saying).`,
-      };
-    }
-  }
-  // Layer 2: interior-witness / noble-avoidance blacklist on purpose
-  for (const ban of COMMITMENT_PROTECTIVE_PURPOSE_BANS) {
-    if (ban.pattern.test(input.protectivePurpose)) {
-      return {
-        consistent: false,
-        reason: `protective_purpose contains ${ban.label}. Rewrite so the purpose names an OBSERVABLE consequence (she can't call me out, mine doesn't come up, she stops expecting me) — not an interior reckoning or noble-avoidance frame.`,
-      };
-    }
-  }
-  // Layer 3: through-line check. Vol 1 p 4: the commitment's
-  // mechanism IS the Column 2 behavior as an active vow, not an
-  // adjacent-but-different move the drafter invented.
-  const throughLine = commitmentReferencesBehavior(
-    input.activeMove,
-    input.behaviorText,
-  );
-  if (!throughLine.references) {
-    return {
-      consistent: false,
-      reason: `active_move drifted from the Column-2 behavior. Kegan Vol 1 p 4: the commitment's mechanism IS the behavior, made visible as an active protective vow. Rewrite so active_move names the specific act from the behavior "${input.behaviorText}" — use at least one of these key words (or a form of it): ${throughLine.keyBehaviorWords.join(", ")}.`,
-    };
-  }
-  return {
-    consistent: true,
-    reason: "no banned patterns; active_move references the Column-2 behavior",
-  };
-}
+// `checkCommitmentLogicalConsistency` and its blacklist/through-line
+// machinery were removed with the switch to the introductory
+// commitment form (Kegan Vol 1 pp 26-27). The introductory form is a
+// text transformation of the paired worry — there's no adjacent-
+// mechanism drift to guard against and no "protective_purpose" slot
+// where interior-witness verbs could leak. Depth rubric alone is the
+// verifier now. If drift patterns re-emerge, add back with shape
+// matching the new single-slot vow (not the old two-slot mechanism).

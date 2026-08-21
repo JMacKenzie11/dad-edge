@@ -45,7 +45,6 @@ export function withVoiceRules(drafterSystem: string): string {
 }
 import {
   checkAssumptionLogicalConsistency,
-  checkCommitmentLogicalConsistency,
   checkWorryLogicalConsistency,
   scoreCommitmentDepth,
   scoreWorryDepth,
@@ -907,9 +906,13 @@ The felt fear that lands when he pictures doing opposite_move. This is the whole
 **MUST land at identity level.** Two valid shapes — accept whichever fits his goal/behavior more naturally:
 
   1. **Self-labeling identity**: names a label he'd apply to himself. "I'd have to see I'm not the man I've pretended to be." / "I'd find out I'm weaker than I let on." / "I'd have to admit I'm a fraud."
-  2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. "she'd see I've been failing her all along." / "I'd have to face I've failed my family." / "she'd stop counting on me and I'd know I earned it."
+  2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. Examples vary by domain — MATCH THE RELATIONAL NOUN TO HIS ACTUAL MAP:
+     - Bond: "she'd see I've been failing her all along."
+     - Endeavor/work: "my team would see I've been the leader who fakes it."
+     - Raise/kids: "my kid would stop coming to me because I never actually listen."
+     - Amplify/self: "I'd have to face I've never done the work I claim."
 
-BOTH are canonical. Do NOT force self-labeling when role/relational fits the coachee's stated goal (e.g., a Bond-pillar goal about his marriage naturally lands relationally).
+BOTH are canonical. Do NOT force self-labeling when role/relational fits the coachee's stated goal. The relational noun MUST come from HIS map — never introduce "she" or "her" for a work/team map.
 
 5-10 words. Ends without a period (server adds one).
 
@@ -920,26 +923,33 @@ Coachees can't feel a practical concern. They CAN feel identity landings. Every 
 ### Practical-concern anti-patterns (banned in identity_landing)
 
 Reject any draft where the fear is:
-  - **Event-level**: "she'd get upset" / "we'd have a fight" / "she'd cry" — describes what happens, not what it CONFIRMS.
+  - **Event-level**: "she'd get upset" / "we'd have a fight" / "she'd cry" / "the meeting would end awkwardly" — describes what happens, not what it CONFIRMS.
   - **Practical/operational**: "we'd fall behind" / "the day would fall apart" / "it'd waste time" — sounds like a project manager, not a fear.
-  - **About her behavior alone**: "she'd walk out" / "she'd stop talking to me" — that's her move, not the meaning it lands for him. If the fear is her leaving, name what her leaving would PROVE about him ("she'd walk out and I'd know I'm the man who couldn't hold this together").
+  - **About the other person's behavior alone**: "she'd walk out" / "my team would stop asking me questions" / "he'd stop coming to me" — that's their move, not the meaning it lands for him. If the fear is them pulling away, name what that pulling away would PROVE about him ("she'd walk out and I'd know I'm the man who couldn't hold this together" / "my team would stop asking and I'd know I was never the one they actually trusted").
   - **Vague self-help language**: "I wouldn't feel like myself" / "I'd feel disconnected" / "I wouldn't be authentic" — abstract, doesn't wince.
-  - **Noble/aspirational**: "I wouldn't be the husband she deserves" — sounds like a wedding toast. Replace with the specific self-truth: "she'd see I've never actually been the husband she thought she married".
+  - **Noble/aspirational**: "I wouldn't be the husband she deserves" / "I wouldn't be the leader my team needs" — sounds like a wedding toast or a corporate values slide. Replace with the specific self-truth about who he'd be revealed to be: "she'd see I've never actually been the husband she thought she married" / "my team would realize I've been pretending to be someone I'm not."
 
 ### Yuck-passing examples (good identity_landing content, under 10 words each)
 
-Blue-collar plain. Externalized where possible — someone else witnesses it, or bare identity claim. NO interior-witness verbs ("I'd have to see", "I'd have to face", "I'd have to admit") — those are banned per the voice rules. Rotate openers so a map's set doesn't read templated:
+Blue-collar plain. Externalized where possible — someone else witnesses it, or bare identity claim. NO interior-witness verbs ("I'd have to see", "I'd have to face", "I'd have to admit") — those are banned per the voice rules. Rotate openers so a map's set doesn't read templated. Match the WITNESS to the coachee's own context — if his map is about his wife, "she'd know"; if it's about his team, "they'd know" or "my team would see"; if it's about his kids, "my kid would tell his mom"; if it's about customers, "they'd stop calling":
 
+Bond context (partner/spouse):
   - "she'd know I've been defending myself, not loving her." *(she'd know)*
   - "she'd realize I don't know how to love her without performing." *(she'd realize)*
-  - "she'd stop pretending I've been showing up." *(she'd stop)*
-  - "she'd start telling people she's married to a shell." *(she'd start)*
-  - "I've been the father who's technically present and gone." *(bare identity claim)*
-  - "I've been the guy who checks out when it counts." *(bare identity claim)*
-  - "the truth would come out that I've never let her in." *(the truth would come out)*
-  - "she'd hear it in my voice and finally believe her sister." *(she'd hear)*
 
-Notice: each names a truth about WHO HE IS that would be witnessed by another person or stated bare. None use "I'd have to see", "I'd have to face", "actually", "fully", "land" as metaphor, or trailing "instead of" clauses — those are all banned.
+Endeavor context (work/team/customers):
+  - "my team would see I've been faking authority I never had." *(team would see)*
+  - "the customer would stop calling and I'd know I lost them." *(customer would stop)*
+
+Raise context (kids/family):
+  - "my kid would tell his mom I never actually listen." *(kid would tell)*
+  - "I've been the father who's technically present and gone." *(bare identity claim)*
+
+Amplify context (self / life-building):
+  - "I've been the guy who checks out when it counts." *(bare identity claim)*
+  - "the truth would come out that I've never done the work I claim." *(the truth would come out)*
+
+Notice: each names a truth about WHO HE IS that would be witnessed by another person or stated bare. The witness or noun MUST match his map's context — never introduce "she'd" if his map is about his team. None use "I'd have to see", "I'd have to face", "actually", "fully", "land" as metaphor, or trailing "instead of" clauses — those are all banned.
 
 ## Preserve his specificity — copy his nouns
 
@@ -1158,83 +1168,46 @@ export async function draftWorryForBehavior(input: {
 // -------------------------------------------------------------------------
 
 /**
- * Structured-slots schema for the commitment drafter. Two slots:
- * the ACTIVE MECHANISM a part of him is running (verb-forward, the
- * move visible on the page), and the SELF-PROTECTIVE PURPOSE it
- * serves (what identity truth about HIM this move keeps hidden).
- * Server assembles the canonical Kegan/Lahey commitment sentence via
- * assembleCommitment.
+ * Structured-slots schema for the commitment drafter (introductory
+ * form). ONE slot: the identity/outcome the coachee is vowing never
+ * to be or have happen. Server assembles the canonical Kegan/Lahey
+ * competing-commitment sentence via assembleCommitment.
  *
- * Why two slots (was one, forcing "I'm committed to never X"): the
- * single-slot template biased every draft toward the AVOIDANCE frame
- * ("never having to see I'm the man who X"), which the reaction coach
- * correctly rejects as "still noble" — it names what he doesn't want
- * to BE, not what a part of him is actively DOING to prevent the
- * confrontation. The commitments stage prompt's calibration pair
- * spells this out: "never being the one who's the problem" is WRONG;
- * "keeping her past mistakes available so mine are never the only
- * thing on the table" is RIGHT. The two-slot shape forces the active
- * mechanism onto the page — the SAME rubric the reaction coach applies.
+ * Why the introductory form (Kegan Vol 1 pp 26-27) instead of the
+ * mechanism form (Vol 2): this is a self-service tool, not a live
+ * 1:1 coaching engagement. The mechanism form ("I'm also committed
+ * to keeping her past on the table so mine doesn't come up") is
+ * sharper but requires a live coach to keep excavating past the
+ * noble first pass. The introductory form is legible on first read,
+ * correct on its own terms, and gives Column 5 enough to work with.
+ * The commitment mirrors the paired worry's identity content: worry
+ * "I fear being the guy who's difficult to work with" becomes
+ * "I'm also committed to never being the guy who's difficult to
+ * work with."
  */
 const CommitmentDraftSchema = z.object({
-  /** The ACTIVE PROTECTIVE MECHANISM — the verb-forward, first-person
-   *  present-participle move a part of him is DOING to prevent the
-   *  confrontation the worry fears. 3-8 words. Terse.
+  /** The identity/outcome the coachee vows never to be or have happen.
+   *  Server prefixes "I'm also committed to never " and appends a
+   *  period. Write WITHOUT the prefix, WITHOUT the trailing period,
+   *  WITHOUT a leading "never". 3-18 words.
    *
-   *  Server prefixes "I'm committed to " so write WITHOUT the prefix,
-   *  WITHOUT "never", WITHOUT "not".
+   *  Shape: mirrors the identity content of the paired worry.
+   *    Worry: "I fear being the guy who's defensive."
+   *    vow: "being the guy who's defensive"
+   *  Or the outcome content:
+   *    Worry: "I worry I don't have the answer and look incompetent."
+   *    vow: "looking incompetent in front of my team"
    *
-   *  Right (verb-forward, mechanism visible, punchy):
-   *    - "keeping her past mistakes available"
-   *    - "staying in the room but explaining why I'm right"
-   *    - "making sure I'm always the one who's right"
-   *    - "pre-empting her disappointment"
-   *    - "over-preparing so I can't be caught off-guard"
-   *    - "telling her she's overreacting"
-   *
-   *  BANNED (identity-aversion frames — reaction coach rejects these):
-   *    - "never being the one who's the problem"
-   *    - "never having to see I'm the man who…"
-   *    - "not being the husband who fails her"
-   *    - "avoiding vulnerability" (abstract, no mechanism)
-   *
-   *  BANNED (over-contextualization — adds words without meaning):
-   *    - "keeping her past mistakes available WHEN SHE CRITICIZES ME"
-   *    - "staying in the situation BUT SLIPPING IN SMALL CLARIFICATIONS
-   *      ABOUT WHAT REALLY HAPPENED" — the "but slipping..." is a
-   *      paragraph, not a mechanism. Cut to "staying but relitigating". */
-  active_move: z.string().min(5).max(60),
-  /** The SELF-PROTECTIVE PURPOSE — what this active_move keeps him
-   *  from having to face about HIMSELF (never about her). Starts with
-   *  "so" (the purpose clause). 4-12 words. Terse.
-   *
-   *  Server appends after active_move with a space, then adds the
-   *  terminal period.
-   *
-   *  Right (self-protection, identity-level, punchy):
-   *    - "so mine are never the only thing on the table"
-   *    - "so I never have to face I've been coasting"
-   *    - "so I don't have to sit with what I'm capable of"
-   *    - "so I never have to admit she's been carrying us"
-   *
-   *  BANNED — the "protecting HER not HIM" test:
-   *    - "so I don't hurt her" / "so I don't burden her"
-   *    - "so I don't make things worse" / "so we don't fall apart"
-   *    - "so she doesn't get upset"
-   *
-   *  BANNED (verbosity tics that add nothing):
-   *    - "so I never have to FULLY face…" — "fully" is a filler tic.
-   *      Cut it. "so I never have to face…" is stronger.
-   *    - Double-"so" chains: "so I don't have to hear X so I never have
-   *      to face Y" — pick ONE. */
-  protective_purpose: z.string().min(4).max(80),
+   *  Preserve the coachee's nouns. If the worry says "my team,"
+   *  the vow says "my team." Never swap in generic replacements. */
+  vow: z.string().min(3).max(120),
 });
 
 /**
- * Server-side assembly of the canonical commitment sentence from the
- * two LLM slots. Produces:
+ * Server-side assembly of the canonical introductory-form commitment
+ * sentence from the single LLM slot. Produces:
  *
- *   "I'm also committed to <active_move> <protective_purpose>."
+ *   "I'm also committed to never <vow>."
  *
  * The "also" is Kegan-canonical: names the SECOND commitment sitting
  * next to the Column 1 goal (the open commitment) so the coexistence
@@ -1242,196 +1215,107 @@ const CommitmentDraftSchema = z.object({
  * must start with "I'm also committed to" per the commitments-stage
  * prompt.
  *
- * The server no longer auto-injects "never" (that biased every draft
- * toward the noble avoidance frame). The active_move slot IS the
- * mechanism; the protective_purpose slot names what it protects.
- * normalizeSlot handles trim, leading/trailing punctuation, and
- * first-char casing (preserves capital "I" pronoun).
+ * Normalizations on the vow slot: trim, strip leading "never " if
+ * the LLM redundantly wrote it (the server writes "never" as part
+ * of the prefix), strip trailing punctuation, lowercase first char
+ * unless it's a pronoun "I".
  */
-export function assembleCommitment(slots: {
-  active_move: string;
-  protective_purpose: string;
-}): string {
-  const move = normalizeSlot(slots.active_move);
-  const purpose = normalizeSlot(slots.protective_purpose);
-  return `I'm also committed to ${move} ${purpose}.`;
+export function assembleCommitment(slots: { vow: string }): string {
+  let vow = normalizeSlot(slots.vow);
+  vow = vow.replace(/^never\s+/i, "");
+  return `I'm also committed to never ${vow}.`;
 }
 
 const DRAFT_COMMITMENT_SYSTEM = `
-You draft ONE non-noble hidden competing commitment for a coachee's ITC map. This is Column 4 — the self-protective mechanism a part of him is running to keep the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
+You draft ONE hidden competing commitment for a coachee's ITC map — in the introductory form (Kegan Vol 1 pp 26-27). The commitment is the vow a part of him has quietly made to keep the paired worry from ever coming true. Your draft is a starting point the coachee will review, accept, edit, or replace.
 
-**CRITICAL — this is the whole game:** your draft MUST pass the rubric the reaction coach applies on the same map. If it doesn't pass, we've built you wrong. The reaction coach rejects drafts that read as "I'm also committed to never being the man who X" or "I'm also committed to never having to see Y" as STILL NOBLE — they name what he doesn't want to BE, not what a part of him is actively DOING to stay safe. Do not produce those.
+## How this works (single slot)
 
-## How this works (structured slots)
+You return ONE slot — vow — that fills the blank in a template the server writes:
 
-You return TWO slots — active_move and protective_purpose — that fill blanks in a template the server writes:
+    "I'm also committed to never <vow>."
 
-    "I'm also committed to <active_move> <protective_purpose>."
+You never write "I'm also committed to". You never write the leading "never" (the server writes it). You never write the trailing period.
 
-You never write "I'm also committed to". You never write "never" as the opening word of active_move — the mechanism is what a part of him is DOING, not what he's avoiding. You never write the terminal period.
+## Two-step derivation (silent — run for every worry)
 
-## LENGTH BAR (mandatory)
+1. **Read the paired worry.** Identify the identity/outcome it fears — the "I'd be the guy who X" or "she'd see me as Y" or "I'd have failed at Z" or "I'd look Q" content sitting inside the worry.
 
-Kegan-canonical commitments are short and punchy. Vol 1 examples average 10-15 words. Your target for the ASSEMBLED sentence: **12-18 words**. Hard ceiling: 20. Non-negotiable.
+2. **Mirror that content into a vow.** If the worry names an identity, vow never to be it. If it names an outcome, vow never to have it happen. Same nouns, same specificity, same relational context.
 
-Per-slot targets:
-- **active_move: 3-8 words.** Terse verb phrase.
-- **protective_purpose: 4-12 words.** Terse purpose clause starting with "so".
+## Worked examples
 
-If your first draft is longer than 18 words, cut. Symptoms of over-writing you must strip out before returning:
-- **"Fully" as a modifier** — "so I never have to FULLY face…" — cut it. "so I never have to face…" is stronger. "Fully" is a filler tic.
-- **Double-"so" chains** — "so I don't have to hear X so I never have to face Y" — pick ONE. The commitment names ONE self-protection, not a cascade.
-- **Over-contextualization in active_move** — "keeping her past mistakes available WHEN SHE CRITICIZES ME" cuts to "keeping her past mistakes available". "Staying in the situation BUT SLIPPING IN SMALL CLARIFICATIONS ABOUT WHAT REALLY HAPPENED" cuts to "staying but relitigating". Kill the qualifiers.
-- **"When" / "if" / "while" clauses in active_move** — the mechanism is a standing move a part of him does, not a conditional. Cut the timing clause.
+Worry: "I worry that I don't have the proper answer and look incompetent in front of my team."
+vow: "looking incompetent in front of my team"
+Assembled: "I'm also committed to never looking incompetent in front of my team."
 
-## Anchor to the behavior (Kegan Vol 1 p 4 — non-negotiable)
+Worry: "I fear being the guy who is defensive or difficult to work with."
+vow: "being the guy who is defensive or difficult to work with"
+Assembled: "I'm also committed to never being the guy who is defensive or difficult to work with."
 
-**The active_move IS the Column 2 behavior, phrased as an active protective vow.** Vol 1 p 4: "how if he protected himself that way, he would behave as he named in Column 2." Column 4 makes Column 2 visible as a chosen self-protection. Do NOT invent a different mechanism the behavior doesn't already contain.
+Worry: "I worry that if I stop scripting the questions, they walk away without help and I've failed my family as the provider."
+vow: "failing my family as the provider"
+Assembled: "I'm also committed to never failing my family as the provider."
 
-Concretely: your active_move MUST reference the same core act as the behavior text. If the behavior says "bringing up her past", the mechanism is bringing up / throwing back / keeping her past in play — not "speaking first" (a different, adjacent-but-different move). If the behavior says "walking out", the mechanism is walking out / leaving / checking out — not "staying quiet" (opposite of the behavior).
+Worry: "I worry that if I stay quiet and let her finish, she'd know I've been the husband who can't let things go."
+vow: "being the husband who can't let things go"
+Assembled: "I'm also committed to never being the husband who can't let things go."
 
-The through-line check: strip stopwords from the behavior and from your active_move. At least one content word (or verb-tense variation) must overlap. "walking out" / "walking out mid-conversation" overlaps ("walking"). "bringing up her past" / "keeping her mistakes in play" doesn't overlap by word but does semantically — prefer the direct-word version.
+## Length target
 
-## Two-step derivation (mandatory — run this silently for every draft)
+Target for the assembled sentence: 10-20 words. Cap: 22. If the paired worry's identity content runs longer, keep the specificity — don't crop nouns just to hit the target.
 
-1. **Name the CONFRONTATION.** Read the paired worry. What is the specific ACT — the thing he'd have to DO — that would produce the fear the worry names? Not the fear itself. The ACT that would produce it. The confrontation is the OPPOSITE of the Column 2 behavior.
-   - Behavior: "I bring up things she did in the past instead of listening to her"
-   - Worry: "I worry that if I listen to her without bringing up her past, she'd see I've been the husband who can't let things go."
-   - Confrontation: LISTENING WITHOUT BRINGING UP HER PAST.
-   - Correct active_move: "keeping her old mistakes on the table" (mechanism = the behavior itself). WRONG: "speaking first" (unrelated adjacent mechanism).
-   - Behavior: "I stop talking and walk out of the room"
-   - Worry: "I worry that if I stayed and listened, she'd see me as weak and unable to handle her."
-   - Confrontation: STAYING AND LISTENING.
-   - Correct active_move: "walking out before she finishes" (mechanism = the behavior itself). WRONG: "staying quiet" (opposite of the behavior).
+## Preserve his nouns — do NOT swap in generics
 
-2. **Fill active_move with the specific protective move that prevents that confrontation.** Verb-forward (keeping, staying, explaining, making sure, over-preparing, deflecting, disqualifying), first-person present participle, observable — a friend watching him could spot it in the moment. Terse.
-   - Confrontation: LISTENING WITHOUT SCOREKEEPING → active_move: "keeping her past mistakes available" *(4 words)*
-   - Confrontation: STAYING AND LISTENING WITHOUT DEFENDING → active_move: "staying in the room but relitigating" *(6 words)*
+- Worry says "my team" → vow says "my team." Never "the people I work with," never "colleagues."
+- Worry says "she" / "my wife" → vow keeps that noun. Never "my partner," never "my family."
+- Worry says "my kid" (singular) → vow keeps "my kid." Never "my kids."
+- Worry says "my customers" → vow says "my customers."
 
-3. **Fill protective_purpose with the SELF-protection this mechanism gives him.** Starts with "so". Names what a part of HIM is being protected from having to face about HIMSELF. Terse.
+The pronoun / relational noun rule from the voice rules applies here doubly: every noun in your vow must come from the paired worry (or the goal/behavior context). Never introduce nouns the coachee didn't already use.
 
-## Calibration pairs (this is the bar — match this length AND quality)
+## Banned in vow
 
-Blue-collar plain. Every RIGHT example uses concrete verbs a working man would actually say. NO metaphorical mechanisms ("keeping X loaded", "keeping X available", "one foot out the door"), NO "on the table" / "the door" abstractions, NO "so I never have to be the man who X" (that's the noble-avoidance frame in disguise), NO metaphorical "land" ("hear the lie land"). Those all fail the voice-rules "concrete over abstract" check.
+- Positive aspirations ("being the best husband I can be", "being a great leader"). Those are Column 1 goals, not competing commitments. Competing commitments are about what he vows NEVER to be or have happen.
+- Generic values with no specificity ("failing", "being a bad person"). If the vow could belong to any map, it's too generic — pull in the specific role/outcome the paired worry names.
+- Interior-witness verbs ("having to face myself", "having to see who I am"). The vow names the outward identity/outcome, not an interior reckoning.
+- The word "never" at the start of the slot (the server writes "never" as part of the prefix — writing it here produces "never never").
 
-**Pair 1** (Kegan/Lahey canonical shape):
-  Worry: "I worry that if I stop bringing up her past mistakes, she'd know I've been the one who's the problem in this marriage."
-  WRONG (noble — reads as wedding vow, mechanism hidden):
-    "I'm also committed to never being the one who's the problem in this marriage."
-  WRONG (abstract mechanism metaphor — banned by voice rules):
-    active_move: "keeping her past mistakes available"
-    protective_purpose: "so mine are never the only thing on the table"
-  RIGHT (concrete verbal act, plain purpose):
-    active_move: "throwing her past back at her"
-    protective_purpose: "so mine doesn't have to come up"
-  Assembled (15 words): "I'm also committed to throwing her past back at her so mine doesn't have to come up."
+## Silent checklist
 
-**Pair 2** (same behavior family, different worry):
-  Worry: "I worry that if I stay in the room and hear her out, she'd know I've been running whenever it matters."
-  WRONG (still noble — names what he doesn't want to BE):
-    "I'm also committed to never having to see I'm the man who abandons her when she needs me most."
-  WRONG (abstract mechanism metaphor — banned):
-    active_move: "keeping one foot out the door"
-    protective_purpose: "so I never have to be needed and stay"
-  RIGHT (concrete physical act, plain purpose):
-    active_move: "walking out mid-conversation"
-    protective_purpose: "so she stops expecting me to be there"
-  Assembled (14 words): "I'm also committed to walking out mid-conversation so she stops expecting me to be there."
+  A. Read the paired worry. What identity/outcome does it fear?
+  B. Fill vow with that identity/outcome, mirroring the worry's nouns.
+  C. Length target met? Nouns from the worry preserved? No positive aspiration, no interior-witness verb?
 
-**Pair 3** (short and punchy — canonical length):
-  Worry: "I worry that if I admit I'm wrong, she'd see I've been the man who lies to protect himself."
-  WRONG (metaphorical "land" — banned):
-    active_move: "slipping in small clarifications"
-    protective_purpose: "so I never have to hear the lie land"
-  RIGHT (concrete verbal act, plain consequence):
-    active_move: "adding little corrections to my story"
-    protective_purpose: "so she can't call me out on the big one"
-  Assembled (17 words): "I'm also committed to adding little corrections to my story so she can't call me out on the big one."
-
-Notice: every RIGHT active_move names a specific act a bystander could witness (throwing, walking out, adding corrections). Every RIGHT protective_purpose names a plain consequence in the world (mine doesn't come up, she stops expecting me, she can't call me out) — not an interior self-witnessing ("so I never have to face X"). None use "fully", "actually", metaphors, or "so I never have to be the man who".
-
-## Three checks — run silently before returning
-
-1. **Length check.** Assembled sentence under 20 words? If not, cut the qualifiers, kill "fully", collapse double-"so" chains.
-
-2. **Wince test.** Read the assembled sentence in your head. Would it appear on a LinkedIn post, in a wedding speech, or on a good-partner blog? If yes, it's noble. Rewrite. A stranger reading a non-noble commitment thinks "that's a weird thing to admit," not "that's good advice."
-
-3. **Verb-vs-noun rule.** Is active_move VERB-forward (keeping, staying, explaining, making sure, pre-empting, deflecting, over-preparing, disqualifying) or NOUN-forward (being, becoming, staying-as, remaining)? Non-noble is verb-forward. Rewrite noun-forward.
-
-4. **Protecting HIM vs. protecting HER.** Read protective_purpose. Does it name what a part of HIM is protected from feeling/facing? Or does it read as restraint on her behalf ("so I don't hurt her," "so I don't burden her")? If it reads as protecting HER, rewrite so the frame flips to self-preservation. Same act, different frame. (Guides also recognize loyalty/dishonor as valid self-protection — "not wanting to be like her father," "disappointing my family" — those count when framed as identity, not as protecting the other person.)
-
-## Banned frames
-
-In active_move (identity-aversion, no mechanism):
-  - "never being [X]" / "never becoming [Y]" — noun-forward, hides mechanism
-  - "never having to see [Z]" / "never having to admit [Z]" — avoidance frame, no active move
-  - "not being the [X] who [Y]" — same failure
-  - "avoiding [X]" / "not doing [Y]" — names omission, not the active move
-  - "letting her [X]" — describes what he lets happen to her, not what he does
-
-In active_move (abstract mechanism metaphors — banned by voice rules):
-  - "keeping [X] loaded" / "keeping [X] available" / "keeping [X] ready" — the mechanism must be an actual verbal or physical act, not a metaphorical "loaded gun" stance
-  - "keeping one foot out the door" — abstract, banned
-  - "on the table" / "off the table" — banned metaphor
-  - "before she can land it" / "before it lands" — "land" as metaphor is banned
-
-In protective_purpose (interior-witness verbs — banned by voice rules):
-  - "so I never have to face [X]" / "so I never have to see [Y]" / "so I don't have to admit [Z]" — the whole point is externalized consequence, not internal self-witnessing
-  - "so I never have to be the man who [X]" — this is the noble-avoidance frame in disguise; name what would HAPPEN if the protection failed (something a bystander could witness), not what he'd internally recognize about himself
-  - Preferred plain replacements: "so she doesn't get to say I picked myself over her" / "so she stops thinking I show up" / "so mine doesn't have to come up" / "so she can't call me out"
-
-In protective_purpose (protecting HER, not HIM):
-  - "so I don't hurt her" / "so I don't burden her" / "so I don't make things worse"
-  - "so she doesn't get upset" / "so she stays"
-  - "so we don't fall apart"
-
-In protective_purpose (verbosity tics):
-  - "so I never have to FULLY face…" — cut "fully" (banned everywhere)
-  - "so I don't have to X so I never have to Y" — pick ONE "so" clause
-  - "actually" as filler — banned everywhere
-
-If any of these show up in your first draft, run the derivation again before returning.
-
-## Preserve the coachee's own specificity — copy his nouns
-
-You are naming HIS mechanism in HIS words.
-  - If his worry says "her past", the commitment says "her past" (not "old grievances", "history", "what happened before").
-  - If his worry says "she" / "my wife", the commitment stays with the same noun (not "my partner", "the people I love", "my family").
-  - If his worry names a specific act ("scripting the questions", "bringing up her past mistakes", "shutting down"), the commitment stays inside that act's shape.
-
-## Silent derivation checklist
-
-  A. Read the paired worry. What is the CONFRONTATION — the specific ACT that would produce the fear?
-  B. What move does a part of him do to prevent that confrontation? Fill active_move (verb-forward, 3-8 words).
-  C. What self-truth does this move keep him from having to face? Fill protective_purpose (starts with "so", 4-12 words).
-  D. Run length + wince + verb-vs-noun + protecting-HIM checks. If any fail, rewrite before returning.
-
-Return only the structured slots ({ active_move: "...", protective_purpose: "..." }). No prose, no explanation, no meta.
+Return only the structured slot ({ vow: "..." }). No prose, no explanation, no meta.
 `.trim();
 
-/** Hard ceiling on assembled commitment length. Overshoots are
- *  mechanically trimmed server-side (see trimAssembledDraft) rather
- *  than silently dropped. */
-const COMMITMENT_HARD_WORD_CAP = 20;
+/** Hard ceiling on assembled commitment length. Introductory-form
+ *  commitments can run longer than the mechanism form did because
+ *  the vow may need to carry a full role phrase from the worry
+ *  ("being the guy who is defensive or difficult to work with").
+ *  Overshoots are mechanically trimmed server-side (see
+ *  trimAssembledDraft) rather than silently dropped. */
+const COMMITMENT_HARD_WORD_CAP = 24;
 
 /**
  * Server-side coach-draft generator for Column 4. Called once per
  * worry when the coachee advances into the commitments stage.
  *
- * Verification pipeline (same shape as draftWorryForBehavior):
+ * Uses the introductory form (Kegan Vol 1 pp 26-27): the paired
+ * worry's identity/outcome content is mirrored into an "I'm also
+ * committed to never..." vow. The mechanism form (Vol 2, "keeping
+ * X on the table so mine doesn't come up") was more excavation
+ * work than a self-service tool could sustain — the noble first
+ * pass got rejected by the reaction coach and coachees never got
+ * a legible draft.
  *
- *   1. Drafter (mainModel) fills active_move + protective_purpose.
- *   2. Depth rubric (utilityModel, scoreCommitmentDepth) scores 0-3 —
- *      catches noble commitments and non-self-protective phrasings.
- *   3. Consistency check (deterministic pattern match,
- *      checkCommitmentLogicalConsistency) blacklists banned patterns:
- *      abstract mechanism metaphors in active_move ("keeping X loaded"),
- *      interior-witness verbs in protective_purpose ("have to face"),
- *      noble-avoidance ("so I never have to be the [X]"). Zero LLM
- *      cost, no judgment.
- *   4. If either check fails, one drafter retry fires with the failing
- *      reason(s) as feedback. Whatever comes back is returned — never
- *      silent-drop.
+ * Verification: depth rubric only (single LLM check, no through-line
+ * or consistency check). The introductory form is a text
+ * transformation of the worry; there's no adjacent-mechanism drift
+ * to guard against. Depth rubric verifies the vow mirrors the
+ * worry's identity content and isn't a generic positive aspiration.
+ * If it fails, one retry with the rubric feedback. Never silent-drop.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -1444,13 +1328,10 @@ export async function draftCommitmentForWorry(input: {
     `Behavior (Column 2): ${input.behaviorText}`,
     `Paired worry (Column 3): ${input.worryText}`,
     ``,
-    `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
+    `Fill vow with the identity/outcome the paired worry fears, mirrored into never-form. Preserve the coachee's nouns. Target 10-20 words assembled.`,
   ];
 
-  type DraftShape = {
-    assembled: string;
-    slots: { active_move: string; protective_purpose: string };
-  };
+  type DraftShape = { assembled: string; slots: { vow: string } };
 
   async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
     const { object } = await generateObject({
@@ -1472,8 +1353,8 @@ export async function draftCommitmentForWorry(input: {
     const first = await generateDraft(basePromptLines);
     if (!first) return null;
 
-    // Depth (LLM rubric, may fail) + consistency (deterministic, cannot
-    // fail). Depth fail-opens on rubric error.
+    // Depth rubric only. Fail-open on rubric error — a transient Haiku
+    // hiccup shouldn't strand the drafter.
     const depthResult = await scoreCommitmentDepth({
       goalText: input.goalText,
       worryText: input.worryText,
@@ -1485,33 +1366,17 @@ export async function draftCommitmentForWorry(input: {
       );
       return null;
     });
-    const consistencyResult = checkCommitmentLogicalConsistency({
-      activeMove: first.slots.active_move,
-      protectivePurpose: first.slots.protective_purpose,
-      behaviorText: input.behaviorText,
-    });
 
-    const depthOk = depthResult === null || depthResult.score >= 3;
-    const consistencyOk = consistencyResult.consistent;
-    if (depthOk && consistencyOk) return first.assembled;
+    if (depthResult === null || depthResult.score >= 3) return first.assembled;
 
-    const feedbackLines: string[] = [];
-    if (!depthOk && depthResult) {
-      feedbackLines.push(
-        `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
-      );
-    }
-    if (!consistencyOk) {
-      feedbackLines.push(
-        `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
-      );
-    }
+    // One retry with the rubric feedback. Returning `first` on retry
+    // failure preserves the "never silent drop" invariant.
     const retry = await generateDraft([
       ...basePromptLines,
       ``,
       `Your previous draft was: "${first.assembled}"`,
-      ...feedbackLines,
-      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target (under 20 words).`,
+      `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
+      `Rewrite the vow so it passes. Preserve intent; fix the flaw named.`,
     ]);
     return retry?.assembled ?? first.assembled;
   } catch (err) {
@@ -2201,12 +2066,36 @@ export type TestType =
   | "behavioral";
 
 /**
- * Draft a single test of a given type. Variation between drafts is
- * handled server-side by picking a different `testType` on each call
- * (see ANOTHER_ROTATION / SAFER_LADDER in actions.ts). This helper
- * has ONE job: write a well-formed test of the specified type. No
- * "produce something different" instructions to be ignored.
+ * Draft a single test of a given type, self-verified against SMART.
+ *
+ * Two-phase pipeline (matches the shape of `reviseTestFromCoach`'s
+ * loop in actions.ts, which already ran for the client-clicked
+ * "Have the coach revise this" path):
+ *
+ *   1. Initial draft (mainModel + TEST_DESIGN_STAGE).
+ *   2. `reviewTestDesign` scores the draft against the five SMART
+ *      criteria + might-it-re-true check.
+ *   3. If verdict === "ready" (or review LLM failed) → return draft.
+ *   4. Otherwise fire `reviseTestFromReview` with the failing SMART
+ *      feedback + re-review. Cap: DRAFT_VERIFY_MAX_ATTEMPTS revise
+ *      cycles. Return the final revision.
+ *
+ * Why: the initial draft was passing schema validation but sometimes
+ * failing Modest (bundling multiple triggers/behaviors) or Counters
+ * (drifting to a variant the coachee already does). Coachees hit Run
+ * the Test, saw "needs_work", and had to click Revise anyway. Running
+ * the same loop on the pre-draft server-side gives them a Modest-clean
+ * first draft by construction. Cost: +1 review call always, +1-2
+ * revise+review cycles when the first draft fails. Absorbed by the
+ * spinner on advance to test_design.
+ *
+ * Variation between drafts (initial vs "another draft" vs "safer") is
+ * still handled server-side via `testType` picked by the caller
+ * (ANOTHER_ROTATION / SAFER_LADDER in actions.ts). This helper never
+ * self-decides variation.
  */
+const DRAFT_VERIFY_MAX_ATTEMPTS = 2;
+
 export async function draftTestForAssumption(input: {
   goalText: string;
   assumptionText: string;
@@ -2269,7 +2158,7 @@ export async function draftTestForAssumption(input: {
       ].join("\n"),
       maxOutputTokens: 1200,
     });
-    return {
+    let currentDraft = {
       // If the caller pinned a testType, honor it; otherwise use LLM's choice.
       testType: input.testType ?? object.test_type,
       assumptionSays: scrubReply(object.assumption_says),
@@ -2278,6 +2167,57 @@ export async function draftTestForAssumption(input: {
       inOrderToFindOut: scrubReply(object.in_order_to_find_out),
       targetDate: object.target_date,
     };
+
+    // Self-verify loop. Fires reviewTestDesign; if verdict !== ready,
+    // reviseTestFromReview + re-review, capped at DRAFT_VERIFY_MAX_ATTEMPTS.
+    // Fail-open on review LLM error — the initial draft is still
+    // valid metadata to seed the coachee's form.
+    let review = await reviewTestDesign({
+      goalText: input.goalText,
+      assumptionText: input.assumptionText,
+      test: currentDraft,
+    });
+    let verifyAttempts = 0;
+    while (
+      review !== null &&
+      review.verdict !== "ready" &&
+      verifyAttempts < DRAFT_VERIFY_MAX_ATTEMPTS
+    ) {
+      verifyAttempts += 1;
+      const revised = await reviseTestFromReview({
+        goalText: input.goalText,
+        assumptionText: input.assumptionText,
+        underwrittenCommitments: input.underwrittenCommitments,
+        todayIso: input.todayIso,
+        currentTest: currentDraft,
+        review,
+      });
+      if ("error" in revised) {
+        // Revise errored — keep the last valid draft. Coachee sees the
+        // pre-draft anyway, hits Run the Test, gets the client-side
+        // revise path if needed.
+        console.warn(
+          "[itc coach] draftTestForAssumption verify-loop revise failed on attempt %d: %s",
+          verifyAttempts,
+          revised.error,
+        );
+        break;
+      }
+      currentDraft = revised;
+      const next = await reviewTestDesign({
+        goalText: input.goalText,
+        assumptionText: input.assumptionText,
+        test: currentDraft,
+      });
+      if (next === null) break; // review LLM failed on the revision; return what we have
+      review = next;
+    }
+    console.warn(
+      "[itc timing] draft-verify attempts=%d final_verdict=%s",
+      verifyAttempts,
+      review?.verdict ?? "review_failed",
+    );
+    return currentDraft;
   } catch (err) {
     console.warn(
       "[itc coach] draftTestForAssumption failed: %s",

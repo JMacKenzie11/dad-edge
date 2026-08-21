@@ -34,7 +34,6 @@ import {
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
 import {
   checkAssumptionLogicalConsistency,
-  checkCommitmentLogicalConsistency,
   checkWorryLogicalConsistency,
 } from "@/lib/itc/rubric";
 import {
@@ -258,48 +257,61 @@ describe("assembleAssumption (structured slots → canonical sentence)", () => {
   });
 });
 
-describe("assembleCommitment (structured slot → canonical sentence)", () => {
-  it("assembles 'I'm committed to never <slot>.'", () => {
+describe("assembleCommitment (single slot → introductory-form sentence)", () => {
+  // Kegan Vol 1 pp 26-27 introductory form:
+  //   "I'm also committed to never <vow>."
+  // The vow slot names the identity/outcome the paired worry fears,
+  // mirrored into never-form. Server writes prefix + terminal period.
+
+  it("assembles 'I'm also committed to never <vow>.'", () => {
     expect(
       assembleCommitment({
-        protective_move: "having to see I'm the husband who keeps failing her",
+        vow: "being the guy who is defensive or difficult to work with",
       }),
     ).toBe(
-      "I'm committed to never having to see I'm the husband who keeps failing her.",
+      "I'm also committed to never being the guy who is defensive or difficult to work with.",
+    );
+  });
+
+  it("mirrors the outcome content of a worry cleanly", () => {
+    expect(
+      assembleCommitment({
+        vow: "looking incompetent in front of my team",
+      }),
+    ).toBe(
+      "I'm also committed to never looking incompetent in front of my team.",
     );
   });
 
   it("strips a redundant leading 'never' if the LLM wrote it", () => {
-    // The server writes "never" as part of the prefix. If the LLM
-    // redundantly writes "never" at the start of the slot, we'd get
-    // "I'm committed to never never having to see..." — normalize
-    // by stripping any leading "never ".
+    // Server writes "never" as part of the prefix. LLM slot with
+    // leading "never" would produce "never never" — normalize.
     expect(
       assembleCommitment({
-        protective_move: "never having to see I'm the failing husband",
+        vow: "never being the husband who can't let things go",
       }),
     ).toBe(
-      "I'm committed to never having to see I'm the failing husband.",
+      "I'm also committed to never being the husband who can't let things go.",
     );
   });
 
   it("strips trailing punctuation the LLM might redundantly write", () => {
     expect(
       assembleCommitment({
-        protective_move: "letting her see the parts of me I'd have to disown.",
+        vow: "failing my family as the provider.",
       }),
     ).toBe(
-      "I'm committed to never letting her see the parts of me I'd have to disown.",
+      "I'm also committed to never failing my family as the provider.",
     );
   });
 
   it("lowercases the first char of the slot", () => {
     expect(
       assembleCommitment({
-        protective_move: "Having to find out my effort didn't matter",
+        vow: "Being seen as weak in front of my team",
       }),
     ).toBe(
-      "I'm committed to never having to find out my effort didn't matter.",
+      "I'm also committed to never being seen as weak in front of my team.",
     );
   });
 });
@@ -533,74 +545,14 @@ describe("checkWorryLogicalConsistency (three-layer deterministic worry check)",
   });
 });
 
-describe("checkCommitmentLogicalConsistency (three-layer deterministic commitment check)", () => {
-  // Layer 1: abstract mechanism metaphor blacklist ("keeping X loaded",
-  //          "keeping one foot", "on/off the table", "land it")
-  // Layer 2: interior-witness / noble-avoidance blacklist on purpose
-  // Layer 3: through-line check — active_move must reference the
-  //          Column-2 behavior via content-word overlap (Vol 1 p 4).
-
-  it("layer 1 fails on abstract mechanism metaphor 'keeping X loaded'", () => {
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "keeping her past mistakes loaded",
-      protectivePurpose: "so mine doesn't have to come up",
-      behaviorText: "I bring up things she did in the past",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/mechanism metaphor|loaded/i);
-  });
-
-  it("layer 2 fails on interior-witness verb 'have to face' in purpose", () => {
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "throwing her past back at her",
-      protectivePurpose: "so I never have to face what I've been doing",
-      behaviorText: "I bring up things she did in the past",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/interior|face/i);
-  });
-
-  it("layer 2 fails on noble-avoidance 'never have to be the [X]'", () => {
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "throwing her past back at her",
-      protectivePurpose: "so I never have to be the man who was wrong",
-      behaviorText: "I bring up things she did in the past",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/noble/i);
-  });
-
-  it("layer 3 fails on through-line drift (active_move doesn't reference behavior)", () => {
-    // Behavior is "bringing up her past"; active_move "speaking
-    // first" has zero content-word overlap. Kegan Vol 1 p 4: the
-    // commitment mechanism IS the behavior made visible.
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "speaking first in every argument",
-      protectivePurpose: "so she can't use my silence against me",
-      behaviorText: "I bring up things she did in the past",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/drifted|Column-2|behavior/i);
-  });
-
-  it("passes when active_move references the behavior (bring/bringing)", () => {
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "bringing up her old stuff",
-      protectivePurpose: "so mine doesn't have to come up",
-      behaviorText: "I bring up things she did in the past",
-    });
-    expect(out.consistent).toBe(true);
-  });
-
-  it("passes with tense-variation overlap (walk / walking)", () => {
-    const out = checkCommitmentLogicalConsistency({
-      activeMove: "walking out mid-conversation",
-      protectivePurpose: "so she can't call me weak to my face",
-      behaviorText: "I stop talking and walk out of the room",
-    });
-    expect(out.consistent).toBe(true);
-  });
-});
+// The old checkCommitmentLogicalConsistency test block was removed
+// with the switch to the introductory commitment form (Kegan Vol 1
+// pp 26-27). The mechanism form's active_move / protective_purpose
+// slots no longer exist. The introductory form is a text
+// transformation of the paired worry — depth rubric alone verifies
+// correctness. If a text-level regression pattern appears (e.g.,
+// positive-aspiration leakage), add a targeted deterministic check
+// with the new vow-slot shape.
 
 describe("checkAssumptionLogicalConsistency (deterministic whitelist on consequent_identity)", () => {
   // Replaces an earlier LLM verifier that made judgment calls on
