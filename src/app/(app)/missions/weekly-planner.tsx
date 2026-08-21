@@ -38,10 +38,10 @@ export function WeeklyPlanner({
       return {
         key: `goal-${g.id}`,
         label: `GOAL ${i + 1} · ${p.label.toUpperCase()}`,
-        subtitle: g.description,
+        subtitle: g.desired_end_state,
         pillarCode: g.focus_area,
         goalId: g.id,
-        goalDescription: g.description,
+        goalDescription: g.desired_end_state,
         accentColor: p.colorVar,
       };
     }),

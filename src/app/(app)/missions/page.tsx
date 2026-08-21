@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { localMonday, localDate, weekDates } from "@/lib/scoring/week";
+import { getCurrentQuarter } from "@/lib/scoring/quarters";
+import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { WeeklyPlanner } from "./weekly-planner";
 import type { PillarCode } from "@/lib/pillars";
 import { format, addDays } from "date-fns";
@@ -20,7 +22,7 @@ export type WeekMission = {
 
 export type ActiveGoal = {
   id: string;
-  description: string;
+  desired_end_state: string;
   focus_area: PillarCode;
   quarter_start: string;
 };
@@ -51,19 +53,15 @@ export default async function MissionsPage() {
   const nextWeek = weekDates(nextMonday);
   const rangeEnd = isSunday ? nextWeek[6] : weekEnd;
 
-  const now = new Date();
-  const qStart = format(
-    new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1),
-    "yyyy-MM-dd",
-  );
+  const q = getCurrentQuarter();
 
   const [{ data: goals }, { data: missions }] = await Promise.all([
     supabase
       .from("quarterly_goals")
-      .select("id, description, focus_area, quarter_start")
+      .select("id, desired_end_state, focus_area, quarter_start")
       .eq("user_id", user.id)
       .eq("status", "active")
-      .eq("quarter_start", qStart)
+      .eq("quarter_start", q.startIso)
       .order("created_at"),
     supabase
       .from("missions")
@@ -82,25 +80,18 @@ export default async function MissionsPage() {
   const thisWeekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
   const nextWeekMissions = allMissions.filter((m) => m.target_date >= nextMonday);
 
-  // Quarter deadline for the header.
-  const qEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0);
-  const daysToQEnd = Math.max(
-    0,
-    Math.ceil((qEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-  );
-
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <header className="flex items-baseline justify-between flex-wrap gap-3">
         <div>
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-            WEEK OF {format(new Date(`${monday}T00:00:00`), "MMM d")} · Q{Math.floor(now.getMonth() / 3) + 1}
+            WEEK OF {format(new Date(`${monday}T00:00:00`), "MMM d")} · {q.label}
           </p>
           <h1 className="font-heading text-3xl">Missions</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            5 per goal, 5 unattached — max 15 per week. Quarter ends in {daysToQEnd} day
-            {daysToQEnd === 1 ? "" : "s"}.
+            5 per goal, 5 unattached, max 15 per week.
           </p>
+          <QuarterCountdown className="text-sm text-[color:var(--color-text-muted)] mt-1" />
         </div>
         <Link
           href="/goals"

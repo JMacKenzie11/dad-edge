@@ -1,5 +1,6 @@
 import type { PillarCode } from "@/lib/pillars";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { ensureUserForItcParticipant } from "./auth-bridge";
 
 /**
@@ -26,14 +27,11 @@ import { ensureUserForItcParticipant } from "./auth-bridge";
 //
 
 /** ISO YYYY-MM-DD of the first day of the calendar quarter containing
- *  today (in the server's UTC clock). Quarters are Jan / Apr / Jul /
- *  Oct. Not user-timezone-aware — the tracker's quarter is a global
- *  bucket, not a per-user boundary. */
+ *  the given instant. Thin shim over the shared getCurrentQuarter
+ *  helper in `src/lib/scoring/quarters.ts` — kept as an alias for
+ *  ITC-side callers that still reference this name. */
 export function currentQuarterStart(now: Date = new Date()): string {
-  const y = now.getUTCFullYear();
-  const q = Math.floor(now.getUTCMonth() / 3); // 0..3
-  const month = q * 3 + 1; // 1, 4, 7, 10
-  return `${y}-${String(month).padStart(2, "0")}-01`;
+  return getCurrentQuarter(now).startIso;
 }
 
 /** First active community the user belongs to, if any. Used for
@@ -109,10 +107,10 @@ export async function syncItcGoalToTracker(input: {
   }
 
   if (map.quarterly_goal_id) {
-    // Edit path: update the linked quarterly_goal's description in place.
+    // Edit path: update the linked quarterly_goal's text in place.
     const { error: updateErr } = await supabase
       .from("quarterly_goals")
-      .update({ description: input.goalText })
+      .update({ desired_end_state: input.goalText })
       .eq("id", map.quarterly_goal_id);
     if (updateErr) {
       console.warn(
@@ -127,6 +125,9 @@ export async function syncItcGoalToTracker(input: {
   // source='itc' claims the third slot the split-cap trigger reserves
   // for ITC-mirrored goals; source='user' claim would fight the trigger
   // when a coachee already has 2 user-authored goals.
+  // The ITC goal text ("I'm committed to getting better at ...") lands
+  // in desired_end_state; ITC goals don't have a start line / signal
+  // (the ITC map machinery is the accountability layer).
   const quarterStart = currentQuarterStart();
   const { data: created, error: insertErr } = await supabase
     .from("quarterly_goals")
@@ -134,7 +135,7 @@ export async function syncItcGoalToTracker(input: {
       user_id: userId,
       quarter_start: quarterStart,
       focus_area: input.pillarCode,
-      description: input.goalText,
+      desired_end_state: input.goalText,
       status: "active",
       source: "itc",
     })

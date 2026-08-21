@@ -162,14 +162,18 @@ export async function saveFirstGoal(formData: FormData) {
   });
   if (!parsed.success) redirect("/onboarding/goal?error=Pick+pillar+and+write+the+goal.");
   const supabase = await createSupabaseServerClient();
-  const y = new Date().getFullYear();
-  const q = Math.floor(new Date().getMonth() / 3);
-  const quarter_start = `${y}-${String(q * 3 + 1).padStart(2, "0")}-01`;
+  const { getCurrentQuarter } = await import("@/lib/scoring/quarters");
+  const q = getCurrentQuarter();
+  // Onboarding stays lean (one input field) to keep the funnel short.
+  // The single input maps to desired_end_state; the coachee can fill
+  // in current_state + how_youll_know from /goals when they land
+  // there post-onboarding.
   await supabase.from("quarterly_goals").insert({
     user_id: user.id,
     focus_area: parsed.data.focus_area,
-    description: parsed.data.description.trim(),
-    quarter_start,
+    desired_end_state: parsed.data.description.trim(),
+    quarter_start: q.startIso,
+    source: "user",
   });
   await bumpStep(5);
   redirect("/onboarding/mission");

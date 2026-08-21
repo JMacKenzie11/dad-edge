@@ -69,7 +69,7 @@ export async function buildUserContext(user: SessionUser): Promise<string> {
       .order("target_date", { ascending: true }),
     svc
       .from("quarterly_goals")
-      .select("focus_area, description, quarter_start, status")
+      .select("focus_area, desired_end_state, quarter_start, status")
       .eq("user_id", user.id)
       .eq("status", "active")
       .order("quarter_start", { ascending: false }),
@@ -258,13 +258,13 @@ export async function buildUserContext(user: SessionUser): Promise<string> {
 
   const goalLines = ((goals ?? []) as {
     focus_area: PillarCode;
-    description: string;
+    desired_end_state: string;
     quarter_start: string;
   }[])
     .slice(0, 4)
     .map(
       (g) =>
-        `  - ${PILLAR_BY_CODE[g.focus_area].label}: ${g.description} (Q starting ${g.quarter_start})`,
+        `  - ${PILLAR_BY_CODE[g.focus_area].label}: ${g.desired_end_state} (Q starting ${g.quarter_start})`,
     )
     .join("\n") || "  (none active)";
 
