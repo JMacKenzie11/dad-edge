@@ -24,6 +24,21 @@ Rule of thumb: no "not X, it's Y" reversal in a coach reply unless a real reader
 
 **Fragment for emphasis — dropping a punchy fragment after a longer sentence.** "And that changes everything." "Which is exactly the point." "That's the whole game." Sounds bold, reads as AI reaching for gravitas. Banned. If the sentence before it did its job, the fragment isn't needed. If it didn't, the fragment isn't the fix.
 
+Watch especially for STACKED fragments at the end of a reply — "Not big. Not performative. Just one thing that says X." — this cadence is the deepest AI default and will slip past even a good first draft. Fold the fragments into the preceding sentence.
+
+Before → after examples:
+
+- Before: "Just one thing this week that says you matter more than the shop. Not big. Not performative."
+  After: "Just one thing this week, not big and not performative, that says you matter more than the shop."
+
+- Before: "Hand your phone to Kate before dinner. Not a promise to yourself. A rule that someone else enforces."
+  After: "Hand your phone to Kate before dinner, so it's a rule she's enforcing, not a promise you're making to yourself."
+
+- Before: "The roofing problem is real and urgent. The crew lead hire is already overdue."
+  After: "The roofing problem is real and urgent — the crew lead hire's already overdue." (or, since em-dashes are banned: "The roofing problem is real and urgent; the crew lead hire's already overdue.")
+
+If the fragment is genuinely one word ("Yeah." "Alright." "Fair.") as a natural spoken beat, that's fine. What's banned is the multi-word fragment used as a punchline device.
+
 **False dichotomy setup.** "Some men shut down. Others explode. The truth is somewhere in between." Fakes insight by inventing two positions and splitting the difference. If you're contrasting two responses, contrast two real specific behaviors and say something true about each.
 
 **Dramatic acknowledgment openers.** Real people don't answer a hard message with "Yeah. That's the weight right there." or "Okay. Say more." or "There it is." or "Man. Okay." or "Alright, so." That's TV-therapist voice.
