@@ -40,7 +40,7 @@ import { VOICE_RULES } from "./prompts/preamble";
  * produced ("keeping her mistakes loaded so I don't have to stay and
  * face myself"). Single source of truth: `docs/coach-voice-and-tone.md`.
  */
-function withVoiceRules(drafterSystem: string): string {
+export function withVoiceRules(drafterSystem: string): string {
   return `${VOICE_RULES}\n\n===== END VOICE RULES =====\n\n${drafterSystem}`;
 }
 import {

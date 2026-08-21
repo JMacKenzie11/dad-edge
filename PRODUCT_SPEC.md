@@ -488,10 +488,27 @@ All coach LLM calls live in `src/lib/itc/coach.ts`. Each returns either a struct
 - `generateSuggestions` — "Give me ideas" trigger. Returns 4-5 grounded options for the current column.
 
 **Structured drafters (server-assembled content):**
-- `draftCommitmentForWorry` — writes a competing commitment from a worry + behavior. Returns semantic slots; server template assembles the final sentence with the canonical stem.
-- `draftAssumptionsFromCommitments` — returns 2-6 assumption drafts as slots (antecedent + consequent). Server assembles each with `I assume that if I …, then …` structure. Hard 20-word cap enforced schema-side + post-processing filter.
+- `draftWorryForBehavior` — writes a worry from a behavior + goal + pillar. Returns two slots (`opposite_move` + `identity_landing`); server template assembles the canonical `"I worry that if I …, ."` sentence. See "Drafter verification pipeline" below for the three-layer consistency check + rubric self-scoring + retry loop.
+- `draftCommitmentForWorry` — writes a competing commitment from a worry + behavior. Returns two slots (`active_move` + `protective_purpose`); server template assembles the canonical `"I'm also committed to …"` sentence. Same three-layer consistency check + rubric self-scoring + retry pipeline as the worry drafter.
+- `draftAssumptionsFromCommitments` — batch-drafts 2-6 assumptions as slot sets (antecedent + tell + identity). Server assembles each with `"I assume that if I …, then … and …"` structure. Assembled sentences run through `trimAssembledDraft`, which is guaranteed to return a string (soft 20-word target, never silent-drop). Deterministic consistency check on each draft; if any fail, one batch retry fires with per-draft feedback.
 - `draftTestForAssumption` — pre-drafts a Kegan-voiced test for the selected assumption. Server pins `testType` when the caller specifies it (see server-owned variation below).
 - `reviseTestFromReview` — targeted test revision from a SMART review. Returns full test slots; server ignores `testType` (pinned to what the coachee already has via the dropdown). Backed by a **self-verify loop** in the server action: after each revision, immediately re-run `reviewTestDesign`; if verdict is still `needs_work`, feed the new review back into another revise pass. Cap: 3 total attempts. Returns final draft + its verdict so the client updates both form fields and the SMART card in one round-trip.
+
+**Drafter verification pipeline (`src/lib/itc/rubric.ts`):**
+
+Every worry / commitment / assumption drafter runs its output through a deterministic three-layer consistency check plus (for worry + commitment) a rubric self-score. If any layer fails, one drafter retry fires with the failing layer's `reason` fed back as feedback. Whatever comes back from the retry is returned — never silent-drop, per the "coachee sees SOMETHING they can edit" invariant.
+
+- **`checkWorryLogicalConsistency`** — three layers on the assembled worry:
+  1. Interior-scaffolding blacklist (`I'd have to see/face/feel/know/admit/be/become`, `admit to myself`).
+  2. Past-tense revealer whitelist (`I've been`, `'s been`, `she'd`, `he'd`, `they'd`, `the truth`, `couldn't pretend/hide/deny`, simple-past event verbs like `I chose / lied / walked`).
+  3. Kegan-canonical identity-rung whitelist (role-noun `the husband/man/father who X`, self-label `a fraud / not enough`, seen-as / see-me-as, role-failure verb toward `her/him/them`, self-over-other pattern). Vol 1 pp 13-14, 27.
+- **`checkCommitmentLogicalConsistency`** — three layers on the assembled commitment:
+  1. Abstract mechanism metaphor blacklist on `active_move` (`keeping X loaded`, `keeping one foot`, `on/off the table`, `land it`).
+  2. Interior-witness / noble-avoidance blacklist on `protective_purpose` (`have to face/see/know/feel/admit`, `never have to be the [X]`).
+  3. Through-line check — `active_move` must reference the Column-2 behavior via content-word overlap. Vol 1 p 4: the commitment's mechanism IS the behavior made visible as an active vow.
+- **`checkAssumptionLogicalConsistency`** — deterministic whitelist on `consequent_identity` requiring a past-tense revealer marker (replaced an earlier LLM verifier that made judgment calls on subtle semantic inversion).
+
+All checks are deterministic pattern matching; zero LLM cost per check. Same architectural family as `trimAssembledDraft` — server-owned structure over LLM-obedience prompt rules.
 
 **Set-piece prose (walkthrough / recommendation / summaries):**
 - `generateImmuneSystemWalkthrough` — the top-down three-movement Kegan/Lahey walkthrough of the coachee's own map. Persists as a `stage_note` on the immune_system section, always visible.
@@ -508,6 +525,7 @@ The "Give me another draft" and (currently hidden) "safer version" affordances o
 
 - **`ANOTHER_ROTATION`** — cycles through the four test types (`behavioral → observation → thought_experiment → data_mining → behavioral`). The coachee clicks "Give me another draft"; server picks the next type deterministically; LLM writes a fresh draft of that type.
 - **`SAFER_LADDER`** — steps down the stakes ladder (`behavioral > observation > thought_experiment > data_mining`; `data_mining` maps to null and the button hides). Currently gated behind `SHOW_SAFER_BUTTON=false` — the SMART-driven "Have the coach revise this" path subsumes the safer affordance because the coach revises with actual feedback data rather than guessing.
+- **`WORRY_IDENTITY_SHAPES`** (`src/lib/itc/coach.ts`) — four Kegan-canonical identity-landing shapes (`role_noun → role_failure_verb → seen_as → self_label`) rotated by behavior index in `draftMissingWorriesAfterAdvance`. Guarantees the map's worry set varies across shapes rather than the LLM defaulting to `"she'd see I've been the man who X"` on every behavior. Same architectural rationale as `ANOTHER_ROTATION`: hard-typed constraint from the server beats soft "vary the shape" prompt instruction.
 
 This pattern is why the LLM produces genuinely different drafts each click instead of near-duplicates: the LLM sees a hard type constraint, not a soft "give me something different" instruction.
 
@@ -544,22 +562,27 @@ All tables enforce RLS; server writes go through `createSupabaseServiceClient()`
 
 ### Voice and tone
 
-`docs/coach-voice-and-tone.md` is loaded once at module init (`src/lib/itc/prompts/preamble.ts`) and prepended to every coach turn. Single source of truth for language rules. Highlights:
+`docs/coach-voice-and-tone.md` is loaded once at module init (`src/lib/itc/prompts/preamble.ts`) and prepended to every coach-generated surface. Single source of truth for language rules. The reaction coach + dock chat inherit voice via `buildItcCoachSystemSplit` → `PREAMBLE`. All drafters and stage-specific system prompts (worry, commitment, assumption, immune-system walkthrough, prioritize, test-design, results, done) inherit via `withVoiceRules()` in `src/lib/itc/coach.ts`, which prepends `VOICE_RULES` + delimiter to the drafter/stage body. No coach LLM call bypasses the voice doc.
+
+Highlights:
 
 - **No em dashes** (defensive strip catches misses).
-- **No UI narration** (`paste`, `click`, `tap`, `hit`, `input`, `the card below`, `the button` — banned).
+- **No UI narration** (`paste`, `click`, `tap`, `hit`, `input`, `the card below`, `the button`, `the coach at the bottom-right` — banned).
 - **No praise language** (`brave`, `raw`, `powerful`, `beautifully`, `you did great` — banned).
 - **No therapy-speak** (`hold space`, `notice`, `invitation`, `sit with`, `lean into`, `process this` — banned).
+- **No interior-witness metaphors in map entries** — `face`, `have to face`, `see` (self-truth object), `know` (self-truth object), `feel` / `have to feel`, `look at myself`, `own`, `sit with`, `admit to myself`, `land it` / `let it land` — banned. Names an OBSERVABLE consequence, not an interior reckoning. Concrete replacements table lives in the voice doc.
 - **No product-speak** in coach-facing prose (`shape`, `the format`, `the template`, `the structure` — banned; describe the thing itself).
 - **Column labels by name, not number** (`your Big Assumptions` not `Column 5`; `your Competing Commitments` not `Column 4`).
 - **Assumption, not belief** — Kegan's canonical term is "Big Assumption"; "belief" as a synonym has been retired throughout schema, prompts, and UI. The SMART criterion is `counters_assumption` (renders as "Counters the assumption").
-- Full substitution table for jargon; contractions everywhere; Anglo-Saxon over Latinate; no crutch words (`very`, `really`, `truly`); no AI-signature vocabulary (`delve`, `tapestry`, `resonate`, `elevate`, `leverage`, `robust`, `profound`).
+- Full substitution table for jargon; contractions everywhere; Anglo-Saxon over Latinate; no crutch words (`very`, `really`, `truly`, `actual`, `actually`); no AI-signature vocabulary (`delve`, `tapestry`, `resonate`, `elevate`, `leverage`, `robust`, `profound`).
 
 Adaptation rulings for how the two source guides (`Assets/Voice and Tone/voice-and-style.md`, `Assets/Voice and Tone/writing-craft.md`) apply inside the app live in `docs/app-voice-adaptation.md`.
 
 ### Test harness
 
-`tests/form-first/` runs the current pipeline against the real DB with the real LLM (Anthropic Sonnet). Not persona-based — the earlier record/replay session harness was retired with the tool-call pipeline. Current suite has ~125 tests across regression + integration flows; run via `npm run test:itc`.
+`tests/form-first/` runs the current pipeline against the real DB with the real LLM (Anthropic Sonnet). Not persona-based — the earlier record/replay session harness was retired with the tool-call pipeline. Current suite has ~150 tests across regression + integration flows; run via `npm run test:itc`.
+
+The unit-test file (`tests/form-first/units.test.ts`) is the fast, pure-function safety net — no LLM, no DB. Covers the deterministic pattern-matching helpers that the drafter verification pipeline depends on: `trimAssembledDraft`, `checkWorryLogicalConsistency` (three layers), `checkCommitmentLogicalConsistency` (three layers including the through-line check), `checkAssumptionLogicalConsistency`, `WORRY_IDENTITY_SHAPES` rotation, `withVoiceRules`, `worryPassesDepth`, plus stem/framing helpers. These lock the drafter safety net in place so a future refactor can't silently remove voice enforcement, revert a check layer, or reorder the shape rotation without a test failing.
 
 ---
 

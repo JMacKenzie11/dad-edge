@@ -23,12 +23,20 @@ import {
   scrubReply,
   scrubReplyLight,
   trimAssembledDraft,
+  withVoiceRules,
+  WORRY_IDENTITY_SHAPES,
+  type WorryIdentityShape,
 } from "@/lib/itc/coach";
 import {
   chipTargetForStage,
   type ChipTarget,
 } from "@/lib/itc/chip-target";
 import { hasCompetingGoalFraming, worryPassesDepth } from "@/lib/itc/rules";
+import {
+  checkAssumptionLogicalConsistency,
+  checkCommitmentLogicalConsistency,
+  checkWorryLogicalConsistency,
+} from "@/lib/itc/rubric";
 import {
   ASSUMPTION_STEM,
   ensureStem,
@@ -361,6 +369,281 @@ describe("trimAssembledDraft (the shared drafter overshoot handler)", () => {
     // biome-ignore lint: intentional narrow-to-string
     const _typed: string = out;
     expect(_typed).toBeTypeOf("string");
+  });
+});
+
+describe("withVoiceRules (drafter → voice-doc single source of truth)", () => {
+  // Prior architectural gap: drafters had their own SYSTEM strings that
+  // didn't inherit docs/coach-voice-and-tone.md. Voice drift landed
+  // in drafter output while reaction-coach paths stayed clean.
+  // withVoiceRules is now the single wrapping point ensuring every
+  // drafter + stage-specific system prompt carries the voice doc.
+  // If this silently regresses, voice enforcement disappears from
+  // every drafter + walkthrough + test-design + prioritize + results
+  // + done stage in one shot.
+
+  it("prepends VOICE_RULES with an explicit end-of-rules delimiter", () => {
+    const wrapped = withVoiceRules("DRAFTER_BODY_HERE");
+    expect(wrapped).toContain("===== END VOICE RULES =====");
+    // Voice rules must appear BEFORE the delimiter.
+    const delimIdx = wrapped.indexOf("===== END VOICE RULES =====");
+    expect(delimIdx).toBeGreaterThan(0);
+    // Body must appear AFTER the delimiter.
+    const bodyIdx = wrapped.indexOf("DRAFTER_BODY_HERE");
+    expect(bodyIdx).toBeGreaterThan(delimIdx);
+  });
+
+  it("loads a substantial voice-rules block (not empty, not truncated)", () => {
+    const wrapped = withVoiceRules("body");
+    // Voice doc is ~250 lines; wrapped output should carry the bulk
+    // of it. Guards against a future refactor that accidentally
+    // stubs VOICE_RULES to an empty string.
+    expect(wrapped.length).toBeGreaterThan(1000);
+  });
+
+  it("preserves the drafter body verbatim (no truncation)", () => {
+    const uniqueBody =
+      "UNIQUE_DRAFTER_BODY_MARKER_that_must_appear_verbatim_in_output";
+    const wrapped = withVoiceRules(uniqueBody);
+    expect(wrapped).toContain(uniqueBody);
+  });
+});
+
+describe("WORRY_IDENTITY_SHAPES (server-owned rotation across Kegan-canonical shapes)", () => {
+  // Server rotates one shape per behavior via index modulo, same
+  // architectural pattern as ANOTHER_ROTATION / SAFER_LADDER in
+  // test-design. Any reorder or truncation of this array silently
+  // shifts every worry drafter's shape assignment across the map.
+
+  it("contains exactly four Kegan-canonical shapes", () => {
+    expect(WORRY_IDENTITY_SHAPES.length).toBe(4);
+  });
+
+  it("contains the four shape names in canonical order", () => {
+    // Order matters: behaviors are indexed by sort_order and mapped
+    // to shape via index modulo. Reordering this array changes
+    // which behavior gets which shape.
+    expect(WORRY_IDENTITY_SHAPES).toEqual([
+      "role_noun",
+      "role_failure_verb",
+      "seen_as",
+      "self_label",
+    ]);
+  });
+
+  it("rotates deterministically via index modulo", () => {
+    // Simulates draftMissingWorriesAfterAdvance's rotation logic.
+    // Ensures behavior 5 loops back to role_noun, behavior 6 to
+    // role_failure_verb, etc.
+    const shapeFor = (index: number): WorryIdentityShape =>
+      WORRY_IDENTITY_SHAPES[index % WORRY_IDENTITY_SHAPES.length];
+    expect(shapeFor(0)).toBe("role_noun");
+    expect(shapeFor(1)).toBe("role_failure_verb");
+    expect(shapeFor(2)).toBe("seen_as");
+    expect(shapeFor(3)).toBe("self_label");
+    expect(shapeFor(4)).toBe("role_noun");
+    expect(shapeFor(5)).toBe("role_failure_verb");
+  });
+});
+
+describe("checkWorryLogicalConsistency (three-layer deterministic worry check)", () => {
+  // Layer 1: interior-scaffolding blacklist ("I'd have to see/face/feel/
+  //          know/admit/be/become", "admit to myself")
+  // Layer 2: past-tense revealer whitelist ("I've been", "'s been",
+  //          "she'd", "the truth", etc.)
+  // Layer 3: Kegan-canonical identity-rung whitelist (role-noun,
+  //          self-label, seen-as/see-me-as, role-failure toward
+  //          her/him/them, self-over-other)
+  //
+  // A draft must pass ALL THREE. Feeds into the drafter retry loop
+  // via the "reason" string.
+
+  const baseInput = {
+    behaviorText: "I bring up things she did in the past instead of listening",
+    oppositeMove: "listen to her without bringing up her past",
+  };
+
+  it("layer 1 fails on interior scaffolding 'I'd have to admit'", () => {
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "I'd have to admit I've been running from her",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/interior-witness scaffolding/i);
+  });
+
+  it("layer 1 fails on 'I'd have to be' state-of-being interior verb", () => {
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "I'd have to be the husband who caused this distance",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/interior-witness scaffolding/i);
+  });
+
+  it("layer 2 fails on bare present-tense 'I'm the [X-er]' inversion", () => {
+    // Behavior = bringing up her past; opposite = listening. Bare
+    // "I'm the man who ignores her" reads as if listening creates
+    // the ignorer identity (impossible — listening is the opposite).
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "I'm the man who ignores her",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/revealer marker/i);
+  });
+
+  it("layer 3 fails on strategy-level landing without identity marker", () => {
+    // "Using her mistakes to avoid hearing mine" is a strategy
+    // description, not an identity landing. Passes layer 1 (no
+    // scaffolding) and layer 2 ("I've been"), but layer 3 catches
+    // the missing role-noun / self-label / seen-as / role-failure.
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "I've been using her mistakes to avoid hearing mine",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/strategy|identity/i);
+  });
+
+  it("passes Kegan-canonical role-noun landing (she'd see I've been the husband who X)", () => {
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding:
+        "she'd see I've been the husband who never let a word she said land",
+    });
+    expect(out.consistent).toBe(true);
+  });
+
+  it("passes Kegan-canonical role-failure landing (chose myself over her)", () => {
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "she'd see I've been choosing myself over her all along",
+    });
+    expect(out.consistent).toBe(true);
+  });
+
+  it("passes Kegan-canonical seen-as variant (she'd see me as [X])", () => {
+    // Vol 1 p 13 canonical framing.
+    const out = checkWorryLogicalConsistency({
+      ...baseInput,
+      identityLanding: "she'd see me as the man I always feared I was",
+    });
+    expect(out.consistent).toBe(true);
+  });
+});
+
+describe("checkCommitmentLogicalConsistency (three-layer deterministic commitment check)", () => {
+  // Layer 1: abstract mechanism metaphor blacklist ("keeping X loaded",
+  //          "keeping one foot", "on/off the table", "land it")
+  // Layer 2: interior-witness / noble-avoidance blacklist on purpose
+  // Layer 3: through-line check — active_move must reference the
+  //          Column-2 behavior via content-word overlap (Vol 1 p 4).
+
+  it("layer 1 fails on abstract mechanism metaphor 'keeping X loaded'", () => {
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "keeping her past mistakes loaded",
+      protectivePurpose: "so mine doesn't have to come up",
+      behaviorText: "I bring up things she did in the past",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/mechanism metaphor|loaded/i);
+  });
+
+  it("layer 2 fails on interior-witness verb 'have to face' in purpose", () => {
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "throwing her past back at her",
+      protectivePurpose: "so I never have to face what I've been doing",
+      behaviorText: "I bring up things she did in the past",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/interior|face/i);
+  });
+
+  it("layer 2 fails on noble-avoidance 'never have to be the [X]'", () => {
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "throwing her past back at her",
+      protectivePurpose: "so I never have to be the man who was wrong",
+      behaviorText: "I bring up things she did in the past",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/noble/i);
+  });
+
+  it("layer 3 fails on through-line drift (active_move doesn't reference behavior)", () => {
+    // Behavior is "bringing up her past"; active_move "speaking
+    // first" has zero content-word overlap. Kegan Vol 1 p 4: the
+    // commitment mechanism IS the behavior made visible.
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "speaking first in every argument",
+      protectivePurpose: "so she can't use my silence against me",
+      behaviorText: "I bring up things she did in the past",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/drifted|Column-2|behavior/i);
+  });
+
+  it("passes when active_move references the behavior (bring/bringing)", () => {
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "bringing up her old stuff",
+      protectivePurpose: "so mine doesn't have to come up",
+      behaviorText: "I bring up things she did in the past",
+    });
+    expect(out.consistent).toBe(true);
+  });
+
+  it("passes with tense-variation overlap (walk / walking)", () => {
+    const out = checkCommitmentLogicalConsistency({
+      activeMove: "walking out mid-conversation",
+      protectivePurpose: "so she can't call me weak to my face",
+      behaviorText: "I stop talking and walk out of the room",
+    });
+    expect(out.consistent).toBe(true);
+  });
+});
+
+describe("checkAssumptionLogicalConsistency (deterministic whitelist on consequent_identity)", () => {
+  // Replaces an earlier LLM verifier that made judgment calls on
+  // subtle semantic inversion. Deterministic whitelist catches the
+  // concrete failure mode: bare present-tense "the man who X" in
+  // consequent_identity without a past-tense/witnessed marker.
+
+  const baseInput = {
+    antecedentAct: "stay in the room and hear her out",
+    consequentTell: "she'd tell me the truth",
+  };
+
+  it("fails on bare present-tense noun 'the man who X' with no revealer marker", () => {
+    const out = checkAssumptionLogicalConsistency({
+      ...baseInput,
+      consequentIdentity: "the man who ignores her",
+    });
+    expect(out.consistent).toBe(false);
+    expect(out.reason).toMatch(/revealer/i);
+  });
+
+  it("passes on past-perfect 'the man who's been X' with revealer marker", () => {
+    const out = checkAssumptionLogicalConsistency({
+      ...baseInput,
+      consequentIdentity: "the man who's been running her whole marriage",
+    });
+    expect(out.consistent).toBe(true);
+  });
+
+  it("passes on witnessed-by-other landing (she'd see...)", () => {
+    const out = checkAssumptionLogicalConsistency({
+      ...baseInput,
+      consequentIdentity: "she'd see I've been the husband who never listened",
+    });
+    expect(out.consistent).toBe(true);
+  });
+
+  it("passes on truth-frame landing", () => {
+    const out = checkAssumptionLogicalConsistency({
+      ...baseInput,
+      consequentIdentity: "the truth would come out that I've never been enough",
+    });
+    expect(out.consistent).toBe(true);
   });
 });
 
