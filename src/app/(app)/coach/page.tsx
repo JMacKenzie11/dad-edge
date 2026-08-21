@@ -149,21 +149,28 @@ function Section({
 function AllowanceBanner({
   state,
 }: {
-  state: { used: number; softCap: number; hardCap: number; remaining: number; bucket: "ok" | "warn" | "block" };
+  state: {
+    used: number;
+    softCap: number;
+    noticeThreshold: number;
+    hardCap: number;
+    remaining: number;
+    bucket: "ok" | "notice" | "over" | "block";
+  };
 }) {
-  if (state.bucket === "ok" && state.used < state.softCap * 0.7) return null;
+  if (state.bucket === "ok") return null;
   const color =
     state.bucket === "block"
       ? "var(--color-danger)"
-      : state.bucket === "warn"
+      : state.bucket === "over"
         ? "var(--color-warning)"
         : "var(--color-text-muted)";
   const msg =
     state.bucket === "block"
-      ? `Monthly coach limit reached (${state.used}). Resets on the 1st.`
-      : state.bucket === "warn"
-        ? `${state.used} of ${state.softCap} messages used this month.`
-        : `${state.remaining} messages left this month.`;
+      ? `Coach paused for the month at ${state.used} messages. Resets on the 1st.`
+      : state.bucket === "over"
+        ? `Over your monthly allowance (${state.used} of ${state.softCap}). Coach is still on. Resets on the 1st.`
+        : `${state.used} of ${state.softCap} coach messages used this month.`;
   return (
     <p className="text-xs font-heading tracking-widest" style={{ color }}>
       {msg}

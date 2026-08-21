@@ -125,7 +125,7 @@ export default async function CoachConversationPage({
         mode={c.mode}
         initialTurns={turns}
         readOnly={readOnly}
-        remaining={allowance.remaining}
+        allowance={allowance}
         firstName={user.first_name}
       />
     </div>

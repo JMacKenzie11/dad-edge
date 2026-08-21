@@ -20,13 +20,24 @@ export type UITurn = {
   createdAt: string;
 };
 
+type AllowanceBucket = "ok" | "notice" | "over" | "block";
+
+type Allowance = {
+  used: number;
+  softCap: number;
+  noticeThreshold: number;
+  hardCap: number;
+  remaining: number;
+  bucket: AllowanceBucket;
+};
+
 type SendResponse = {
   conversationId: string;
   userMessageId: string;
   assistantMessageId: string;
   reply: string;
   missionSuggestion: MissionSuggestion | null;
-  allowance: { used: number; softCap: number; hardCap: number; remaining: number; bucket: "ok" | "warn" | "block" };
+  allowance: Allowance;
   crisis: boolean;
 };
 
@@ -35,21 +46,21 @@ export function CoachConversation({
   mode,
   initialTurns,
   readOnly,
-  remaining: initialRemaining,
+  allowance: initialAllowance,
   firstName,
 }: {
   conversationId: string;
   mode: "general" | "mission";
   initialTurns: UITurn[];
   readOnly: boolean;
-  remaining: number;
+  allowance: Allowance;
   firstName: string | null;
 }) {
   const [turns, setTurns] = useState<UITurn[]>(initialTurns);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [remaining, setRemaining] = useState(initialRemaining);
+  const [allowance, setAllowance] = useState<Allowance>(initialAllowance);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,7 +113,7 @@ export function CoachConversation({
           throw new Error(body.error ?? `Coach errored (${res.status})`);
         }
         const body = (await res.json()) as SendResponse;
-        setRemaining(body.allowance.remaining);
+        setAllowance(body.allowance);
         setTurns((prev) => {
           // Replace the optimistic user turn with the real ID, then append assistant.
           const withReal = prev.map((p) =>
@@ -162,14 +173,14 @@ export function CoachConversation({
                 send();
               }
             }}
-            disabled={readOnly || pending || remaining <= 0}
+            disabled={readOnly || pending || allowance.bucket === "block"}
             rows={2}
             maxLength={4000}
             placeholder={
               readOnly
                 ? "Read-only account."
-                : remaining <= 0
-                  ? "Monthly limit reached. Resets on the 1st."
+                : allowance.bucket === "block"
+                  ? "Coach paused for the month. Resets on the 1st."
                   : mode === "mission"
                     ? "Behavior + day. What are we committing to?"
                     : firstName
@@ -180,17 +191,54 @@ export function CoachConversation({
           />
           <button
             type="submit"
-            disabled={readOnly || pending || text.trim().length === 0}
+            disabled={
+              readOnly ||
+              pending ||
+              text.trim().length === 0 ||
+              allowance.bucket === "block"
+            }
             className="h-11 px-4 rounded-md bg-[color:var(--color-coach)] text-white font-heading text-xs tracking-widest disabled:opacity-40"
           >
             {pending ? "…" : "SEND"}
           </button>
         </form>
-        <p className="text-[10px] text-[color:var(--color-text-muted)] mt-2">
+        <AllowanceLine allowance={allowance} />
+        <p className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
           ⌘/Ctrl + Enter to send · Coach is not a therapist. In crisis call 911 or 988.
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Quiet allowance indicator under the composer. Only shows when the
+ * coachee is at 80% of the monthly soft cap or over; ok bucket stays
+ * silent so the meter doesn't clutter the vast majority of turns.
+ */
+function AllowanceLine({ allowance }: { allowance: Allowance }) {
+  if (allowance.bucket === "ok") return null;
+  if (allowance.bucket === "notice") {
+    return (
+      <p className="text-[10px] text-[color:var(--color-text-muted)] mt-2">
+        You've used {allowance.used} of {allowance.softCap} coach messages
+        this month.
+      </p>
+    );
+  }
+  if (allowance.bucket === "over") {
+    return (
+      <p className="text-[10px] text-[color:var(--color-warning)] mt-2">
+        Over your monthly allowance ({allowance.used} of {allowance.softCap}).
+        Coach is still on. Resets on the 1st.
+      </p>
+    );
+  }
+  // block
+  return (
+    <p className="text-[10px] text-[color:var(--color-danger)] mt-2">
+      Coach paused for the month at {allowance.used} messages. Resets on the 1st.
+    </p>
   );
 }
 

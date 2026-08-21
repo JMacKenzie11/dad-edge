@@ -14,7 +14,8 @@
     "test:itc:scenario": "vitest run -t",
     "seed": "tsx scripts/seed.ts",
     "seed:boardroom": "tsx scripts/seed-boardroom.ts",
-    "brand:sync": "tsx scripts/sync-brand-assets.ts"
+    "brand:sync": "tsx scripts/sync-brand-assets.ts",
+    "coach:scenario": "tsx scripts/coach-scenario.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",
