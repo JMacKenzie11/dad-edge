@@ -7,6 +7,8 @@ export default defineConfig({
       "src/**/__tests__/**/*.test.ts",
       // Form-First regression tests live here.
       "tests/form-first/**/*.test.ts",
+      // Coach context pipeline unit tests.
+      "tests/coach/**/*.test.ts",
     ],
     // Behavior tests hit the Anthropic API — slower than unit tests but
     // still bounded. State-machine tests are fast because they mock the LLM.

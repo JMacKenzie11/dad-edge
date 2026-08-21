@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { generateObject, type ModelMessage } from "ai";
 import { mainModel, mainModelIdOrUnset } from "@/lib/model-config";
-import { buildUserContext } from "@/lib/coach/context";
+import { buildCoachContext } from "@/lib/coach/context";
 import { systemBase, PROMPT_VERSION, type Mode } from "@/lib/coach/prompts";
 import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
 import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
@@ -72,17 +72,29 @@ async function recentTurns(conversationId: string, limit = 20) {
 }
 
 /**
- * Build the single system prompt string. AI SDK v7 requires system to come
- * through the `system` parameter — role: "system" is not allowed in messages.
- * The persona/mode + context + optional crisis note are concatenated with
- * clear section markers; Anthropic's automatic prompt caching still catches
- * the stable prefix when the same string repeats.
+ * Assemble the system prompt string.
+ *
+ * The persona/mode/method prompt + the context pipeline's stable
+ * prefix (identity/family/survey) form the cacheable region; the
+ * volatile body (goals/missions/streaks/reflections/itc) + any
+ * per-turn crisis note follow. Anthropic's automatic prompt caching
+ * catches the stable prefix when the same string repeats across
+ * turns — we don't need to pass `cache_control` breakpoints
+ * explicitly because the SDK's stable-prefix caching already covers
+ * the "put slow-changing content first" pattern the assembler
+ * enforces.
  */
-function buildSystemPrompt(mode: Mode, context: string, crisis: boolean): string {
+function buildSystemPrompt(
+  mode: Mode,
+  cacheablePrefix: string,
+  volatileBody: string,
+  crisis: boolean,
+): string {
   const parts: string[] = [
     `${systemBase(mode)}\n\n(prompt version: ${PROMPT_VERSION})`,
-    `# Live user context (rebuilt each turn)\n${context}`,
   ];
+  if (cacheablePrefix) parts.push(cacheablePrefix);
+  if (volatileBody) parts.push(volatileBody);
   if (crisis) {
     parts.push(
       `# Crisis signal detected on this turn
@@ -139,22 +151,35 @@ export async function sendCoachMessage(opts: {
     .single();
   const userMessageId = (userMsg as { id: string } | null)?.id ?? "";
 
-  if (crisis && userMessageId) {
+  // Enqueue for admin review at medium+ (spec: medium is flagged for
+  // review, no change to reply; high/critical also flagged AND trigger
+  // the crisis resource append). Low/none don't hit the queue —
+  // ordinary distress is coaching territory, not queue territory.
+  const enqueueForReview =
+    classification.severity === "medium" ||
+    classification.severity === "high" ||
+    classification.severity === "critical";
+  if (enqueueForReview && userMessageId) {
     await svc.from("coach_flags_queue").insert({
       message_id: userMessageId,
       severity: classification.severity,
     });
   }
 
-  // 3. Build context + history.
-  const context = await buildUserContext(opts.user);
+  // 3. Build context via the provider pipeline + history.
+  const assembled = await buildCoachContext(opts.user);
   const history = await recentTurns(conversationId, 20);
   const historyMessages: ModelMessage[] = history.map((t) => ({
     role: t.role,
     content: t.content,
   }));
 
-  const systemPrompt = buildSystemPrompt(mode, context, crisis);
+  const systemPrompt = buildSystemPrompt(
+    mode,
+    assembled.cacheablePrefix,
+    assembled.volatileBody,
+    crisis,
+  );
 
   // 4. Coach call (Sonnet via AI SDK).
   let reply: CoachReply = {
@@ -236,8 +261,24 @@ export async function sendCoachMessage(opts: {
 
   const finalReplyText = crisis ? `${reply.reply}\n\n${CRISIS_RESOURCES}` : reply.reply;
 
-  // 6. Persist the assistant turn with token usage.
+  // 6. Persist the assistant turn with token usage + metadata.
+  // metadata carries the context audit trail (which providers
+  // contributed + their combined token estimate) and the safety
+  // classification for the user turn this reply responded to. Both
+  // land on the assistant row because that's the row admins review
+  // when they want to know "what did the coach see when it said
+  // this" — same pattern itc_turn_events uses on the ITC side.
   const inTokens = usageInput + usageCacheRead + usageCacheWrite;
+  const metadata = {
+    context: {
+      providers: assembled.providerKeys,
+      tokenEstimate: assembled.tokenEstimate,
+    },
+    safety: {
+      severity: classification.severity,
+      categories: classification.categories,
+    },
+  };
   const { data: asstMsg } = await svc
     .from("coach_messages")
     .insert({
@@ -251,6 +292,7 @@ export async function sendCoachMessage(opts: {
       model_used: mainModelIdOrUnset(),
       tokens_in: inTokens,
       tokens_out: usageOutput,
+      metadata,
     })
     .select("id")
     .single();
