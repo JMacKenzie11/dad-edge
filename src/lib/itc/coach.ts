@@ -1732,7 +1732,7 @@ export async function generateImmuneSystemWalkthrough(input: {
 
     const { text } = await generateText({
       model: mainModel(),
-      system: IMMUNE_SYSTEM_STAGE,
+      system: withVoiceRules(IMMUNE_SYSTEM_STAGE),
       prompt: [
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         ``,
@@ -1857,7 +1857,7 @@ export async function recommendAssumptionToTest(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: PrioritizeRecommendationSchema,
-      system: PRIORITIZE_STAGE,
+      system: withVoiceRules(PRIORITIZE_STAGE),
       prompt: [
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         ``,
@@ -1995,7 +1995,7 @@ export async function draftTestForAssumption(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: TestDraftSchema,
-      system: TEST_DESIGN_STAGE,
+      system: withVoiceRules(TEST_DESIGN_STAGE),
       prompt: [
         `Draft one test of the specified type for the assumption below.${typeConstraint}`,
         ``,
@@ -2096,7 +2096,7 @@ export async function reviewTestDesign(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: TestReviewSchema,
-      system: TEST_DESIGN_STAGE,
+      system: withVoiceRules(TEST_DESIGN_STAGE),
       prompt: [
         `MODE: review (score the saved test below against SMART + might-it-re-true).`,
         ``,
@@ -2218,7 +2218,7 @@ export async function reviseTestFromReview(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: TestDraftSchema,
-      system: TEST_DESIGN_STAGE,
+      system: withVoiceRules(TEST_DESIGN_STAGE),
       prompt: [
         `Revise the coachee's current test to address the SMART failures below. This is targeted editing — preserve what worked, change what didn't. Do NOT write from scratch.`,
         ``,
@@ -2322,7 +2322,7 @@ export async function reviewTestResult(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: TestResultReviewSchema,
-      system: RESULTS_STAGE,
+      system: withVoiceRules(RESULTS_STAGE),
       prompt: [
         `MODE: review (interpret the coachee's saved debrief against the assumption's specific prediction).`,
         ``,
@@ -2410,7 +2410,7 @@ export async function generateMapCloseSummary(input: {
     const { DONE_STAGE } = await import("./prompts/stages/done");
     const { text } = await generateText({
       model: mainModel(),
-      system: DONE_STAGE,
+      system: withVoiceRules(DONE_STAGE),
       prompt: [
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         ``,
