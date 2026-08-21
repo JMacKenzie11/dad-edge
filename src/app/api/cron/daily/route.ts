@@ -3,6 +3,7 @@ import { assertCronAuth } from "@/lib/jobs/utils";
 import { runDisengagementScan } from "@/lib/jobs/disengagement-scan";
 import { runWeekLock } from "@/lib/jobs/week-lock";
 import { runMarkMissedMissions } from "@/lib/jobs/mark-missed-missions";
+import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
 import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
 
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const results = await Promise.all([
     runMarkMissedMissions(now),
+    runMarkGoalsForReview(now),
     runWeekLock(now),
     runDisengagementScan(now),
     runWeeklyDigest(now),

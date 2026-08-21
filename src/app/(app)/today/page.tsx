@@ -6,6 +6,7 @@ import { deriveA2ForDate, applyDerivedA2 } from "@/lib/scoring/action";
 import { CheckinBoard } from "./checkin-board";
 import { ReflectionPanel } from "./reflection-panel";
 import { StreakChip } from "@/components/ui/streak-chip";
+import { GoalReviewPrompt } from "@/app/(app)/goals/goal-review-prompt";
 import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -18,24 +19,30 @@ export default async function TodayPage() {
   const monday = localMonday(new Date(), user.timezone);
   const week = weekDates(monday);
 
-  const [{ data: rows }, { data: missions }, { data: reflection }] = await Promise.all([
-    supabase
-      .from("daily_checkins")
-      .select("date, pillar_code, value")
-      .eq("user_id", user.id)
-      .in("date", week),
-    supabase
-      .from("missions")
-      .select("target_date, status")
-      .eq("user_id", user.id)
-      .in("target_date", week),
-    supabase
-      .from("daily_reflections")
-      .select("wins, learnings")
-      .eq("user_id", user.id)
-      .eq("date", today)
-      .maybeSingle(),
-  ]);
+  const [{ data: rows }, { data: missions }, { data: reflection }, { data: reviewGoals }] =
+    await Promise.all([
+      supabase
+        .from("daily_checkins")
+        .select("date, pillar_code, value")
+        .eq("user_id", user.id)
+        .in("date", week),
+      supabase
+        .from("missions")
+        .select("target_date, status")
+        .eq("user_id", user.id)
+        .in("target_date", week),
+      supabase
+        .from("daily_reflections")
+        .select("wins, learnings")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .maybeSingle(),
+      supabase
+        .from("quarterly_goals")
+        .select("id, desired_end_state, focus_area, quarter_start, source")
+        .eq("user_id", user.id)
+        .eq("status", "needs_review"),
+    ]);
   const todayReflection = (reflection ?? { wins: "", learnings: "" }) as {
     wins: string | null;
     learnings: string | null;
@@ -62,6 +69,14 @@ export default async function TodayPage() {
     }
   }
 
+  const reviewableGoals = ((reviewGoals ?? []) as Array<{
+    id: string;
+    desired_end_state: string;
+    focus_area: PillarCode;
+    quarter_start: string;
+    source: "user" | "itc";
+  }>);
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <header>
@@ -73,6 +88,10 @@ export default async function TodayPage() {
           Tap to mark done. Tap again to undo.
         </p>
       </header>
+
+      {reviewableGoals.map((g) => (
+        <GoalReviewPrompt key={`review-${g.id}`} goal={g} />
+      ))}
 
       <section className="flex items-center justify-between p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
         <div>

@@ -86,6 +86,67 @@ export async function updateGoal(input: unknown) {
 }
 
 
+const ReviewAnswerSchema = z.object({
+  goal_id: z.string().uuid(),
+  answer: z.enum(["yes", "partially", "no"]),
+  reflection: z.string().max(1000).optional(),
+});
+
+/**
+ * Quarter-end review submission. Called from the dismissible prompt
+ * that appears on /today and /goals when a source='user' goal has
+ * status='needs_review'. Yes/Partially → status='completed'; No →
+ * status='abandoned'. Optional reflection lands in review_reflection.
+ * ITC-sourced goals never reach this path — the prompt UI treats them
+ * as read-only pointers back into the map.
+ */
+export async function submitGoalReview(input: unknown) {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+  const parsed = ReviewAnswerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const supabase = await createSupabaseServerClient();
+  const { data: goal, error: lookupErr } = await supabase
+    .from("quarterly_goals")
+    .select("source, status")
+    .eq("id", parsed.data.goal_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, error: lookupErr.message };
+  if (!goal) return { ok: false, error: "Goal not found." };
+  if (goal.source === "itc") {
+    return {
+      ok: false,
+      error: "This goal is managed by your ITC map. Close it in the ITC tool.",
+    };
+  }
+  const nextStatus = parsed.data.answer === "no" ? "abandoned" : "completed";
+  const { error } = await supabase
+    .from("quarterly_goals")
+    .update({
+      status: nextStatus,
+      review_reflection: parsed.data.reflection?.trim() || null,
+    })
+    .eq("id", parsed.data.goal_id)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/goals");
+  revalidatePath("/today");
+  return { ok: true };
+}
+
+/**
+ * "Not now" — dismiss the review prompt for this session without
+ * answering. We don't persist a dismissed flag; the goal stays in
+ * needs_review and the prompt reappears on next page load. Client
+ * hides the prompt for the current render via a local flag.
+ * Server-side no-op (kept as a placeholder so the UI can call a
+ * consistent shape).
+ */
+export async function dismissGoalReview(_goalId: string) {
+  return { ok: true };
+}
+
 export async function closeGoal(goalId: string, status: "completed" | "abandoned") {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };

@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { NewGoalForm } from "./new-goal-form";
 import { GoalCard } from "./goal-card";
+import { GoalReviewPrompt } from "./goal-review-prompt";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
@@ -142,6 +143,21 @@ export default async function GoalsPage() {
       {!readOnly ? (
         <NewGoalForm userSlotsRemaining={userSlotsRemaining} />
       ) : null}
+
+      {active
+        .filter((g) => g.status === "needs_review")
+        .map((g) => (
+          <GoalReviewPrompt
+            key={`review-${g.id}`}
+            goal={{
+              id: g.id,
+              desired_end_state: g.desired_end_state,
+              focus_area: g.focus_area,
+              quarter_start: g.quarter_start,
+              source: g.source,
+            }}
+          />
+        ))}
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
