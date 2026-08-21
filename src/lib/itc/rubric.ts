@@ -310,3 +310,173 @@ export async function scoreWorryDepth(input: {
     );
   }
 }
+
+// -------------------------------------------------------------------------
+// Logical-consistency verifiers — the second model in the two-model split
+// -------------------------------------------------------------------------
+//
+// Depth rubrics answer "is this deep enough?" These verifiers answer a
+// different question: "does the identity landing make LOGICAL SENSE
+// given what the opposite move would reveal?"
+//
+// Observed failure (worry drafter): behavior = "I walk out of the room",
+// drafter produced worry = "if I stayed and heard her out, I'd have to
+// see I'm the man who abandons her." That's inverted — staying is not
+// abandoning. The identity landing describes the CURRENT behavior's
+// identity, not what STAYING would reveal. Depth rubric passes it (it's
+// felt, first-person, touches identity) but the logic is broken.
+//
+// Same shape one column downstream in the assumption drafter:
+// "if I stay, then I'm the man who can't even run away when it matters."
+// Staying is the opposite of running.
+//
+// These verifiers explicitly compare (current, opposite, revealed) and
+// flag when `revealed` conflates with `current` instead of describing
+// what `opposite` would expose. Runs after assemble+trim, before
+// persisting. On fail, feeds `reason` into the same drafter-retry loop
+// that the depth rubric feeds. Two-model pattern: drafter drafts,
+// verifier verifies; both live server-side.
+
+const ConsistencySchema = z.object({
+  consistent: z.boolean(),
+  reason: z.string().min(1).max(300),
+});
+
+export type ConsistencyResult = {
+  consistent: boolean;
+  reason: string;
+};
+
+const WORRY_CONSISTENCY_SYSTEM = `
+You verify logical consistency in an Immunity to Change map worry draft.
+
+The coachee's CURRENT behavior is X. The OPPOSITE move (what he'd do differently) is Y. The IDENTITY LANDING is what he fears would happen if he did Y — specifically, what Y would REVEAL about him that X has been hiding.
+
+The failure mode you catch: the identity landing describes X's identity (the identity of the CURRENT behavior) instead of what Y would reveal. That's an inversion — it produces sentences like "if I stayed and heard her out, I'd have to see I'm the man who abandons her" where staying is not abandoning.
+
+Return { consistent: boolean, reason: string }.
+
+- consistent = true when the identity landing describes what DOING Y (the opposite) would reveal about him — a NEW truth exposed by the counter-move.
+- consistent = false when the identity landing restates X's identity, or contradicts Y (says he'd reveal being the very thing Y is the opposite of).
+
+Reason: one line explaining the inversion if you detect it, or a one-line confirmation if consistent. Under 30 words.
+
+Examples:
+
+  X = "I walk out of the room"
+  Y = "stayed in the room and heard her out"
+  identity_landing = "I'm the man who abandons her"
+  → consistent: false. Staying is the opposite of abandoning. "Abandons her" is X's identity, not what Y reveals.
+
+  X = "I walk out of the room"
+  Y = "stayed in the room and heard her out"
+  identity_landing = "she'd realize I've been running her whole marriage"
+  → consistent: true. Staying reveals the PATTERN of running that X has been hiding.
+
+  X = "I bring up her past mistakes"
+  Y = "listened without bringing up her past"
+  identity_landing = "the truth would come out that I've been the one who's the problem"
+  → consistent: true. Listening reveals what scorekeeping was hiding.
+
+  X = "I bring up her past mistakes"
+  Y = "listened without bringing up her past"
+  identity_landing = "I'd have to see I'm the man who scorekeeps"
+  → consistent: false. "Scorekeeps" is X's identity; listening doesn't reveal it, listening is the opposite of it.
+`.trim();
+
+export async function checkWorryLogicalConsistency(input: {
+  behaviorText: string;
+  oppositeMove: string;
+  identityLanding: string;
+}): Promise<ConsistencyResult> {
+  const started = Date.now();
+  let outcomeForLog = "unknown";
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: ConsistencySchema,
+      system: WORRY_CONSISTENCY_SYSTEM,
+      prompt: [
+        `Current behavior (X): ${input.behaviorText}`,
+        `Opposite move (Y): ${input.oppositeMove}`,
+        `Identity landing (proposed): ${input.identityLanding}`,
+      ].join("\n"),
+      maxOutputTokens: 256,
+      temperature: 0.1,
+    });
+    outcomeForLog = object.consistent ? "consistent" : "inverted";
+    return { consistent: object.consistent, reason: object.reason };
+  } finally {
+    console.warn(
+      "[itc timing] consistency kind=worry ms=%d outcome=%s",
+      Date.now() - started,
+      outcomeForLog,
+    );
+  }
+}
+
+const ASSUMPTION_CONSISTENCY_SYSTEM = `
+You verify logical consistency in an Immunity to Change map Big Assumption draft.
+
+A Big Assumption states: "If I [ANTECEDENT_ACT], then [CONSEQUENT_TELL] and [CONSEQUENT_IDENTITY]."
+
+The antecedent is what the coachee would do DIFFERENTLY — the counter-move his commitments protect him from doing. The consequent describes what that counter-move would reveal.
+
+The failure mode you catch: consequent_identity describes the identity of the CURRENT protective behavior (the opposite of antecedent_act) instead of what antecedent_act would reveal. That produces inversions like "if I stay in the room, then I'm the man who can't even run away when it matters" where staying is the opposite of running away, so "can't run away" describes staying itself, not what staying would REVEAL.
+
+Return { consistent: boolean, reason: string }.
+
+- consistent = true when consequent_identity describes what DOING antecedent_act would reveal about him.
+- consistent = false when consequent_identity describes the identity of the OPPOSITE of antecedent_act, or literally contradicts antecedent_act.
+
+Reason: one line naming the inversion, or one-line confirmation if consistent. Under 30 words.
+
+Examples:
+
+  antecedent_act = "stay in the room and hear her out"
+  consequent_identity = "the man who can't even run away when it matters"
+  → consistent: false. Staying is the opposite of running. "Can't run away" describes staying, not what staying would reveal.
+
+  antecedent_act = "stay in the room and hear her out"
+  consequent_identity = "the man who's been running her whole marriage"
+  → consistent: true. Staying would reveal the pattern of running that his walkout behavior has been hiding.
+
+  antecedent_act = "admit she's right"
+  consequent_identity = "the man who chose himself over her"
+  → consistent: true. Admitting reveals what lying-to-escape was hiding.
+
+  antecedent_act = "admit she's right"
+  consequent_identity = "the man who lies"
+  → consistent: false. "Lies" is the identity of the CURRENT lying behavior, which is what admitting is the opposite of.
+`.trim();
+
+export async function checkAssumptionLogicalConsistency(input: {
+  antecedentAct: string;
+  consequentTell: string;
+  consequentIdentity: string;
+}): Promise<ConsistencyResult> {
+  const started = Date.now();
+  let outcomeForLog = "unknown";
+  try {
+    const { object } = await generateObject({
+      model: utilityModel(),
+      schema: ConsistencySchema,
+      system: ASSUMPTION_CONSISTENCY_SYSTEM,
+      prompt: [
+        `antecedent_act: ${input.antecedentAct}`,
+        `consequent_tell: ${input.consequentTell}`,
+        `consequent_identity: ${input.consequentIdentity}`,
+      ].join("\n"),
+      maxOutputTokens: 256,
+      temperature: 0.1,
+    });
+    outcomeForLog = object.consistent ? "consistent" : "inverted";
+    return { consistent: object.consistent, reason: object.reason };
+  } finally {
+    console.warn(
+      "[itc timing] consistency kind=assumption ms=%d outcome=%s",
+      Date.now() - started,
+      outcomeForLog,
+    );
+  }
+}

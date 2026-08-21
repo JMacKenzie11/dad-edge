@@ -43,7 +43,12 @@ import { VOICE_RULES } from "./prompts/preamble";
 function withVoiceRules(drafterSystem: string): string {
   return `${VOICE_RULES}\n\n===== END VOICE RULES =====\n\n${drafterSystem}`;
 }
-import { scoreCommitmentDepth, scoreWorryDepth } from "./rubric";
+import {
+  checkAssumptionLogicalConsistency,
+  checkWorryLogicalConsistency,
+  scoreCommitmentDepth,
+  scoreWorryDepth,
+} from "./rubric";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -881,14 +886,22 @@ const WORRY_HARD_WORD_CAP = 20;
  * the canonical "I worry that if I ..., ..." sentence and mechanically
  * trims any overshoot via trimAssembledDraft.
  *
- * Drafter-rubric alignment: after assembly, the draft is scored with
- * the same scoreWorryDepth rubric that gates advance. If it fails, one
- * retry fires with the rubric's `reason` fed back so the drafter can
- * self-correct against the exact criterion it missed. Prior behavior
- * was drafter-then-hope: coachee taps "Use this draft" → promotes to
- * real worry → rubric bounces it as shallow. The retry closes that
- * loop. Whatever comes back from the retry (or the first draft, if
- * scoring failed) is returned — no silent drops.
+ * Two-model verification pipeline (server-owned structure over LLM
+ * obedience):
+ *
+ *   1. Drafter (mainModel) fills opposite_move + identity_landing.
+ *   2. Depth rubric (utilityModel, scoreWorryDepth) scores 0-3 —
+ *      answers "is this deep enough?"
+ *   3. Consistency verifier (utilityModel, checkWorryLogicalConsistency)
+ *      answers "does identity_landing describe what opposite_move
+ *      would REVEAL, or does it restate the CURRENT behavior's
+ *      identity?" Catches inversions like "if I stayed and heard her
+ *      out, I'd have to see I'm the man who abandons her" (staying is
+ *      the opposite of abandoning).
+ *   4. If either check fails, one drafter retry fires with the failing
+ *      reason(s) as feedback. Whatever comes back is returned — never
+ *      silent drop; a slightly-off draft the coachee can edit beats
+ *      no draft at all.
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
@@ -902,9 +915,15 @@ export async function draftWorryForBehavior(input: {
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
     `Behavior (Column 2): ${input.behaviorText}`,
     ``,
-    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with the identity-level felt fear that would land if he actually did opposite_move in a real moment. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what DOING opposite_move would REVEAL about him — the new truth exposed by the counter-move, not the identity of the current behavior. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
   ];
-  async function generateAssembled(promptLines: string[]): Promise<string | null> {
+
+  type DraftShape = {
+    assembled: string;
+    slots: { opposite_move: string; identity_landing: string };
+  };
+
+  async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
     const { object } = await generateObject({
       model: mainModel(),
       schema: WorryDraftSchema,
@@ -912,45 +931,73 @@ export async function draftWorryForBehavior(input: {
       prompt: promptLines.join("\n"),
       maxOutputTokens: 200,
     });
-    const assembled = scrubReply(assembleWorry(object));
-    if (!assembled) return null;
-    return trimAssembledDraft(assembled, WORRY_HARD_WORD_CAP);
+    const raw = scrubReply(assembleWorry(object));
+    if (!raw) return null;
+    return {
+      assembled: trimAssembledDraft(raw, WORRY_HARD_WORD_CAP),
+      slots: object,
+    };
   }
+
   try {
-    const first = await generateAssembled(basePromptLines);
+    const first = await generateDraft(basePromptLines);
     if (!first) return null;
-    // Score against the same rubric that gates advance. Fail-open on
-    // rubric error — a transient Haiku hiccup shouldn't strand the
+
+    // Run depth + consistency verifiers in parallel. Both fail-open on
+    // verifier error — transient Haiku hiccups shouldn't strand the
     // drafter output.
-    let firstScore: Awaited<ReturnType<typeof scoreWorryDepth>> | null = null;
-    try {
-      firstScore = await scoreWorryDepth({
+    const [depthResult, consistencyResult] = await Promise.all([
+      scoreWorryDepth({
         goalText: input.goalText,
         behaviorText: input.behaviorText,
-        worryText: first,
-      });
-    } catch (err) {
-      console.warn(
-        "[itc coach] worry draft rubric score failed, keeping first: %s",
-        err instanceof Error ? err.message : String(err),
-      );
-      return first;
-    }
-    if (firstScore.score >= 3) return first;
+        worryText: first.assembled,
+      }).catch((err) => {
+        console.warn(
+          "[itc coach] worry depth rubric failed, treating as pass: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+        return null;
+      }),
+      checkWorryLogicalConsistency({
+        behaviorText: input.behaviorText,
+        oppositeMove: first.slots.opposite_move,
+        identityLanding: first.slots.identity_landing,
+      }).catch((err) => {
+        console.warn(
+          "[itc coach] worry consistency verifier failed, treating as pass: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+        return null;
+      }),
+    ]);
 
-    // Rubric flagged a real gap. Retry once with the rubric's reason
-    // as feedback so the drafter self-corrects against the exact
-    // criterion. Return whatever comes back either way — never silent
-    // drop; a slightly-shallow draft the coachee can edit beats no
-    // draft at all.
-    const retry = await generateAssembled([
+    const depthOk = depthResult === null || depthResult.score >= 3;
+    const consistencyOk = consistencyResult === null || consistencyResult.consistent;
+    if (depthOk && consistencyOk) return first.assembled;
+
+    // One retry with the failing reason(s) fed back. Both verifiers'
+    // feedback goes in if both failed; retry addresses whichever is
+    // wrong. Returning `first` on retry failure preserves the "never
+    // silent drop" invariant.
+    const feedbackLines: string[] = [];
+    if (!depthOk && depthResult) {
+      feedbackLines.push(
+        `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
+      );
+    }
+    if (!consistencyOk && consistencyResult) {
+      feedbackLines.push(
+        `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
+      );
+    }
+    const retry = await generateDraft([
       ...basePromptLines,
       ``,
-      `Your previous draft was: "${first}"`,
-      `The depth rubric rejected it (${firstScore.score}/3). Reason: "${firstScore.reason}"`,
-      `Rewrite the slots so the assembled sentence passes. Preserve intent; fix the flaw the rubric named. Same length target (under 20 words).`,
+      `Your previous draft was: "${first.assembled}"`,
+      ...feedbackLines,
+      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target (under 20 words).`,
     ]);
-    return retry ?? first;
+    return retry?.assembled ?? first.assembled;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1549,15 +1596,36 @@ Return only structured drafts (the three slots + commitment_indices per draft). 
 /**
  * Server-side coach-draft generator for Column 5. Called once per
  * map when the coachee advances into the assumptions stage. Returns
- * the drafts in a schema-safe shape; the caller resolves indices to
+ * drafts in a schema-safe shape; the caller resolves indices to
  * commitment_ids and persists via saveAssumptionDrafts.
+ *
+ * Two-model verification pipeline (matches the worry drafter one
+ * column upstream). Batch-generated drafts get individually
+ * consistency-checked (checkAssumptionLogicalConsistency) to catch
+ * inversions like "if I stay in the room, then I'm the man who can't
+ * even run away when it matters" where staying is the opposite of
+ * running. If any drafts fail, one batch retry fires with per-draft
+ * feedback naming which are inverted. Whatever comes back is
+ * returned — never silent drop.
  */
 export async function draftAssumptionsFromCommitments(input: {
   goalText: string;
   commitments: Array<{ text: string; worry_text: string }>;
 }): Promise<Array<{ text: string; commitment_indices: number[] }>> {
   const started = Date.now();
-  try {
+  const HARD_WORD_CAP = 20;
+
+  type BatchDraft = {
+    text: string;
+    commitment_indices: number[];
+    slots: {
+      antecedent_act: string;
+      consequent_tell: string;
+      consequent_identity: string;
+    };
+  };
+
+  async function generateBatch(extraLines: string[]): Promise<BatchDraft[]> {
     if (input.commitments.length === 0) return [];
     const commitmentBlock = input.commitments
       .map(
@@ -1576,50 +1644,91 @@ export async function draftAssumptionsFromCommitments(input: {
         commitmentBlock,
         ``,
         `Cluster these commitments and draft the Big Assumptions underneath. Use 1-based indices from the list above in each draft's commitment_indices.`,
+        ...extraLines,
       ].join("\n"),
       maxOutputTokens: 1200,
     });
-    // Clamp indices to the input range so a hallucinated index can't
-    // land a link pointing at nothing. Each draft's sentence is
-    // assembled server-side from the three slots the LLM returned —
-    // no more ensureStem or ensureThenAfterIfClause needed (the server
-    // wrote the stem, "if I", "then", "and" tokens itself). scrubReply
-    // still runs on the assembled sentence for dash / claim-of-action
-    // normalization.
     const max = input.commitments.length;
-    const normalized = object.drafts.map((d) => ({
-      text: scrubReply(
+    return object.drafts.map((d) => {
+      const raw = scrubReply(
         assembleAssumption({
           antecedent_act: d.antecedent_act,
           consequent_tell: d.consequent_tell,
           consequent_identity: d.consequent_identity,
         }),
-      ),
-      commitment_indices: d.commitment_indices.filter(
-        (n) => n >= 1 && n <= max,
-      ),
-    }));
+      );
+      return {
+        text: trimAssembledDraft(raw, HARD_WORD_CAP),
+        commitment_indices: d.commitment_indices.filter(
+          (n) => n >= 1 && n <= max,
+        ),
+        slots: {
+          antecedent_act: d.antecedent_act,
+          consequent_tell: d.consequent_tell,
+          consequent_identity: d.consequent_identity,
+        },
+      };
+    });
+  }
 
-    // 20-word soft quality target. trimAssembledDraft strips known
-    // filler / trailing "instead of" / parenthetical qualifiers when
-    // present; if the sentence is still over cap it comes through
-    // anyway. Empty state (silent drop) is worse than a slightly-long
-    // draft the coachee can edit.
-    //
-    // Rubric-based filtering was removed here (previously dropped
-    // drafts that failed identity-landing or scored <2). Same
-    // silent-drop failure mode as the word-cap null-return: coachee
-    // hit "Big Assumptions" and saw zero drafts because every
-    // batch-generated draft got filtered post-hoc. Matches the
-    // worry/commitment pattern: show whatever the drafter produces;
-    // if the coachee promotes a shallow one, the depth gate on
-    // itc_assumptions will surface "One thing to sharpen" naturally
-    // via the same rubric.
-    const HARD_WORD_CAP = 20;
-    return normalized.map((d) => ({
-      ...d,
-      text: trimAssembledDraft(d.text, HARD_WORD_CAP),
-    }));
+  try {
+    const first = await generateBatch([]);
+    if (first.length === 0) return [];
+
+    // Verify each draft's logical consistency in parallel. Fail-open
+    // on verifier error — transient Haiku hiccups shouldn't strand the
+    // whole batch. Each drafted assumption gets its own consistency
+    // verdict; the batch retry (if any) knows which ones failed.
+    const checks = await Promise.all(
+      first.map((d) =>
+        checkAssumptionLogicalConsistency({
+          antecedentAct: d.slots.antecedent_act,
+          consequentTell: d.slots.consequent_tell,
+          consequentIdentity: d.slots.consequent_identity,
+        }).catch((err) => {
+          console.warn(
+            "[itc coach] assumption consistency verifier failed, treating as pass: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+          return null;
+        }),
+      ),
+    );
+
+    const inverted = first
+      .map((d, i) => ({ d, check: checks[i], index: i + 1 }))
+      .filter((x) => x.check !== null && !x.check.consistent);
+
+    if (inverted.length === 0) {
+      return first.map(({ slots: _slots, ...rest }) => rest);
+    }
+
+    // One batch retry with per-draft inversion feedback. The retry
+    // prompt names each broken draft AND its specific inversion so the
+    // drafter fixes the pair, not the whole set. Return whatever the
+    // retry produces; fall back to the first batch (with inversions
+    // included) if the retry fails, so the coachee is never stranded.
+    const feedbackBlock = inverted
+      .map(
+        (x) =>
+          `  - Draft #${x.index} was: "${x.d.text}". The logical-consistency check rejected it: "${x.check!.reason}"`,
+      )
+      .join("\n");
+    const retry = await generateBatch([
+      ``,
+      `Your previous batch had ${inverted.length} draft(s) that failed the logical-consistency check:`,
+      feedbackBlock,
+      ``,
+      `For each failed draft, the identity slot restated the CURRENT protective behavior's identity instead of describing what the antecedent_act would REVEAL. Rewrite the whole batch so every draft passes. Antecedent must be the counter-move; consequent must describe what DOING that counter-move would expose.`,
+    ]).catch((err) => {
+      console.warn(
+        "[itc coach] assumption batch retry failed, returning first batch: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    });
+    const chosen = retry && retry.length > 0 ? retry : first;
+    return chosen.map(({ slots: _slots, ...rest }) => rest);
   } catch (err) {
     console.warn(
       "[itc coach] draftAssumptionsFromCommitments failed: %s",
