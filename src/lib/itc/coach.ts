@@ -43,11 +43,7 @@ import { VOICE_RULES } from "./prompts/preamble";
 function withVoiceRules(drafterSystem: string): string {
   return `${VOICE_RULES}\n\n===== END VOICE RULES =====\n\n${drafterSystem}`;
 }
-import {
-  scoreAssumptionDepth,
-  scoreCommitmentDepth,
-  scoreWorryDepth,
-} from "./rubric";
+import { scoreCommitmentDepth, scoreWorryDepth } from "./rubric";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -1591,67 +1587,21 @@ export async function draftAssumptionsFromCommitments(input: {
     // present; if the sentence is still over cap it comes through
     // anyway. Empty state (silent drop) is worse than a slightly-long
     // draft the coachee can edit.
+    //
+    // Rubric-based filtering was removed here (previously dropped
+    // drafts that failed identity-landing or scored <2). Same
+    // silent-drop failure mode as the word-cap null-return: coachee
+    // hit "Big Assumptions" and saw zero drafts because every
+    // batch-generated draft got filtered post-hoc. Matches the
+    // worry/commitment pattern: show whatever the drafter produces;
+    // if the coachee promotes a shallow one, the depth gate on
+    // itc_assumptions will surface "One thing to sharpen" naturally
+    // via the same rubric.
     const HARD_WORD_CAP = 20;
-    const withinCap = normalized.map((d) => ({
+    return normalized.map((d) => ({
       ...d,
       text: trimAssembledDraft(d.text, HARD_WORD_CAP),
     }));
-
-    // Belt-and-suspenders rubric filter. Prompt guidance alone has
-    // proven insufficient — the drafter periodically produces drafts
-    // that pass Form-First checks (stem, then, atomic) but fail the
-    // depth rubric (missing identity landing). Those drafts then get
-    // offered to the coachee, who taps "Use this draft", promotes to
-    // itc_assumptions, and immediately gets bounced by the same
-    // rubric via computeAdvanceGate ("N assumptions need more depth").
-    // Solving upstream: score every draft here and drop any that
-    // fails identity-landing OR overall score < 2. Better to show
-    // the coachee fewer drafts than to show him drafts that will
-    // trap him at the depth gate.
-    //
-    // Architecturally Form-First-pure: server-side scoring of
-    // server-computed metadata before persisting metadata. Coachee
-    // never sees a rejected draft. If ALL drafts are rejected, the
-    // return is empty and the UI shows the "Add another Big
-    // Assumption" form with no drafts — user writes their own.
-    const scored = await Promise.all(
-      withinCap.map(async (d) => {
-        try {
-          const score = await scoreAssumptionDepth({
-            goalText: input.goalText,
-            assumptionText: d.text,
-          });
-          return { draft: d, score };
-        } catch (err) {
-          console.warn(
-            "[itc coach] draft rubric score failed, keeping draft: %s",
-            err instanceof Error ? err.message : String(err),
-          );
-          // On score failure keep the draft (fail-open) — better a
-          // possibly-shallow draft than losing the drafter output
-          // entirely to a transient rubric error.
-          return { draft: d, score: null };
-        }
-      }),
-    );
-    const kept = scored.filter(({ score }) => {
-      if (score === null) return true; // fail-open on rubric error
-      // Require identity-landing AND score >= 2. A draft with a
-      // finished-then + first-person-felt but no identity-landing
-      // would score 2 without lands_in_identity — reject those
-      // explicitly, since that's exactly the failure mode we're
-      // guarding against.
-      return score.lands_in_identity_or_big_time_bad && score.score >= 2;
-    });
-    const dropped = scored.length - kept.length;
-    if (dropped > 0) {
-      console.warn(
-        "[itc coach] rubric filter dropped %d/%d draft(s) for missing identity landing or low depth score",
-        dropped,
-        scored.length,
-      );
-    }
-    return kept.map(({ draft }) => draft);
   } catch (err) {
     console.warn(
       "[itc coach] draftAssumptionsFromCommitments failed: %s",
