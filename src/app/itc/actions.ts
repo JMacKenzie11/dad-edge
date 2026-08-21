@@ -19,6 +19,7 @@ import {
   reviewTestResult,
   reviseTestFromReview,
   scrubReply,
+  WORRY_IDENTITY_SHAPES,
   type ReactionInput,
   type ReactionOutput,
   type SmartReview,
@@ -1651,12 +1652,27 @@ async function draftMissingWorriesAfterAdvance(
   );
   if (needsDraft.length === 0) return;
 
+  // Server-owned shape rotation. Each behavior's drafter call gets
+  // a hard identity-shape constraint from WORRY_IDENTITY_SHAPES,
+  // rotated by index. Guarantees the map's worry set varies across
+  // Kegan-canonical shapes (role-noun, role-failure verb, seen-as,
+  // self-label) instead of the LLM's default clustering on
+  // "she'd see I've been the man who X" for every behavior.
+  //
+  // Rotation uses the behavior's ORDINAL POSITION on the map
+  // (needsDraft is already ordered by sort_order via listBehaviors)
+  // so re-drafts land on the same shape for the same behavior on
+  // retry, keeping the pattern stable rather than churning shape
+  // across regenerations.
   const drafted = await Promise.all(
-    needsDraft.map(async (b) => {
+    needsDraft.map(async (b, index) => {
+      const identityShape =
+        WORRY_IDENTITY_SHAPES[index % WORRY_IDENTITY_SHAPES.length];
       const draft = await draftWorryForBehavior({
         goalText: map.improvement_goal ?? "",
         behaviorText: b.text,
         pillar: map.pillar_code,
+        identityShape,
       });
       return { behaviorId: b.id, draft };
     }),

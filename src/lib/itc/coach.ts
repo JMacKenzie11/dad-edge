@@ -880,6 +880,44 @@ Return only the structured slots ({ opposite_move: "...", identity_landing: "...
 const WORRY_HARD_WORD_CAP = 20;
 
 /**
+ * Server-owned rotation across Kegan-canonical identity-landing
+ * shapes. The four shapes are the ones Vol 1 pp 13-14 and p 27
+ * explicitly enumerate as valid Column-3 landings. When the caller
+ * (draftMissingWorriesAfterAdvance) rotates one shape per behavior
+ * modulo, the whole map's worry set is guaranteed to vary across
+ * canonical shapes rather than clustering on one ("she'd see I've
+ * been the man who X" every time).
+ *
+ * Same architectural pattern as ANOTHER_ROTATION / SAFER_LADDER in
+ * the test-design flow: the LLM sees a hard-typed constraint from
+ * the server, not a soft "vary the shape" instruction. Prompt rules
+ * are LLM-obedience (drift); rotation is server-owned structure.
+ */
+export type WorryIdentityShape =
+  | "role_noun"
+  | "role_failure_verb"
+  | "seen_as"
+  | "self_label";
+
+export const WORRY_IDENTITY_SHAPES: readonly WorryIdentityShape[] = [
+  "role_noun",
+  "role_failure_verb",
+  "seen_as",
+  "self_label",
+] as const;
+
+const WORRY_SHAPE_INSTRUCTIONS: Record<WorryIdentityShape, string> = {
+  role_noun:
+    'For THIS draft, land the identity as a ROLE-NOUN CLAIM. Use the shape: "she\'d see I\'ve been the [husband|man|father|guy|one|kind of X] who [Y]" or "I\'ve been the [role] who [Y]". Kegan Vol 1 p 14 canonical example: "the husband who hurts her".',
+  role_failure_verb:
+    'For THIS draft, land the identity as an EXPLICIT ROLE-FAILURE VERB directed at her/him/them. Use the shape: "she\'d see I\'ve been [choosing myself over her | abandoning her | letting her down | hurting her | running from her | failing her]" or "I\'ve been [verb-ing] her all along". Kegan Vol 1 p 14 canonical example: "chose ego over her".',
+  seen_as:
+    'For THIS draft, land the identity via SEEN-AS framing (Kegan Vol 1 p 13 canonical vocabulary). Use the shape: "she\'d have seen me as [X]" / "she\'d see me as [role/label]" / "I\'d have been seen as [X]" / "she\'d know me as [X]". Kegan Vol 1 p 13 canonical example: "seen as incompetent".',
+  self_label:
+    'For THIS draft, land the identity as a SELF-LABEL (Kegan Vol 1 p 14). Use the shape: "she\'d know I\'ve been a [fraud|fake|phony|coward|failure]" / "the truth would come out that I\'ve never been [enough|the man she thought]" / "I couldn\'t pretend I\'m not a [X]". Kegan Vol 1 p 14 canonical example: "I\'d be a fraud".',
+};
+
+/**
  * Server-side coach-draft generator for Column 3. Called once per
  * selected behavior when the coachee advances into the worries stage.
  *
@@ -908,15 +946,26 @@ export async function draftWorryForBehavior(input: {
   goalText: string;
   behaviorText: string;
   pillar: PillarCode;
+  /**
+   * Optional server-owned identity-landing shape hint. When present,
+   * the drafter is constrained to one of the four Kegan-canonical
+   * shapes (see WORRY_IDENTITY_SHAPES). The caller rotates shapes
+   * across behaviors to guarantee map-level variety.
+   */
+  identityShape?: WorryIdentityShape;
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
+  const shapeLine = input.identityShape
+    ? WORRY_SHAPE_INSTRUCTIONS[input.identityShape]
+    : null;
   const basePromptLines = [
     `Pillar: ${pillar.label} (${pillar.domain})`,
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
     `Behavior (Column 2): ${input.behaviorText}`,
     ``,
     `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what DOING opposite_move would REVEAL about him — the new truth exposed by the counter-move, not the identity of the current behavior. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+    ...(shapeLine ? [``, shapeLine] : []),
   ];
 
   type DraftShape = {
