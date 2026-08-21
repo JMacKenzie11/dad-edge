@@ -251,7 +251,12 @@ export async function fireCoachReaction(
     const reaction = await generateCoachReaction({
       ...context,
       recentChat,
-      justAdded,
+      // Pass the anchor row id so the reaction generator can hash into
+      // a server-owned rotation of Kegan-canonical opener frames.
+      // Guarantees each entry on the map gets a distinct SCORE-3
+      // opener without the model needing visibility into prior
+      // reactions. See pickReactionOpener() in coach.ts.
+      justAdded: { ...justAdded, anchorId: anchor.id },
     });
     if (!reaction.reply.trim()) return;
     const stored = await persistReaction(

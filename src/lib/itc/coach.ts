@@ -239,8 +239,90 @@ export type ReactionInput = MapContextInput & {
     /** Number of save/edit attempts on this entry so far. Used
      *  alongside depthScore to shape the excavation prose. */
     attempts?: number;
+    /**
+     * Stable string identifier for this entry (typically the row's
+     * uuid). Used server-side to hash into a rotation of Kegan-canonical
+     * opener frames so each entry gets a distinct opener across a map,
+     * without the model needing visibility into prior reactions. Same
+     * architectural pattern as WORRY_IDENTITY_SHAPES rotation on the
+     * drafter side.
+     */
+    anchorId?: string;
   };
 };
+
+/**
+ * Kegan-canonical opener frames for depth-stage SCORE-3 reactions.
+ * The reaction prompt already asks the model to "VARY YOUR OPENER"
+ * with a list of alternatives, but per-reaction generation has no
+ * visibility into prior reactions on the map — the model reliably
+ * picks the same safest alternative every time ("You moved from
+ * what you're doing to what you're afraid of.") across all N
+ * worries. Result: templated monotony.
+ *
+ * Server-owned rotation via anchor-id hash. Each entry deterministically
+ * gets its own opener, distinct across the map. Same architectural
+ * pattern as WORRY_IDENTITY_SHAPES for drafter shape rotation.
+ */
+const WORRY_REACTION_OPENERS: readonly string[] = [
+  "There it is.",
+  "You moved from what you're doing to what you're afraid of.",
+  "Now you're at the layer that runs it.",
+  "You landed the fear underneath.",
+  "Now the worry has teeth.",
+  "That names something you couldn't quite reach a minute ago.",
+] as const;
+
+const COMMITMENT_REACTION_OPENERS: readonly string[] = [
+  "There's the piece you weren't supposed to say out loud.",
+  "That's the commitment doing the work.",
+  "You named the game.",
+  "Now the map has what actually runs it.",
+  "You landed the protective flinch.",
+  "That reads as the real vow, not the noble version.",
+] as const;
+
+const ASSUMPTION_REACTION_OPENERS: readonly string[] = [
+  "There's the belief that makes all of it feel necessary.",
+  "You named the ground you're standing on.",
+  "Now the assumption is on the page instead of running underneath.",
+  "You got to the belief that has to be tested.",
+  "There's the piece that has to be tested for anything to move.",
+  "You just made the invisible thing visible.",
+] as const;
+
+/**
+ * Deterministic string → index hash. Same string always maps to the
+ * same index so retry of the same reaction picks the same opener
+ * (avoids opener churn across retries). Simple djb2-ish variant.
+ */
+function hashStringToIndex(s: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) >>> 0;
+  }
+  return h % Math.max(1, mod);
+}
+
+/** Pick the opener frame for a given depth-stage reaction. Returns
+ *  null when the kind doesn't use rotation (goal, behavior) or when
+ *  no anchorId was passed. */
+function pickReactionOpener(
+  kind: ReactionInput["justAdded"]["kind"],
+  anchorId: string | undefined,
+): string | null {
+  if (!anchorId) return null;
+  const list =
+    kind === "worry"
+      ? WORRY_REACTION_OPENERS
+      : kind === "commitment"
+        ? COMMITMENT_REACTION_OPENERS
+        : kind === "assumption"
+          ? ASSUMPTION_REACTION_OPENERS
+          : null;
+  if (!list) return null;
+  return list[hashStringToIndex(anchorId, list.length)];
+}
 
 export async function generateCoachReaction(
   input: ReactionInput,
@@ -383,6 +465,23 @@ function buildReactionPrompt(input: ReactionInput): string {
       );
       parts.push(
         "SCORE 3 (deep): ONE SHORT acknowledgment. Then STOP. No question, no chip, no cross-column direction.",
+      );
+    }
+
+    // Server-owned opener rotation for SCORE-3 replies. Per-reaction
+    // generation has no visibility into prior reactions on the map, so
+    // the LLM reliably picks the same "safest" alternative from the
+    // vary-your-opener list across all N entries. Result: three worries
+    // all opening "You moved from what you're doing to what you're
+    // afraid of." (templated monotony the user surfaced).
+    //
+    // Rotation via anchor-id hash makes each entry deterministically
+    // get its own opener, distinct across the map. Same ANOTHER_ROTATION
+    // pattern used for test-type rotation and WORRY_IDENTITY_SHAPES.
+    const pinnedOpener = pickReactionOpener(kind, input.justAdded.anchorId);
+    if (pinnedOpener && (depthScore ?? 0) >= 3) {
+      parts.push(
+        `SCORE-3 OPENER PIN (mandatory when depth is 3): use exactly this opener as the first sentence of your reply: "${pinnedOpener}". Do not paraphrase, do not swap, do not add "Yeah." or "Right." before it. This is server-picked per-entry so each entry on the map gets a distinct opener rather than the templated repetition that happens when you pick from the vary-your-opener list yourself. If depth is under 3, ignore this pin — the shallow/getting-there paths use different reply shapes.`,
       );
     }
   } else {
