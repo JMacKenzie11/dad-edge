@@ -30,6 +30,19 @@ import { mainModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
+import { VOICE_RULES } from "./prompts/preamble";
+
+/**
+ * Wrap a drafter-specific system prompt with the coach voice/tone
+ * rulebook. All drafter output surfaces on the same map the reaction
+ * coach reads, so both must obey the same language rules — otherwise
+ * the reaction coach corrects abstractions the drafter itself
+ * produced ("keeping her mistakes loaded so I don't have to stay and
+ * face myself"). Single source of truth: `docs/coach-voice-and-tone.md`.
+ */
+function withVoiceRules(drafterSystem: string): string {
+  return `${VOICE_RULES}\n\n===== END VOICE RULES =====\n\n${drafterSystem}`;
+}
 import {
   scoreAssumptionDepth,
   scoreCommitmentDepth,
@@ -905,7 +918,7 @@ export async function draftWorryForBehavior(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: WorryDraftSchema,
-      system: DRAFT_WORRY_SYSTEM,
+      system: withVoiceRules(DRAFT_WORRY_SYSTEM),
       prompt: promptLines.join("\n"),
       maxOutputTokens: 200,
     });
@@ -1219,7 +1232,7 @@ export async function draftCommitmentForWorry(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: CommitmentDraftSchema,
-      system: DRAFT_COMMITMENT_SYSTEM,
+      system: withVoiceRules(DRAFT_COMMITMENT_SYSTEM),
       prompt: promptLines.join("\n"),
       maxOutputTokens: 200,
     });
@@ -1541,7 +1554,7 @@ export async function draftAssumptionsFromCommitments(input: {
     const { object } = await generateObject({
       model: mainModel(),
       schema: AssumptionDraftsSchema,
-      system: DRAFT_ASSUMPTIONS_SYSTEM,
+      system: withVoiceRules(DRAFT_ASSUMPTIONS_SYSTEM),
       prompt: [
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         ``,

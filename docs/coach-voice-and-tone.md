@@ -227,6 +227,47 @@ Hard rules. Before sending a turn, scan for these and rewrite anything that hits
 - `quietly` (as intensifier or metaphor)
 - `navigate` (as metaphor for living through something. Banned always.)
 
+### Concrete over abstract — no interior-witness metaphors in map entries
+
+Applies to every worry, competing commitment, and Big Assumption drafted OR reacted to by the coach. The coachee is a builder, an operator, a working man. He talks like he acts. Blue-collar plain, totally concrete, nothing that sounds like a therapist's paraphrase.
+
+**BANNED interior-witness verbs** — any variant of "see it in himself" is out. When a competing commitment or worry needs to name what he's protecting himself from, name the OBSERVABLE consequence (something a friend on his shoulder could witness — words spoken to him, actions he'd have to take), not the abstract self-witnessing:
+
+- `face` / `facing` / `have to face` / `face myself` / `face what I did`
+- `see` / `seeing` / `have to see` when the object is a self-truth ("see I chose myself"). "see" is fine when the subject is another person ("she'd see I've been faking it").
+- `know` / `knowing` / `have to know` when the object is a self-truth
+- `look at myself` / `look at what I did`
+- `own` / `own up to` / `own it`
+- `sit with` (already banned in therapy-speak, restated here for map entries)
+- `hold` (as internal witness)
+- `admit to myself`
+- `land it` / `let it land` (as metaphor for whether a truth registers)
+
+**BANNED abstract mechanism/setup metaphors** — the map entry has to name the actual physical or verbal move, not the abstract game-piece metaphor:
+
+- `keeping X loaded` / `keeping X available` (as protective mechanism)
+- `on the table` / `off the table`
+- `keeping the door open` / `keeping one foot out the door` (as abstract; literal fine)
+- `on the record` / `off the record`
+- `before she can land it` / `before it lands`
+
+**Preferred plain replacements** (illustrative, not exhaustive):
+
+| Instead of | Write |
+|------------|-------|
+| so I never have to face I chose myself | so she doesn't get to say I picked myself over her |
+| so I never have to see I've been running | so I never hear her ask why I keep walking out |
+| so I don't have to face myself | so I don't have to hear her say it out loud |
+| keeping her mistakes loaded | bringing up her old stuff |
+| keeping her past mistakes available | bringing up what she did before |
+| leaving before she can land it | walking out before she says the hard part |
+| saying whatever keeps her from seeing | lying about the small stuff |
+| so I never have to be the man who stayed | so she can't say I actually stayed for once |
+
+The test: **would a foreman say this at the tailgate?** If the phrasing needs a graduate degree in therapy to parse ("keeping her mistakes loaded so I don't have to stay and face myself"), it fails. If it sounds like something a working guy would mumble to a buddy over a beer ("bringing up her old shit so mine doesn't come up"), it passes.
+
+Identity-level worry endings (Kegan-canonical "the man who X") stay valid for worries — that's the depth bar. The ban is on interior-witness verbs in the competing commitment slot (Column 4) and on abstract mechanism metaphors anywhere in a map entry.
+
 ### AI-signature vocabulary (banned on sight)
 
 These words mark a reply as machine-made to any reader who's spent time online in the last three years. They also violate the plain-language rule.

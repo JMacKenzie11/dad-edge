@@ -11,7 +11,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const VOICE_RULES = readFileSync(
+/** Full voice/tone rulebook, loaded verbatim from
+ *  `docs/coach-voice-and-tone.md`. Exported so every coach-generated
+ *  path (reaction coach via PREAMBLE, worry/commitment/assumption
+ *  drafters in coach.ts) can inherit the same source of truth. Prior
+ *  gap: drafters didn't load these rules, so their outputs drifted
+ *  into abstract "keeping X loaded" / "so I never have to face Y"
+ *  phrasing while the reaction coach stayed plain. */
+export const VOICE_RULES = readFileSync(
   join(process.cwd(), "docs", "coach-voice-and-tone.md"),
   "utf8",
 ).trim();
