@@ -1185,13 +1185,25 @@ If your first draft is longer than 18 words, cut. Symptoms of over-writing you m
 - **Over-contextualization in active_move** — "keeping her past mistakes available WHEN SHE CRITICIZES ME" cuts to "keeping her past mistakes available". "Staying in the situation BUT SLIPPING IN SMALL CLARIFICATIONS ABOUT WHAT REALLY HAPPENED" cuts to "staying but relitigating". Kill the qualifiers.
 - **"When" / "if" / "while" clauses in active_move** — the mechanism is a standing move a part of him does, not a conditional. Cut the timing clause.
 
+## Anchor to the behavior (Kegan Vol 1 p 4 — non-negotiable)
+
+**The active_move IS the Column 2 behavior, phrased as an active protective vow.** Vol 1 p 4: "how if he protected himself that way, he would behave as he named in Column 2." Column 4 makes Column 2 visible as a chosen self-protection. Do NOT invent a different mechanism the behavior doesn't already contain.
+
+Concretely: your active_move MUST reference the same core act as the behavior text. If the behavior says "bringing up her past", the mechanism is bringing up / throwing back / keeping her past in play — not "speaking first" (a different, adjacent-but-different move). If the behavior says "walking out", the mechanism is walking out / leaving / checking out — not "staying quiet" (opposite of the behavior).
+
+The through-line check: strip stopwords from the behavior and from your active_move. At least one content word (or verb-tense variation) must overlap. "walking out" / "walking out mid-conversation" overlaps ("walking"). "bringing up her past" / "keeping her mistakes in play" doesn't overlap by word but does semantically — prefer the direct-word version.
+
 ## Two-step derivation (mandatory — run this silently for every draft)
 
-1. **Name the CONFRONTATION.** Read the paired worry. What is the specific ACT — the thing he'd have to DO — that would produce the fear the worry names? Not the fear itself. The ACT that would produce it.
-   - Worry: "I worry that if I listen to her without bringing up what she's done before, I'd have to see I'm the man who's been using her past against her."
-   - Confrontation: LISTENING WITHOUT SCOREKEEPING.
-   - Worry: "I worry that if I stay in the room and listen to her without defending myself, I'd have to see I'm the man who's been running away."
-   - Confrontation: STAYING AND LISTENING WITHOUT DEFENDING.
+1. **Name the CONFRONTATION.** Read the paired worry. What is the specific ACT — the thing he'd have to DO — that would produce the fear the worry names? Not the fear itself. The ACT that would produce it. The confrontation is the OPPOSITE of the Column 2 behavior.
+   - Behavior: "I bring up things she did in the past instead of listening to her"
+   - Worry: "I worry that if I listen to her without bringing up her past, she'd see I've been the husband who can't let things go."
+   - Confrontation: LISTENING WITHOUT BRINGING UP HER PAST.
+   - Correct active_move: "keeping her old mistakes on the table" (mechanism = the behavior itself). WRONG: "speaking first" (unrelated adjacent mechanism).
+   - Behavior: "I stop talking and walk out of the room"
+   - Worry: "I worry that if I stayed and listened, she'd see me as weak and unable to handle her."
+   - Confrontation: STAYING AND LISTENING.
+   - Correct active_move: "walking out before she finishes" (mechanism = the behavior itself). WRONG: "staying quiet" (opposite of the behavior).
 
 2. **Fill active_move with the specific protective move that prevents that confrontation.** Verb-forward (keeping, staying, explaining, making sure, over-preparing, deflecting, disqualifying), first-person present participle, observable — a friend watching him could spot it in the moment. Terse.
    - Confrontation: LISTENING WITHOUT SCOREKEEPING → active_move: "keeping her past mistakes available" *(4 words)*
@@ -1377,6 +1389,7 @@ export async function draftCommitmentForWorry(input: {
     const consistencyResult = checkCommitmentLogicalConsistency({
       activeMove: first.slots.active_move,
       protectivePurpose: first.slots.protective_purpose,
+      behaviorText: input.behaviorText,
     });
 
     const depthOk = depthResult === null || depthResult.score >= 3;

@@ -636,10 +636,73 @@ const COMMITMENT_PROTECTIVE_PURPOSE_BANS: Array<{ pattern: RegExp; label: string
   { pattern: /\bland\s+(it|the)\b/i, label: "metaphorical 'land it' / 'land the [X]'" },
 ];
 
+/**
+ * Stopword set for behavior/commitment content-word extraction.
+ * Excludes function words, pronouns, articles, prepositions, and
+ * common linking verbs that appear in almost every English sentence
+ * and therefore don't carry the behavior's semantic content.
+ */
+const CONTENT_EXTRACTION_STOPWORDS = new Set([
+  "a", "an", "the", "to", "of", "in", "on", "at", "by", "for", "with",
+  "and", "or", "but", "if", "when", "where", "what", "who", "why", "how",
+  "instead", "rather", "than", "get", "got", "have", "has", "had", "do",
+  "does", "did", "am", "is", "are", "was", "were", "be", "been", "being",
+  "my", "me", "myself", "her", "him", "them", "his", "she", "he", "they",
+  "this", "that", "these", "those", "it", "its",
+  "up", "down", "out", "over", "off", "from", "into", "so", "just",
+  "any", "all", "some", "no", "not",
+]);
+
+function extractContentWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z\s']/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !CONTENT_EXTRACTION_STOPWORDS.has(w));
+}
+
+/**
+ * Through-line check: verify the commitment's active_move actually
+ * references the Column-2 behavior. Vol 1 p 4 is explicit: the
+ * commitment's mechanism IS the Column 2 behavior, phrased as an
+ * active protective vow ("how if he protected himself that way, he
+ * would behave as he named in Column 2"). When the drafter drifts to
+ * an adjacent-but-different mechanism (behavior = "bringing up her
+ * past", active_move = "speaking first"), the coachee gets a
+ * commitment that doesn't tie back to the specific behavior it's
+ * supposed to make visible.
+ *
+ * Cheap deterministic heuristic: extract content words from both,
+ * check for overlap (substring match either direction, catching
+ * verb-tense variations like "walk"/"walking", "bring"/"bringing").
+ * If no overlap, the drafter has drifted — retry with feedback
+ * naming the behavior's key words to preserve.
+ */
+function commitmentReferencesBehavior(
+  activeMove: string,
+  behaviorText: string,
+): { references: boolean; keyBehaviorWords: string[] } {
+  const behaviorWords = extractContentWords(behaviorText);
+  const moveWords = extractContentWords(activeMove);
+  const references = behaviorWords.some((bw) =>
+    moveWords.some((mw) => {
+      // Substring match either direction. Catches verb-tense
+      // variations ("walk"/"walking", "bring"/"bringing"/"brought")
+      // and root-word matches ("listen"/"listening"/"listened").
+      const bwRoot = bw.slice(0, Math.min(4, bw.length));
+      const mwRoot = mw.slice(0, Math.min(4, mw.length));
+      return mw.includes(bwRoot) || bw.includes(mwRoot);
+    }),
+  );
+  return { references, keyBehaviorWords: behaviorWords };
+}
+
 export function checkCommitmentLogicalConsistency(input: {
   activeMove: string;
   protectivePurpose: string;
+  behaviorText: string;
 }): ConsistencyResult {
+  // Layer 1: abstract mechanism metaphor blacklist
   for (const ban of COMMITMENT_ACTIVE_MOVE_BANS) {
     if (ban.pattern.test(input.activeMove)) {
       return {
@@ -648,6 +711,7 @@ export function checkCommitmentLogicalConsistency(input: {
       };
     }
   }
+  // Layer 2: interior-witness / noble-avoidance blacklist on purpose
   for (const ban of COMMITMENT_PROTECTIVE_PURPOSE_BANS) {
     if (ban.pattern.test(input.protectivePurpose)) {
       return {
@@ -656,8 +720,21 @@ export function checkCommitmentLogicalConsistency(input: {
       };
     }
   }
+  // Layer 3: through-line check. Vol 1 p 4: the commitment's
+  // mechanism IS the Column 2 behavior as an active vow, not an
+  // adjacent-but-different move the drafter invented.
+  const throughLine = commitmentReferencesBehavior(
+    input.activeMove,
+    input.behaviorText,
+  );
+  if (!throughLine.references) {
+    return {
+      consistent: false,
+      reason: `active_move drifted from the Column-2 behavior. Kegan Vol 1 p 4: the commitment's mechanism IS the behavior, made visible as an active protective vow. Rewrite so active_move names the specific act from the behavior "${input.behaviorText}" — use at least one of these key words (or a form of it): ${throughLine.keyBehaviorWords.join(", ")}.`,
+    };
+  }
   return {
     consistent: true,
-    reason: "no banned patterns detected in active_move or protective_purpose",
+    reason: "no banned patterns; active_move references the Column-2 behavior",
   };
 }
