@@ -50,6 +50,7 @@ import {
   LEGACY_INTRO_PREFIXES,
   STAGE_INTROS,
 } from "@/lib/itc/stage-intros";
+import { normalizeWorryPrefix } from "@/lib/itc/maps";
 
 describe("scrubReply", () => {
   it("strips em dashes to comma-space", () => {
@@ -313,6 +314,88 @@ describe("assembleCommitment (single slot → introductory-form sentence)", () =
     ).toBe(
       "I'm also committed to never being seen as weak in front of my team.",
     );
+  });
+});
+
+describe("normalizeWorryPrefix (DB-boundary worry stem guard)", () => {
+  // Every worry stored must start with "I worry that...". Two failure
+  // paths let non-conforming worries through historically:
+  //   (a) chat LLM violates the WORRIES_STAGE prompt rule and emits
+  //       "I fear being X" in a <<propose_worry>> marker
+  //   (b) the coachee types freely in the worry form
+  // upsertWorryForBehavior runs every text through this normalizer.
+
+  it("passes through worries already in the canonical stem", () => {
+    const s = "I worry that if I stayed calm, she'd know I've been faking it.";
+    expect(normalizeWorryPrefix(s)).toBe(s);
+  });
+
+  it("passes through 'I worry that' case-insensitively", () => {
+    const s = "i worry that I'd be the man who couldn't hold it together";
+    // Already begins with "I worry" — no rewrite, just passthrough.
+    expect(normalizeWorryPrefix(s)).toBe(s);
+  });
+
+  it("transforms 'I fear being X' into 'I worry that I'd be X'", () => {
+    expect(
+      normalizeWorryPrefix("I fear being the guy who is defensive"),
+    ).toBe("I worry that I'd be the guy who is defensive");
+  });
+
+  it("transforms 'I fear that X' into 'I worry that X'", () => {
+    expect(
+      normalizeWorryPrefix("I fear that she'd stop trusting me"),
+    ).toBe("I worry that she'd stop trusting me");
+  });
+
+  it("transforms bare 'I fear X' into 'I worry that X'", () => {
+    expect(normalizeWorryPrefix("I fear losing my team's respect")).toBe(
+      "I worry that losing my team's respect",
+    );
+  });
+
+  it("transforms 'I'm afraid that X' into 'I worry that X'", () => {
+    expect(
+      normalizeWorryPrefix("I'm afraid that they'd never take me seriously again"),
+    ).toBe("I worry that they'd never take me seriously again");
+  });
+
+  it("transforms 'I'm afraid of being X' into 'I worry that I'd be X'", () => {
+    expect(
+      normalizeWorryPrefix("I'm afraid of being the leader who folds"),
+    ).toBe("I worry that I'd be the leader who folds");
+  });
+
+  it("transforms 'My fear is that X' into 'I worry that X'", () => {
+    expect(
+      normalizeWorryPrefix("My fear is that I'd be seen as incompetent"),
+    ).toBe("I worry that I'd be seen as incompetent");
+  });
+
+  it("prepends 'I worry that' with lowercased first char for unhandled shapes", () => {
+    // Coachee types a sentence with none of the known stems.
+    expect(
+      normalizeWorryPrefix("She'd see I've never been the man she thought"),
+    ).toBe("I worry that she'd see I've never been the man she thought");
+  });
+
+  it("preserves capital I when prepending", () => {
+    expect(
+      normalizeWorryPrefix("I'd have to admit I was wrong the whole time"),
+    ).toBe("I worry that I'd have to admit I was wrong the whole time");
+  });
+
+  it("is idempotent — running twice is the same as running once", () => {
+    const inputs = [
+      "I fear being the guy who is defensive",
+      "I worry that if I stayed calm, she'd know",
+      "She'd stop trusting me",
+    ];
+    for (const s of inputs) {
+      const once = normalizeWorryPrefix(s);
+      const twice = normalizeWorryPrefix(once);
+      expect(twice).toBe(once);
+    }
   });
 });
 
