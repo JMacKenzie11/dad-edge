@@ -56,6 +56,22 @@ export default async function MePage() {
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">{user.email}</p>
       </header>
 
+      <Link
+        href="/dashboard"
+        className="flex items-center justify-between p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] transition-colors"
+      >
+        <div>
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+            YOUR RECORD
+          </p>
+          <p className="font-heading text-lg mt-1">Dashboard</p>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+            Pillars, composite trend, survey delta, missions, and any active ITC map.
+          </p>
+        </div>
+        <span className="text-[color:var(--color-primary)]">→</span>
+      </Link>
+
       <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="font-heading text-lg text-[color:var(--color-accent)]">Partner</h2>
