@@ -184,6 +184,7 @@ export function ResultsForm({
       </label>
 
       <FormField
+        step={1}
         label="So in Order to Test it I Changed my Behavior This Way"
         hint="What you actually did. The concrete move. If plan and reality diverged, say so."
         value={whatIDid}
@@ -198,6 +199,7 @@ export function ResultsForm({
       />
 
       <FormField
+        step={2}
         label="This is What I Observed Happening"
         hint="Observable: what people said and did. Felt: what came up in you. Not interpretations."
         value={dataCollected}
@@ -212,6 +214,7 @@ export function ResultsForm({
       />
 
       <FormField
+        step={3}
         label="And This is What it Tells me About my Big Assumption"
         hint="Which aspects of the assumption held? Which didn't? Be specific."
         value={whatItSays}

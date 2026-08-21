@@ -23,6 +23,7 @@ export function FormField({
   disabled,
   placeholder,
   error,
+  step,
 }: {
   label: string;
   hint: string;
@@ -34,12 +35,28 @@ export function FormField({
   /** Per-field validation error. When present the border turns
    *  danger red and the hint below is replaced with this message. */
   error?: string;
+  /** Optional 1-based step number. When set, renders a numbered
+   *  badge beside the label and a colored left-border accent on the
+   *  input. Used on multi-field forms (test design, results debrief)
+   *  where the fields form an ordered sequence and reading them as a
+   *  wall of identical inputs is hard on the eye. */
+  step?: number;
 }) {
   const invalid = Boolean(error);
   return (
     <label className="block space-y-1">
-      <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
-        {label}
+      <span className="flex items-center gap-2">
+        {step !== undefined ? (
+          <span
+            aria-hidden="true"
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/20 text-[11px] font-bold text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/40"
+          >
+            {step}
+          </span>
+        ) : null}
+        <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
+          {label}
+        </span>
       </span>
       <AutoTextarea
         value={value}
@@ -52,7 +69,10 @@ export function FormField({
           "w-full rounded-md bg-black/30 px-3 py-2 text-sm leading-relaxed placeholder:text-[color:var(--color-text-muted)]/60 placeholder:italic border " +
           (invalid
             ? "border-[color:var(--color-danger)]"
-            : "border-[color:var(--color-border)]")
+            : "border-[color:var(--color-border)]") +
+          (step !== undefined && !invalid
+            ? " border-l-2 border-l-[color:var(--color-primary)]/60"
+            : "")
         }
       />
       {invalid ? (

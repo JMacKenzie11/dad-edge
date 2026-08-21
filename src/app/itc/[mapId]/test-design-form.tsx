@@ -433,6 +433,7 @@ export function TestDesignForm({
         }
       >
         <FormField
+          step={1}
           label="So I Will (Change my Behavior This Way)"
           hint="One specific move in one specific moment. Modest. Worst case must be livable."
           value={behaviorChange}
@@ -446,6 +447,7 @@ export function TestDesignForm({
         />
 
         <FormField
+          step={2}
           label="And Collect the Following Data"
           hint="Observable (what would show up on a videotape) + felt. Not interpretive."
           value={dataToCollect}
@@ -459,6 +461,7 @@ export function TestDesignForm({
         />
 
         <FormField
+          step={3}
           label="In Order to Find Out Whether"
           hint="What would tell you the assumption doesn't hold. Name the disconfirmation."
           value={inOrderToFindOut}
