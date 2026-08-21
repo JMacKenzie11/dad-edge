@@ -12,10 +12,12 @@ const items = [
   { href: "/me", label: "Me", icon: "●" },
 ] as const;
 
-/** Left-menu-only entry. Not in the mobile bottom nav (which is at
- *  its 5-slot ergonomic cap) — /me carries a top card that also
- *  links to /dashboard for mobile users. */
+/** Left-menu-only entries. Not in the mobile bottom nav (which is
+ *  at its 5-slot ergonomic cap). Dashboard is reachable on mobile
+ *  via /me's top card; Goals is reachable via the "Manage goals"
+ *  button on /missions. */
 const dashboardItem = { href: "/dashboard", label: "Dashboard", icon: "▤" } as const;
+const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
 
@@ -50,12 +52,14 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
-  // Dashboard sits at the top of the desktop left menu (user request).
-  // Mobile users still reach it via /me's top card since we didn't add
-  // it to the bottom nav (5-slot cap).
+  // Dashboard + Goals sit at the top of the desktop left menu
+  // (planning/analytical surfaces above the daily work). Neither is
+  // in the mobile bottom nav (5-slot ergonomic cap); mobile users
+  // reach Dashboard via /me and Goals via the /missions "Manage
+  // goals" button.
   const navItems = isPlatformAdmin
-    ? [dashboardItem, ...items, adminItem]
-    : [dashboardItem, ...items];
+    ? [dashboardItem, goalsItem, ...items, adminItem]
+    : [dashboardItem, goalsItem, ...items];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
