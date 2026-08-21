@@ -155,7 +155,7 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - **`weeks`** — per community, Monday `start_date`, `is_intensive`, `locked_at`. Unique (community, start_date).
 - **`pillar_framework_versions`** — versioned JSONB definition of pillars + `weekly_max`.
 - **`daily_checkins`** — one row per (user, date, pillar). `value` is `0` or `1`. Absence of a row is meaningfully different from `value=0`.
-- **`quarterly_goals`** — user + quarter_start + focus_area (pillar) + description + status (`active` / `completed` / `abandoned`). DB trigger `enforce_active_goals_cap_trg` caps active goals at 2 per user per quarter.
+- **`quarterly_goals`** — user + quarter_start + focus_area (pillar) + `desired_end_state` (renamed from `description` in migration `20260826000002`; both user and ITC goals use this column) + `current_state` (start line, user goals only) + `source` (`user`/`itc`, from migration `20260826000001`) + `status` (`active`/`completed`/`abandoned`/`needs_review`) + `midpoint_check_at` + `midpoint_check_answer` + `retrospective_what_happened` + `retrospective_what_learned`. DB trigger `enforce_active_goals_cap_trg` enforces a split cap: 2 user-authored active goals + 1 ITC-mirrored (3 total) per user per quarter. See §6 for the review flow that transitions goals into `needs_review`.
 - **`missions`** — user, community, optional `quarterly_goal_id`, description (≥ 8 chars, DB CHECK), pillar, target_date, status (`planned` / `completed` / `missed` / `rolled_over`), `rolled_over_from_mission_id`, `created_by` (`user` / `coach_suggested`), `completed_at`, `completed_late`, `legacy_import`, `is_exemplar`. Trigger `enforce_mission_weekly_cap_trg` enforces cap of 15/week total, 5/goal-bucket, 5/other; rolled-over missions excluded from count.
 - **`daily_reflections`** — one row per (user, date) with optional `wins` + `learnings`. Self-only RLS; coach reads via service role.
 
@@ -242,6 +242,16 @@ composite = round((dailyTotal / 56) * 100 * 0.7 + missionRate * 100 * 0.3)
 ### Mission caps (DECISION #3 v2)
 - 15 total per week, 5 per goal bucket, 5 for the unattached "other" bucket. Rolled-over missions excluded from count.
 - Enforced by DB trigger `enforce_mission_weekly_cap()` **and** server action (dual gate). Hard cap — no exceptions.
+
+### Quarterly goal cap (revised 2026-08-26)
+- Split cap enforced by `enforce_active_goals_cap_trg`: 2 user-authored active goals + 1 ITC-mirrored (3 total) per user per quarter.
+- `source='user'` inserts rejected at 2/2 user goals with a message; the third slot is reserved for a `source='itc'` goal.
+- Application-layer mirroring: `/goals` disables the "add" form at 2/2 with explanatory copy so the coachee doesn't hit the DB trigger. `syncItcGoalToTracker` in `src/lib/itc/tracker-link.ts` writes `source='itc'`.
+
+### Quarterly goal review flow (added 2026-08-26)
+- **Calendar quarters** — canonical UTC quarters (Jan/Apr/Jul/Oct) via `src/lib/scoring/quarters.ts::getCurrentQuarter`. Single source of truth for `/missions` header countdown, `/goals` header, quarter-end cron, and dashboard goal-period bands.
+- **Midpoint check-in** — `computeMidpointCheckAt(quarter_end, created_at)` at goal-create time: halfway between `created_at` and `quarter_end`, or `null` when `<MIDPOINT_MIN_RUNWAY_DAYS` (21) remain (skip). ITC goals leave it `null` (their map has its own cadence). Prompt renders on `/today` and `/goals` when `midpoint_check_at <= today` AND `midpoint_check_answer IS NULL`. Answering writes to `midpoint_check_answer`; the prompt stops firing.
+- **Quarter-end retrospective** — `runMarkGoalsForReview` (daily cron) transitions active goals to `needs_review` when the quarter is within `REVIEW_LEAD_DAYS` (=7) of ending. Prior-quarter safety-net path also runs unconditionally. Retrospective prompt renders on `/today` and `/goals` when a `needs_review` goal exists. Coachee answers Yes / Partway / No plus two freeform fields (`retrospective_what_happened` + `retrospective_what_learned`). Yes/Partway → `completed`; No → `abandoned`. ITC-sourced needs_review goals render an "open the map" variant that points to the ITC done-stage flow instead of the retrospective fields.
 
 ### Win-back window (DECISION #4)
 - 30 days after `canceled_at`. Shown on scorecard as "INACTIVE," read-only. After 30 days, hidden and redirected to `/inactive`. Constant `WIN_BACK_DAYS` in `src/lib/entitlement.ts`.

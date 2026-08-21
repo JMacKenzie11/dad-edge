@@ -51,6 +51,10 @@ import {
   STAGE_INTROS,
 } from "@/lib/itc/stage-intros";
 import { normalizeWorryPrefix } from "@/lib/itc/maps";
+import {
+  computeMidpointCheckAt,
+  MIDPOINT_MIN_RUNWAY_DAYS,
+} from "@/lib/scoring/quarters";
 
 describe("scrubReply", () => {
   it("strips em dashes to comma-space", () => {
@@ -1033,5 +1037,70 @@ describe("isLegacyCannedIntro", () => {
         "Look at your map. Column 2 is what you actually do would tell us more.",
       ),
     ).toBe(false);
+  });
+});
+
+describe("computeMidpointCheckAt (goal-relative midpoint math)", () => {
+  // Q3 2026 ends 2026-09-30. Anchor every test on that boundary so the
+  // "join week N" scenarios read cleanly against a real calendar quarter.
+  const QUARTER_END = "2026-09-30";
+
+  it("returns halfway date for a goal created at quarter start (week 1)", () => {
+    // Q3 starts July 1. Full 92-day quarter ahead. Midpoint should
+    // land near Aug 15-16 (halfway between Jul 1 and Sep 30).
+    const created = new Date("2026-07-01T00:00:00Z");
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).not.toBeNull();
+    // Between Jul 20 and Aug 25 is close enough for a halfway check.
+    expect(midpoint! >= "2026-07-20" && midpoint! <= "2026-08-25").toBe(true);
+  });
+
+  it("returns proportional midpoint for a mid-quarter joiner (week 6)", () => {
+    // Joins ~week 6 of Q3. Roughly 47 days remain. Midpoint ~24 days out.
+    const created = new Date("2026-08-15T00:00:00Z");
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).not.toBeNull();
+    // Should be roughly early September.
+    expect(midpoint! >= "2026-08-30" && midpoint! <= "2026-09-15").toBe(true);
+  });
+
+  it("returns null when joining <21 days from quarter end (week 10+)", () => {
+    // Joins Sep 15. 15 days to quarter end — under the 21-day floor.
+    const created = new Date("2026-09-15T00:00:00Z");
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).toBeNull();
+  });
+
+  it("returns null when joining in the final week (week 12)", () => {
+    // Joins Sep 24, only 6 days left. Definitely skip midpoint.
+    const created = new Date("2026-09-24T00:00:00Z");
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).toBeNull();
+  });
+
+  it("boundary: exactly MIDPOINT_MIN_RUNWAY_DAYS remaining passes", () => {
+    // Ensure the floor rule is `< 21`, not `<= 21`. At exactly 21 days
+    // we should still schedule a midpoint (10-11 days out).
+    const quarterEndMs = new Date(`${QUARTER_END}T00:00:00Z`).getTime();
+    const created = new Date(
+      quarterEndMs - MIDPOINT_MIN_RUNWAY_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).not.toBeNull();
+  });
+
+  it("boundary: one day under the floor returns null", () => {
+    const quarterEndMs = new Date(`${QUARTER_END}T00:00:00Z`).getTime();
+    const created = new Date(
+      quarterEndMs - (MIDPOINT_MIN_RUNWAY_DAYS - 1) * 24 * 60 * 60 * 1000,
+    );
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).toBeNull();
+  });
+
+  it("returns ISO YYYY-MM-DD format when non-null", () => {
+    const created = new Date("2026-07-01T00:00:00Z");
+    const midpoint = computeMidpointCheckAt(QUARTER_END, created);
+    expect(midpoint).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
