@@ -918,43 +918,153 @@ const WORRY_SHAPE_INSTRUCTIONS: Record<WorryIdentityShape, string> = {
 };
 
 /**
+ * Shared runner for the worry + commitment drafters. Both share the
+ * exact same verification-and-retry shape:
+ *
+ *   1. Generate draft (mainModel) → assemble slots → trim overshoot.
+ *   2. Score depth rubric (utilityModel) + run consistency check
+ *      (deterministic pattern match) in PARALLEL. Depth fail-opens
+ *      on rubric error; consistency cannot fail.
+ *   3. If both pass, return the assembled draft.
+ *   4. If either fails, one drafter retry with the failing reason(s)
+ *      fed back as feedback. Return whatever comes back — never
+ *      silent-drop, per the "coachee sees SOMETHING they can edit"
+ *      invariant.
+ *
+ * Extracted from the two near-identical implementations of
+ * draftWorryForBehavior / draftCommitmentForWorry. The batch
+ * assumption drafter has a different shape (batch generation +
+ * per-item verify + batch retry) so it stays separate.
+ *
+ * Config uses closures for the rubric + consistency calls so each
+ * drafter can pass its own kind-specific inputs (worry needs
+ * behaviorText + worryText; commitment needs worryText + commitmentText).
+ */
+type DrafterConfig<TSlots> = {
+  /** For log lines only. "worry" | "commitment" etc. */
+  kind: string;
+  schema: z.ZodType<TSlots>;
+  /** Full system prompt — caller applies `withVoiceRules()`. */
+  system: string;
+  /** Base prompt lines. Closure captures the drafter's inputs. */
+  basePromptLines: string[];
+  /** Slots → canonical sentence via server-owned template. */
+  assemble: (slots: TSlots) => string;
+  /** Hard word cap; trimAssembledDraft is applied. */
+  hardCap: number;
+  maxOutputTokens: number;
+  /**
+   * Depth rubric call. Receives the assembled sentence, returns the
+   * rubric result or throws. Runner catches errors and treats them
+   * as pass (fail-open) so a Haiku hiccup can't strand the draft.
+   */
+  scoreDepth: (assembled: string) => Promise<{ score: number; reason: string }>;
+  /**
+   * Deterministic consistency check. Receives the raw slots (not the
+   * assembled sentence) so pattern checks can inspect individual
+   * slot contents. Cannot fail.
+   */
+  checkConsistency: (slots: TSlots) => { consistent: boolean; reason: string };
+};
+
+async function runDrafterWithVerification<TSlots>(
+  cfg: DrafterConfig<TSlots>,
+): Promise<string | null> {
+  const started = Date.now();
+
+  async function generate(
+    promptLines: string[],
+  ): Promise<{ assembled: string; slots: TSlots } | null> {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: cfg.schema,
+      system: cfg.system,
+      prompt: promptLines.join("\n"),
+      maxOutputTokens: cfg.maxOutputTokens,
+    });
+    const raw = scrubReply(cfg.assemble(object));
+    if (!raw) return null;
+    return {
+      assembled: trimAssembledDraft(raw, cfg.hardCap),
+      slots: object,
+    };
+  }
+
+  try {
+    const first = await generate(cfg.basePromptLines);
+    if (!first) return null;
+
+    // Parallel verification. Depth (LLM) + consistency (deterministic)
+    // are independent — no reason to sequence them. Cuts ~50-300ms
+    // per draft vs. the pre-extract sequential shape.
+    const [depthResult, consistencyResult] = await Promise.all([
+      cfg.scoreDepth(first.assembled).catch((err) => {
+        console.warn(
+          "[itc coach] %s depth rubric failed, treating as pass: %s",
+          cfg.kind,
+          err instanceof Error ? err.message : String(err),
+        );
+        return null;
+      }),
+      Promise.resolve(cfg.checkConsistency(first.slots)),
+    ]);
+
+    const depthOk = depthResult === null || depthResult.score >= 3;
+    const consistencyOk = consistencyResult.consistent;
+    if (depthOk && consistencyOk) return first.assembled;
+
+    // One retry with the failing reason(s) fed back.
+    const feedbackLines: string[] = [];
+    if (!depthOk && depthResult) {
+      feedbackLines.push(
+        `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
+      );
+    }
+    if (!consistencyOk) {
+      feedbackLines.push(
+        `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
+      );
+    }
+    const retry = await generate([
+      ...cfg.basePromptLines,
+      ``,
+      `Your previous draft was: "${first.assembled}"`,
+      ...feedbackLines,
+      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target.`,
+    ]);
+    return retry?.assembled ?? first.assembled;
+  } catch (err) {
+    console.warn(
+      "[itc coach] draft kind=%s failed: %s",
+      cfg.kind,
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=%s ms=%d",
+      cfg.kind,
+      Date.now() - started,
+    );
+  }
+}
+
+/**
  * Server-side coach-draft generator for Column 3. Called once per
  * selected behavior when the coachee advances into the worries stage.
  *
- * Form-First-pure: LLM returns METADATA (two slots); server assembles
- * the canonical "I worry that if I ..., ..." sentence and mechanically
- * trims any overshoot via trimAssembledDraft.
- *
- * Verification pipeline (server-owned structure over LLM obedience):
- *
- *   1. Drafter (mainModel) fills opposite_move + identity_landing.
- *   2. Depth rubric (utilityModel, scoreWorryDepth) scores 0-3 —
- *      answers "is this deep enough?"
- *   3. Consistency check (deterministic pattern match,
- *      checkWorryLogicalConsistency) verifies the identity landing
- *      uses past-tense/witnessed/truth-frame framing. Catches
- *      bare-present-tense inversions like "if I stayed and heard her
- *      out, I'd have to see I'm the man who abandons her" (staying is
- *      the opposite of abandoning; "I'm the [X-er]" reads as staying
- *      creating the abandoner identity). Zero LLM cost, no judgment.
- *   4. If either check fails, one drafter retry fires with the failing
- *      reason(s) as feedback. Whatever comes back is returned — never
- *      silent drop; a slightly-off draft the coachee can edit beats
- *      no draft at all.
+ * Thin wrapper around runDrafterWithVerification — see that helper
+ * for the verification pipeline shape. Kegan-canonical identity
+ * shape rotation (WORRY_IDENTITY_SHAPES) is applied here via the
+ * optional identityShape input; the caller rotates shapes across
+ * behaviors to guarantee map-level variety.
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
   behaviorText: string;
   pillar: PillarCode;
-  /**
-   * Optional server-owned identity-landing shape hint. When present,
-   * the drafter is constrained to one of the four Kegan-canonical
-   * shapes (see WORRY_IDENTITY_SHAPES). The caller rotates shapes
-   * across behaviors to guarantee map-level variety.
-   */
   identityShape?: WorryIdentityShape;
 }): Promise<string | null> {
-  const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
   const shapeLine = input.identityShape
     ? WORRY_SHAPE_INSTRUCTIONS[input.identityShape]
@@ -968,90 +1078,27 @@ export async function draftWorryForBehavior(input: {
     ...(shapeLine ? [``, shapeLine] : []),
   ];
 
-  type DraftShape = {
-    assembled: string;
-    slots: { opposite_move: string; identity_landing: string };
-  };
-
-  async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: WorryDraftSchema,
-      system: withVoiceRules(DRAFT_WORRY_SYSTEM),
-      prompt: promptLines.join("\n"),
-      maxOutputTokens: 200,
-    });
-    const raw = scrubReply(assembleWorry(object));
-    if (!raw) return null;
-    return {
-      assembled: trimAssembledDraft(raw, WORRY_HARD_WORD_CAP),
-      slots: object,
-    };
-  }
-
-  try {
-    const first = await generateDraft(basePromptLines);
-    if (!first) return null;
-
-    // Depth (LLM rubric, may fail) + consistency (deterministic pattern
-    // check, cannot fail). Depth fail-opens on rubric error — a
-    // transient Haiku hiccup shouldn't strand the drafter output.
-    const depthResult = await scoreWorryDepth({
-      goalText: input.goalText,
-      behaviorText: input.behaviorText,
-      worryText: first.assembled,
-    }).catch((err) => {
-      console.warn(
-        "[itc coach] worry depth rubric failed, treating as pass: %s",
-        err instanceof Error ? err.message : String(err),
-      );
-      return null;
-    });
-    const consistencyResult = checkWorryLogicalConsistency({
-      behaviorText: input.behaviorText,
-      oppositeMove: first.slots.opposite_move,
-      identityLanding: first.slots.identity_landing,
-    });
-
-    const depthOk = depthResult === null || depthResult.score >= 3;
-    const consistencyOk = consistencyResult.consistent;
-    if (depthOk && consistencyOk) return first.assembled;
-
-    // One retry with the failing reason(s) fed back. Both verifiers'
-    // feedback goes in if both failed; retry addresses whichever is
-    // wrong. Returning `first` on retry failure preserves the "never
-    // silent drop" invariant.
-    const feedbackLines: string[] = [];
-    if (!depthOk && depthResult) {
-      feedbackLines.push(
-        `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
-      );
-    }
-    if (!consistencyOk) {
-      feedbackLines.push(
-        `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
-      );
-    }
-    const retry = await generateDraft([
-      ...basePromptLines,
-      ``,
-      `Your previous draft was: "${first.assembled}"`,
-      ...feedbackLines,
-      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target (under 20 words).`,
-    ]);
-    return retry?.assembled ?? first.assembled;
-  } catch (err) {
-    console.warn(
-      "[itc coach] draftWorryForBehavior failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
-  } finally {
-    console.warn(
-      "[itc timing] draft kind=worry ms=%d",
-      Date.now() - started,
-    );
-  }
+  return runDrafterWithVerification({
+    kind: "worry",
+    schema: WorryDraftSchema,
+    system: withVoiceRules(DRAFT_WORRY_SYSTEM),
+    basePromptLines,
+    assemble: assembleWorry,
+    hardCap: WORRY_HARD_WORD_CAP,
+    maxOutputTokens: 200,
+    scoreDepth: (assembled) =>
+      scoreWorryDepth({
+        goalText: input.goalText,
+        behaviorText: input.behaviorText,
+        worryText: assembled,
+      }),
+    checkConsistency: (slots) =>
+      checkWorryLogicalConsistency({
+        behaviorText: input.behaviorText,
+        oppositeMove: slots.opposite_move,
+        identityLanding: slots.identity_landing,
+      }),
+  });
 }
 
 // -------------------------------------------------------------------------
@@ -1319,27 +1366,14 @@ const COMMITMENT_HARD_WORD_CAP = 20;
  * Server-side coach-draft generator for Column 4. Called once per
  * worry when the coachee advances into the commitments stage.
  *
- * Verification pipeline (same shape as draftWorryForBehavior):
- *
- *   1. Drafter (mainModel) fills active_move + protective_purpose.
- *   2. Depth rubric (utilityModel, scoreCommitmentDepth) scores 0-3 —
- *      catches noble commitments and non-self-protective phrasings.
- *   3. Consistency check (deterministic pattern match,
- *      checkCommitmentLogicalConsistency) blacklists banned patterns:
- *      abstract mechanism metaphors in active_move ("keeping X loaded"),
- *      interior-witness verbs in protective_purpose ("have to face"),
- *      noble-avoidance ("so I never have to be the [X]"). Zero LLM
- *      cost, no judgment.
- *   4. If either check fails, one drafter retry fires with the failing
- *      reason(s) as feedback. Whatever comes back is returned — never
- *      silent-drop.
+ * Thin wrapper around runDrafterWithVerification — see that helper
+ * for the verification pipeline shape.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
   behaviorText: string;
   worryText: string;
 }): Promise<string | null> {
-  const started = Date.now();
   const basePromptLines = [
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
     `Behavior (Column 2): ${input.behaviorText}`,
@@ -1348,85 +1382,27 @@ export async function draftCommitmentForWorry(input: {
     `Fill active_move with the specific verb-forward protective mechanism a part of him is running (3-8 words), and protective_purpose with the self-protection it gives him (4-12 words, starts with "so"). Assembled sentence must be under 20 words.`,
   ];
 
-  type DraftShape = {
-    assembled: string;
-    slots: { active_move: string; protective_purpose: string };
-  };
-
-  async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: CommitmentDraftSchema,
-      system: withVoiceRules(DRAFT_COMMITMENT_SYSTEM),
-      prompt: promptLines.join("\n"),
-      maxOutputTokens: 200,
-    });
-    const raw = scrubReply(assembleCommitment(object));
-    if (!raw) return null;
-    return {
-      assembled: trimAssembledDraft(raw, COMMITMENT_HARD_WORD_CAP),
-      slots: object,
-    };
-  }
-
-  try {
-    const first = await generateDraft(basePromptLines);
-    if (!first) return null;
-
-    // Depth (LLM rubric, may fail) + consistency (deterministic, cannot
-    // fail). Depth fail-opens on rubric error.
-    const depthResult = await scoreCommitmentDepth({
-      goalText: input.goalText,
-      worryText: input.worryText,
-      commitmentText: first.assembled,
-    }).catch((err) => {
-      console.warn(
-        "[itc coach] commitment depth rubric failed, treating as pass: %s",
-        err instanceof Error ? err.message : String(err),
-      );
-      return null;
-    });
-    const consistencyResult = checkCommitmentLogicalConsistency({
-      activeMove: first.slots.active_move,
-      protectivePurpose: first.slots.protective_purpose,
-      behaviorText: input.behaviorText,
-    });
-
-    const depthOk = depthResult === null || depthResult.score >= 3;
-    const consistencyOk = consistencyResult.consistent;
-    if (depthOk && consistencyOk) return first.assembled;
-
-    const feedbackLines: string[] = [];
-    if (!depthOk && depthResult) {
-      feedbackLines.push(
-        `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
-      );
-    }
-    if (!consistencyOk) {
-      feedbackLines.push(
-        `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
-      );
-    }
-    const retry = await generateDraft([
-      ...basePromptLines,
-      ``,
-      `Your previous draft was: "${first.assembled}"`,
-      ...feedbackLines,
-      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target (under 20 words).`,
-    ]);
-    return retry?.assembled ?? first.assembled;
-  } catch (err) {
-    console.warn(
-      "[itc coach] draftCommitmentForWorry failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
-  } finally {
-    console.warn(
-      "[itc timing] draft kind=commitment ms=%d",
-      Date.now() - started,
-    );
-  }
+  return runDrafterWithVerification({
+    kind: "commitment",
+    schema: CommitmentDraftSchema,
+    system: withVoiceRules(DRAFT_COMMITMENT_SYSTEM),
+    basePromptLines,
+    assemble: assembleCommitment,
+    hardCap: COMMITMENT_HARD_WORD_CAP,
+    maxOutputTokens: 200,
+    scoreDepth: (assembled) =>
+      scoreCommitmentDepth({
+        goalText: input.goalText,
+        worryText: input.worryText,
+        commitmentText: assembled,
+      }),
+    checkConsistency: (slots) =>
+      checkCommitmentLogicalConsistency({
+        activeMove: slots.active_move,
+        protectivePurpose: slots.protective_purpose,
+        behaviorText: input.behaviorText,
+      }),
+  });
 }
 
 // -------------------------------------------------------------------------
