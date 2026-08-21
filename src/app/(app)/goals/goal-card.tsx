@@ -13,7 +13,6 @@ type Goal = {
   source: "user" | "itc";
   current_state: string | null;
   desired_end_state: string;
-  how_youll_know: string | null;
   review_reflection: string | null;
   completed_missions: number;
   total_missions: number;

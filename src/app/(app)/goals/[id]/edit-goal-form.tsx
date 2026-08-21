@@ -6,8 +6,8 @@ import { updateGoal } from "../actions";
 
 /**
  * Inline edit form for a user-authored goal. Fields mirror the create
- * form (current_state / desired_end_state / how_youll_know); pillar
- * and quarter are immutable once set (changing either → new goal).
+ * form (current_state / desired_end_state); pillar and quarter are
+ * immutable once set (changing either → new goal).
  */
 export function EditGoalForm({
   goal,
@@ -16,12 +16,10 @@ export function EditGoalForm({
     id: string;
     current_state: string;
     desired_end_state: string;
-    how_youll_know: string;
   };
 }) {
   const [currentState, setCurrentState] = useState(goal.current_state);
   const [desiredEndState, setDesiredEndState] = useState(goal.desired_end_state);
-  const [howYoullKnow, setHowYoullKnow] = useState(goal.how_youll_know);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -34,7 +32,6 @@ export function EditGoalForm({
         goal_id: goal.id,
         current_state: currentState,
         desired_end_state: desiredEndState,
-        how_youll_know: howYoullKnow || undefined,
       });
       if (res.ok) setMessage("Saved.");
       else setError(res.error ?? "Something went wrong.");
@@ -55,16 +52,9 @@ export function EditGoalForm({
       />
       <FormField
         label="Where you want to be"
-        hint="The finish line. What done looks like at the end of the quarter."
+        hint="The finish line. Write it specific enough that you'll know when you've hit it."
         value={desiredEndState}
         onChange={setDesiredEndState}
-        rows={2}
-      />
-      <FormField
-        label="How you'll know (optional)"
-        hint="The observable signal. What you'd point at to say it's done."
-        value={howYoullKnow}
-        onChange={setHowYoullKnow}
         rows={2}
       />
       {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}

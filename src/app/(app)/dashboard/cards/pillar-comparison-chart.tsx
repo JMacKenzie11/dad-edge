@@ -1,6 +1,5 @@
 "use client";
 
-import { PILLARS } from "@/lib/pillars";
 import {
   Bar,
   BarChart,
@@ -14,9 +13,9 @@ import {
 
 /**
  * Grouped bar chart: this-quarter vs last-quarter Daily Living
- * check-in totals per pillar. Two bars per pillar, colored via
- * pillar tokens. Recharts is client-only so this is a client
- * component; the parent server card fetches + shapes the data.
+ * check-in totals per pillar. Two bars per pillar (or one when there's
+ * no last-quarter data). Full pillar names on the x-axis so the chart
+ * is legible without needing to know the BRAVEMAN codes by heart.
  */
 export function PillarComparisonChart({
   data,
@@ -30,20 +29,36 @@ export function PillarComparisonChart({
   hasLastQuarter: boolean;
 }) {
   return (
-    <div className="h-56">
+    <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 8, left: -20, bottom: 24 }}
+        >
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
             dataKey="pillar"
-            tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10 }}
             tickLine={{ stroke: "var(--color-border)" }}
             axisLine={{ stroke: "var(--color-border)" }}
+            angle={-25}
+            textAnchor="end"
+            interval={0}
+            height={44}
           />
           <YAxis
             tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
             tickLine={{ stroke: "var(--color-border)" }}
             axisLine={{ stroke: "var(--color-border)" }}
+            allowDecimals={false}
+            label={{
+              value: "Check-ins",
+              angle: -90,
+              position: "insideLeft",
+              offset: 20,
+              fill: "var(--color-text-muted)",
+              fontSize: 11,
+            }}
           />
           <Tooltip
             cursor={{ fill: "var(--color-border)", opacity: 0.2 }}
@@ -74,11 +89,6 @@ export function PillarComparisonChart({
           ) : null}
         </BarChart>
       </ResponsiveContainer>
-      <div className="hidden">
-        {/* Reference PILLARS so the pillar sort_order is deterministic
-            even when the data has zeros. */}
-        {PILLARS.map((p) => p.code).join(",")}
-      </div>
     </div>
   );
 }

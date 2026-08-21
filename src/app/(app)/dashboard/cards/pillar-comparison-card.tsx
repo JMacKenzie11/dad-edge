@@ -49,8 +49,10 @@ export async function PillarComparisonCard({ userId }: { userId: string }) {
     );
   }
 
+  // Use the full pillar name on the axis so the chart is legible
+  // without the reader knowing the BRAVEMAN codes.
   const data = PILLARS.map((p) => ({
-    pillar: p.code,
+    pillar: p.label,
     thisQuarter: thisCounts.get(p.code) ?? 0,
     lastQuarter: lastCounts.get(p.code) ?? 0,
   }));

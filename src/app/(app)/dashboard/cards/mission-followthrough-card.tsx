@@ -48,7 +48,7 @@ export async function MissionFollowThroughCard({ userId }: { userId: string }) {
   if (weeks.length < 2) {
     return (
       <CardEmpty
-        title="Mission follow-through"
+        title="Mission completion trend"
         message="Once you have two full weeks with completed or missed missions, your on-time vs late rate will chart here."
       />
     );
@@ -64,8 +64,8 @@ export async function MissionFollowThroughCard({ userId }: { userId: string }) {
 
   return (
     <DashboardCard
-      title="Mission follow-through"
-      subtitle="Weekly completion rate. Late-completed sits on top of on-time so you can see how much was finished the week you set it vs after."
+      title="Mission completion trend"
+      subtitle="Weekly completion rate as a percentage. On-time and completed-late shown separately so you can see how much was finished the week you set it vs after."
     >
       <MissionFollowThroughChart data={data} />
     </DashboardCard>

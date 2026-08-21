@@ -14,21 +14,21 @@ import type { PillarCode } from "@/lib/pillars";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 
 /**
- * Composite score weekly trend with quarterly goal windows overlaid
- * as pillar-colored bands. Goal windows are drawn behind the line
- * via ReferenceArea so the coach can see which weeks fell inside
- * which active-goal periods.
+ * Weekly Daily Living check-in count (0-56) as a line across the
+ * user's full history. Quarterly goal windows are overlaid as
+ * pillar-colored shaded bands so the reader can see which weeks
+ * fell inside which active-goal period without an explicit label
+ * (labels stack awkwardly on adjacent quarters).
  */
-export function CompositeTrendChart({
+export function DailyLivingTrendChart({
   data,
   goalBands,
 }: {
-  data: Array<{ week: string; composite: number }>;
+  data: Array<{ week: string; total: number }>;
   goalBands: Array<{
     startWeek: string;
     endWeek: string;
     pillar: PillarCode;
-    label: string;
   }>;
 }) {
   return (
@@ -43,10 +43,18 @@ export function CompositeTrendChart({
             axisLine={{ stroke: "var(--color-border)" }}
           />
           <YAxis
-            domain={[0, 100]}
+            domain={[0, 56]}
             tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
             tickLine={{ stroke: "var(--color-border)" }}
             axisLine={{ stroke: "var(--color-border)" }}
+            label={{
+              value: "Check-ins / 56",
+              angle: -90,
+              position: "insideLeft",
+              offset: 20,
+              fill: "var(--color-text-muted)",
+              fontSize: 11,
+            }}
           />
           <Tooltip
             contentStyle={{
@@ -63,22 +71,16 @@ export function CompositeTrendChart({
               x1={band.startWeek}
               x2={band.endWeek}
               y1={0}
-              y2={100}
+              y2={56}
               fill={PILLAR_BY_CODE[band.pillar].colorVar}
-              fillOpacity={0.12}
+              fillOpacity={0.1}
               stroke={PILLAR_BY_CODE[band.pillar].colorVar}
-              strokeOpacity={0.3}
-              label={{
-                value: band.label,
-                position: "insideTopLeft",
-                fill: "var(--color-text-muted)",
-                fontSize: 10,
-              }}
+              strokeOpacity={0.25}
             />
           ))}
           <Line
             type="monotone"
-            dataKey="composite"
+            dataKey="total"
             stroke="var(--color-primary)"
             strokeWidth={2}
             dot={{ fill: "var(--color-primary)", r: 3 }}

@@ -12,6 +12,11 @@ const items = [
   { href: "/me", label: "Me", icon: "●" },
 ] as const;
 
+/** Left-menu-only entry. Not in the mobile bottom nav (which is at
+ *  its 5-slot ergonomic cap) — /me carries a top card that also
+ *  links to /dashboard for mobile users. */
+const dashboardItem = { href: "/dashboard", label: "Dashboard", icon: "▤" } as const;
+
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
 
 export function BottomNav() {
@@ -45,7 +50,12 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
-  const navItems = isPlatformAdmin ? [...items, adminItem] : items;
+  // Dashboard sits at the top of the desktop left menu (user request).
+  // Mobile users still reach it via /me's top card since we didn't add
+  // it to the bottom nav (5-slot cap).
+  const navItems = isPlatformAdmin
+    ? [dashboardItem, ...items, adminItem]
+    : [dashboardItem, ...items];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {

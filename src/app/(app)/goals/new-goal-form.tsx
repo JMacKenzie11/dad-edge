@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { createGoal } from "./actions";
 
 /**
- * Create form for a user-authored quarterly goal. Three fields per the
- * rebuild: start line (current_state), finish line (desired_end_state),
- * and an optional signal-of-done (how_youll_know). Quarter is server-
- * computed; the user never picks a quarter — the calendar quarter
- * containing "now" is authoritative.
+ * Create form for a user-authored quarterly goal. Two fields: start
+ * line (current_state) and finish line (desired_end_state). Quarter
+ * is server-computed; the user never picks a quarter — the calendar
+ * quarter containing "now" is authoritative. If the finish line is
+ * specific enough, the signal is baked into it, so no separate
+ * "how you'll know" field.
  */
 export function NewGoalForm({
   userSlotsRemaining,
@@ -23,7 +24,6 @@ export function NewGoalForm({
   const [pillar, setPillar] = useState<PillarCode>("V");
   const [currentState, setCurrentState] = useState("");
   const [desiredEndState, setDesiredEndState] = useState("");
-  const [howYoullKnow, setHowYoullKnow] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const noSlots = userSlotsRemaining <= 0;
@@ -36,12 +36,10 @@ export function NewGoalForm({
         focus_area: pillar,
         current_state: currentState,
         desired_end_state: desiredEndState,
-        how_youll_know: howYoullKnow || undefined,
       });
       if (res.ok) {
         setCurrentState("");
         setDesiredEndState("");
-        setHowYoullKnow("");
       } else {
         setError(res.error ?? "Something went wrong.");
       }
@@ -87,20 +85,10 @@ export function NewGoalForm({
 
       <FormField
         label="Where you want to be"
-        hint="The finish line. What done looks like at the end of the quarter."
+        hint="The finish line. Write it specific enough that you'll know when you've hit it."
         value={desiredEndState}
         onChange={setDesiredEndState}
         placeholder="Deadlift 350 by end of quarter."
-        rows={2}
-        disabled={noSlots}
-      />
-
-      <FormField
-        label="How you'll know (optional)"
-        hint="The observable signal. What you'd point at to say it's done."
-        value={howYoullKnow}
-        onChange={setHowYoullKnow}
-        placeholder="I hit the 350 x1 on video."
         rows={2}
         disabled={noSlots}
       />

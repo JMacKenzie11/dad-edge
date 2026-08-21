@@ -21,7 +21,6 @@ export type Goal = {
   source: "user" | "itc";
   current_state: string | null;
   desired_end_state: string;
-  how_youll_know: string | null;
   review_reflection: string | null;
   completed_missions: number;
   total_missions: number;
@@ -40,7 +39,7 @@ export default async function GoalsPage() {
   const { data } = await supabase
     .from("quarterly_goals")
     .select(
-      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, how_youll_know, review_reflection",
+      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, review_reflection",
     )
     .eq("user_id", user.id)
     .order("quarter_start", { ascending: false });
@@ -161,7 +160,7 @@ export default async function GoalsPage() {
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
-          Regular goals
+          Goals
         </h2>
         {activeUserGoals.length === 0 ? (
           <EmptyState title="Nothing on the horizon." body="Pick one pillar. Write one goal." />
@@ -242,7 +241,8 @@ function AdaptiveGoalCard({
               {stageLabel}
             </span>
           </p>
-          <p className="text-sm mt-2 text-[color:var(--color-text-muted)]">
+          <p className="text-sm mt-2 leading-relaxed">{adaptive.goalText}</p>
+          <p className="text-[11px] text-[color:var(--color-text-muted)] mt-2">
             {adaptive.behaviorCount} behavior{adaptive.behaviorCount === 1 ? "" : "s"} mapped ·{" "}
             {adaptive.testCount} test{adaptive.testCount === 1 ? "" : "s"} designed
           </p>

@@ -165,9 +165,8 @@ export async function saveFirstGoal(formData: FormData) {
   const { getCurrentQuarter } = await import("@/lib/scoring/quarters");
   const q = getCurrentQuarter();
   // Onboarding stays lean (one input field) to keep the funnel short.
-  // The single input maps to desired_end_state; the coachee can fill
-  // in current_state + how_youll_know from /goals when they land
-  // there post-onboarding.
+  // The single input maps to desired_end_state; the coachee can add
+  // current_state from /goals when they land there post-onboarding.
   await supabase.from("quarterly_goals").insert({
     user_id: user.id,
     focus_area: parsed.data.focus_area,

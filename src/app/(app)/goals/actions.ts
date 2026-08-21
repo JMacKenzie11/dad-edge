@@ -12,7 +12,6 @@ const CreateSchema = z.object({
   focus_area: PillarCodeSchema,
   current_state: z.string().min(4).max(500),
   desired_end_state: z.string().min(4).max(500),
-  how_youll_know: z.string().max(500).optional(),
 });
 
 export async function createGoal(input: unknown) {
@@ -29,7 +28,6 @@ export async function createGoal(input: unknown) {
     focus_area: parsed.data.focus_area,
     current_state: parsed.data.current_state.trim(),
     desired_end_state: parsed.data.desired_end_state.trim(),
-    how_youll_know: parsed.data.how_youll_know?.trim() || null,
     quarter_start: q.startIso,
     source: "user",
   });
@@ -42,7 +40,6 @@ const UpdateSchema = z.object({
   goal_id: z.string().uuid(),
   current_state: z.string().min(4).max(500),
   desired_end_state: z.string().min(4).max(500),
-  how_youll_know: z.string().max(500).optional(),
 });
 
 /**
@@ -75,7 +72,6 @@ export async function updateGoal(input: unknown) {
     .update({
       current_state: parsed.data.current_state.trim(),
       desired_end_state: parsed.data.desired_end_state.trim(),
-      how_youll_know: parsed.data.how_youll_know?.trim() || null,
     })
     .eq("id", parsed.data.goal_id)
     .eq("user_id", user.id);
