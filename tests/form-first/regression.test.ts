@@ -19,6 +19,7 @@ import type { LanguageModel } from "ai";
 import {
   addBehavior,
   getAdvanceGate,
+  updateBehavior,
   saveAssumption,
   saveCommitment,
   saveGoal,
@@ -620,6 +621,346 @@ describe("Form-First regression", () => {
       ).toBe(true);
     },
     120_000,
+  );
+
+  it(
+    "regression u: behaviors excavation loop — shallow blocks Continue, deep unblocks",
+    async () => {
+      // Mirror of regression c one column upstream. Guards the
+      // behaviors depth branch in computeAdvanceGate (added when
+      // itc_behaviors gained depth_score/attempts/rubric_reason). If
+      // someone reverts to the old count-only gate on behaviors, this
+      // test catches it — otherwise the coach could flag "sharpen
+      // behavior #2" and the Continue-to-Worries button would stay
+      // enabled (the exact bug the migration fixed).
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probe: depth_score + attempts + rubric_reason on
+      // itc_behaviors come from migration 20260823000001. Skip cleanly
+      // if not applied.
+      const probe = await supabase
+        .from("itc_behaviors")
+        .select("attempts, depth_score, rubric_reason")
+        .limit(1);
+      if (probe.error) {
+        console.warn(
+          "[regression u] skipping: schema missing — apply migration 20260823000001. Probe error: %s",
+          probe.error.message,
+        );
+        return;
+      }
+
+      const goal =
+        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
+      const gfd = new FormData();
+      gfd.set("map_id", ctx.mapId);
+      gfd.set("text", goal);
+      expect((await saveGoal(gfd)).ok).toBe(true);
+
+      const { advanceToStage } = await import("@/app/itc/actions");
+      const advB = new FormData();
+      advB.set("map_id", ctx.mapId);
+      advB.set("to", "behaviors");
+      expect((await advanceToStage(advB)).ok).toBe(true);
+
+      // Seed 3 selected behaviors via addBehavior. The real rubric
+      // scores each. Use texts we expect to pass 3/3 so the count
+      // gate + depth gate both open initially.
+      const deepTexts = [
+        "I bring up things she did in the past instead of listening",
+        "I stop talking and walk out of the room mid-conversation",
+        "I raise my voice and start explaining why she's wrong",
+      ];
+      for (const text of deepTexts) {
+        const fd = new FormData();
+        fd.set("map_id", ctx.mapId);
+        fd.set("text", text);
+        expect((await addBehavior(fd)).ok).toBe(true);
+      }
+      const { data: bs } = await supabase
+        .from("itc_behaviors")
+        .select("id, text, depth_score, attempts")
+        .eq("map_id", ctx.mapId)
+        .order("sort_order");
+      expect(bs?.length).toBe(3);
+      const testBehaviorId = bs![0].id as string;
+
+      // The other two behaviors: force to depth_score=3 in case the
+      // real rubric happened to score one of them low. This isolates
+      // the assertion on the FIRST behavior — same pattern as
+      // regression c uses for worries.
+      for (const b of (bs ?? []).slice(1)) {
+        const { error } = await supabase
+          .from("itc_behaviors")
+          .update({ depth_score: 3, attempts: 1 })
+          .eq("id", b.id);
+        expect(
+          error,
+          `seed depth=3 for ${b.id} failed: ${error?.message}`,
+        ).toBeNull();
+      }
+
+      // 1. Edit the first behavior to a shallow (aspirational)
+      //    version. is_first_person_action_not_aspiration should
+      //    fail — "I want to X" is a wish, not an observable move.
+      const shallowText = "I want to be more patient with her";
+      const upd1 = new FormData();
+      upd1.set("map_id", ctx.mapId);
+      upd1.set("behavior_id", testBehaviorId);
+      upd1.set("text", shallowText);
+      expect((await updateBehavior(upd1)).ok).toBe(true);
+
+      const { data: rowsShallow } = await supabase
+        .from("itc_behaviors")
+        .select("id, text, depth_score, attempts, rubric_reason")
+        .eq("id", testBehaviorId);
+      expect(rowsShallow?.length).toBe(1);
+      const shallow = rowsShallow![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+        rubric_reason: string | null;
+      };
+      expect(shallow.text).toBe(shallowText);
+      expect(
+        shallow.depth_score,
+        "shallow aspirational behavior should be scored",
+      ).not.toBeNull();
+      expect(
+        shallow.depth_score! < 2,
+        `shallow behavior should score below 2/3 (got ${shallow.depth_score}); rubric_reason: ${shallow.rubric_reason}`,
+      ).toBe(true);
+
+      // Gate: behaviors → worries must be disabled with depth reason.
+      const blockedGate = await getAdvanceGate(ctx.mapId);
+      expect(blockedGate.from).toBe("behaviors");
+      expect(blockedGate.enabled).toBe(false);
+      expect(blockedGate.reason ?? "").toMatch(/depth/i);
+
+      // 2. Edit back to a deep (concrete, observable, first-person,
+      //    works-against-goal) version. Rubric should score >= 2.
+      const deepText =
+        "I interrupt her mid-sentence and cite something she did two years ago";
+      const upd2 = new FormData();
+      upd2.set("map_id", ctx.mapId);
+      upd2.set("behavior_id", testBehaviorId);
+      upd2.set("text", deepText);
+      expect((await updateBehavior(upd2)).ok).toBe(true);
+
+      const { data: rowsDeep } = await supabase
+        .from("itc_behaviors")
+        .select("id, text, depth_score, attempts")
+        .eq("id", testBehaviorId);
+      const deep = rowsDeep![0] as {
+        id: string;
+        text: string;
+        depth_score: number | null;
+        attempts: number;
+      };
+      expect(deep.text).toBe(deepText);
+      // Two updateBehavior calls → attempts should be 2 or 3
+      // (addBehavior counts as 1, each updateBehavior bumps).
+      expect(deep.attempts).toBeGreaterThanOrEqual(2);
+      expect(
+        deep.depth_score,
+        "deep behavior must score >= 2",
+      ).not.toBeNull();
+      expect(deep.depth_score! >= 2).toBe(true);
+
+      // Gate: with all three behaviors passing depth (2/3+attempts>=2
+      // or 3/3), the gate must open.
+      const openGate = await getAdvanceGate(ctx.mapId);
+      expect(openGate.from).toBe("behaviors");
+      expect(
+        openGate.enabled,
+        `behaviors gate should open (score=${deep.depth_score}, attempts=${deep.attempts}); reason: ${openGate.reason}`,
+      ).toBe(true);
+
+      // rubric_scored event should have fired for every behavior
+      // save (3 adds + 2 edits = 5 minimum).
+      const { data: rubricEvents } = await supabase
+        .from("itc_turn_events")
+        .select("payload")
+        .eq("map_id", ctx.mapId)
+        .eq("event_type", "rubric_scored");
+      const behaviorRubricEvents = (rubricEvents ?? []).filter(
+        (e) =>
+          e.payload !== null &&
+          (e.payload as Record<string, unknown>).kind === "behavior",
+      );
+      expect(
+        behaviorRubricEvents.length >= 5,
+        `rubric_scored(kind=behavior) should fire once per save (expected >=5, got ${behaviorRubricEvents.length})`,
+      ).toBe(true);
+    },
+    180_000,
+  );
+
+  it(
+    "regression v: gate fails-open on null depth_score across all four columns",
+    async () => {
+      // worryPassesDepth(null, _) === true is unit-tested, but each
+      // computeAdvanceGate branch calls the helper independently. If
+      // someone inlines a `depth_score !== null &&` check in one
+      // branch, the unit test still passes but the fail-open invariant
+      // silently regresses for that column. This asserts the
+      // integration wiring per column.
+      //
+      // Fail-open matters because: (a) migration backfill leaves
+      // pre-existing rows at depth_score=null, (b) LLM outages
+      // (Haiku hiccup) leave rows unscored, (c) regression 5+7
+      // depends on it to complete the coach-service-down map.
+      const supabase = createSupabaseServiceClient();
+
+      // Schema probes for all four columns.
+      for (const table of ["itc_behaviors", "itc_worries", "itc_commitments", "itc_assumptions"]) {
+        const probe = await supabase
+          .from(table)
+          .select("depth_score, attempts")
+          .limit(1);
+        if (probe.error) {
+          console.warn(
+            "[regression v] skipping: schema missing on %s — %s",
+            table,
+            probe.error.message,
+          );
+          return;
+        }
+      }
+
+      // Behaviors: seed 3 behaviors with depth_score=null.
+      await supabase
+        .from("itc_maps")
+        .update({
+          current_stage: "behaviors",
+          improvement_goal:
+            "I'm committed to getting better at being present with my wife.",
+        })
+        .eq("id", ctx.mapId);
+      const behaviorInserts = [
+        "I bring up things she did in the past",
+        "I stop talking mid-conversation",
+        "I raise my voice",
+      ];
+      const behaviorIds: string[] = [];
+      for (let i = 0; i < behaviorInserts.length; i++) {
+        const { data, error } = await supabase
+          .from("itc_behaviors")
+          .insert({
+            map_id: ctx.mapId,
+            text: behaviorInserts[i],
+            source: "user",
+            sort_order: i,
+            selected: true,
+            depth_score: null,
+            attempts: 1,
+          })
+          .select("id")
+          .single();
+        expect(error, `seed behavior ${i} failed: ${error?.message}`).toBeNull();
+        behaviorIds.push(data!.id as string);
+      }
+      const behGate = await getAdvanceGate(ctx.mapId);
+      expect(behGate.from).toBe("behaviors");
+      expect(
+        behGate.enabled,
+        `behaviors gate must open with null depth_score (fail-open); reason: ${behGate.reason}`,
+      ).toBe(true);
+
+      // Worries: advance, seed one worry per behavior with null score.
+      await supabase
+        .from("itc_maps")
+        .update({ current_stage: "worries" })
+        .eq("id", ctx.mapId);
+      const worryIds: string[] = [];
+      for (const bId of behaviorIds) {
+        const { data, error } = await supabase
+          .from("itc_worries")
+          .insert({
+            map_id: ctx.mapId,
+            behavior_id: bId,
+            text: "That I would prove I'm the man who breaks the family.",
+            depth_score: null,
+            attempts: 1,
+          })
+          .select("id")
+          .single();
+        expect(error, `seed worry for ${bId}: ${error?.message}`).toBeNull();
+        worryIds.push(data!.id as string);
+      }
+      const worryGate = await getAdvanceGate(ctx.mapId);
+      expect(worryGate.from).toBe("worries");
+      expect(
+        worryGate.enabled,
+        `worries gate must open with null depth_score (fail-open); reason: ${worryGate.reason}`,
+      ).toBe(true);
+
+      // Commitments: advance, seed one commitment per worry with null score.
+      await supabase
+        .from("itc_maps")
+        .update({ current_stage: "commitments" })
+        .eq("id", ctx.mapId);
+      const commitmentIds: string[] = [];
+      for (const wId of worryIds) {
+        const { data, error } = await supabase
+          .from("itc_commitments")
+          .insert({
+            map_id: ctx.mapId,
+            worry_id: wId,
+            text: "I'm also committed to keeping her past mistakes available so mine are never the only thing on the table.",
+            depth_score: null,
+            attempts: 1,
+          })
+          .select("id")
+          .single();
+        expect(error, `seed commitment for ${wId}: ${error?.message}`).toBeNull();
+        commitmentIds.push(data!.id as string);
+      }
+      const cGate = await getAdvanceGate(ctx.mapId);
+      expect(cGate.from).toBe("commitments");
+      expect(
+        cGate.enabled,
+        `commitments gate must open with null depth_score (fail-open); reason: ${cGate.reason}`,
+      ).toBe(true);
+
+      // Assumptions: advance, seed one assumption + link to every
+      // commitment (assumptions gate needs coverage).
+      await supabase
+        .from("itc_maps")
+        .update({ current_stage: "assumptions" })
+        .eq("id", ctx.mapId);
+      const { data: aRow, error: aErr } = await supabase
+        .from("itc_assumptions")
+        .insert({
+          map_id: ctx.mapId,
+          text: "I assume that if I let her past mistakes go, I'll have failed as the husband who protects the family.",
+          sort_order: 0,
+          depth_score: null,
+          attempts: 1,
+        })
+        .select("id")
+        .single();
+      expect(aErr, `seed assumption: ${aErr?.message}`).toBeNull();
+      const assumptionId = aRow!.id as string;
+      for (const cId of commitmentIds) {
+        const { error: linkErr } = await supabase
+          .from("itc_assumption_commitments")
+          .insert({
+            map_id: ctx.mapId,
+            assumption_id: assumptionId,
+            commitment_id: cId,
+          });
+        expect(linkErr, `link assumption→commitment: ${linkErr?.message}`).toBeNull();
+      }
+      const aGate = await getAdvanceGate(ctx.mapId);
+      expect(aGate.from).toBe("assumptions");
+      expect(
+        aGate.enabled,
+        `assumptions gate must open with null depth_score (fail-open); reason: ${aGate.reason}`,
+      ).toBe(true);
+    },
+    30_000,
   );
 
   it(

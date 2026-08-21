@@ -22,6 +22,7 @@ import {
   ensureThenAfterIfClause,
   scrubReply,
   scrubReplyLight,
+  trimAssembledDraft,
 } from "@/lib/itc/coach";
 import {
   chipTargetForStage,
@@ -295,6 +296,74 @@ describe("assembleCommitment (structured slot → canonical sentence)", () => {
   });
 });
 
+describe("trimAssembledDraft (the shared drafter overshoot handler)", () => {
+  const CAP = 20;
+
+  it("returns the assembled sentence as-is when already under cap", () => {
+    const s = "I worry that if I stayed calm, I'd have to see I've been hiding.";
+    expect(trimAssembledDraft(s, CAP)).toBe(s);
+  });
+
+  it("strips filler modifiers to fit under cap", () => {
+    // >20 words with "actually" + "fully" — banned filler that
+    // the drafter prompts explicitly call out. Trim only fires when
+    // the assembled sentence exceeds cap, so fixture must be OVER 20.
+    const over =
+      "I worry that if I actually listened to her fully without defending myself in that moment, she'd really see I've been hiding.";
+    expect(over.split(/\s+/).length).toBeGreaterThan(CAP);
+    const trimmed = trimAssembledDraft(over, CAP);
+    expect(trimmed.toLowerCase()).not.toContain("actually");
+    expect(trimmed.toLowerCase()).not.toContain("fully");
+    expect(trimmed.split(/\s+/).length).toBeLessThanOrEqual(CAP);
+  });
+
+  it("strips a trailing 'instead of ...' clause to fit under cap", () => {
+    // >20 words; trailing "instead of ..." is the redundant tic both
+    // worry and commitment prompts explicitly ban.
+    const over =
+      "I worry that if I asked her plainly what she needs from me right now, she'd realize I've been performing instead of really loving her.";
+    expect(over.split(/\s+/).length).toBeGreaterThan(CAP);
+    const trimmed = trimAssembledDraft(over, CAP);
+    expect(trimmed.toLowerCase()).not.toContain("instead of");
+    expect(trimmed.split(/\s+/).length).toBeLessThanOrEqual(CAP);
+  });
+
+  it("strips a trailing parenthetical qualifier", () => {
+    // >20 words with a trailing parenthetical the trim should strip
+    // as context noise.
+    const over =
+      "I'm also committed to keeping one foot out the door at all times so I never have to be the man who is needed (when it counts).";
+    expect(over.split(/\s+/).length).toBeGreaterThan(CAP);
+    const trimmed = trimAssembledDraft(over, CAP);
+    expect(trimmed).not.toContain("(");
+    expect(trimmed).not.toContain(")");
+  });
+
+  it("NEVER returns null — over-cap-and-unrescuable draft still comes back", () => {
+    // 25 unique words, no filler, no "instead of", no parens.
+    // Beyond mechanical rescue but must still return a string so
+    // the coachee sees SOMETHING instead of an empty draft card.
+    // Prior implementations (silent-drop + null-return) caused the
+    // "only one behavior got a draft" bug the user hit twice.
+    const unrescuable =
+      "I worry that if I stopped bringing up her past mistakes she would recognize the pattern of my defensive maneuvers running throughout our marriage.";
+    const out = trimAssembledDraft(unrescuable, CAP);
+    expect(out).toBeTypeOf("string");
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("returns a string type (not null) on any input, guarding the drafter contract", () => {
+    // Structural: worry/commitment/assumption drafters all rely on
+    // this returning a string so their "show whatever comes back"
+    // guarantee holds. If someone reverts to nullable return, this
+    // test fails at the type level too.
+    const out = trimAssembledDraft("short sentence.", CAP);
+    // biome-ignore lint: intentional narrow-to-string
+    const _typed: string = out;
+    expect(_typed).toBeTypeOf("string");
+  });
+});
+
 describe("hasGoalStem", () => {
   it("accepts the exact stem", () => {
     expect(hasGoalStem(`${GOAL_STEM} being present`)).toBe(true);
@@ -487,7 +556,10 @@ describe("worryPassesDepth (the actual depth gate rule)", () => {
     // Null means the rubric never wrote a score (LLM outage, migration
     // backfill, pre-scoring row state). The rubric is a guard against
     // shallow entries; when the guard can't run, trust the coachee
-    // rather than stranding him on a Haiku hiccup.
+    // rather than stranding him on a Haiku hiccup. This behavior is
+    // load-bearing for regression 5+7 (coach-service-down completes
+    // the map end to end) AND for the behaviors depth branch which
+    // was added after worries/commitments/assumptions.
     expect(worryPassesDepth(null, 0)).toBe(true);
     expect(worryPassesDepth(null, 5)).toBe(true);
   });
