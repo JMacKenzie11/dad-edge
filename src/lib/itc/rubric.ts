@@ -416,8 +416,9 @@ const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
   label: string;
 }> = [
   {
-    pattern: /\bi['\u2019]d\s+have\s+to\s+(see|face|feel|know|admit)\b/i,
-    label: "interior-witness scaffolding 'I'd have to see/face/feel/know/admit'",
+    pattern: /\bi['\u2019]d\s+have\s+to\s+(see|face|feel|know|admit|be|become)\b/i,
+    label:
+      "interior-witness scaffolding 'I'd have to see/face/feel/know/admit/be/become'",
   },
   {
     pattern: /\badmit\s+to\s+myself\b/i,
@@ -465,13 +466,20 @@ const WORRY_IDENTITY_MARKERS: RegExp[] = [
   /\bfailed\s+(as|her|him|them|my|the|at)\b/i,
   /\blet\s+(her|him|them|down|my)\b/i,
   /\bbrought\s+dishonor\b/i,
-  /\bchose\s+(myself|me)\s+over\b/i,
-  /\bput\s+(myself|me)\s+(before|ahead\s+of|first)\b/i,
-  /\babandoned\s+(her|him|them|my)\b/i,
-  /\bbetrayed\s+(her|him|them|my)\b/i,
-  /\bhurt\s+(her|him|them|my)\b/i,
-  /\bdisappointed\s+(her|him|them|my)\b/i,
-  // Relational-role verbs directed at a person (past-perfect + "her/him/them")
+  // Self-over-other pattern (any verb tense: chose/choosing/chosen,
+  // put/putting, picked/picking) — matches the semantic "putting
+  // myself ahead of her" that Kegan p 14 names as canonical role
+  // failure ("chose ego over her"). Decoupled from verb so tense
+  // doesn't matter.
+  /\b(myself|me)\s+(over|before|ahead\s+of)\s+(her|him|them|my)\b/i,
+  /\babandon(ed|ing)?\s+(her|him|them|my)\b/i,
+  /\bbetray(ed|ing)?\s+(her|him|them|my)\b/i,
+  /\bhurt(ing)?\s+(her|him|them|my)\b/i,
+  /\bdisappoint(ed|ing)?\s+(her|him|them|my)\b/i,
+  /\bneglect(ed|ing)?\s+(her|him|them|my)\b/i,
+  /\bignor(ed|ing)\s+(her|him|them|my)\b/i,
+  // Relational-role verbs directed at a person (any tense + "from/on
+  // her/him/them")
   /\b(running|walking\s+out|hiding|checking\s+out|shutting\s+down|shutting\s+her\s+out)\s+(from|on)\s+(her|him|them|my)\b/i,
 ];
 
