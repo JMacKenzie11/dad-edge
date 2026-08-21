@@ -13,7 +13,13 @@ type Goal = {
   focus_area: PillarCode;
   quarter_start: string;
   status: "active" | "completed" | "abandoned";
+  source: "user" | "itc";
 };
+
+/** Cap on user-authored active goals per quarter. The DB trigger
+ *  enforce_active_goals_cap enforces this; UI mirrors so the form
+ *  disables with a clear reason instead of hitting a server rejection. */
+const USER_GOAL_SLOTS = 2;
 
 export default async function GoalsPage() {
   const { user, readOnly } = await requireAccess();
@@ -21,13 +27,21 @@ export default async function GoalsPage() {
 
   const { data } = await supabase
     .from("quarterly_goals")
-    .select("id, description, focus_area, quarter_start, status")
+    .select("id, description, focus_area, quarter_start, status, source")
     .eq("user_id", user.id)
     .order("quarter_start", { ascending: false });
 
   const rows = (data ?? []) as Goal[];
   const active = rows.filter((g) => g.status === "active");
   const closed = rows.filter((g) => g.status !== "active");
+  const currentQuarterStart = currentQuarter();
+  const activeUserGoalsThisQuarter = active.filter(
+    (g) => g.source === "user" && g.quarter_start === currentQuarterStart,
+  ).length;
+  const userSlotsRemaining = Math.max(
+    0,
+    USER_GOAL_SLOTS - activeUserGoalsThisQuarter,
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -38,7 +52,12 @@ export default async function GoalsPage() {
         <h1 className="font-heading text-3xl">Quarterly goals</h1>
       </header>
 
-      {!readOnly ? <NewGoalForm currentQuarterStart={currentQuarter()} /> : null}
+      {!readOnly ? (
+        <NewGoalForm
+          currentQuarterStart={currentQuarterStart}
+          userSlotsRemaining={userSlotsRemaining}
+        />
+      ) : null}
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">Active</h2>

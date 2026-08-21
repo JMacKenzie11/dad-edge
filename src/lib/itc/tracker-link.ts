@@ -124,6 +124,9 @@ export async function syncItcGoalToTracker(input: {
   }
 
   // Create path: new quarterly_goal in the current quarter, link to map.
+  // source='itc' claims the third slot the split-cap trigger reserves
+  // for ITC-mirrored goals; source='user' claim would fight the trigger
+  // when a coachee already has 2 user-authored goals.
   const quarterStart = currentQuarterStart();
   const { data: created, error: insertErr } = await supabase
     .from("quarterly_goals")
@@ -133,6 +136,7 @@ export async function syncItcGoalToTracker(input: {
       focus_area: input.pillarCode,
       description: input.goalText,
       status: "active",
+      source: "itc",
     })
     .select("id")
     .single();

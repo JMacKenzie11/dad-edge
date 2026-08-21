@@ -35,6 +35,24 @@ export async function closeGoal(goalId: string, status: "completed" | "abandoned
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
   const supabase = await createSupabaseServerClient();
+  // ITC-sourced goals are owned by the ITC map. Closing them from
+  // /goals would drift the goal's status from the map's status; the
+  // ITC cascade paths (cascadeItcMapClear, ITC-side abandon) are the
+  // only legitimate way to close a source='itc' goal.
+  const { data: goal, error: lookupErr } = await supabase
+    .from("quarterly_goals")
+    .select("source")
+    .eq("id", goalId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, error: lookupErr.message };
+  if (!goal) return { ok: false, error: "Goal not found." };
+  if (goal.source === "itc") {
+    return {
+      ok: false,
+      error: "This goal is managed by your ITC map. Close it in the ITC tool.",
+    };
+  }
   const { error } = await supabase
     .from("quarterly_goals")
     .update({ status })
