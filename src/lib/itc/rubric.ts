@@ -68,6 +68,8 @@ Score three binary criteria. When in doubt, false.
 3. is_not_productivity_platitude: The commitment would sound STRANGE on a productivity blog or in a corporate meeting — a stranger reading it would think "that's a weird thing to admit," not "that's good advice." A noble-sounding vow ("I'm committed to being the best husband I can be") fails this; it's socially acceptable and doesn't reveal a hidden flinch.
 
 Also return a one-line reason (<40 words) explaining what would need to change to raise a false criterion to true.
+
+When your reason includes an example rewrite, use the CANONICAL Column-4 stem: **"I'm also committed to..."** (with "also"). Column 4 competing commitments always take "also" because they COMPETE with the coachee's primary Column-1 goal ("I'm committed to getting better at X"). Dropping "also" turns the competing commitment into a bare commitment that reads as if it stands alone — losing the diagnostic tension the map is designed to surface.
 `.trim();
 
 export async function scoreCommitmentDepth(input: {
