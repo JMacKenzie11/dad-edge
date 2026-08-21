@@ -347,72 +347,72 @@ export type ConsistencyResult = {
   reason: string;
 };
 
-const WORRY_CONSISTENCY_SYSTEM = `
-You verify logical consistency in an Immunity to Change map worry draft.
+/**
+ * Deterministic replacement for the earlier LLM-based worry-consistency
+ * verifier. The LLM verifier was fragile — asking Haiku to detect
+ * subtle semantic inversion is a judgment call, and the model kept
+ * reading bare present-tense identity claims two valid ways
+ * ("I'm the husband who weaponizes" could mean current-state or
+ * revealed-pattern depending on generous reading).
+ *
+ * The concrete failure mode is syntactic, not semantic: the drafter
+ * produces bare present-tense "I'm the [X-er]" that reads as the
+ * opposite_move creating the X-er identity. That's impossible — Y is
+ * the opposite of X, Y cannot create X's identity.
+ *
+ * The fix is a mechanical check for revealer-framing markers. The
+ * identity landing must contain at least ONE marker indicating the
+ * identity is presented as pre-existing pattern being witnessed /
+ * revealed:
+ *
+ *   - Past-perfect first-person: "I've" (been, never, kept, etc.)
+ *   - External witness: "she'd", "he'd", "they'd", "she'll", "she would"
+ *   - Truth-frame: "the truth" (would come out / is)
+ *   - Denial-of-hiding: "couldn't pretend/hide/deny"
+ *
+ * Zero LLM cost. Fully deterministic. Same outcome contract as the
+ * previous LLM verifier ({ consistent, reason }) so the drafter's
+ * existing retry loop consumes it unchanged. If it fails, the reason
+ * gives the drafter the specific pattern it violated and the whitelist
+ * to try instead.
+ */
+const WORRY_REVEALER_MARKERS: RegExp[] = [
+  // Past-perfect first-person: "I've", "I have"
+  /\bi['\u2019]ve\b/i,
+  /\bi\s+have\s+(been|never)/i,
+  // External witness contractions + full form: she/he/they + would/will
+  /\bshe['\u2019]d\b/i,
+  /\bhe['\u2019]d\b/i,
+  /\bthey['\u2019]d\b/i,
+  /\bshe['\u2019]ll\b/i,
+  /\bshe\s+would\b/i,
+  /\bthey\s+would\b/i,
+  /\bmy\s+(wife|kids|family)\s+would\b/i,
+  // Truth-frame
+  /\bthe\s+truth\b/i,
+  // Denial-of-hiding (the current behavior no longer works to hide)
+  /\bcouldn['\u2019]t\s+(pretend|hide|deny)\b/i,
+];
 
-The coachee's CURRENT behavior is X. The OPPOSITE move (what he'd do differently) is Y. The IDENTITY LANDING is what he fears would happen if he did Y — specifically, what Y would REVEAL about him that X has been hiding.
-
-The failure mode you catch: the identity landing describes X's identity (the identity of the CURRENT behavior) instead of what Y would reveal. That's an inversion — it produces sentences like "if I stayed and heard her out, I'd have to see I'm the man who abandons her" where staying is not abandoning.
-
-Return { consistent: boolean, reason: string }.
-
-- consistent = true when the identity landing describes what DOING Y (the opposite) would reveal about him — a NEW truth exposed by the counter-move.
-- consistent = false when the identity landing restates X's identity, or contradicts Y (says he'd reveal being the very thing Y is the opposite of).
-
-Reason: one line explaining the inversion if you detect it, or a one-line confirmation if consistent. Under 30 words.
-
-Examples:
-
-  X = "I walk out of the room"
-  Y = "stayed in the room and heard her out"
-  identity_landing = "I'm the man who abandons her"
-  → consistent: false. Staying is the opposite of abandoning. "Abandons her" is X's identity, not what Y reveals.
-
-  X = "I walk out of the room"
-  Y = "stayed in the room and heard her out"
-  identity_landing = "she'd realize I've been running her whole marriage"
-  → consistent: true. Staying reveals the PATTERN of running that X has been hiding.
-
-  X = "I bring up her past mistakes"
-  Y = "listened without bringing up her past"
-  identity_landing = "the truth would come out that I've been the one who's the problem"
-  → consistent: true. Listening reveals what scorekeeping was hiding.
-
-  X = "I bring up her past mistakes"
-  Y = "listened without bringing up her past"
-  identity_landing = "I'd have to see I'm the man who scorekeeps"
-  → consistent: false. "Scorekeeps" is X's identity; listening doesn't reveal it, listening is the opposite of it.
-`.trim();
-
-export async function checkWorryLogicalConsistency(input: {
+export function checkWorryLogicalConsistency(input: {
   behaviorText: string;
   oppositeMove: string;
   identityLanding: string;
-}): Promise<ConsistencyResult> {
-  const started = Date.now();
-  let outcomeForLog = "unknown";
-  try {
-    const { object } = await generateObject({
-      model: utilityModel(),
-      schema: ConsistencySchema,
-      system: WORRY_CONSISTENCY_SYSTEM,
-      prompt: [
-        `Current behavior (X): ${input.behaviorText}`,
-        `Opposite move (Y): ${input.oppositeMove}`,
-        `Identity landing (proposed): ${input.identityLanding}`,
-      ].join("\n"),
-      maxOutputTokens: 256,
-      temperature: 0.1,
-    });
-    outcomeForLog = object.consistent ? "consistent" : "inverted";
-    return { consistent: object.consistent, reason: object.reason };
-  } finally {
-    console.warn(
-      "[itc timing] consistency kind=worry ms=%d outcome=%s",
-      Date.now() - started,
-      outcomeForLog,
-    );
+}): ConsistencyResult {
+  const hasMarker = WORRY_REVEALER_MARKERS.some((re) =>
+    re.test(input.identityLanding),
+  );
+  if (hasMarker) {
+    return {
+      consistent: true,
+      reason: "past-tense revealer framing detected",
+    };
   }
+  return {
+    consistent: false,
+    reason:
+      "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\".",
+  };
 }
 
 const ASSUMPTION_CONSISTENCY_SYSTEM = `
@@ -420,34 +420,49 @@ You verify logical consistency in an Immunity to Change map Big Assumption draft
 
 A Big Assumption states: "If I [ANTECEDENT_ACT], then [CONSEQUENT_TELL] and [CONSEQUENT_IDENTITY]."
 
-The antecedent is what the coachee would do DIFFERENTLY — the counter-move his commitments protect him from doing. The consequent describes what that counter-move would reveal.
+The antecedent is what the coachee would do DIFFERENTLY — the counter-move his commitments protect him from doing. The consequent describes what that counter-move would reveal about a pre-existing pattern.
 
-The failure mode you catch: consequent_identity describes the identity of the CURRENT protective behavior (the opposite of antecedent_act) instead of what antecedent_act would reveal. That produces inversions like "if I stay in the room, then I'm the man who can't even run away when it matters" where staying is the opposite of running away, so "can't run away" describes staying itself, not what staying would REVEAL.
+## Two failure modes you catch
 
-Return { consistent: boolean, reason: string }.
+**Inversion via bare present-tense.** consequent_identity uses "the man who [X-verb]s" describing the CURRENT behavior's identity as if antecedent_act creates it. That's impossible — antecedent is the opposite of the current behavior. Consequent_identity MUST use past-tense revealer framing:
 
-- consistent = true when consequent_identity describes what DOING antecedent_act would reveal about him.
-- consistent = false when consequent_identity describes the identity of the OPPOSITE of antecedent_act, or literally contradicts antecedent_act.
+- Past-tense revealer: "the man who's been [X-ing]", "the man who's spent years [X-ing]"
+- Witnessed-by-other: "she'd see I've been [X-ing]", "she'd realize I've been [X-er]"
+- Truth-frame: "the truth would come out that I've been [X-ing]"
 
-Reason: one line naming the inversion, or one-line confirmation if consistent. Under 30 words.
+**Literal contradiction.** consequent_identity describes the identity of the OPPOSITE of antecedent_act (e.g., antecedent = "stay", identity = "the man who can't run away"). Staying is the opposite of running, so "can't run away" describes staying itself, not what staying reveals.
 
-Examples:
+BANNED framings (all inversions):
+- "the [X-er]" bare present-tense noun phrase where X is the current behavior
+- "I'm the [X-er]" bare present-tense
+- "the man who can't [Y]" when Y is antecedent_act itself
+
+## Return format
+
+{ consistent: boolean, reason: string }
+
+- consistent = true ONLY when consequent_identity uses past-tense / witnessed / truth-frame framing AND describes a pattern the antecedent_act would REVEAL (not the identity of the opposite of antecedent_act).
+- consistent = false otherwise.
+
+Reason: one line. Under 30 words.
+
+## Examples
 
   antecedent_act = "stay in the room and hear her out"
   consequent_identity = "the man who can't even run away when it matters"
-  → consistent: false. Staying is the opposite of running. "Can't run away" describes staying, not what staying would reveal.
+  → consistent: false. Contradicts antecedent. Staying is the opposite of running; "can't run away" describes staying itself.
 
   antecedent_act = "stay in the room and hear her out"
   consequent_identity = "the man who's been running her whole marriage"
-  → consistent: true. Staying would reveal the pattern of running that his walkout behavior has been hiding.
-
-  antecedent_act = "admit she's right"
-  consequent_identity = "the man who chose himself over her"
-  → consistent: true. Admitting reveals what lying-to-escape was hiding.
+  → consistent: true. Past-tense revealer. Staying would expose the pattern of running his walkout behavior has been hiding.
 
   antecedent_act = "admit she's right"
   consequent_identity = "the man who lies"
-  → consistent: false. "Lies" is the identity of the CURRENT lying behavior, which is what admitting is the opposite of.
+  → consistent: false. Bare present-tense noun. Rewrite as "the man who's been lying" or "she'd see I've been lying".
+
+  antecedent_act = "admit she's right"
+  consequent_identity = "the man who's chosen himself over her every time"
+  → consistent: true. Past-tense revealer. Admitting reveals the pattern lying-to-escape has been hiding.
 `.trim();
 
 export async function checkAssumptionLogicalConsistency(input: {

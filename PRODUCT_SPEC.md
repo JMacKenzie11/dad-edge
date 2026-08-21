@@ -137,7 +137,7 @@ Cron
 |------|------|---------|
 | `/itc` | `src/app/itc/page.tsx` | Landing — pick a BRAVE MAN pillar to start a new map, or resume any in-progress / prior map. |
 | `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of four surfaces (stage note, entry thread, focus, dock). A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
-| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Lists all maps. |
+| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Lists in-progress maps only by default (`status === "in_progress"`); completed maps are hidden to keep the facilitator's watchlist tight. |
 | `/itc/admin/[mapId]` | `src/app/itc/admin/[mapId]/page.tsx` | Per-map viewer with full transcript + turn events (`itc_turn_events`) for coach debugging. |
 | `/itc/login` | `src/app/itc/login/page.tsx` | Separate email/password auth for Boardroom coachees (distinct from the member-app session). Demo login uses password `1111` behind an `itcDemoAuthEnabled()` flag; production will migrate to full auth (see §17). |
 | `/itc/logout` | `src/app/itc/logout/route.ts` | Clears the ITC session cookie, redirects to `/itc/login`. |

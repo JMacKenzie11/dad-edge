@@ -886,18 +886,18 @@ const WORRY_HARD_WORD_CAP = 20;
  * the canonical "I worry that if I ..., ..." sentence and mechanically
  * trims any overshoot via trimAssembledDraft.
  *
- * Two-model verification pipeline (server-owned structure over LLM
- * obedience):
+ * Verification pipeline (server-owned structure over LLM obedience):
  *
  *   1. Drafter (mainModel) fills opposite_move + identity_landing.
  *   2. Depth rubric (utilityModel, scoreWorryDepth) scores 0-3 —
  *      answers "is this deep enough?"
- *   3. Consistency verifier (utilityModel, checkWorryLogicalConsistency)
- *      answers "does identity_landing describe what opposite_move
- *      would REVEAL, or does it restate the CURRENT behavior's
- *      identity?" Catches inversions like "if I stayed and heard her
+ *   3. Consistency check (deterministic pattern match,
+ *      checkWorryLogicalConsistency) verifies the identity landing
+ *      uses past-tense/witnessed/truth-frame framing. Catches
+ *      bare-present-tense inversions like "if I stayed and heard her
  *      out, I'd have to see I'm the man who abandons her" (staying is
- *      the opposite of abandoning).
+ *      the opposite of abandoning; "I'm the [X-er]" reads as staying
+ *      creating the abandoner identity). Zero LLM cost, no judgment.
  *   4. If either check fails, one drafter retry fires with the failing
  *      reason(s) as feedback. Whatever comes back is returned — never
  *      silent drop; a slightly-off draft the coachee can edit beats
@@ -943,36 +943,28 @@ export async function draftWorryForBehavior(input: {
     const first = await generateDraft(basePromptLines);
     if (!first) return null;
 
-    // Run depth + consistency verifiers in parallel. Both fail-open on
-    // verifier error — transient Haiku hiccups shouldn't strand the
-    // drafter output.
-    const [depthResult, consistencyResult] = await Promise.all([
-      scoreWorryDepth({
-        goalText: input.goalText,
-        behaviorText: input.behaviorText,
-        worryText: first.assembled,
-      }).catch((err) => {
-        console.warn(
-          "[itc coach] worry depth rubric failed, treating as pass: %s",
-          err instanceof Error ? err.message : String(err),
-        );
-        return null;
-      }),
-      checkWorryLogicalConsistency({
-        behaviorText: input.behaviorText,
-        oppositeMove: first.slots.opposite_move,
-        identityLanding: first.slots.identity_landing,
-      }).catch((err) => {
-        console.warn(
-          "[itc coach] worry consistency verifier failed, treating as pass: %s",
-          err instanceof Error ? err.message : String(err),
-        );
-        return null;
-      }),
-    ]);
+    // Depth (LLM rubric, may fail) + consistency (deterministic pattern
+    // check, cannot fail). Depth fail-opens on rubric error — a
+    // transient Haiku hiccup shouldn't strand the drafter output.
+    const depthResult = await scoreWorryDepth({
+      goalText: input.goalText,
+      behaviorText: input.behaviorText,
+      worryText: first.assembled,
+    }).catch((err) => {
+      console.warn(
+        "[itc coach] worry depth rubric failed, treating as pass: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    });
+    const consistencyResult = checkWorryLogicalConsistency({
+      behaviorText: input.behaviorText,
+      oppositeMove: first.slots.opposite_move,
+      identityLanding: first.slots.identity_landing,
+    });
 
     const depthOk = depthResult === null || depthResult.score >= 3;
-    const consistencyOk = consistencyResult === null || consistencyResult.consistent;
+    const consistencyOk = consistencyResult.consistent;
     if (depthOk && consistencyOk) return first.assembled;
 
     // One retry with the failing reason(s) fed back. Both verifiers'
@@ -985,7 +977,7 @@ export async function draftWorryForBehavior(input: {
         `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
       );
     }
-    if (!consistencyOk && consistencyResult) {
+    if (!consistencyOk) {
       feedbackLines.push(
         `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
       );
