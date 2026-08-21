@@ -15,13 +15,10 @@ import {
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
-  ensureAssumptionDraftsDelivered,
-  ensureCommitmentDraftsDelivered,
   ensureMapCloseSummaryDelivered,
   ensurePrioritizeRecommendationDelivered,
   ensureTestDraftDelivered,
   ensureWalkthroughDelivered,
-  ensureWorryDraftsDelivered,
   getAdvanceGate,
 } from "../actions";
 import { MapCanvas } from "./map-canvas";
@@ -46,39 +43,33 @@ export default async function ItcMapPage({
   const map = await getMapForParticipant(mapId, participant.id);
   if (!map) notFound();
 
-  // Post-advance delivery recovery. advanceToStage moves every stage's
-  // delivery (drafters + set-piece prose) behind Next.js after() so
-  // the Continue click returns in ~200ms instead of blocking on 5-15s
-  // of LLM work. The ensure*Delivered calls below fill in
-  // synchronously if the after() work hasn't landed yet by render
-  // time. All are idempotent — zero latency once delivery has already
-  // happened (short-circuit on existence check).
-  //
-  // In the common case: after() completes during the roundtrip +
-  // browser navigation, and every ensure below returns instantly.
-  // In the slow-network / cold-cache case: ensure blocks until the
-  // delivery lands. Either way the coachee never sees an empty stage.
-  //
-  // Draft stages (worries, commitments, assumptions):
-  if (map.current_stage === "worries") {
-    await ensureWorryDraftsDelivered(map.id);
-  }
-  if (map.current_stage === "commitments") {
-    await ensureCommitmentDraftsDelivered(map.id);
-  }
-  if (map.current_stage === "assumptions") {
-    await ensureAssumptionDraftsDelivered(map.id);
-  }
-  // Set-piece prose stages (walkthrough, prioritize, test_design, done):
+  // Stuck-user recovery: anyone whose map is at the immune_system
+  // stage without a delivered walkthrough (because they advanced
+  // before this pipeline existed, or an earlier LLM call failed)
+  // gets the walkthrough delivered synchronously here before render.
+  // Adds one-time 5-15s latency for the recovery case; zero latency
+  // for everyone else because ensureWalkthroughDelivered short-
+  // circuits when the flag is already set.
   if (map.current_stage === "immune_system" && !map.walkthrough_delivered) {
     await ensureWalkthroughDelivered(map.id);
   }
+  // Same recovery pattern for the prioritize stage — anyone stuck on
+  // prioritize without a coach-recommended assumption gets the
+  // recommendation delivered here before render. Adds one-time
+  // 5-10s latency for the recovery case; zero for anyone else
+  // because ensurePrioritizeRecommendationDelivered short-circuits
+  // when a selection already exists.
   if (map.current_stage === "prioritize") {
     await ensurePrioritizeRecommendationDelivered(map.id);
   }
+  // Same recovery pattern for test_design — if coachee lands there
+  // with a selected assumption but no test draft, deliver the coach's
+  // pre-drafted test before render.
   if (map.current_stage === "test_design") {
     await ensureTestDraftDelivered(map.id);
   }
+  // Same recovery pattern for done — if coachee lands there without
+  // a closing summary, deliver it before render.
   if (map.current_stage === "done") {
     await ensureMapCloseSummaryDelivered(map.id);
   }

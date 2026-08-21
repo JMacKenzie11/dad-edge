@@ -1,6 +1,5 @@
 "use server";
 
-import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -1317,67 +1316,62 @@ export async function advanceToStage(
     { from: loaded.map.current_stage, to: target },
     { stage: target },
   );
-  await events.flush();
 
-  // Post-advance deliveries (drafters + set-piece prose) run behind
-  // Next.js after() so the Continue button returns in ~200ms instead
-  // of blocking on N parallel LLM calls (5-15s). The client gets
-  // {ok:true} immediately, navigates, and page.tsx's ensureXDelivered
-  // recovery calls fill in synchronously if the after() work hasn't
-  // completed yet by render time. In the common case (after() finishes
-  // during the roundtrip), page.tsx short-circuits and renders with
-  // drafts/prose already present.
-  //
-  // scheduleDelivery wraps after() with a sync-execution fallback for
-  // the test harness (which lacks a Next.js request context and would
-  // otherwise throw). In tests, the delivery blocks the advance call
-  // — same shape the tests were written against before this refactor.
-  const mapId = loaded.map.id;
-  const scheduleDelivery = (fn: () => Promise<unknown>): Promise<void> => {
-    try {
-      after(fn);
-      return Promise.resolve();
-    } catch {
-      // Not in a Next.js request context — run synchronously and
-      // swallow. The delivery's own error handling logs failures.
-      return fn().then(() => undefined).catch(() => undefined);
-    }
-  };
-  switch (target) {
-    case "worries":
-      // Coach draft worry per selected behavior missing one. Idempotent —
-      // skips behaviors that already have a draft or a real worry.
-      await scheduleDelivery(() => ensureWorryDraftsDelivered(mapId));
-      break;
-    case "commitments":
-      // Coach draft commitment per worry missing one. Idempotent.
-      await scheduleDelivery(() => ensureCommitmentDraftsDelivered(mapId));
-      break;
-    case "assumptions":
-      // Cluster commitments + draft Big Assumptions with coverage.
-      // Idempotent — skips when drafts or accepted assumptions exist.
-      await scheduleDelivery(() => ensureAssumptionDraftsDelivered(mapId));
-      break;
-    case "immune_system":
-      // Three-movement Kegan/Lahey walkthrough as a stage_note. Flips
-      // walkthrough_delivered so the Continue-to-Prioritize gate opens.
-      await scheduleDelivery(() => ensureWalkthroughDelivered(mapId));
-      break;
-    case "prioritize":
-      // Vol 2 p 268-anchored assumption-to-test-first recommendation +
-      // pre-select the recommended assumption. Coachee can override.
-      await scheduleDelivery(() => ensurePrioritizeRecommendationDelivered(mapId));
-      break;
-    case "test_design":
-      // Kegan-voice pre-drafted test for the selected assumption.
-      await scheduleDelivery(() => ensureTestDraftDelivered(mapId));
-      break;
-    case "done":
-      // Kegan-voice closing summary as a stage_note.
-      await scheduleDelivery(() => ensureMapCloseSummaryDelivered(mapId));
-      break;
+  // On entry to the worries stage, generate a coach draft worry for
+  // each selected behavior that doesn't already have a real paired
+  // worry. Drafts are metadata: they only become real worry.text when
+  // the user accepts via saveWorry. Column 3 is the depth gate of the
+  // whole map, so the drafter's job is to pre-produce the "yuck" — a
+  // starting worry the coachee can accept, edit, or replace, which
+  // shows the identity-level shape a good worry needs.
+  if (target === "worries") {
+    await draftMissingWorriesAfterAdvance(loaded.map.id, events);
   }
-
+  // On entry to the commitments stage, generate a coach draft for
+  // each worry that doesn't already have one AND has no commitment
+  // yet. Per ITC methodology, Column 4 derivation is coach work —
+  // the coachee has already done the deep excavation at Column 3.
+  // Drafts are metadata, not map content: they only become real
+  // commitment.text when the user accepts via saveCommitment.
+  if (target === "commitments") {
+    await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
+  }
+  // On entry to the assumptions stage, cluster the commitments and
+  // draft a small set of Big Assumptions with commitment coverage.
+  // Same architectural class as commitment drafts: metadata only,
+  // becomes map state via saveAssumption when the user acts.
+  if (target === "assumptions") {
+    await draftAssumptionsAfterAdvance(loaded.map.id, events);
+  }
+  // On entry to the immune-system stage, generate the three-movement
+  // Kegan/Lahey walkthrough of the coachee's own map and persist it
+  // as a stage-note message. Also flips walkthrough_delivered so the
+  // Continue-to-Prioritize gate opens.
+  if (target === "immune_system") {
+    await deliverWalkthroughAfterAdvance(loaded.map.id, events);
+  }
+  // On entry to the prioritize stage, generate the coach's
+  // Vol 2 p.268-anchored recommendation of which Big Assumption to
+  // test first, persist the prose, and pre-select the recommended
+  // assumption. Coachee can override by clicking a different one.
+  if (target === "prioritize") {
+    await deliverPrioritizeRecommendationAfterAdvance(loaded.map.id, events);
+  }
+  // On entry to test_design, pre-draft a Kegan-voice test for the
+  // selected assumption. Coachee sees the draft in the form,
+  // reviews / edits any field, and saves. Idempotent — skip if any
+  // active (non-abandoned) test already exists for the selected
+  // assumption on this map.
+  if (target === "test_design") {
+    await deliverTestDraftAfterAdvance(loaded.map.id, events);
+  }
+  // On entry to done, generate the Kegan-voice closing summary and
+  // persist it as a stage_note. Idempotent — skip if a done stage_note
+  // already exists.
+  if (target === "done") {
+    await deliverMapCloseSummaryAfterAdvance(loaded.map.id, events);
+  }
+  await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
@@ -1563,73 +1557,6 @@ async function draftAssumptionsAfterAdvance(
     },
     { stage: "assumptions" },
   );
-}
-
-// -------------------------------------------------------------------------
-// Ensure-delivered recovery wrappers for the three drafters.
-//
-// Same shape as ensureWalkthroughDelivered / ensureTestDraftDelivered:
-// idempotent (short-circuits when drafts already exist), swallows
-// errors, and manages its own TurnEventLog. Called both:
-//   1. Behind after() from advanceToStage — non-blocking initial
-//      delivery so the Continue button returns fast.
-//   2. Synchronously from page.tsx as a stuck-user recovery when the
-//      after() from advance hasn't landed yet by render time.
-// -------------------------------------------------------------------------
-
-/**
- * Ensure coach worry drafts exist for every selected behavior on the
- * map. Idempotent — the underlying draftMissingWorriesAfterAdvance
- * skips behaviors that already have a draft or a real paired worry,
- * so calling this at page-render time is cheap in the common case.
- */
-export async function ensureWorryDraftsDelivered(mapId: string): Promise<void> {
-  try {
-    const events = new TurnEventLog(mapId, 0);
-    await draftMissingWorriesAfterAdvance(mapId, events);
-    await events.flush();
-  } catch (err) {
-    console.warn(
-      "[itc] ensureWorryDraftsDelivered failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-/**
- * Ensure coach commitment drafts exist for every worry on the map
- * without a real commitment yet. Same idempotency contract as the
- * worry variant.
- */
-export async function ensureCommitmentDraftsDelivered(mapId: string): Promise<void> {
-  try {
-    const events = new TurnEventLog(mapId, 0);
-    await draftMissingCommitmentsAfterAdvance(mapId, events);
-    await events.flush();
-  } catch (err) {
-    console.warn(
-      "[itc] ensureCommitmentDraftsDelivered failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-/**
- * Ensure Big Assumption drafts exist for the map. Idempotent —
- * draftAssumptionsAfterAdvance short-circuits when drafts already
- * exist OR when any accepted assumptions exist.
- */
-export async function ensureAssumptionDraftsDelivered(mapId: string): Promise<void> {
-  try {
-    const events = new TurnEventLog(mapId, 0);
-    await draftAssumptionsAfterAdvance(mapId, events);
-    await events.flush();
-  } catch (err) {
-    console.warn(
-      "[itc] ensureAssumptionDraftsDelivered failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-  }
 }
 
 const regenerateDraftsSchema = z.object({
