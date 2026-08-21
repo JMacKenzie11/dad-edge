@@ -377,9 +377,16 @@ export type ConsistencyResult = {
  * to try instead.
  */
 const WORRY_REVEALER_MARKERS: RegExp[] = [
-  // Past-perfect first-person: "I've", "I have"
-  /\bi['\u2019]ve\b/i,
-  /\bi\s+have\s+(been|never)/i,
+  // Past-perfect construction with any subject (contracted or full form).
+  // Catches "I've been", "who's been", "he's been", "she's been",
+  // "there's been", "we've been", "you've been".
+  /['\u2019](s|ve)\s+been\b/i,
+  /\b(has|have|had)\s+been\b/i,
+  // Past-perfect negations
+  /['\u2019](s|ve)\s+never\b/i,
+  /\b(has|have|had)\s+never\b/i,
+  // Simple past that names an event-level reveal ("I knew the truth and lied")
+  /\bi\s+(knew|lied|chose|failed|hid|walked|left|ignored)\b/i,
   // External witness contractions + full form: she/he/they + would/will
   /\bshe['\u2019]d\b/i,
   /\bhe['\u2019]d\b/i,
@@ -415,83 +422,123 @@ export function checkWorryLogicalConsistency(input: {
   };
 }
 
-const ASSUMPTION_CONSISTENCY_SYSTEM = `
-You verify logical consistency in an Immunity to Change map Big Assumption draft.
+/**
+ * Deterministic consistency check for Big Assumption drafts. Same
+ * shape as the worry check — requires past-tense / witnessed /
+ * truth-frame framing on the consequent_identity slot so bare
+ * present-tense "the man who X" inversions are caught mechanically.
+ *
+ * The BEHAVIORAL invariant (antecedent_act cannot create the identity
+ * of its own opposite) is enforced by requiring the revealer marker.
+ * If consequent_identity uses "I've been" / "she'd see" / "the truth
+ * would come out", it's presenting a pre-existing pattern that
+ * antecedent_act would expose — not a state antecedent_act creates.
+ */
+const ASSUMPTION_REVEALER_MARKERS: RegExp[] = [
+  // Past-perfect (any subject)
+  /['\u2019](s|ve)\s+been\b/i,
+  /\b(has|have|had)\s+been\b/i,
+  // Past-perfect negations
+  /['\u2019](s|ve)\s+never\b/i,
+  /\b(has|have|had)\s+never\b/i,
+  // Past-perfect action verbs on his identity ("who's spent years", "who's chosen")
+  /\bwho['\u2019]s\s+\w+/i,
+  // External witness
+  /\bshe['\u2019]d\b/i,
+  /\bhe['\u2019]d\b/i,
+  /\bthey['\u2019]d\b/i,
+  /\bshe['\u2019]ll\b/i,
+  /\bshe\s+would\b/i,
+  /\bmy\s+(wife|kids|family)\s+would\b/i,
+  // Truth-frame
+  /\bthe\s+truth\b/i,
+];
 
-A Big Assumption states: "If I [ANTECEDENT_ACT], then [CONSEQUENT_TELL] and [CONSEQUENT_IDENTITY]."
-
-The antecedent is what the coachee would do DIFFERENTLY — the counter-move his commitments protect him from doing. The consequent describes what that counter-move would reveal about a pre-existing pattern.
-
-## Two failure modes you catch
-
-**Inversion via bare present-tense.** consequent_identity uses "the man who [X-verb]s" describing the CURRENT behavior's identity as if antecedent_act creates it. That's impossible — antecedent is the opposite of the current behavior. Consequent_identity MUST use past-tense revealer framing:
-
-- Past-tense revealer: "the man who's been [X-ing]", "the man who's spent years [X-ing]"
-- Witnessed-by-other: "she'd see I've been [X-ing]", "she'd realize I've been [X-er]"
-- Truth-frame: "the truth would come out that I've been [X-ing]"
-
-**Literal contradiction.** consequent_identity describes the identity of the OPPOSITE of antecedent_act (e.g., antecedent = "stay", identity = "the man who can't run away"). Staying is the opposite of running, so "can't run away" describes staying itself, not what staying reveals.
-
-BANNED framings (all inversions):
-- "the [X-er]" bare present-tense noun phrase where X is the current behavior
-- "I'm the [X-er]" bare present-tense
-- "the man who can't [Y]" when Y is antecedent_act itself
-
-## Return format
-
-{ consistent: boolean, reason: string }
-
-- consistent = true ONLY when consequent_identity uses past-tense / witnessed / truth-frame framing AND describes a pattern the antecedent_act would REVEAL (not the identity of the opposite of antecedent_act).
-- consistent = false otherwise.
-
-Reason: one line. Under 30 words.
-
-## Examples
-
-  antecedent_act = "stay in the room and hear her out"
-  consequent_identity = "the man who can't even run away when it matters"
-  → consistent: false. Contradicts antecedent. Staying is the opposite of running; "can't run away" describes staying itself.
-
-  antecedent_act = "stay in the room and hear her out"
-  consequent_identity = "the man who's been running her whole marriage"
-  → consistent: true. Past-tense revealer. Staying would expose the pattern of running his walkout behavior has been hiding.
-
-  antecedent_act = "admit she's right"
-  consequent_identity = "the man who lies"
-  → consistent: false. Bare present-tense noun. Rewrite as "the man who's been lying" or "she'd see I've been lying".
-
-  antecedent_act = "admit she's right"
-  consequent_identity = "the man who's chosen himself over her every time"
-  → consistent: true. Past-tense revealer. Admitting reveals the pattern lying-to-escape has been hiding.
-`.trim();
-
-export async function checkAssumptionLogicalConsistency(input: {
+export function checkAssumptionLogicalConsistency(input: {
   antecedentAct: string;
   consequentTell: string;
   consequentIdentity: string;
-}): Promise<ConsistencyResult> {
-  const started = Date.now();
-  let outcomeForLog = "unknown";
-  try {
-    const { object } = await generateObject({
-      model: utilityModel(),
-      schema: ConsistencySchema,
-      system: ASSUMPTION_CONSISTENCY_SYSTEM,
-      prompt: [
-        `antecedent_act: ${input.antecedentAct}`,
-        `consequent_tell: ${input.consequentTell}`,
-        `consequent_identity: ${input.consequentIdentity}`,
-      ].join("\n"),
-      maxOutputTokens: 256,
-      temperature: 0.1,
-    });
-    outcomeForLog = object.consistent ? "consistent" : "inverted";
-    return { consistent: object.consistent, reason: object.reason };
-  } finally {
-    console.warn(
-      "[itc timing] consistency kind=assumption ms=%d outcome=%s",
-      Date.now() - started,
-      outcomeForLog,
-    );
+}): ConsistencyResult {
+  const hasMarker = ASSUMPTION_REVEALER_MARKERS.some((re) =>
+    re.test(input.consequentIdentity),
+  );
+  if (hasMarker) {
+    return {
+      consistent: true,
+      reason: "past-tense revealer framing detected on consequent_identity",
+    };
   }
+  return {
+    consistent: false,
+    reason:
+      "consequent_identity lacks past-tense revealer framing. Rewrite so it presents the identity as a pre-existing pattern the antecedent_act would REVEAL. Use one of: \"the man who's been [X]\", \"she'd see I've been [X]\", \"the truth would come out that [X]\". NOT bare present-tense \"the man who [X-verb]s\" — the antecedent is the opposite of the current behavior, so it cannot create the current behavior's identity.",
+  };
+}
+
+/**
+ * Deterministic consistency check for competing commitment drafts.
+ * Different failure mode than worries/assumptions — commitments don't
+ * have a "reveal" slot per se. What DOES fail here is:
+ *
+ *   1. Interior-witness verbs in protective_purpose ("so I never have
+ *      to face X", "so I never have to see Y"). The commitment names
+ *      what he's protecting himself from having to encounter — must
+ *      be an OBSERVABLE consequence, not an internal reckoning.
+ *   2. Noble-avoidance in protective_purpose ("so I never have to be
+ *      the man who X"). This is the drafter's own banned frame in
+ *      disguise — same identity-aversion structure, just moved from
+ *      active_move to protective_purpose.
+ *   3. Abstract mechanism metaphors in active_move ("keeping X loaded",
+ *      "keeping one foot out the door", "before she can land it").
+ *      Banned by the voice rules; must be a specific physical or
+ *      verbal act.
+ *
+ * Blacklist check (any hit = fail) rather than whitelist because
+ * "good" purposes vary widely ("so she can't call me out", "so mine
+ * doesn't come up", "so she stops expecting me") — no small set of
+ * required markers.
+ */
+const COMMITMENT_ACTIVE_MOVE_BANS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bkeeping\s+.*\b(loaded|available|ready)\b/i, label: "abstract mechanism metaphor ('keeping X loaded/available/ready')" },
+  { pattern: /\bkeeping\s+one\s+foot\b/i, label: "abstract 'keeping one foot out the door' metaphor" },
+  { pattern: /\bbefore\s+.*\bcan\s+land\b/i, label: "metaphorical 'before she can land it'" },
+  { pattern: /\bon\s+the\s+table\b/i, label: "banned metaphor 'on the table'" },
+  { pattern: /\boff\s+the\s+table\b/i, label: "banned metaphor 'off the table'" },
+];
+
+const COMMITMENT_PROTECTIVE_PURPOSE_BANS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bhave\s+to\s+face\b/i, label: "interior-witness verb 'have to face'" },
+  { pattern: /\bhave\s+to\s+see\b/i, label: "interior-witness verb 'have to see' (about a self-truth)" },
+  { pattern: /\bhave\s+to\s+know\b/i, label: "interior-witness verb 'have to know' (about a self-truth)" },
+  { pattern: /\bhave\s+to\s+feel\b/i, label: "interior-witness verb 'have to feel' (about a self-truth)" },
+  { pattern: /\bhave\s+to\s+admit\b/i, label: "interior-witness verb 'have to admit'" },
+  { pattern: /\bnever\s+have\s+to\s+be\s+the\b/i, label: "noble-avoidance frame 'never have to be the [X]'" },
+  { pattern: /\bnever\s+have\s+to\s+become\b/i, label: "noble-avoidance frame 'never have to become [X]'" },
+  { pattern: /\bland\s+(it|the)\b/i, label: "metaphorical 'land it' / 'land the [X]'" },
+];
+
+export function checkCommitmentLogicalConsistency(input: {
+  activeMove: string;
+  protectivePurpose: string;
+}): ConsistencyResult {
+  for (const ban of COMMITMENT_ACTIVE_MOVE_BANS) {
+    if (ban.pattern.test(input.activeMove)) {
+      return {
+        consistent: false,
+        reason: `active_move contains ${ban.label}. Rewrite as a concrete physical or verbal act a bystander could witness (throwing, walking out, adding, sneaking, saying).`,
+      };
+    }
+  }
+  for (const ban of COMMITMENT_PROTECTIVE_PURPOSE_BANS) {
+    if (ban.pattern.test(input.protectivePurpose)) {
+      return {
+        consistent: false,
+        reason: `protective_purpose contains ${ban.label}. Rewrite so the purpose names an OBSERVABLE consequence (she can't call me out, mine doesn't come up, she stops expecting me) — not an interior reckoning or noble-avoidance frame.`,
+      };
+    }
+  }
+  return {
+    consistent: true,
+    reason: "no banned patterns detected in active_move or protective_purpose",
+  };
 }

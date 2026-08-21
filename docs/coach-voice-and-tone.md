@@ -236,6 +236,7 @@ Applies to every worry, competing commitment, and Big Assumption drafted OR reac
 - `face` / `facing` / `have to face` / `face myself` / `face what I did`
 - `see` / `seeing` / `have to see` when the object is a self-truth ("see I chose myself"). "see" is fine when the subject is another person ("she'd see I've been faking it").
 - `know` / `knowing` / `have to know` when the object is a self-truth
+- `feel` / `feeling` / `have to feel` when the object is a self-truth ("feel how much I've failed her"). Same family as face/see/know — an interior reckoning, not an observable consequence. External replacement: "she'd know how much I've failed her" / "she'd say it out loud".
 - `look at myself` / `look at what I did`
 - `own` / `own up to` / `own it`
 - `sit with` (already banned in therapy-speak, restated here for map entries)
