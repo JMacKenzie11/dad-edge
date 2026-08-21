@@ -114,13 +114,13 @@ Redirects always resume the user at their current incomplete step; completion se
 | `/admin/users/[id]` | Edit a user; manually set `subscription_status` and `subscription_source`; view audit log entries for the user. |
 | `/admin/invites` | Create / list / resend invites. |
 | `/admin/disengagement` | Platform-wide disengagement view. |
-| `/admin/coach-flags` | Review queue for messages flagged by the safety classifier (severity ≥ high). Notes + mark reviewed. |
+| `/admin/coach-flags` | Review queue for messages flagged by the safety classifier (severity ≥ medium, per 2026-08-27 update). Filterable by severity + status via `?severity=` + `?status=` query params. Notes + mark reviewed. |
 | `/admin/audit` | Platform-wide audit log, searchable by actor / action / target. |
 | `/admin/jobs` | Manual trigger for daily jobs with recent run history. |
 
 ### 3.6 API routes
 Coach
-- `POST /api/coach/messages` — send a user turn; runs safety classification (Haiku), builds context, routes to Sonnet or Haiku, validates any mission suggestion, persists both turns to `coach_messages`, enqueues flags. Returns `{ conversationId, userMessageId, assistantMessageId, reply, missionSuggestion, allowance, crisis }`.
+- `POST /api/coach/messages` — send a user turn; runs safety classification (Haiku), builds context via the provider pipeline (see §6 Coach context pipeline), routes to Sonnet, validates any mission suggestion + one-shot retry on concreteness fail, scrubs em-dashes from the reply, persists both turns to `coach_messages` with context + safety metadata written to the assistant row, enqueues flags at severity ≥ medium. Returns `{ conversationId, userMessageId, assistantMessageId, reply, missionSuggestion, allowance, crisis }`. `allowance` shape: `{ used, softCap: 150, noticeThreshold: 120, hardCap: 300, remaining, bucket: 'ok'|'notice'|'over'|'block' }`.
 - `POST /api/coach/accept-mission` — user accepts a coach-suggested mission. Validates concreteness, enforces weekly cap, creates a `missions` row with `created_by='coach_suggested'`.
 
 Missions
@@ -169,8 +169,8 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 
 ### Coach
 - **`coach_conversations`** — user, mode (`general` / `mission`), started_at, last_message_at, auto-generated title, reserved summary fields, `archived_at`.
-- **`coach_messages`** — conversation, role (`user` / `assistant` / `system`), content, `model_used`, `tokens_in`, `tokens_out`, `flagged`, `flag_reason`.
-- **`coach_flags_queue`** — message ref, severity, status (`open` / `reviewed`), reviewed_by, notes. Admin-only RLS (per DECISION #6).
+- **`coach_messages`** — conversation, role (`user` / `assistant` / `system`), content, `model_used`, `tokens_in`, `tokens_out`, `flagged`, `flag_reason`, `metadata` (JSONB from migration `20260827000001`). Metadata is populated only on assistant turns; shape: `{ context: { providers: string[], tokenEstimate: number }, safety: { severity, categories } }`. Purpose: the "what did the coach know when it said that" audit trail reviewable from `/admin/coach-flags` (same purpose `itc_turn_events` serves for the ITC coach).
+- **`coach_flags_queue`** — message ref, severity, status (`open` / `reviewed`), reviewed_by, notes. Admin-only RLS (per DECISION #6). Enqueue threshold widened from `high`+ to `medium`+ on 2026-08-27.
 
 ### Admin & audit
 - **`score_corrections`** — audit trail for post-lock check-in edits. admin, target user, date, pillar, old/new value, reason.
@@ -256,8 +256,28 @@ composite = round((dailyTotal / 56) * 100 * 0.7 + missionRate * 100 * 0.3)
 ### Win-back window (DECISION #4)
 - 30 days after `canceled_at`. Shown on scorecard as "INACTIVE," read-only. After 30 days, hidden and redirected to `/inactive`. Constant `WIN_BACK_DAYS` in `src/lib/entitlement.ts`.
 
-### Coach allowance (DECISION #5)
-- Soft cap: 150 messages/member/month. Metering via `tokens_in`/`tokens_out` on `coach_messages`. Enforcement wiring is Phase 2.
+### Coach allowance (DECISION #5, revised 2026-08-27)
+- Metering: user-turn message count in the current UTC month across all conversations. `src/lib/coach/allowance.ts::readAllowance`.
+- Buckets:
+  - `ok` (0-119): silent.
+  - `notice` (120-149, 80% of soft cap): quiet indicator in the composer + on `/coach` — "You've used X of 150 coach messages this month."
+  - `over` (150-299): explicit "Over your monthly allowance" notice, coach STILL responds. Spec is explicit that we never hard-block a man mid-conversation about his marriage.
+  - `block` (300+): hard cap — runaway-spend safety net only, composer disables. Normal use never approaches this.
+- Exposed on every `POST /api/coach/messages` response via the `allowance` field so the client can render the bucket-appropriate treatment inline.
+- No billing consequence yet; Stripe integration is Phase 3.
+
+### Coach context pipeline (added 2026-08-27)
+- Provider pattern under `src/lib/coach/context/`. Each provider is one file that returns a `{ label, text, tokenEstimate }` block (or null when it has nothing). Adding a new context source is: write the file, append to `registry.ts`. No changes to the assembler, no prompt changes, no other provider changes. Extensibility is the whole point; a load-bearing test in `tests/coach/context.test.ts` proves the pattern with a throwaway provider.
+- 8 shipped providers: `identity`, `family`, `survey` (cacheable — change on the order of weeks); `streaks`, `goals`, `missions`, `reflections`, `itc` (volatile — change daily; ITC provider is null unless the user has a linked participant with an in-progress map).
+- Assembler emits two strings: `cacheablePrefix` (identity + family + survey) and `volatileBody` (everything else). `send-message.ts` places the cacheable prefix immediately after the persona/method prompt and before the volatile body so Anthropic's automatic stable-prefix caching catches the largest shared byte range across turns without needing explicit cache_control breakpoints.
+- Provider keys + combined token estimate + safety classification for the user turn are written to `coach_messages.metadata` on every assistant turn — reviewable from `/admin/coach-flags`.
+
+### Coach voice bundle (added 2026-08-27)
+- Main coach loads TWO docs via `src/lib/coach/voice-rules.ts`:
+  - `docs/coach-voice-and-tone.md` — shared voice/tone rules also loaded by the ITC coach.
+  - `docs/main-coach-ai-patterns.md` — stricter AI-pattern bans that apply ONLY to the main coach's open conversational surface (manufactured "It's not X, it's Y" reversals, dramatic acknowledgment openers, stacked fragment-for-emphasis, tricolon, anaphora, hedge-then-pivot, signature AI vocabulary, empty intensifiers, empathy preamble, mirrored conclusion, em-dash addiction).
+- ITC coach loads only the shared doc via `src/lib/itc/prompts/preamble.ts`. Its voice is calibrated and working; the stricter rules would over-constrain a scoped surface for no gain.
+- Defensive em-dash / en-dash / double-hyphen strip on main-coach output via `src/lib/coach/scrub-reply.ts`, applied in `send-message.ts` before persist + return. Belt-and-suspenders for the punctuation ban.
 
 ### Concreteness validator (`src/lib/validation/mission.ts`)
 1. Description length ≥ 8 chars.
