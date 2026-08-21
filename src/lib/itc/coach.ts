@@ -823,24 +823,18 @@ Reject any draft where the fear is:
 
 ### Yuck-passing examples (good identity_landing content, under 10 words each)
 
-Deliberately varied openers — the frame matters as much as the content:
+Blue-collar plain. Externalized where possible — someone else witnesses it, or bare identity claim. NO interior-witness verbs ("I'd have to see", "I'd have to face", "I'd have to admit") — those are banned per the voice rules. Rotate openers so a map's set doesn't read templated:
 
   - "she'd know I've been defending myself, not loving her." *(she'd know)*
-  - "the truth would be I've been coasting on her patience." *(the truth would be)*
-  - "I couldn't pretend I've been the husband she thought." *(I couldn't pretend)*
   - "she'd realize I don't know how to love her without performing." *(she'd realize)*
+  - "she'd stop pretending I've been showing up." *(she'd stop)*
+  - "she'd start telling people she's married to a shell." *(she'd start)*
   - "I've been the father who's technically present and gone." *(bare identity claim)*
-  - "it'd land that I've never let her all the way in." *(it'd land)*
-  - "I'd have to see I'm the man who checks out when it counts." *(I'd have to see)*
-  - "I'd find out she's been holding on longer than I deserved." *(I'd find out)*
+  - "I've been the guy who checks out when it counts." *(bare identity claim)*
+  - "the truth would come out that I've never let her in." *(the truth would come out)*
+  - "she'd hear it in my voice and finally believe her sister." *(she'd hear)*
 
-Notice: each one names a truth about WHO HE IS that landing the counter-move would expose. That's the yuck. None use "actually", "fully", or trailing "instead of" clauses — those are the filler tics that push drafts over the cap.
-
-### Vary the opening frame (mandatory)
-
-"I'd have to see..." is one canonical shape — NOT the only one. Overusing it makes the map read like a template. Rotate across the shapes above. Rough guide: if you're drafting several worries on the same map (each behavior gets one), NO MORE than one of them should open with "I'd have to see..." / "I'd have to admit..." / "I'd have to face...". The rest use bare identity statements ("I've been the man who..."), other-subject framings ("she'd know...", "she'd realize..."), or truth-frames ("the truth would be...", "it'd land that...", "I couldn't pretend anymore that...").
-
-The prompt gives you the behavior in isolation, so you can't see the other drafts. Default to a NON-"I'd have to see" opener unless the fear specifically requires that visual/witnessing shape — save "I'd have to see" for fears where the moment of SEEING is the wound. That biases the whole map's set toward variety.
+Notice: each names a truth about WHO HE IS that would be witnessed by another person or stated bare. None use "I'd have to see", "I'd have to face", "actually", "fully", "land" as metaphor, or trailing "instead of" clauses — those are all banned.
 
 ## Preserve his specificity — copy his nouns
 
@@ -1118,32 +1112,43 @@ If your first draft is longer than 18 words, cut. Symptoms of over-writing you m
 
 ## Calibration pairs (this is the bar — match this length AND quality)
 
+Blue-collar plain. Every RIGHT example uses concrete verbs a working man would actually say. NO metaphorical mechanisms ("keeping X loaded", "keeping X available", "one foot out the door"), NO "on the table" / "the door" abstractions, NO "so I never have to be the man who X" (that's the noble-avoidance frame in disguise), NO metaphorical "land" ("hear the lie land"). Those all fail the voice-rules "concrete over abstract" check.
+
 **Pair 1** (Kegan/Lahey canonical shape):
-  Worry: "I worry that if I stop bringing up her past mistakes, I'll always be the one who's the problem in this marriage."
+  Worry: "I worry that if I stop bringing up her past mistakes, she'd know I've been the one who's the problem in this marriage."
   WRONG (noble — reads as wedding vow, mechanism hidden):
     "I'm also committed to never being the one who's the problem in this marriage."
-  RIGHT (non-noble — mechanism on the page):
+  WRONG (abstract mechanism metaphor — banned by voice rules):
     active_move: "keeping her past mistakes available"
     protective_purpose: "so mine are never the only thing on the table"
-  Assembled (17 words): "I'm also committed to keeping her past mistakes available so mine are never the only thing on the table."
+  RIGHT (concrete verbal act, plain purpose):
+    active_move: "throwing her past back at her"
+    protective_purpose: "so mine doesn't have to come up"
+  Assembled (15 words): "I'm also committed to throwing her past back at her so mine doesn't have to come up."
 
 **Pair 2** (same behavior family, different worry):
-  Worry: "I worry that if I stay in the room and listen without defending myself, I'd have to see I'm the man who runs when she needs me."
+  Worry: "I worry that if I stay in the room and hear her out, she'd know I've been running whenever it matters."
   WRONG (still noble — names what he doesn't want to BE):
     "I'm also committed to never having to see I'm the man who abandons her when she needs me most."
-  RIGHT (active mechanism, punchy):
+  WRONG (abstract mechanism metaphor — banned):
     active_move: "keeping one foot out the door"
     protective_purpose: "so I never have to be needed and stay"
-  Assembled (16 words): "I'm also committed to keeping one foot out the door so I never have to be needed and stay."
+  RIGHT (concrete physical act, plain purpose):
+    active_move: "walking out mid-conversation"
+    protective_purpose: "so she stops expecting me to be there"
+  Assembled (14 words): "I'm also committed to walking out mid-conversation so she stops expecting me to be there."
 
 **Pair 3** (short and punchy — canonical length):
   Worry: "I worry that if I admit I'm wrong, she'd see I've been the man who lies to protect himself."
-  RIGHT:
+  WRONG (metaphorical "land" — banned):
     active_move: "slipping in small clarifications"
     protective_purpose: "so I never have to hear the lie land"
-  Assembled (14 words): "I'm also committed to slipping in small clarifications so I never have to hear the lie land."
+  RIGHT (concrete verbal act, plain consequence):
+    active_move: "adding little corrections to my story"
+    protective_purpose: "so she can't call me out on the big one"
+  Assembled (17 words): "I'm also committed to adding little corrections to my story so she can't call me out on the big one."
 
-Notice: none of the RIGHT drafts exceed 20 words. None use "fully". None chain multiple "so" clauses. Every one names ONE active mechanism + ONE self-protection.
+Notice: every RIGHT active_move names a specific act a bystander could witness (throwing, walking out, adding corrections). Every RIGHT protective_purpose names a plain consequence in the world (mine doesn't come up, she stops expecting me, she can't call me out) — not an interior self-witnessing ("so I never have to face X"). None use "fully", "actually", metaphors, or "so I never have to be the man who".
 
 ## Three checks — run silently before returning
 
@@ -1164,14 +1169,26 @@ In active_move (identity-aversion, no mechanism):
   - "avoiding [X]" / "not doing [Y]" — names omission, not the active move
   - "letting her [X]" — describes what he lets happen to her, not what he does
 
+In active_move (abstract mechanism metaphors — banned by voice rules):
+  - "keeping [X] loaded" / "keeping [X] available" / "keeping [X] ready" — the mechanism must be an actual verbal or physical act, not a metaphorical "loaded gun" stance
+  - "keeping one foot out the door" — abstract, banned
+  - "on the table" / "off the table" — banned metaphor
+  - "before she can land it" / "before it lands" — "land" as metaphor is banned
+
+In protective_purpose (interior-witness verbs — banned by voice rules):
+  - "so I never have to face [X]" / "so I never have to see [Y]" / "so I don't have to admit [Z]" — the whole point is externalized consequence, not internal self-witnessing
+  - "so I never have to be the man who [X]" — this is the noble-avoidance frame in disguise; name what would HAPPEN if the protection failed (something a bystander could witness), not what he'd internally recognize about himself
+  - Preferred plain replacements: "so she doesn't get to say I picked myself over her" / "so she stops thinking I show up" / "so mine doesn't have to come up" / "so she can't call me out"
+
 In protective_purpose (protecting HER, not HIM):
   - "so I don't hurt her" / "so I don't burden her" / "so I don't make things worse"
   - "so she doesn't get upset" / "so she stays"
   - "so we don't fall apart"
 
 In protective_purpose (verbosity tics):
-  - "so I never have to FULLY face…" — cut "fully"
+  - "so I never have to FULLY face…" — cut "fully" (banned everywhere)
   - "so I don't have to X so I never have to Y" — pick ONE "so" clause
+  - "actually" as filler — banned everywhere
 
 If any of these show up in your first draft, run the derivation again before returning.
 
@@ -1457,6 +1474,7 @@ An OBSERVABLE event — something the coachee could see, hear, or feel in real l
 
 Banned in this slot (META-LANGUAGE — these are self-verdicts, not observable events; drafts containing these are rejected server-side):
   - "I'd prove" / "I'd confirm" / "I'd realize" / "I'd finally know" / "I'd see that I'm"
+  - "I'd have to see" / "I'd have to face" / "I'd have to admit" — interior-witness verbs banned by the voice rules. These are not observable events; they're the coachee's internal recognition. Replace with something external ("she'd stop trusting me", "I'd lose control", "she'd walk out").
 
 Do NOT start the tell with "then" — the server writes that.
 
