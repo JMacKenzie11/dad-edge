@@ -162,8 +162,11 @@ export async function saveFirstGoal(formData: FormData) {
   });
   if (!parsed.success) redirect("/onboarding/goal?error=Pick+pillar+and+write+the+goal.");
   const supabase = await createSupabaseServerClient();
-  const { getCurrentQuarter } = await import("@/lib/scoring/quarters");
+  const { getCurrentQuarter, computeMidpointCheckAt } = await import(
+    "@/lib/scoring/quarters"
+  );
   const q = getCurrentQuarter();
+  const midpointCheckAt = computeMidpointCheckAt(q.endIso, new Date());
   // Onboarding stays lean (one input field) to keep the funnel short.
   // The single input maps to desired_end_state; the coachee can add
   // current_state from /goals when they land there post-onboarding.
@@ -173,6 +176,7 @@ export async function saveFirstGoal(formData: FormData) {
     desired_end_state: parsed.data.description.trim(),
     quarter_start: q.startIso,
     source: "user",
+    midpoint_check_at: midpointCheckAt,
   });
   await bumpStep(5);
   redirect("/onboarding/mission");

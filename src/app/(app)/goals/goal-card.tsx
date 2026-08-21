@@ -13,7 +13,10 @@ type Goal = {
   source: "user" | "itc";
   current_state: string | null;
   desired_end_state: string;
-  review_reflection: string | null;
+  midpoint_check_at: string | null;
+  midpoint_check_answer: string | null;
+  retrospective_what_happened: string | null;
+  retrospective_what_learned: string | null;
   completed_missions: number;
   total_missions: number;
 };
@@ -68,9 +71,10 @@ export function GoalCard({ goal, readOnly }: { goal: Goal; readOnly: boolean }) 
           <p className="text-[11px] text-[color:var(--color-text-muted)] mt-2">
             {missionRate}
           </p>
-          {goal.status === "abandoned" && goal.review_reflection ? (
+          {(goal.status === "abandoned" || goal.status === "completed") &&
+          (goal.retrospective_what_learned || goal.retrospective_what_happened) ? (
             <p className="text-xs text-[color:var(--color-text-muted)] mt-2 italic">
-              {goal.review_reflection}
+              {goal.retrospective_what_learned || goal.retrospective_what_happened}
             </p>
           ) : null}
           {!itcSourced ? (

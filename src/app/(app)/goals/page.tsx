@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { NewGoalForm } from "./new-goal-form";
 import { GoalCard } from "./goal-card";
 import { GoalReviewPrompt } from "./goal-review-prompt";
+import { GoalMidpointPrompt } from "./goal-midpoint-prompt";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
@@ -21,7 +22,10 @@ export type Goal = {
   source: "user" | "itc";
   current_state: string | null;
   desired_end_state: string;
-  review_reflection: string | null;
+  midpoint_check_at: string | null;
+  midpoint_check_answer: string | null;
+  retrospective_what_happened: string | null;
+  retrospective_what_learned: string | null;
   completed_missions: number;
   total_missions: number;
 };
@@ -39,7 +43,7 @@ export default async function GoalsPage() {
   const { data } = await supabase
     .from("quarterly_goals")
     .select(
-      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, review_reflection",
+      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, midpoint_check_at, midpoint_check_answer, retrospective_what_happened, retrospective_what_learned",
     )
     .eq("user_id", user.id)
     .order("quarter_start", { ascending: false });
@@ -158,6 +162,26 @@ export default async function GoalsPage() {
           />
         ))}
 
+      {active
+        .filter(
+          (g) =>
+            g.status === "active" &&
+            g.source === "user" &&
+            g.midpoint_check_at !== null &&
+            g.midpoint_check_answer === null &&
+            g.midpoint_check_at <= todayIso(),
+        )
+        .map((g) => (
+          <GoalMidpointPrompt
+            key={`midpoint-${g.id}`}
+            goal={{
+              id: g.id,
+              desired_end_state: g.desired_end_state,
+              focus_area: g.focus_area,
+            }}
+          />
+        ))}
+
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
           Goals
@@ -200,6 +224,10 @@ export default async function GoalsPage() {
       ) : null}
     </div>
   );
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /**

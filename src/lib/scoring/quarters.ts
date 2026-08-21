@@ -76,6 +76,35 @@ export function daysUntilQuarterEnd(now: Date = new Date()): number {
 }
 
 /**
+ * Compute the midpoint check-in date for a goal, given the quarter
+ * end and the goal's creation time. Returns:
+ *   - ISO date halfway between createdAt and quarterEnd if there's
+ *     enough runway (>= MIDPOINT_MIN_RUNWAY_DAYS remaining in the
+ *     quarter at creation time)
+ *   - null if the goal was created too late for a midpoint to be
+ *     meaningful — the quarter-end retrospective handles it instead
+ *
+ * Goal-relative (not calendar-fixed) so a coachee who joins mid-quarter
+ * still gets a proportional check-in instead of missing it entirely.
+ * See DECISIONS 2026-08-26 for the edge-case reasoning.
+ */
+export const MIDPOINT_MIN_RUNWAY_DAYS = 21;
+
+export function computeMidpointCheckAt(
+  quarterEndIso: string,
+  createdAt: Date,
+): string | null {
+  const quarterEnd = new Date(`${quarterEndIso}T00:00:00Z`);
+  const daysRemaining = Math.floor(
+    (quarterEnd.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (daysRemaining < MIDPOINT_MIN_RUNWAY_DAYS) return null;
+  const midpointMs =
+    createdAt.getTime() + Math.floor(daysRemaining / 2) * 24 * 60 * 60 * 1000;
+  return new Date(midpointMs).toISOString().slice(0, 10);
+}
+
+/**
  * Return the quarter whose `startIso` equals the given ISO date, or
  * null if the ISO doesn't match a canonical quarter start. Used to
  * validate incoming form input.

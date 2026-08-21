@@ -1,44 +1,76 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { getCurrentQuarter } from "@/lib/scoring/quarters";
+import { daysUntilQuarterEnd, getCurrentQuarter } from "@/lib/scoring/quarters";
 import type { JobResult } from "@/lib/jobs/utils";
 
+/** Days before quarter-end at which the retrospective prompt starts
+ *  firing. 7 gives the coachee a full final week with the quarter
+ *  still live to reflect while the memory's fresh — waiting until
+ *  quarter-end proper meant he'd already moved on by the time the
+ *  prompt appeared. */
+export const REVIEW_LEAD_DAYS = 7;
+
 /**
- * Once a quarter has ended, transition any still-active goal from that
- * quarter into `needs_review`. The /today and /goals surfaces render a
- * dismissible prompt when a needs_review goal exists so the coachee can
- * close it out (or leave it and be re-prompted next visit).
+ * Transition any still-active goal into `needs_review` once its
+ * quarter is within REVIEW_LEAD_DAYS of ending. The /today and
+ * /goals surfaces render a dismissible retrospective prompt when a
+ * needs_review goal exists so the coachee can close it out.
+ *
+ * Two cases handled:
+ *   1. Prior-quarter goals (safety net for missed cron runs) —
+ *      always transitioned regardless of lead window.
+ *   2. Current-quarter goals — transitioned only when we're within
+ *      REVIEW_LEAD_DAYS of quarter-end.
  *
  * ITC-sourced goals: also flagged. The ITC map's own close-out flow
- * lives at the ITC `done` stage, but if a coachee lets an ITC map sit
- * past quarter-end without advancing it, we still surface the review
- * prompt on /goals — the answer just links them back into the map.
- * (The prompt UI treats source='itc' goals as read-only and points to
- * the ITC tool for the actual close-out.)
+ * lives at the ITC `done` stage, but if a coachee lets an ITC map
+ * sit past quarter-end without advancing it, we still surface the
+ * review prompt — the answer just links them back into the map.
  */
 export async function runMarkGoalsForReview(
   now: Date = new Date(),
 ): Promise<JobResult> {
   const svc = createSupabaseServiceClient();
   const q = getCurrentQuarter(now);
-  // Any active goal whose quarter_start is strictly earlier than the
-  // current quarter's start is a past-quarter goal that never got
-  // closed. Move to needs_review.
-  const { data, error } = await svc
+  const daysLeft = daysUntilQuarterEnd(now);
+
+  // Case 1: prior-quarter goals. Safety net for a cron run that
+  // missed the boundary window on the prior quarter.
+  const { data: stale, error: staleErr } = await svc
     .from("quarterly_goals")
     .update({ status: "needs_review" })
     .eq("status", "active")
     .lt("quarter_start", q.startIso)
     .select("id");
-  if (error) {
+  if (staleErr) {
     return {
       job: "mark-goals-for-review",
       ok: false,
-      errors: [error.message],
+      errors: [staleErr.message],
     };
   }
+
+  // Case 2: current-quarter goals within the lead window.
+  let currentCount = 0;
+  if (daysLeft <= REVIEW_LEAD_DAYS) {
+    const { data: current, error: currentErr } = await svc
+      .from("quarterly_goals")
+      .update({ status: "needs_review" })
+      .eq("status", "active")
+      .eq("quarter_start", q.startIso)
+      .select("id");
+    if (currentErr) {
+      return {
+        job: "mark-goals-for-review",
+        ok: false,
+        errors: [currentErr.message],
+      };
+    }
+    currentCount = (current ?? []).length;
+  }
+
   return {
     job: "mark-goals-for-review",
     ok: true,
-    processed: (data ?? []).length,
+    processed: (stale ?? []).length + currentCount,
   };
 }

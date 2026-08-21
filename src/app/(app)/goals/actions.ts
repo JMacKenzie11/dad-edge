@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getCurrentQuarter } from "@/lib/scoring/quarters";
+import { computeMidpointCheckAt, getCurrentQuarter } from "@/lib/scoring/quarters";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -22,6 +22,7 @@ export async function createGoal(input: unknown) {
 
   // Quarter is server-computed; client never picks a quarter.
   const q = getCurrentQuarter();
+  const midpointCheckAt = computeMidpointCheckAt(q.endIso, new Date());
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("quarterly_goals").insert({
     user_id: user.id,
@@ -30,6 +31,7 @@ export async function createGoal(input: unknown) {
     desired_end_state: parsed.data.desired_end_state.trim(),
     quarter_start: q.startIso,
     source: "user",
+    midpoint_check_at: midpointCheckAt,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/goals");
@@ -85,14 +87,24 @@ export async function updateGoal(input: unknown) {
 const ReviewAnswerSchema = z.object({
   goal_id: z.string().uuid(),
   answer: z.enum(["yes", "partially", "no"]),
-  reflection: z.string().max(1000).optional(),
+  /** Concrete story of what actually happened this quarter. */
+  what_happened: z.string().max(2000).optional(),
+  /** Extracted lesson — separate field because the learning is
+   *  different from the story of what occurred. */
+  what_learned: z.string().max(2000).optional(),
 });
 
 /**
- * Quarter-end review submission. Called from the dismissible prompt
+ * Quarter-end review submission. Called from the retrospective prompt
  * that appears on /today and /goals when a source='user' goal has
  * status='needs_review'. Yes/Partially → status='completed'; No →
- * status='abandoned'. Optional reflection lands in review_reflection.
+ * status='abandoned'.
+ *
+ * Fields are split (was single review_reflection blob): what_happened
+ * captures the concrete story, what_learned captures the extracted
+ * lesson. Both optional so a coachee can answer only the verdict if
+ * that's all he wants to give.
+ *
  * ITC-sourced goals never reach this path — the prompt UI treats them
  * as read-only pointers back into the map.
  */
@@ -121,7 +133,55 @@ export async function submitGoalReview(input: unknown) {
     .from("quarterly_goals")
     .update({
       status: nextStatus,
-      review_reflection: parsed.data.reflection?.trim() || null,
+      retrospective_what_happened:
+        parsed.data.what_happened?.trim() || null,
+      retrospective_what_learned:
+        parsed.data.what_learned?.trim() || null,
+    })
+    .eq("id", parsed.data.goal_id)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/goals");
+  revalidatePath("/today");
+  return { ok: true };
+}
+
+const MidpointAnswerSchema = z.object({
+  goal_id: z.string().uuid(),
+  answer: z.string().min(1).max(2000),
+});
+
+/**
+ * Midpoint check-in submission. One freeform field ("where are you at
+ * with this?"). Non-blocking; only fires for source='user' goals with
+ * midpoint_check_at set. Writing an answer stops the prompt showing.
+ * If the coachee wants to update mid-quarter, he can edit through
+ * /goals/[id] once we surface it.
+ */
+export async function submitMidpointCheck(input: unknown) {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+  const parsed = MidpointAnswerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const supabase = await createSupabaseServerClient();
+  const { data: goal, error: lookupErr } = await supabase
+    .from("quarterly_goals")
+    .select("source, midpoint_check_at")
+    .eq("id", parsed.data.goal_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, error: lookupErr.message };
+  if (!goal) return { ok: false, error: "Goal not found." };
+  if (goal.source === "itc" || !goal.midpoint_check_at) {
+    return {
+      ok: false,
+      error: "This goal doesn't have a midpoint check-in.",
+    };
+  }
+  const { error } = await supabase
+    .from("quarterly_goals")
+    .update({
+      midpoint_check_answer: parsed.data.answer.trim(),
     })
     .eq("id", parsed.data.goal_id)
     .eq("user_id", user.id);

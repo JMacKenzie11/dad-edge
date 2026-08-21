@@ -28,7 +28,7 @@ export default async function GoalDetailPage({
   const { data: goal } = await supabase
     .from("quarterly_goals")
     .select(
-      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, review_reflection",
+      "id, focus_area, quarter_start, status, source, current_state, desired_end_state, midpoint_check_answer, retrospective_what_happened, retrospective_what_learned",
     )
     .eq("id", id)
     .eq("user_id", user.id)
@@ -91,8 +91,20 @@ export default async function GoalDetailPage({
             <FieldReadout label="Where you are now" value={goal.current_state as string} />
           ) : null}
           <FieldReadout label="Where you want to be" value={goal.desired_end_state as string} />
-          {goal.review_reflection ? (
-            <FieldReadout label="Quarter-end reflection" value={goal.review_reflection as string} />
+          {goal.midpoint_check_answer ? (
+            <FieldReadout label="Midpoint check-in" value={goal.midpoint_check_answer as string} />
+          ) : null}
+          {goal.retrospective_what_happened ? (
+            <FieldReadout
+              label="What actually happened"
+              value={goal.retrospective_what_happened as string}
+            />
+          ) : null}
+          {goal.retrospective_what_learned ? (
+            <FieldReadout
+              label="What you learned"
+              value={goal.retrospective_what_learned as string}
+            />
           ) : null}
         </div>
       )}
