@@ -48,12 +48,12 @@ What makes a good worry:
 • About what YOU dread, not what she'd feel or how it'd look to someone else
 • Says something about WHO YOU ARE. A label about you ("I'd be a fraud"), or a role you'd have failed at ("the husband who hurts her").`,
   commitments: () =>
-    `What a part of you is SECRETLY committed to protecting. These are the hidden vows that keep every worry above from ever coming true, which means they also block your goal. That's why "just try harder" doesn't work: part of you is quietly working against you. Start with "I'm also committed to…" and name the active move a part of you is running to stay safe.
+    `What a part of you is SECRETLY committed to protecting. These are the hidden vows that keep every worry above from ever coming true, which means they also block your goal. That's why "just try harder" doesn't work: part of you is working against you. Start with "I'm also committed to never…" and name what you're vowing never to be.
 
 What makes a good competing commitment:
-• Names what you're protecting yourself from. The flinch is visible. (Not a noble vow like "being a better husband.")
-• YOUR commitment, in your voice. Not general advice or a rule for others.
-• Would sound weird on a LinkedIn post. A stranger reading it thinks "that's a strange thing to admit," not "that's good advice."
+• Mirrors the worry above. If the worry is "I fear being the guy who folds under pressure," the commitment is "I'm also committed to never being the guy who folds under pressure." Same identity, same specificity.
+• YOUR commitment, in your voice. Uses the nouns from the worry (my team, my wife, my kids, whatever the worry actually names). Not general advice.
+• Names something to AVOID, not a positive aspiration. "Never being the leader who folds" belongs here. "Being a stronger leader" belongs in your goal at the top.
 
 Under each worry, the coach has drafted a starting point. Review it, tap to use, edit, or write your own.`,
   assumptions: () =>
