@@ -456,9 +456,13 @@ const WORRY_IDENTITY_MARKERS: RegExp[] = [
   // Self-label — Vol 1 p 14 shape
   /\b(a|the)\s+(fraud|fake|phony|coward|failure|liar|loser|monster|villain|cheat|hypocrite|fool|weakling)\b/i,
   /\bnot\s+(enough|good\s+enough|worthy|the\s+\w+|a\s+real|a\s+true)\b/i,
-  // "Seen as" / "looking like" / "appeared like" — Vol 1 p 13, p 27
+  // "Seen as" / "looking like" / "appeared like" — Vol 1 p 13, p 27.
+  // Include pronoun-inserted variants "see me/him/her/them as" which
+  // are semantically identical to "seen as" (the Kegan-canonical
+  // form) — just active voice with subject "she'd".
   /\bseen\s+as\b/i,
   /\bbe\s+seen\b/i,
+  /\b(see|sees|seeing|saw)\s+(me|him|her|them|us)\s+as\b/i,
   /\bappeared?\s+(as|like)\b/i,
   /\blooking\s+like\b/i,
   /\blook\s+like\b/i,
