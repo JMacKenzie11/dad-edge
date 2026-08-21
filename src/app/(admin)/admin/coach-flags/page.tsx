@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { resolveFlag } from "./actions";
@@ -5,15 +6,45 @@ import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-export default async function CoachFlagsPage() {
-  await requirePlatformAdmin();
-  const svc = createSupabaseServiceClient();
+const SEVERITY_OPTIONS = ["all", "medium", "high", "critical"] as const;
+const STATUS_OPTIONS = ["open", "reviewed", "all"] as const;
+type Severity = (typeof SEVERITY_OPTIONS)[number];
+type Status = (typeof STATUS_OPTIONS)[number];
 
-  const { data: flags } = await svc
+function isSeverity(v: string | undefined): v is Severity {
+  return !!v && (SEVERITY_OPTIONS as readonly string[]).includes(v);
+}
+function isStatus(v: string | undefined): v is Status {
+  return !!v && (STATUS_OPTIONS as readonly string[]).includes(v);
+}
+
+export default async function CoachFlagsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ severity?: string; status?: string }>;
+}) {
+  await requirePlatformAdmin();
+  const params = await searchParams;
+  const severityFilter: Severity = isSeverity(params.severity)
+    ? params.severity
+    : "all";
+  const statusFilter: Status = isStatus(params.status) ? params.status : "open";
+
+  const svc = createSupabaseServiceClient();
+  let query = svc
     .from("coach_flags_queue")
-    .select("id, severity, status, notes, created_at, message_id, coach_messages:message_id(content, role, created_at, conversation_id, coach_conversations:conversation_id(user_id, users:user_id(email, first_name, last_name)))")
+    .select(
+      "id, severity, status, notes, created_at, message_id, coach_messages:message_id(content, role, flag_reason, created_at, conversation_id, coach_conversations:conversation_id(user_id, mode, users:user_id(email, first_name, last_name)))",
+    )
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(200);
+  if (severityFilter !== "all") {
+    query = query.eq("severity", severityFilter);
+  }
+  if (statusFilter !== "all") {
+    query = query.eq("status", statusFilter);
+  }
+  const { data: flags } = await query;
 
   return (
     <div className="space-y-6">
@@ -23,6 +54,23 @@ export default async function CoachFlagsPage() {
           Messages flagged by the safety classifier. Platform admin only (DECISION #6).
         </p>
       </header>
+
+      <div className="flex flex-wrap gap-4">
+        <FilterGroup
+          label="Severity"
+          options={SEVERITY_OPTIONS}
+          current={severityFilter}
+          paramName="severity"
+          otherParam={{ status: statusFilter }}
+        />
+        <FilterGroup
+          label="Status"
+          options={STATUS_OPTIONS}
+          current={statusFilter}
+          paramName="status"
+          otherParam={{ severity: severityFilter }}
+        />
+      </div>
 
       <ul className="space-y-3">
         {(flags ?? []).map((f) => {
@@ -36,25 +84,49 @@ export default async function CoachFlagsPage() {
               | {
                   content: string;
                   role: string;
+                  flag_reason: string | null;
                   coach_conversations:
                     | {
                         user_id: string;
+                        mode: "general" | "mission";
                         users:
-                          | { email: string; first_name: string | null; last_name: string | null }
-                          | { email: string; first_name: string | null; last_name: string | null }[]
+                          | {
+                              email: string;
+                              first_name: string | null;
+                              last_name: string | null;
+                            }
+                          | Array<{
+                              email: string;
+                              first_name: string | null;
+                              last_name: string | null;
+                            }>
                           | null;
                       }
-                    | { user_id: string; users: unknown }[]
+                    | Array<{
+                        user_id: string;
+                        mode: "general" | "mission";
+                        users: unknown;
+                      }>
                     | null;
                 }
-              | { content: string; role: string; coach_conversations: unknown }[]
+              | Array<{
+                  content: string;
+                  role: string;
+                  flag_reason: string | null;
+                  coach_conversations: unknown;
+                }>
               | null;
           };
           const msgRaw = Array.isArray(raw.coach_messages)
             ? raw.coach_messages[0]
             : raw.coach_messages;
           const msg = msgRaw as
-            | { content: string; role: string; coach_conversations: unknown }
+            | {
+                content: string;
+                role: string;
+                flag_reason: string | null;
+                coach_conversations: unknown;
+              }
             | null;
           const convoRaw = msg
             ? Array.isArray(msg.coach_conversations)
@@ -62,7 +134,11 @@ export default async function CoachFlagsPage() {
               : msg.coach_conversations
             : null;
           const convo = convoRaw as
-            | { user_id: string; users: unknown }
+            | {
+                user_id: string;
+                mode: "general" | "mission";
+                users: unknown;
+              }
             | null;
           const usersRaw = convo
             ? Array.isArray(convo.users)
@@ -70,7 +146,11 @@ export default async function CoachFlagsPage() {
               : convo.users
             : null;
           const u = usersRaw as
-            | { email: string; first_name: string | null; last_name: string | null }
+            | {
+                email: string;
+                first_name: string | null;
+                last_name: string | null;
+              }
             | null;
           return (
             <li
@@ -80,10 +160,15 @@ export default async function CoachFlagsPage() {
               <div className="flex items-baseline justify-between mb-2">
                 <div>
                   <p className="font-heading text-sm">
-                    {u ? [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email : "—"}
+                    {u
+                      ? [u.first_name, u.last_name].filter(Boolean).join(" ") ||
+                        u.email
+                      : "—"}
                   </p>
                   <p className="text-xs text-[color:var(--color-text-muted)]">
-                    {u?.email ?? ""} · {format(new Date(raw.created_at), "MMM d HH:mm")}
+                    {u?.email ?? ""} ·{" "}
+                    {format(new Date(raw.created_at), "MMM d HH:mm")}
+                    {convo?.mode ? ` · ${convo.mode} mode` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
@@ -101,7 +186,10 @@ export default async function CoachFlagsPage() {
                   <span
                     className="font-heading tracking-widest"
                     style={{
-                      color: raw.status === "open" ? "var(--color-warning)" : "var(--color-text-muted)",
+                      color:
+                        raw.status === "open"
+                          ? "var(--color-warning)"
+                          : "var(--color-text-muted)",
                     }}
                   >
                     {raw.status.toUpperCase()}
@@ -111,6 +199,11 @@ export default async function CoachFlagsPage() {
               <p className="text-sm text-[color:var(--color-text-muted)] whitespace-pre-wrap">
                 {msg?.content ?? "(message deleted)"}
               </p>
+              {msg?.flag_reason ? (
+                <p className="mt-2 text-[11px] text-[color:var(--color-text-muted)] italic">
+                  Classifier: {msg.flag_reason}
+                </p>
+              ) : null}
               {raw.status === "open" ? (
                 <form action={resolveFlag} className="mt-3 flex gap-2">
                   <input type="hidden" name="flag_id" value={raw.id} />
@@ -134,10 +227,54 @@ export default async function CoachFlagsPage() {
         })}
         {(flags ?? []).length === 0 ? (
           <li className="p-8 text-center text-sm text-[color:var(--color-text-muted)] border border-[color:var(--color-border)] rounded-[var(--radius-card)]">
-            No flags. The coach is behaving.
+            {statusFilter === "open" && severityFilter === "all"
+              ? "No open flags. The coach is behaving."
+              : "No flags match this filter."}
           </li>
         ) : null}
       </ul>
+    </div>
+  );
+}
+
+function FilterGroup({
+  label,
+  options,
+  current,
+  paramName,
+  otherParam,
+}: {
+  label: string;
+  options: readonly string[];
+  current: string;
+  paramName: string;
+  otherParam: Record<string, string>;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+        {label.toUpperCase()}
+      </span>
+      <div className="flex gap-1">
+        {options.map((opt) => {
+          const params = new URLSearchParams({ ...otherParam, [paramName]: opt });
+          const href = `/admin/coach-flags?${params.toString()}`;
+          const active = opt === current;
+          return (
+            <Link
+              key={opt}
+              href={href}
+              className={`h-7 px-2.5 rounded-md text-[11px] font-heading tracking-widest flex items-center ${
+                active
+                  ? "bg-[color:var(--color-primary)] text-white"
+                  : "border border-[color:var(--color-border)] text-[color:var(--color-text-muted)] hover:text-white"
+              }`}
+            >
+              {opt.toUpperCase()}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
