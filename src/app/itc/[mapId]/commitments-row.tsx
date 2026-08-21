@@ -11,7 +11,7 @@ import { worryPassesDepth } from "@/lib/itc/rules";
 import { saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
-import { SavingIndicator } from "./form-field";
+import { InlineSpinner, SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 
 const FRESH_ROW_MS = 15_000;
@@ -277,8 +277,10 @@ function CommitmentItem({
               type="button"
               disabled={pending}
               onClick={() => saveText(worry.coach_commitment_draft ?? "")}
-              className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+              aria-busy={pending ? "true" : undefined}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             >
+              {pending ? <InlineSpinner className="h-3 w-3" /> : null}
               Use this draft
             </button>
           </div>

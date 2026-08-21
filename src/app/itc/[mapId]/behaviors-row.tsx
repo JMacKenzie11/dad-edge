@@ -223,14 +223,6 @@ function AddBehaviorForm({
         className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={submit}
-          disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
-        >
-          {pending ? "…" : "Add"}
-        </button>
         {text.length === 0 ? (
           <button
             type="button"
@@ -258,6 +250,13 @@ function AddBehaviorForm({
           Give me ideas
         </button>
       </div>
+      {pending ? (
+        <SavingIndicator pending={pending} />
+      ) : text.length > 0 ? (
+        <p className="text-xs text-[color:var(--color-text-muted)]">
+          Enter to save · Esc to cancel
+        </p>
+      ) : null}
       {error ? (
         <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
       ) : null}

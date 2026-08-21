@@ -401,11 +401,50 @@ const WORRY_REVEALER_MARKERS: RegExp[] = [
   /\bcouldn['\u2019]t\s+(pretend|hide|deny)\b/i,
 ];
 
+/**
+ * Interior-witness scaffolding patterns that must NOT appear in
+ * identity_landing regardless of whether a revealer marker is present.
+ * Observed failure: drafter reaches for "I'd have to admit I've been
+ * running" — the past-perfect passes the whitelist but "I'd have to
+ * admit" is exactly the interior-witness verb the voice rules ban.
+ * Stripping "I'd have to admit" leaves "I've been running" which is
+ * perfect. So the blacklist is a strip-this-scaffolding directive to
+ * the drafter, not a reveal-check.
+ */
+const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
+  pattern: RegExp;
+  label: string;
+}> = [
+  {
+    pattern: /\bi['\u2019]d\s+have\s+to\s+(see|face|feel|know|admit)\b/i,
+    label: "interior-witness scaffolding 'I'd have to see/face/feel/know/admit'",
+  },
+  {
+    pattern: /\badmit\s+to\s+myself\b/i,
+    label: "'admit to myself' (banned in voice rules)",
+  },
+];
+
 export function checkWorryLogicalConsistency(input: {
   behaviorText: string;
   oppositeMove: string;
   identityLanding: string;
 }): ConsistencyResult {
+  // Blacklist first: interior scaffolding fails regardless of whether
+  // a revealer marker is also present. "I'd have to admit I've been
+  // running" has the "I've been" marker but the "I'd have to admit"
+  // scaffolding is exactly what the voice rules ban.
+  for (const ban of WORRY_INTERIOR_SCAFFOLDING_BANS) {
+    if (ban.pattern.test(input.identityLanding)) {
+      return {
+        consistent: false,
+        reason: `Identity landing contains ${ban.label}. Strip the interior verb and let the reveal stand alone (e.g., "she'd see I've been X" or "I've been the man who X" — no "I'd have to admit/see/face/feel").`,
+      };
+    }
+  }
+
+  // Whitelist: at least one revealer marker required. Catches bare
+  // present-tense "I'm the [X-er]" / "I'm a [X]" inversions.
   const hasMarker = WORRY_REVEALER_MARKERS.some((re) =>
     re.test(input.identityLanding),
   );
@@ -418,7 +457,7 @@ export function checkWorryLogicalConsistency(input: {
   return {
     consistent: false,
     reason:
-      "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\".",
+      "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
   };
 }
 

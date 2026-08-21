@@ -16,7 +16,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
-import { SavingIndicator } from "./form-field";
+import { InlineSpinner, SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "./use-confirm";
 
@@ -352,9 +352,11 @@ function DraftCard({
           type="button"
           disabled={pending}
           onClick={useDraft}
-          className="rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          aria-busy={pending ? "true" : undefined}
+          className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
         >
-          {pending ? "…" : "Use this draft"}
+          {pending ? <InlineSpinner className="h-3 w-3" /> : null}
+          Use this draft
         </button>
         <button
           type="button"

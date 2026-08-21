@@ -110,6 +110,42 @@ export function SavingIndicator({
 }
 
 /**
+ * Small inline spinner used inside action buttons while the server
+ * action is pending. Same visual language as the ContinueBar spinner
+ * in map-canvas — matching two-arc SVG, currentColor so it inherits
+ * the button's text color, sized to sit alongside a text label.
+ *
+ * Reason for a shared component: three "Use this draft" buttons plus
+ * the ContinueBar all needed the same "something is happening"
+ * affordance; a static "…" or plain disabled state read as frozen.
+ */
+export function InlineSpinner({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      className={`${className} animate-spin`}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeOpacity="0.25"
+        strokeWidth="3"
+      />
+      <path
+        d="M12 2a10 10 0 0 1 10 10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/**
  * Standard top-level form error summary. Renders when there's a
  * server-side or top-level client-side error to surface. Uses
  * aria-live="polite" + role="status" so screen readers announce it
