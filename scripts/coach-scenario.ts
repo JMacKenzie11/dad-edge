@@ -31,6 +31,7 @@ import { generateObject, type ModelMessage } from "ai";
 import { mainModel } from "../src/lib/model-config";
 import { systemBase, PROMPT_VERSION } from "../src/lib/coach/prompts";
 import { classifyMessage, CRISIS_RESOURCES } from "../src/lib/coach/safety";
+import { scrubCoachReply } from "../src/lib/coach/scrub-reply";
 import type { ContextBlock } from "../src/lib/coach/context";
 import { SCENARIOS, scenarioBySlug, type Scenario } from "../tests/coach/fixtures";
 
@@ -150,7 +151,10 @@ async function main() {
     reply = result.object;
     const ms = Date.now() - started;
 
-    const finalReply = crisis ? `${reply.reply}\n\n${CRISIS_RESOURCES}` : reply.reply;
+    const scrubbed = scrubCoachReply(reply.reply);
+    const finalReply = crisis
+      ? `${scrubbed}\n\n${CRISIS_RESOURCES}`
+      : scrubbed;
 
     console.log("─── Coach reply ───────────────────────────────────────────");
     console.log(finalReply);

@@ -5,6 +5,7 @@ import { buildCoachContext } from "@/lib/coach/context";
 import { systemBase, PROMPT_VERSION, type Mode } from "@/lib/coach/prompts";
 import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
 import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
+import { scrubCoachReply } from "@/lib/coach/scrub-reply";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { SessionUser } from "@/lib/session";
@@ -259,7 +260,14 @@ export async function sendCoachMessage(opts: {
     }
   }
 
-  const finalReplyText = crisis ? `${reply.reply}\n\n${CRISIS_RESOURCES}` : reply.reply;
+  // Scrub em-dashes / en-dashes out of the reply before persist +
+  // return. The prompt bans them but no prompt rule survives every
+  // generation; this is the output-boundary guarantee that a coachee
+  // never sees one.
+  const scrubbedReply = scrubCoachReply(reply.reply);
+  const finalReplyText = crisis
+    ? `${scrubbedReply}\n\n${CRISIS_RESOURCES}`
+    : scrubbedReply;
 
   // 6. Persist the assistant turn with token usage + metadata.
   // metadata carries the context audit trail (which providers

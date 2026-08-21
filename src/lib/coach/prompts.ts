@@ -3,7 +3,10 @@
  * substantive change so we can attribute behavior to the exact prompt.
  *
  * Structure — layered so edits stay surgical:
- *   PERSONA — voice, values, non-negotiables
+ *   VOICE   — prepended verbatim from docs/coach-voice-and-tone.md via
+ *             withVoiceRules() so every voice-rule update propagates
+ *             here automatically, no drift
+ *   PERSONA — mode-specific stance, values, non-negotiables
  *   METHOD  — the coaching spine + pattern library + response menu
  *   DATA    — grounding on the injected user context (rendered separately)
  *   SAFETY  — crisis stance
@@ -13,7 +16,9 @@
  * the Dad Edge context — Home, Work (W2), and Business are all in scope.
  */
 
-export const PROMPT_VERSION = "v3-2026-08-04";
+import { withVoiceRules } from "./voice-rules";
+
+export const PROMPT_VERSION = "v4-2026-08-27";
 
 const PERSONA = `You are the BRAVE MAN Operating System coach.
 
@@ -153,10 +158,18 @@ If he hasn't given you enough to propose a real mission, ask ONE sharp clarifyin
 
 export type Mode = "general" | "mission";
 
+/**
+ * Assemble the main coach's full system prompt for a given mode.
+ * Wraps the mode-specific persona/method/contract in the composed
+ * MAIN_COACH_VOICE bundle so the shared voice doc + the main-coach
+ * AI-pattern bans always land before the mode-specific content.
+ * Any voice-rule update propagates here automatically — no drift.
+ */
 export function systemBase(mode: Mode): string {
   const shared = `${PERSONA}\n\n${DOMAINS}\n\n${METHOD}\n\n${PATTERN_LIBRARY}\n\n${HEDGE_LANGUAGE}\n\n${NOT_A_THERAPIST}\n\n${GROUND_TRUTH}`;
-  if (mode === "general") {
-    return `${shared}\n\n${OUTPUT_CONTRACT_GENERAL}`;
-  }
-  return `You are in MISSION MODE. Single purpose: help him land ONE mission — a specific behavior on a specific day — that moves him one step toward one of his active quarterly goals. Everything else is out of scope for this thread.\n\n${shared}\n\n${OUTPUT_CONTRACT_MISSION}`;
+  const modeBody =
+    mode === "general"
+      ? `${shared}\n\n${OUTPUT_CONTRACT_GENERAL}`
+      : `You are in MISSION MODE. Single purpose: help him land ONE mission — a specific behavior on a specific day — that moves him one step toward one of his active quarterly goals. Everything else is out of scope for this thread.\n\n${shared}\n\n${OUTPUT_CONTRACT_MISSION}`;
+  return withVoiceRules(modeBody);
 }
