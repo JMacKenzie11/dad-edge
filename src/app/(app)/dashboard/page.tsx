@@ -30,7 +30,7 @@ export default async function DashboardPage() {
         </p>
         <h1 className="font-heading text-3xl">Dashboard</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          The story your data is telling. Self only, never community.
+          What your numbers show. Self only, not community.
         </p>
       </header>
 

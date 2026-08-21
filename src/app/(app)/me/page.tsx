@@ -66,7 +66,7 @@ export default async function MePage() {
           </p>
           <p className="font-heading text-lg mt-1">Dashboard</p>
           <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
-            Pillars, composite trend, survey delta, missions, and any active ITC map.
+            Daily Living, mission completion, survey delta, and any active ITC map.
           </p>
         </div>
         <span className="text-[color:var(--color-primary)]">→</span>

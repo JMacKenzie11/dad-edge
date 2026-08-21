@@ -137,7 +137,7 @@ export default async function GoalsPage() {
     <div className="max-w-2xl mx-auto space-y-8">
       <header>
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-          NINETY-DAY HORIZON
+          THIS QUARTER
         </p>
         <h1 className="font-heading text-3xl">Quarterly goals</h1>
         <QuarterCountdown className="text-sm text-[color:var(--color-text-muted)] mt-1" />
@@ -205,7 +205,7 @@ export default async function GoalsPage() {
           <AdaptiveGoalCard adaptive={adaptive} />
         ) : (
           <p className="text-sm text-[color:var(--color-text-muted)] italic">
-            No active ITC map. If you build one, its improvement goal will show up here alongside your regular goals.
+            No active ITC map. If you build one, its goal shows up here alongside your other goals.
           </p>
         )}
       </section>

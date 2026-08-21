@@ -44,7 +44,7 @@ export async function PillarComparisonCard({ userId }: { userId: string }) {
     return (
       <CardEmpty
         title="Pillars this quarter vs last"
-        message="Once you have a few weeks of check-ins, you'll see how each pillar is trending compared to last quarter."
+        message="A few weeks of check-ins from now, this shows how each pillar compares to last quarter."
       />
     );
   }
@@ -62,8 +62,8 @@ export async function PillarComparisonCard({ userId }: { userId: string }) {
       title="Pillars this quarter vs last"
       subtitle={
         hasLastQuarter
-          ? `${q.label} check-ins vs the quarter before.`
-          : `${q.label} check-ins. Last quarter shows once you have history to compare against.`
+          ? `${q.label} check-ins next to the quarter before.`
+          : `${q.label} check-ins. Last quarter shows here once you have history to compare against.`
       }
     >
       <PillarComparisonChart data={data} hasLastQuarter={hasLastQuarter} />

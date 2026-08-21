@@ -77,7 +77,7 @@ export async function DailyLivingTrendCard({ userId }: { userId: string }) {
   return (
     <DashboardCard
       title="Daily Living trend"
-      subtitle="Weekly check-ins out of 56. Shaded bands mark the quarters where a goal was running."
+      subtitle="Weekly check-ins out of 56. Shaded bands mark the quarters when a goal was running."
     >
       <DailyLivingTrendChart data={data} goalBands={goalBands} />
       {bandLegend.length > 0 ? (

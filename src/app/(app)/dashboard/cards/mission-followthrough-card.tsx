@@ -65,7 +65,7 @@ export async function MissionFollowThroughCard({ userId }: { userId: string }) {
   return (
     <DashboardCard
       title="Mission completion trend"
-      subtitle="Weekly completion rate as a percentage. On-time and completed-late shown separately so you can see how much was finished the week you set it vs after."
+      subtitle="Weekly completion rate. On-time and late-completed shown separately so you can see what got done the week you set it vs after."
     >
       <MissionFollowThroughChart data={data} />
     </DashboardCard>

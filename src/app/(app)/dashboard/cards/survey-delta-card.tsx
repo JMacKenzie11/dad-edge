@@ -47,7 +47,7 @@ export async function SurveyDeltaCard({ userId }: { userId: string }) {
     return (
       <DashboardCard
         title="Partner Connection Survey"
-        subtitle="Baseline captured. Take it again to see change over time."
+        subtitle="Baseline saved. Take it again to see how you're moving."
       >
         <div className="flex items-baseline gap-3">
           <p className="font-heading text-4xl">{compositeOf(rows[0]).toFixed(2)}</p>
