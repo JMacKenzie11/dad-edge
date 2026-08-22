@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { itcLogin } from "./actions";
 
 const ERROR_COPY: Record<string, string> = {
@@ -7,6 +8,8 @@ const ERROR_COPY: Record<string, string> = {
   disabled: "ITC access is currently disabled.",
   session_missing: "Your session expired or the cookie didn't come through. Sign in again.",
   participant_missing: "We couldn't find your participant record. Sign in to recreate it.",
+  migrated:
+    "Your account has been upgraded. Sign in with your password on the main login page. If you haven't set one yet, check your email for your activation link.",
 };
 
 export default async function ItcLoginPage({
@@ -62,15 +65,32 @@ export default async function ItcLoginPage({
           </label>
 
           {errorMessage ? (
-            <p className="text-sm text-[color:var(--color-danger)]">{errorMessage}</p>
+            <p
+              className={
+                params.error === "migrated"
+                  ? "text-sm text-[color:var(--color-primary)]"
+                  : "text-sm text-[color:var(--color-danger)]"
+              }
+            >
+              {errorMessage}
+            </p>
           ) : null}
 
-          <button
-            type="submit"
-            className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold"
-          >
-            Enter
-          </button>
+          {params.error === "migrated" ? (
+            <Link
+              href="/login"
+              className="block w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold text-center text-white"
+            >
+              Go to the main login
+            </Link>
+          ) : (
+            <button
+              type="submit"
+              className="w-full rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold"
+            >
+              Enter
+            </button>
+          )}
         </form>
       </div>
     </main>

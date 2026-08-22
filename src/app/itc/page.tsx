@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CHOOSABLE_PILLARS, PILLAR_BY_CODE } from "@/lib/pillars";
 import { isItcAdmin } from "@/lib/itc/admin";
 import { listMapsForParticipant } from "@/lib/itc/maps";
@@ -33,6 +34,17 @@ export default async function ItcLandingPage({
 
   const inProgress = maps.filter((m) => m.status === "in_progress");
   const completed = maps.filter((m) => m.status !== "in_progress");
+
+  // First-login redirect per auth-phase spec Section 7. If the coachee
+  // has exactly one in-progress map, land them on it directly — no
+  // reason to make them click through the landing page every visit.
+  // (The one-map-per-participant DB constraint from migration
+  // 20260828000001 means "more than one in-progress" shouldn't occur;
+  // if it does, we still fall through to the landing page's chooser.)
+  if (inProgress.length === 1) {
+    redirect(`/itc/${inProgress[0].id}`);
+  }
+
   // Product decision 2026-08-28: one active map per participant. If any
   // map is in progress, the "Start a new map" section is hidden entirely
   // rather than shown-with-restrictions — otherwise the coachee sees an
