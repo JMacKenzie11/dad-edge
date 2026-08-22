@@ -127,6 +127,14 @@ export default async function UsersPage({
             <option value="active">Active</option>
             <option value="past_due">Past due</option>
           </select>
+          <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] sm:col-span-2">
+            <input
+              type="checkbox"
+              name="is_platform_admin"
+              className="h-4 w-4"
+            />
+            Platform admin (bypasses RLS, full access to /admin/*)
+          </label>
           <button className="h-10 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest sm:col-span-2">
             CREATE ACCOUNT
           </button>

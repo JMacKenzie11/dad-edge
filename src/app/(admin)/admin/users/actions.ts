@@ -20,6 +20,10 @@ const CreateAccountSchema = z.object({
   subscription_status: z
     .enum(["trialing", "active", "past_due", "canceled", "comped"])
     .default("comped"),
+  // Checkbox on the New Account form. When true, sets is_platform_admin
+  // on the users row in the same insert so creating an admin is a
+  // single step (was: create then flip on the detail page).
+  is_platform_admin: z.string().optional(),
 });
 
 /**
@@ -38,6 +42,7 @@ export async function createAccount(formData: FormData) {
     community_id: formData.get("community_id"),
     subscription_status:
       formData.get("subscription_status") || undefined,
+    is_platform_admin: formData.get("is_platform_admin") ?? undefined,
   });
   if (!parsed.success) {
     redirect(
@@ -73,6 +78,7 @@ export async function createAccount(formData: FormData) {
   }
   const userId = authRes.user.id;
 
+  const isPlatformAdmin = parsed.data.is_platform_admin === "on";
   await svc
     .from("users")
     .update({
@@ -80,6 +86,7 @@ export async function createAccount(formData: FormData) {
       last_name: parsed.data.last_name ?? null,
       subscription_status: parsed.data.subscription_status,
       subscription_source: "manual",
+      is_platform_admin: isPlatformAdmin,
     })
     .eq("id", userId);
 
@@ -99,6 +106,7 @@ export async function createAccount(formData: FormData) {
       email: parsed.data.email,
       community_id: parsed.data.community_id,
       subscription_status: parsed.data.subscription_status,
+      is_platform_admin: isPlatformAdmin,
     },
   });
 
