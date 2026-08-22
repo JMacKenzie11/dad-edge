@@ -8,6 +8,8 @@ import {
   listBehaviors,
   listCommitments,
   listMessages,
+  listTestResults,
+  listTests,
   listWorries,
 } from "@/lib/itc/maps";
 import { getParticipantById } from "@/lib/itc/participant";
@@ -36,6 +38,8 @@ export default async function ItcAdminMapPage({
     commitments,
     assumptions,
     assumptionLinks,
+    tests,
+    testResults,
     gate,
   ] = await Promise.all([
     getParticipantById(map.participant_id),
@@ -45,8 +49,17 @@ export default async function ItcAdminMapPage({
     listCommitments(map.id),
     listAssumptions(map.id),
     listAssumptionLinks(map.id),
+    listTests(map.id),
+    listTestResults(map.id),
     getAdvanceGateAdmin(map.id),
   ]);
+
+  // Index → "A1"/"A2"/"A3" tag so a test can reference which assumption
+  // it's testing without duplicating the (often long) assumption text.
+  const assumptionTag = new Map<string, string>();
+  assumptions.forEach((a, i) => assumptionTag.set(a.id, `A${i + 1}`));
+  const resultsByTestId = new Map<string, typeof testResults[number]>();
+  for (const r of testResults) resultsByTestId.set(r.test_id, r);
 
   const displayMessages = messages.filter(
     (m) => m.role === "user" || m.role === "assistant",
@@ -209,8 +222,14 @@ export default async function ItcAdminMapPage({
                 const links = assumptionLinks
                   .filter((l) => l.assumption_id === a.id)
                   .map((l) => l.commitment_id);
+                const tag = assumptionTag.get(a.id);
                 return (
                   <li key={a.id}>
+                    {tag ? (
+                      <span className="text-[color:var(--color-primary)] font-semibold mr-1">
+                        {tag}.
+                      </span>
+                    ) : null}
                     {a.text}
                     <span className="text-[color:var(--color-muted)]/80 ml-1">
                       (depth {a.depth_score ?? "—"}, {a.attempts} attempt{a.attempts === 1 ? "" : "s"}, links {links.length})
@@ -220,6 +239,75 @@ export default async function ItcAdminMapPage({
               })}
             </ul>
           </div>
+
+          {tests.length > 0 ? (
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">
+                Tests ({tests.length})
+              </div>
+              <ol className="list-decimal ml-4 space-y-2">
+                {tests.map((t) => {
+                  const tag = assumptionTag.get(t.assumption_id) ?? "?";
+                  const result = resultsByTestId.get(t.id);
+                  return (
+                    <li key={t.id} className="space-y-0.5">
+                      <div>
+                        <span className="text-[color:var(--color-primary)] font-semibold mr-1">
+                          {tag}
+                        </span>
+                        <span className="uppercase tracking-wide text-[color:var(--color-muted)] text-[10px]">
+                          {t.test_type.replace("_", " ")}
+                        </span>
+                        <span className="text-[color:var(--color-muted)]/80 ml-1">
+                          · {t.status}
+                          {t.target_date ? ` · due ${t.target_date}` : ""}
+                          {result?.assumption_verdict
+                            ? ` · verdict: ${result.assumption_verdict}`
+                            : ""}
+                        </span>
+                      </div>
+                      {t.behavior_change ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">So I will: </span>
+                          {t.behavior_change}
+                        </div>
+                      ) : null}
+                      {t.data_to_collect ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">Collect: </span>
+                          {t.data_to_collect}
+                        </div>
+                      ) : null}
+                      {t.in_order_to_find_out ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">Find out whether: </span>
+                          {t.in_order_to_find_out}
+                        </div>
+                      ) : null}
+                      {result?.what_i_did ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">What he did: </span>
+                          {result.what_i_did}
+                        </div>
+                      ) : null}
+                      {result?.data_collected ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">Data: </span>
+                          {result.data_collected}
+                        </div>
+                      ) : null}
+                      {result?.what_it_says_about_assumption ? (
+                        <div>
+                          <span className="text-[color:var(--color-muted)]">Says about assumption: </span>
+                          {result.what_it_says_about_assumption}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ) : null}
         </section>
       </div>
     </main>
