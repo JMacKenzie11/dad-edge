@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { isStageBEmailLive, sendPasswordResetEmail } from "@/lib/email";
 
 /**
  * Auth actions for the public login screen. Per the auth-phase spec
@@ -90,20 +92,69 @@ export async function requestPasswordReset(formData: FormData) {
     redirect(`/login?mode=forgot&error=${encodeURIComponent("Enter your email.")}`);
   }
 
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appOrigin()}/auth/callback?next=/reset-password`,
-  });
-  if (error) {
-    if (isRateLimitError(error.message)) {
-      redirect(
-        `/login?mode=forgot&error=${encodeURIComponent("Just sent one. Check your inbox, or try again in a few minutes.")}`,
-      );
+  const redirectTo = `${appOrigin()}/auth/callback?next=/reset-password`;
+
+  if (!isStageBEmailLive()) {
+    // Stage A: Supabase generates the link AND sends its default email.
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    if (error) {
+      if (isRateLimitError(error.message)) {
+        redirect(
+          `/login?mode=forgot&error=${encodeURIComponent("Just sent one. Check your inbox, or try again in a few minutes.")}`,
+        );
+      }
+      console.warn("[login] password reset (Stage A) swallowed:", error.message);
     }
-    // Swallow all other errors — never surface whether the email
-    // matched a real account. Log for debugging.
-    console.warn("[login] password reset swallowed:", error.message);
+    redirect(`/login?reset=1`);
   }
+
+  // Stage B: generate the recovery link ourselves and send via Resend.
+  // Look up the user first for the greeting; swallow silently if not
+  // found so we don't leak account existence.
+  const svc = createSupabaseServiceClient();
+  const { data: userRow } = await svc
+    .from("users")
+    .select("id, first_name")
+    .eq("email", email)
+    .maybeSingle();
+  if (userRow) {
+    const { data, error: linkErr } = await svc.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo },
+    });
+    if (linkErr) {
+      if (isRateLimitError(linkErr.message)) {
+        redirect(
+          `/login?mode=forgot&error=${encodeURIComponent("Just sent one. Check your inbox, or try again in a few minutes.")}`,
+        );
+      }
+      console.warn(
+        "[login] password reset (Stage B) generateLink swallowed:",
+        linkErr.message,
+      );
+    } else {
+      const actionLink = data.properties?.action_link;
+      if (actionLink) {
+        const first = (userRow as { first_name: string | null }).first_name;
+        const send = await sendPasswordResetEmail({
+          to: email,
+          firstName: first,
+          resetUrl: actionLink,
+        });
+        if (!send.ok) {
+          console.warn(
+            "[login] password reset (Stage B) send swallowed:",
+            send.error,
+          );
+        }
+      }
+    }
+  }
+  // Always show success, regardless of whether a real send happened.
   redirect(`/login?reset=1`);
 }
 

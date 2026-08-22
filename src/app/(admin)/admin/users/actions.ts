@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
+import { isStageBEmailLive, sendActivationEmail } from "@/lib/email";
 
 function appOrigin(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
@@ -129,21 +130,22 @@ export async function sendInvite(formData: FormData) {
   const svc = createSupabaseServiceClient();
   const { data: userRow } = await svc
     .from("users")
-    .select("id, email")
+    .select("id, email, first_name")
     .eq("id", parsed.data.user_id)
     .maybeSingle();
   if (!userRow) {
     redirect(`/admin/users?error=${encodeURIComponent("User not found.")}`);
   }
-  const email = (userRow as { email: string }).email;
+  const user = userRow as {
+    id: string;
+    email: string;
+    first_name: string | null;
+  };
 
-  const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
-  const { error: inviteErr } = await svc.auth.admin.inviteUserByEmail(email, {
-    redirectTo,
-  });
+  const inviteErr = await deliverActivationInvite(user);
   if (inviteErr) {
     redirect(
-      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(`Invite failed: ${inviteErr.message}`)}`,
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(`Invite failed: ${inviteErr}`)}`,
     );
   }
 
@@ -157,12 +159,84 @@ export async function sendInvite(formData: FormData) {
     action: "user.invite_sent",
     target_type: "user",
     target_id: parsed.data.user_id,
-    metadata: { email },
+    metadata: { email: user.email, stage: isStageBEmailLive() ? "B" : "A" },
   });
 
   revalidatePath(`/admin/users/${parsed.data.user_id}`);
   revalidatePath("/admin/users");
   redirect(`/admin/users/${parsed.data.user_id}?invited=1`);
+}
+
+/**
+ * Deliver an activation email to a user, using the right sender for
+ * the current stage.
+ *
+ * Stage A (default, EMAIL_STAGE unset or !== "B"): call
+ * supabase.auth.admin.inviteUserByEmail — Supabase generates the
+ * link AND sends its own default template. Ugly, unbranded, but
+ * unblocks testing without any DNS work. Safe for internal use;
+ * MUST NOT be used to invite a real person (spec Section 4).
+ *
+ * Stage B (EMAIL_STAGE=B + RESEND_API_KEY set): generate the
+ * activation link via supabase.auth.admin.generateLink({type:
+ * 'invite'}) but skip Supabase's sender; deliver our own branded
+ * email via Resend using the copy in src/lib/copy/auth-emails.ts.
+ * This is what a real invited person sees. Requires DNS work per
+ * docs/email-setup-checklist.md.
+ *
+ * Returns a string error message on failure, null on success.
+ */
+async function deliverActivationInvite(user: {
+  id: string;
+  email: string;
+  first_name: string | null;
+}): Promise<string | null> {
+  const svc = createSupabaseServiceClient();
+  const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
+
+  if (!isStageBEmailLive()) {
+    // Stage A: let Supabase send its default email.
+    const { error } = await svc.auth.admin.inviteUserByEmail(user.email, {
+      redirectTo,
+    });
+    return error?.message ?? null;
+  }
+
+  // Stage B: generate the link without sending Supabase's default,
+  // then deliver our own branded email via Resend.
+  const { data, error: linkErr } = await svc.auth.admin.generateLink({
+    type: "invite",
+    email: user.email,
+    options: { redirectTo },
+  });
+  if (linkErr) return linkErr.message;
+  const actionLink = data.properties?.action_link;
+  if (!actionLink) return "generateLink returned no action_link";
+
+  // Look up the user's community for the greeting.
+  const { data: membership } = await svc
+    .from("memberships")
+    .select("communities:community_id(name)")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  const memRaw = membership as
+    | { communities: { name: string } | { name: string }[] | null }
+    | null;
+  const communityName = memRaw?.communities
+    ? Array.isArray(memRaw.communities)
+      ? (memRaw.communities[0]?.name ?? null)
+      : (memRaw.communities.name ?? null)
+    : null;
+
+  const result = await sendActivationEmail({
+    to: user.email,
+    firstName: user.first_name,
+    communityName,
+    activationUrl: actionLink,
+  });
+  return result.ok ? null : result.error;
 }
 
 const SendInvitesBatchSchema = z.object({
@@ -186,21 +260,23 @@ export async function sendInvitesBatch(formData: FormData) {
   const svc = createSupabaseServiceClient();
   const { data: userRows } = await svc
     .from("users")
-    .select("id, email")
+    .select("id, email, first_name")
     .in("id", parsed.data.user_ids);
-  const rows = (userRows ?? []) as Array<{ id: string; email: string }>;
+  const rows = (userRows ?? []) as Array<{
+    id: string;
+    email: string;
+    first_name: string | null;
+  }>;
 
   let sent = 0;
   let failed = 0;
   const nowIso = new Date().toISOString();
-  const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
+  const stage = isStageBEmailLive() ? "B" : "A";
 
   for (const u of rows) {
-    const { error } = await svc.auth.admin.inviteUserByEmail(u.email, {
-      redirectTo,
-    });
-    if (error) {
-      console.warn("[admin] batch invite failed for %s: %s", u.email, error.message);
+    const err = await deliverActivationInvite(u);
+    if (err) {
+      console.warn("[admin] batch invite failed for %s: %s", u.email, err);
       failed += 1;
       continue;
     }
@@ -210,7 +286,7 @@ export async function sendInvitesBatch(formData: FormData) {
       action: "user.invite_sent",
       target_type: "user",
       target_id: u.id,
-      metadata: { email: u.email, batch: true },
+      metadata: { email: u.email, batch: true, stage },
     });
     sent += 1;
   }

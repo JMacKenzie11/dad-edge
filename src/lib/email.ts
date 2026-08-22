@@ -63,18 +63,85 @@ export async function sendInviteEmail(opts: {
   firstName: string | null;
   communityName: string;
 }) {
+  // Legacy magic-link invite body from the pre-password era. Retained so
+  // any older caller still compiles; new callers should use
+  // sendActivationEmail (below), which uses the Stage B activation copy
+  // from src/lib/copy/auth-emails.ts.
   const greeting = opts.firstName ? `${opts.firstName},` : "Man,";
   const url = `${APP_URL}/login`;
   return send({
     to: opts.to,
-    subject: `You're in — ${opts.communityName}`,
-    text: `${greeting}\n\nYou've been added to ${opts.communityName} on the BRAVE MAN Operating System.\n\nSign in with your email at ${url}. No password.\n\n— BRAVE MAN OS`,
+    subject: `You're in, ${opts.communityName}`,
+    text: `${greeting}\n\nYou've been added to ${opts.communityName} on the BRAVE MAN Operating System.\n\nSign in with your email at ${url}. No password.\n\n, BRAVE MAN OS`,
     html: shell(
       "You're in.",
       `<p>${greeting}</p><p>You've been added to <strong>${opts.communityName}</strong>.</p>
        <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Sign in</a></p>
        <p style="color:#9aa7b4;font-size:12px;">No password. Magic link only.</p>`,
     ),
+  });
+}
+
+// -------------------------------------------------------------------------
+// Auth-phase transactional emails (Section 4 of the 2026-08-22 spec).
+//
+// Two email types in scope: account activation and password reset. Copy
+// lives in src/lib/copy/auth-emails.ts. Sending uses the same send()
+// helper as every other email in this file.
+//
+// Stage A convention: for these two types SPECIFICALLY, we let Supabase
+// send its own default email (via inviteUserByEmail / resetPasswordForEmail
+// in the callers) — ugly but functional. Callers route through the
+// functions below only when EMAIL_STAGE === "B", the explicit go-live
+// flag Jason flips after DNS verification per
+// docs/email-setup-checklist.md.
+// -------------------------------------------------------------------------
+
+/** True when the app should send activation + reset emails via our own
+ *  Resend transport rather than Supabase's default. Gated on an
+ *  explicit env var (EMAIL_STAGE=B) — not just presence of
+ *  RESEND_API_KEY — so a dev with a key set for other emails doesn't
+ *  accidentally start sending auth emails through an unverified domain. */
+export function isStageBEmailLive(): boolean {
+  const key = process.env.RESEND_API_KEY;
+  return process.env.EMAIL_STAGE === "B" && Boolean(key) && key!.length > 0;
+}
+
+export async function sendActivationEmail(opts: {
+  to: string;
+  firstName: string | null;
+  communityName: string | null;
+  activationUrl: string;
+}) {
+  const { activationEmail } = await import("./copy/auth-emails");
+  const body = activationEmail({
+    firstName: opts.firstName,
+    activationUrl: opts.activationUrl,
+    communityName: opts.communityName,
+  });
+  return send({
+    to: opts.to,
+    subject: body.subject,
+    text: body.text,
+    html: body.html,
+  });
+}
+
+export async function sendPasswordResetEmail(opts: {
+  to: string;
+  firstName: string | null;
+  resetUrl: string;
+}) {
+  const { passwordResetEmail } = await import("./copy/auth-emails");
+  const body = passwordResetEmail({
+    firstName: opts.firstName,
+    resetUrl: opts.resetUrl,
+  });
+  return send({
+    to: opts.to,
+    subject: body.subject,
+    text: body.text,
+    html: body.html,
   });
 }
 
