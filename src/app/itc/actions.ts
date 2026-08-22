@@ -131,13 +131,14 @@ export async function startMap(formData: FormData): Promise<void> {
   });
   if (!parsed.success) redirect("/itc?error=pillar");
 
+  // One active map per participant, globally (product decision 2026-08-28).
+  // If any in-progress map exists — same pillar or otherwise — redirect
+  // there instead of creating a new one. The DB-level unique partial index
+  // (migration 20260828000001) is the backstop; this guard just makes the
+  // UX friendly rather than surfacing a raw DB error.
   const existingMaps = await listMapsForParticipant(participant.id);
-  const samePillarInProgress = existingMaps.find(
-    (m) =>
-      m.status === "in_progress" &&
-      m.pillar_code === parsed.data.pillar_code,
-  );
-  if (samePillarInProgress) redirect(`/itc/${samePillarInProgress.id}`);
+  const anyInProgress = existingMaps.find((m) => m.status === "in_progress");
+  if (anyInProgress) redirect(`/itc/${anyInProgress.id}`);
 
   const map = await createMap(participant.id, parsed.data.pillar_code as PillarCode);
   // No persisted goal intro — the client renders STAGE_INTROS.goal live

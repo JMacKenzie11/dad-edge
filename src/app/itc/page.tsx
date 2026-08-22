@@ -33,10 +33,12 @@ export default async function ItcLandingPage({
 
   const inProgress = maps.filter((m) => m.status === "in_progress");
   const completed = maps.filter((m) => m.status !== "in_progress");
-  // Pillars still available: not currently in-progress on this participant.
-  // Completed maps do NOT block re-starting the same pillar — the coachee
-  // may want to run the same pillar again with fresh material.
-  const inProgressPillars = new Set(inProgress.map((m) => m.pillar_code));
+  // Product decision 2026-08-28: one active map per participant. If any
+  // map is in progress, the "Start a new map" section is hidden entirely
+  // rather than shown-with-restrictions — otherwise the coachee sees an
+  // inviting form, picks a pillar, and gets silently redirected back to
+  // his existing map, which reads as a bug.
+  const canStartNewMap = inProgress.length === 0;
 
   const params = await searchParams;
   const errorMessage = params.error ? ERROR_COPY[params.error] : null;
@@ -119,37 +121,26 @@ export default async function ItcLandingPage({
         </section>
       ) : null}
 
-      <section className="space-y-3 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6">
-        <div className="space-y-1">
-          <h2 className="text-sm font-semibold">Start a new map</h2>
-          <p className="text-xs text-[color:var(--color-muted)]">
-            Pick the BRAVEMAN pillar this map is about.
-            {inProgressPillars.size > 0
-              ? " Pillars you already have in progress are disabled below."
-              : ""}
-          </p>
-        </div>
-        <form action={startMap} className="space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {CHOOSABLE_PILLARS.map((p) => {
-              const disabled = inProgressPillars.has(p.code);
-              return (
+      {canStartNewMap ? (
+        <section className="space-y-3 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Start a new map</h2>
+            <p className="text-xs text-[color:var(--color-muted)]">
+              Pick the BRAVEMAN pillar this map is about.
+            </p>
+          </div>
+          <form action={startMap} className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {CHOOSABLE_PILLARS.map((p) => (
                 <label
                   key={p.code}
-                  className={
-                    "flex flex-col items-center gap-1 rounded-md border px-2 py-3 text-xs " +
-                    (disabled
-                      ? "border-[color:var(--color-border)] bg-black/10 opacity-40 cursor-not-allowed"
-                      : "border-[color:var(--color-border)] bg-black/20 cursor-pointer has-[:checked]:border-[color:var(--color-primary)] has-[:checked]:bg-[color:var(--color-primary)]/20")
-                  }
-                  title={disabled ? "You already have this pillar in progress" : undefined}
+                  className="flex flex-col items-center gap-1 rounded-md border px-2 py-3 text-xs border-[color:var(--color-border)] bg-black/20 cursor-pointer has-[:checked]:border-[color:var(--color-primary)] has-[:checked]:bg-[color:var(--color-primary)]/20"
                 >
                   <input
                     type="radio"
                     name="pillar_code"
                     value={p.code}
                     required
-                    disabled={disabled}
                     className="sr-only"
                   />
                   <span
@@ -162,15 +153,19 @@ export default async function ItcLandingPage({
                     {p.short}
                   </span>
                 </label>
-              );
-            })}
-          </div>
-          {errorMessage ? (
-            <p className="text-xs text-[color:var(--color-danger)]">{errorMessage}</p>
-          ) : null}
-          <StartMapButton />
-        </form>
-      </section>
+              ))}
+            </div>
+            {errorMessage ? (
+              <p className="text-xs text-[color:var(--color-danger)]">{errorMessage}</p>
+            ) : null}
+            <StartMapButton />
+          </form>
+        </section>
+      ) : (
+        <p className="text-xs text-[color:var(--color-muted)] italic">
+          Finish or close your current map before starting a new one. One at a time keeps the work honest.
+        </p>
+      )}
 
       {completed.length > 0 ? (
         <section className="space-y-3">
