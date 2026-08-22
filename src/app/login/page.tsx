@@ -1,9 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
-import { signIn, signUp, requestPasswordReset } from "./actions";
+import { requestMagicLink, requestPasswordReset, signIn } from "./actions";
 
-type Mode = "signin" | "signup" | "forgot";
+type Mode = "signin" | "forgot" | "magic";
 
+/**
+ * Public login screen. Per the auth-phase spec (2026-08-22), public
+ * sign-up is off — new accounts happen only through the admin panel
+ * followed by an explicit Send Invite. Three modes only:
+ *
+ *   signin  — email + password (default)
+ *   forgot  — password reset request
+ *   magic   — one-shot sign-in link for a man locked out of his
+ *             password who doesn't want the reset dance
+ */
 export default async function LoginPage({
   searchParams,
 }: {
@@ -17,25 +27,34 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const mode: Mode =
-    params.mode === "signup" ? "signup" : params.mode === "forgot" ? "forgot" : "signin";
+    params.mode === "forgot"
+      ? "forgot"
+      : params.mode === "magic"
+        ? "magic"
+        : "signin";
   const next = params.next ?? "/today";
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-8">
       <Image
         src="/brand/logo-tagline-white.png"
-        alt="THE DAD EDGE — Live Legendary"
+        alt="THE DAD EDGE - Live Legendary"
         width={320}
         height={90}
         priority
       />
       <div className="w-full max-w-sm bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6 space-y-4">
         {mode === "signin" ? (
-          <SignInForm error={params.error} next={next} sent={params.sent} reset={params.reset} />
-        ) : mode === "signup" ? (
-          <SignUpForm error={params.error} next={next} sent={params.sent} />
-        ) : (
+          <SignInForm
+            error={params.error}
+            next={next}
+            reset={params.reset}
+            sent={params.sent}
+          />
+        ) : mode === "forgot" ? (
           <ForgotForm error={params.error} sent={params.reset} />
+        ) : (
+          <MagicForm error={params.error} next={next} sent={params.sent} />
         )}
       </div>
     </main>
@@ -45,13 +64,13 @@ export default async function LoginPage({
 function SignInForm({
   error,
   next,
-  sent,
   reset,
+  sent,
 }: {
   error?: string;
   next: string;
-  sent?: string;
   reset?: string;
+  sent?: string;
 }) {
   return (
     <>
@@ -61,61 +80,17 @@ function SignInForm({
           Email and password.
         </p>
       </div>
-      {sent ? (
-        <p className="text-xs text-[color:var(--color-primary)]">
-          Check your email to confirm your account.
-        </p>
-      ) : null}
       {reset ? (
         <p className="text-xs text-[color:var(--color-primary)]">
-          Password reset link sent. Check your email.
+          If that account exists, we've sent a reset link. Check your email.
+        </p>
+      ) : null}
+      {sent === "magic" ? (
+        <p className="text-xs text-[color:var(--color-primary)]">
+          If that account exists, we've sent a sign-in link. Check your email.
         </p>
       ) : null}
       <form action={signIn} className="space-y-3">
-        <input type="hidden" name="next" value={next} />
-        <Field label="EMAIL" name="email" type="email" required autoFocus />
-        <Field label="PASSWORD" name="password" type="password" required minLength={8} />
-        <button
-          type="submit"
-          className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
-        >
-          SIGN IN
-        </button>
-        {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
-      </form>
-      <div className="flex items-center justify-between text-xs">
-        <Link
-          href={`/login?mode=signup${next !== "/today" ? `&next=${encodeURIComponent(next)}` : ""}`}
-          className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-        >
-          Create account
-        </Link>
-        <Link
-          href="/login?mode=forgot"
-          className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-        >
-          Forgot password?
-        </Link>
-      </div>
-    </>
-  );
-}
-
-function SignUpForm({ error, next, sent }: { error?: string; next: string; sent?: string }) {
-  return (
-    <>
-      <div>
-        <h1 className="font-heading text-2xl">Create account</h1>
-        <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          Sign up with email and password.
-        </p>
-      </div>
-      {sent ? (
-        <p className="text-xs text-[color:var(--color-primary)]">
-          Check your email to confirm.
-        </p>
-      ) : null}
-      <form action={signUp} className="space-y-3">
         <input type="hidden" name="next" value={next} />
         <Field label="EMAIL" name="email" type="email" required autoFocus />
         <Field
@@ -124,23 +99,31 @@ function SignUpForm({ error, next, sent }: { error?: string; next: string; sent?
           type="password"
           required
           minLength={8}
-          hint="At least 8 characters."
         />
-        <Field label="CONFIRM PASSWORD" name="confirm" type="password" required minLength={8} />
         <button
           type="submit"
           className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
         >
-          CREATE ACCOUNT
+          SIGN IN
         </button>
-        {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
+        {error ? (
+          <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+        ) : null}
       </form>
-      <Link
-        href="/login"
-        className="block text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-      >
-        ← Back to sign in
-      </Link>
+      <div className="flex items-center justify-between text-xs">
+        <Link
+          href={`/login?mode=magic${next !== "/today" ? `&next=${encodeURIComponent(next)}` : ""}`}
+          className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+        >
+          Email me a sign-in link
+        </Link>
+        <Link
+          href="/login?mode=forgot"
+          className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+        >
+          Forgot password?
+        </Link>
+      </div>
     </>
   );
 }
@@ -156,7 +139,7 @@ function ForgotForm({ error, sent }: { error?: string; sent?: string }) {
       </div>
       {sent ? (
         <p className="text-xs text-[color:var(--color-primary)]">
-          If an account exists, a reset link has been sent.
+          If that account exists, we've sent a reset link. Check your email.
         </p>
       ) : null}
       <form action={requestPasswordReset} className="space-y-3">
@@ -167,13 +150,60 @@ function ForgotForm({ error, sent }: { error?: string; sent?: string }) {
         >
           SEND RESET LINK
         </button>
-        {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
+        {error ? (
+          <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+        ) : null}
       </form>
       <Link
         href="/login"
         className="block text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
       >
-        ← Back to sign in
+        Back to sign in
+      </Link>
+    </>
+  );
+}
+
+function MagicForm({
+  error,
+  next,
+  sent,
+}: {
+  error?: string;
+  next: string;
+  sent?: string;
+}) {
+  return (
+    <>
+      <div>
+        <h1 className="font-heading text-2xl">Email me a sign-in link</h1>
+        <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
+          One-shot link, no password needed.
+        </p>
+      </div>
+      {sent === "magic" ? (
+        <p className="text-xs text-[color:var(--color-primary)]">
+          If that account exists, we've sent a sign-in link. Check your email.
+        </p>
+      ) : null}
+      <form action={requestMagicLink} className="space-y-3">
+        <input type="hidden" name="next" value={next} />
+        <Field label="EMAIL" name="email" type="email" required autoFocus />
+        <button
+          type="submit"
+          className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
+        >
+          SEND SIGN-IN LINK
+        </button>
+        {error ? (
+          <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+        ) : null}
+      </form>
+      <Link
+        href="/login"
+        className="block text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+      >
+        Back to sign in
       </Link>
     </>
   );
@@ -210,7 +240,9 @@ function Field({
         className="mt-1 w-full h-11 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-[color:var(--color-text)] focus:border-[color:var(--color-primary)]"
       />
       {hint ? (
-        <span className="text-[10px] text-[color:var(--color-text-muted)] mt-1 block">{hint}</span>
+        <span className="text-[10px] text-[color:var(--color-text-muted)] mt-1 block">
+          {hint}
+        </span>
       ) : null}
     </label>
   );
