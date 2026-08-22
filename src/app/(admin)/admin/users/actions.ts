@@ -7,6 +7,218 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
 
+function appOrigin(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
+}
+
+const CreateAccountSchema = z.object({
+  email: z.string().email().max(254),
+  first_name: z.string().max(80).optional(),
+  last_name: z.string().max(80).optional(),
+  community_id: z.string().uuid(),
+  subscription_status: z
+    .enum(["trialing", "active", "past_due", "canceled", "comped"])
+    .default("comped"),
+});
+
+/**
+ * Create an account. NEVER sends any email. The user exists in
+ * auth.users with email_confirm=true (so future sign-ins work) but
+ * has no password. They cannot sign in until Send Invite fires.
+ * Community assignment is required and manual — the whole point of
+ * Section 5 of the auth-phase spec.
+ */
+export async function createAccount(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = CreateAccountSchema.safeParse({
+    email: String(formData.get("email") ?? "").trim().toLowerCase(),
+    first_name: String(formData.get("first_name") ?? "").trim() || undefined,
+    last_name: String(formData.get("last_name") ?? "").trim() || undefined,
+    community_id: formData.get("community_id"),
+    subscription_status:
+      formData.get("subscription_status") || undefined,
+  });
+  if (!parsed.success) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent("Bad input: email, community required.")}`,
+    );
+  }
+
+  const svc = createSupabaseServiceClient();
+
+  const { data: existing } = await svc
+    .from("users")
+    .select("id, email")
+    .eq("email", parsed.data.email)
+    .maybeSingle();
+  if (existing) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent(`An account already exists for ${parsed.data.email}.`)}`,
+    );
+  }
+
+  // Create the auth user with email_confirm=true and no password.
+  // The public.users row is created by the handle_new_auth_user
+  // trigger; we then patch first/last/subscription in a follow-up
+  // update since the trigger doesn't know those fields.
+  const { data: authRes, error: authErr } = await svc.auth.admin.createUser({
+    email: parsed.data.email,
+    email_confirm: true,
+  });
+  if (authErr || !authRes.user) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent(`Create failed: ${authErr?.message ?? "no user returned"}`)}`,
+    );
+  }
+  const userId = authRes.user.id;
+
+  await svc
+    .from("users")
+    .update({
+      first_name: parsed.data.first_name ?? null,
+      last_name: parsed.data.last_name ?? null,
+      subscription_status: parsed.data.subscription_status,
+      subscription_source: "manual",
+    })
+    .eq("id", userId);
+
+  await svc.from("memberships").insert({
+    user_id: userId,
+    community_id: parsed.data.community_id,
+    role: "member",
+    status: "active",
+  });
+
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.create",
+    target_type: "user",
+    target_id: userId,
+    metadata: {
+      email: parsed.data.email,
+      community_id: parsed.data.community_id,
+      subscription_status: parsed.data.subscription_status,
+    },
+  });
+
+  revalidatePath("/admin/users");
+  redirect(`/admin/users/${userId}?created=1`);
+}
+
+const SendInviteSchema = z.object({
+  user_id: z.string().uuid(),
+});
+
+/**
+ * Send an activation invite to a user. Sends via Supabase's default
+ * email sender for Stage A; swap to Resend in Checkpoint D. Sets
+ * invited_at = now(). The recipient lands on /auth/callback →
+ * /set-password.
+ *
+ * Idempotent-ish: re-sending simply generates a fresh link and
+ * re-stamps invited_at. Prior invite links are invalidated by
+ * Supabase's token rotation.
+ */
+export async function sendInvite(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = SendInviteSchema.safeParse({
+    user_id: formData.get("user_id"),
+  });
+  if (!parsed.success) return;
+
+  const svc = createSupabaseServiceClient();
+  const { data: userRow } = await svc
+    .from("users")
+    .select("id, email")
+    .eq("id", parsed.data.user_id)
+    .maybeSingle();
+  if (!userRow) {
+    redirect(`/admin/users?error=${encodeURIComponent("User not found.")}`);
+  }
+  const email = (userRow as { email: string }).email;
+
+  const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
+  const { error: inviteErr } = await svc.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+  });
+  if (inviteErr) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(`Invite failed: ${inviteErr.message}`)}`,
+    );
+  }
+
+  await svc
+    .from("users")
+    .update({ invited_at: new Date().toISOString() })
+    .eq("id", parsed.data.user_id);
+
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.invite_sent",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { email },
+  });
+
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  revalidatePath("/admin/users");
+  redirect(`/admin/users/${parsed.data.user_id}?invited=1`);
+}
+
+const SendInvitesBatchSchema = z.object({
+  user_ids: z.array(z.string().uuid()).min(1).max(200),
+});
+
+/**
+ * Batch Send Invite. Any per-user failure is logged and the batch
+ * continues — one bad address doesn't block the rest.
+ */
+export async function sendInvitesBatch(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const raw = formData.getAll("user_ids").map((v) => String(v));
+  const parsed = SendInvitesBatchSchema.safeParse({ user_ids: raw });
+  if (!parsed.success) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent("Select at least one user.")}`,
+    );
+  }
+
+  const svc = createSupabaseServiceClient();
+  const { data: userRows } = await svc
+    .from("users")
+    .select("id, email")
+    .in("id", parsed.data.user_ids);
+  const rows = (userRows ?? []) as Array<{ id: string; email: string }>;
+
+  let sent = 0;
+  let failed = 0;
+  const nowIso = new Date().toISOString();
+  const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
+
+  for (const u of rows) {
+    const { error } = await svc.auth.admin.inviteUserByEmail(u.email, {
+      redirectTo,
+    });
+    if (error) {
+      console.warn("[admin] batch invite failed for %s: %s", u.email, error.message);
+      failed += 1;
+      continue;
+    }
+    await svc.from("users").update({ invited_at: nowIso }).eq("id", u.id);
+    await auditLog({
+      actor_user_id: admin.id,
+      action: "user.invite_sent",
+      target_type: "user",
+      target_id: u.id,
+      metadata: { email: u.email, batch: true },
+    });
+    sent += 1;
+  }
+
+  revalidatePath("/admin/users");
+  redirect(`/admin/users?batch_sent=${sent}&batch_failed=${failed}`);
+}
+
 const StatusSchema = z.object({
   user_id: z.string().uuid(),
   subscription_status: z.enum(["trialing", "active", "past_due", "canceled", "comped"]),

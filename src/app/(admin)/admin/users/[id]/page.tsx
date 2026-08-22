@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { canAccess } from "@/lib/entitlement";
-import { setSubscriptionStatus, setPlatformAdmin } from "../actions";
+import { setSubscriptionStatus, setPlatformAdmin, sendInvite } from "../actions";
 import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -15,16 +15,16 @@ export default async function UserDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; created?: string; invited?: string }>;
 }) {
   await requirePlatformAdmin();
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, created, invited } = await searchParams;
   const svc = createSupabaseServiceClient();
 
   const { data: user } = await svc
     .from("users")
-    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step")
+    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step, invited_at")
     .eq("id", id)
     .maybeSingle();
   if (!user) notFound();
@@ -43,6 +43,7 @@ export default async function UserDetailPage({
     created_at: string;
     last_seen_at: string | null;
     onboarding_step: number | null;
+    invited_at: string | null;
   };
 
   const { data: memberships } = await svc
@@ -101,7 +102,41 @@ export default async function UserDetailPage({
       </header>
 
       {saved ? <p className="text-xs text-[color:var(--color-success)]">Saved.</p> : null}
+      {created ? (
+        <p className="text-xs text-[color:var(--color-success)]">
+          Account created. Send Invite is a separate action below.
+        </p>
+      ) : null}
+      {invited ? (
+        <p className="text-xs text-[color:var(--color-success)]">
+          Invite sent. The activation link is short-lived.
+        </p>
+      ) : null}
       {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
+
+      <section className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+              INVITE
+            </p>
+            <p className="text-sm">
+              {u.invited_at
+                ? `Invite sent ${format(new Date(u.invited_at), "yyyy-MM-dd HH:mm")}`
+                : "Never invited"}
+            </p>
+          </div>
+          <form action={sendInvite}>
+            <input type="hidden" name="user_id" value={u.id} />
+            <button
+              className="h-9 px-3 rounded-md bg-[color:var(--color-warning)] text-black font-heading text-xs tracking-widest"
+              type="submit"
+            >
+              {u.invited_at ? "RESEND INVITE" : "SEND INVITE"}
+            </button>
+          </form>
+        </div>
+      </section>
 
       <section className="grid gap-3 md:grid-cols-2">
         <div className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-xs space-y-1">
