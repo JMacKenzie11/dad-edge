@@ -15,7 +15,8 @@
     "seed": "tsx scripts/seed.ts",
     "seed:boardroom": "tsx scripts/seed-boardroom.ts",
     "brand:sync": "tsx scripts/sync-brand-assets.ts",
-    "coach:scenario": "tsx scripts/coach-scenario.ts"
+    "coach:scenario": "tsx scripts/coach-scenario.ts",
+    "migrate:itc": "tsx scripts/migrate-itc-participants.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",
