@@ -291,10 +291,27 @@ function printReport(report: MigrationReport, mode: "dry-run" | "apply") {
 
 async function applyLinks(
   report: MigrationReport,
-): Promise<{ linked: number; errors: string[] }> {
+): Promise<{ linked: number; accessGranted: number; errors: string[] }> {
   let linked = 0;
+  let accessGranted = 0;
   const errors: string[] = [];
   for (const m of report.matched) {
+    // Grant itc_access on the user row idempotently. Schema migration
+    // 20260822000001 does an initial backfill; this handles participants
+    // added AFTER that migration ran (e.g., a real person gets an
+    // itc_participants row later without a corresponding backfill).
+    try {
+      const updated = await pgPatch<Array<{ id: string; itc_access: boolean }>>(
+        `users?id=eq.${m.user.id}&itc_access=is.false`,
+        { itc_access: true },
+      );
+      if (updated.length > 0) accessGranted += 1;
+    } catch (err) {
+      errors.push(
+        `itc_access grant failed for ${m.participant.email}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     if (m.toLink === 0) continue;
     const overwriteCandidates = m.maps.filter(
       (map) => map.user_id !== null && map.user_id !== m.user.id,
@@ -328,7 +345,7 @@ async function applyLinks(
       );
     }
   }
-  return { linked, errors };
+  return { linked, accessGranted, errors };
 }
 
 async function main() {
@@ -353,8 +370,11 @@ async function main() {
   }
 
   console.log("\n--- APPLYING LINKS ---\n");
-  const { linked, errors } = await applyLinks(report);
+  const { linked, accessGranted, errors } = await applyLinks(report);
   console.log(`\nLinked ${linked} map${linked === 1 ? "" : "s"} in total.`);
+  console.log(
+    `Granted itc_access to ${accessGranted} user${accessGranted === 1 ? "" : "s"} (idempotent — those not already granted by the schema backfill).`,
+  );
   if (errors.length > 0) {
     console.log(`\n${errors.length} issue${errors.length === 1 ? "" : "s"} encountered:`);
     for (const e of errors) console.log(`  - ${e}`);
