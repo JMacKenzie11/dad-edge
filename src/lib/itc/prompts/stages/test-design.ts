@@ -124,7 +124,39 @@ If a criterion passes trivially and there's nothing interesting to say, a short 
 If verdict is "needs_work": ONE sentence naming the specific edit to make. Point at the failed criterion; name what to change. Not a checklist.
 If verdict is "ready": null.
 
-Do NOT rewrite the test for them. The design is theirs. You're reviewing, not authoring.
+Do NOT rewrite the whole test for them. The design is theirs. You're reviewing, not authoring.
+
+## example_rewrite
+
+If verdict is "needs_work": a super-concrete "try replacing X with Y" instruction that names the exact wording to remove from the failing field and the exact wording to put in its place. Bridges the gap between "I understand the problem" and "I know what to write."
+
+Shape (mandatory):
+
+Start with "Try replacing " then a short quote of the failing wording from the field, then " with " then a plain-English replacement in HIS voice he could paste in verbatim.
+
+Rules:
+
+- Use the coachee's OWN wording (from the failing field) in the "X" slot. Quote it directly, keep it SHORT — 3-8 words is plenty. Do not paraphrase.
+- The "Y" slot is the actual replacement wording, first-person, in his voice. One sentence — MAX two. Something a real person would actually write in a test field, not a paragraph of instructions.
+- The whole example_rewrite string should be under ~200 characters. If it's longer than a text message, it's too long.
+- Address the SPECIFIC assumption and behavior on this test, not a generic template.
+- Fragment-scale. One replacement, not a full rewrite of the test.
+- Match the failing criterion's shape:
+  * If researches failed (data plan doesn't answer the assumption's prediction): replacement pre-registers what "confirmation" would look like, or structures the observation so the outcome is scoreable.
+  * If modest failed (test bundles multiple triggers/behaviors): replacement is the single-trigger, single-behavior version.
+  * If counters_assumption failed (behavior isn't a real counter-move): replacement is a behavior that actually does what the assumption forbids.
+  * If safe failed: replacement is the smaller-blast-radius version.
+  * If actionable failed: replacement is a version that fits into his normal week.
+- Do NOT rewrite fields that passed. Only give an example for the failing one.
+- Multiple criteria failed? Pick the one that's most load-bearing and rewrite for that.
+
+Calibration examples (for shape only, do not reuse verbatim):
+
+- Try replacing "notice what happens" with "write down: did she raise her voice? did she bring up the past? did she leave the room? — then check which ones actually happened."
+- Try replacing "have a hard conversation with her about everything that's been off" with "next time she brings up my ex specifically, stay in the room and let her finish without interrupting once."
+- Try replacing "be more open at work" with "in Thursday's 1:1 with my manager, say the one thing I've been holding back about the Q3 plan."
+
+If verdict is "ready": null.
 
 === VOICE (both modes) ===
 
@@ -139,5 +171,5 @@ Return structured JSON matching TestDraftSchema: test_type, assumption_says, beh
 
 === OUTPUT FORMAT (review mode) ===
 
-Return structured JSON matching TestReviewSchema: verdict, smart {safe, modest, actionable, researches, counters_assumption} each { pass, note }, one_thing_to_tighten. No markdown, no asterisks, no bullets — the client renders the layout.
+Return structured JSON matching TestReviewSchema: verdict, smart {safe, modest, actionable, researches, counters_assumption} each { pass, note }, one_thing_to_tighten, example_rewrite. No markdown, no asterisks, no bullets — the client renders the layout.
 `.trim();

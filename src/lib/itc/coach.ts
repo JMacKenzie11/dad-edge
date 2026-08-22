@@ -2262,6 +2262,12 @@ const TestReviewSchema = z.object({
   /** Present iff verdict === "needs_work". One sentence naming the
    *  single specific edit to make, pointing at the failed criterion. */
   one_thing_to_tighten: z.string().min(3).max(400).nullable(),
+  /** Present iff verdict === "needs_work". A concrete rewrite fragment
+   *  the coachee could drop into the failing field verbatim (or
+   *  adapt). Bridges the gap between "I understand the problem" and
+   *  "I know what to write." Renders below one_thing_to_tighten with
+   *  an "e.g." marker. */
+  example_rewrite: z.string().min(3).max(240).nullable(),
 });
 export type SmartReview = z.infer<typeof TestReviewSchema>;
 
@@ -2308,7 +2314,7 @@ export async function reviewTestDesign(input: {
         `  In Order to Find Out Whether: ${input.test.inOrderToFindOut}`,
         `  Target date: ${input.test.targetDate}`,
         ``,
-        `Return the structured SMART verdict per the schema. Each SMART criterion gets a pass/fail flag and one short sentence grounded in the SPECIFIC test above (not a generic definition). If verdict is "needs_work", one_thing_to_tighten names the single specific edit to make. If verdict is "ready", one_thing_to_tighten is null.`,
+        `Return the structured SMART verdict per the schema. Each SMART criterion gets a pass/fail flag and one short sentence grounded in the SPECIFIC test above (not a generic definition). If verdict is "needs_work", one_thing_to_tighten names the single specific edit to make AND example_rewrite gives a concrete rewrite fragment the coachee could drop into the failing field. The example_rewrite is what a well-formed version of the failing field would look like given THIS assumption and THIS behavior — not a generic template. Write the example in HIS voice, first-person, plain prose he could paste and adapt. If verdict is "ready", set both one_thing_to_tighten and example_rewrite to null.`,
       ].join("\n"),
       maxOutputTokens: 1200,
     });
@@ -2338,6 +2344,9 @@ export async function reviewTestDesign(input: {
       },
       one_thing_to_tighten: object.one_thing_to_tighten
         ? scrubReply(object.one_thing_to_tighten)
+        : null,
+      example_rewrite: object.example_rewrite
+        ? scrubReply(object.example_rewrite)
         : null,
     };
   } catch (err) {

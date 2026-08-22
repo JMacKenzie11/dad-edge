@@ -612,13 +612,25 @@ function SmartReviewCard({
         ))}
       </ul>
       {!isReady && review.one_thing_to_tighten ? (
-        <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-black/30 px-3 py-2 text-sm">
-          <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-warning)] mb-1 font-semibold">
-            One thing to tighten
+        <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-black/30 px-3 py-2 text-sm space-y-2">
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-warning)] mb-1 font-semibold">
+              One thing to tighten
+            </div>
+            <div className="text-white/90 leading-relaxed">
+              {review.one_thing_to_tighten}
+            </div>
           </div>
-          <div className="text-white/90 leading-relaxed">
-            {review.one_thing_to_tighten}
-          </div>
+          {review.example_rewrite ? (
+            <div className="border-t border-[color:var(--color-warning)]/25 pt-2">
+              <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-text-muted)] mb-1 font-semibold">
+                For example
+              </div>
+              <div className="text-white/90 leading-relaxed italic">
+                {review.example_rewrite}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {!isReady && onRevise ? (
