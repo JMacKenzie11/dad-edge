@@ -20,6 +20,7 @@ import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { advanceToStage, type AdvanceGate } from "../actions";
 import { AssumptionsRow } from "./assumptions-row";
 import { BehaviorsRow } from "./behaviors-row";
+import { ImmuneSystemDiagram } from "./immune-system-diagram";
 import { RegenerateWalkthroughButton } from "./regenerate-walkthrough-button";
 import { CoachDock } from "./coach-dock";
 import { CommitmentsRow } from "./commitments-row";
@@ -388,6 +389,12 @@ export function MapCanvas({
             title="Your immune system"
             active={map.current_stage === "immune_system"}
             liveIntro={liveIntroFor("immune_system")}
+            beforeNotes={
+              <ImmuneSystemDiagram
+                improvementGoal={map.improvement_goal}
+                commitments={commitments}
+              />
+            }
             stageNotes={immuneSystemNotes}
           >
             {immuneSystemNotes.length > 0 ? (
@@ -595,6 +602,7 @@ function Section({
   children,
   active = false,
   liveIntro,
+  beforeNotes,
   stageNotes,
   unattachedCoachNotes = [],
   chipTarget,
@@ -608,6 +616,10 @@ function Section({
    *  Comes from STAGE_INTROS with the current map state so quotes of
    *  the goal etc. always reflect present values, not a stale snapshot. */
   liveIntro?: string;
+  /** Optional block rendered between the liveIntro and the stage
+   *  notes — e.g. the immune-system diagram, which orients the coachee
+   *  visually before he reads the narrative. */
+  beforeNotes?: React.ReactNode;
   stageNotes: ItcMessage[];
   /** Fallback: assistant messages on this stage with no surface set.
    *  Rendered as stage-note-styled coach notes so the coach's reply
@@ -680,6 +692,7 @@ function Section({
           </div>
         </div>
       ) : null}
+      {beforeNotes ? <div className="mb-4">{beforeNotes}</div> : null}
       {notesToShow.length > 0 ? (
         <div className="mb-4 space-y-2">
           {notesToShow.map((m) => (
