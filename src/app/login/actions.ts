@@ -12,8 +12,6 @@ import { isStageBEmailLive, sendPasswordResetEmail } from "@/lib/email";
  * here are:
  *
  *   signIn                — email + password sign-in
- *   requestMagicLink      — "email me a sign-in link instead" fallback
- *                            for a man locked out of his password
  *   requestPasswordReset  — forgot-password link email
  *   updatePassword        — new-password form on /reset-password, also
  *                            signs out every OTHER active session so a
@@ -21,6 +19,9 @@ import { isStageBEmailLive, sendPasswordResetEmail } from "@/lib/email";
  *                            doesn't leave a stolen device signed in
  *
  * The old signUp action is removed. Public sign-up is off.
+ * Magic-link fallback removed 2026-08-23 — Forgot password covers the
+ * locked-out-of-password case; a second "email me a link" path was
+ * just noise.
  */
 
 function appOrigin(): string {
@@ -45,45 +46,6 @@ export async function signIn(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent("That email and password don't match.")}`);
   }
   redirect(next);
-}
-
-/**
- * Magic-link fallback. A man who's locked out of his password and
- * doesn't want the reset dance can request a one-shot sign-in link.
- * Kept per product decision 2026-08-22 as a small friction-reducing
- * addition; easy to remove later if we want a single clean path.
- *
- * Same "never reveal existence" rule as password reset — always show
- * success regardless of whether the email matched an account.
- */
-export async function requestMagicLink(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const next = String(formData.get("next") ?? "/today");
-  if (!email) {
-    redirect(`/login?error=${encodeURIComponent("Enter your email.")}`);
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      // shouldCreateUser=false: magic link only works for existing
-      // accounts. Never auto-creates. New accounts go through admin
-      // Send Invite (Checkpoint C).
-      shouldCreateUser: false,
-      emailRedirectTo: `${appOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
-    },
-  });
-  if (error) {
-    if (isRateLimitError(error.message)) {
-      redirect(
-        `/login?error=${encodeURIComponent("Just sent one. Check your inbox, or try again in a few minutes.")}`,
-      );
-    }
-    // Swallow any other error so we don't leak account existence.
-    console.warn("[login] magic link swallowed:", error.message);
-  }
-  redirect(`/login?sent=magic`);
 }
 
 export async function requestPasswordReset(formData: FormData) {
