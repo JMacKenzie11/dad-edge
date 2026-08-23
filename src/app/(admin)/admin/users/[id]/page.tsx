@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { canAccess } from "@/lib/entitlement";
-import { setSubscriptionStatus, setPlatformAdmin, sendInvite } from "../actions";
+import {
+  deleteUser,
+  sendInvite,
+  setPlatformAdmin,
+  setSubscriptionStatus,
+} from "../actions";
 import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -234,6 +239,39 @@ export default async function UserDetailPage({
             <li className="px-4 py-4 text-xs text-[color:var(--color-text-muted)]">No memberships.</li>
           ) : null}
         </ul>
+      </section>
+
+      <section className="p-4 rounded-[var(--radius-card)] border border-[color:var(--color-danger)]/50 bg-[color:var(--color-danger)]/[0.06] space-y-2">
+        <div>
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-danger)]">
+            DANGER ZONE
+          </p>
+          <p className="text-sm font-semibold text-white">Delete this account</p>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+            Permanent. Removes the auth user, the users row, and cascades
+            any child data with cascade-on-delete FKs. Not for cancellations —
+            use ENTITLEMENT → canceled for that.
+          </p>
+        </div>
+        <form
+          action={deleteUser}
+          className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center"
+        >
+          <input type="hidden" name="user_id" value={u.id} />
+          <input
+            name="confirm_email"
+            required
+            autoComplete="off"
+            placeholder={`Type ${u.email} to confirm`}
+            className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-xs flex-1 min-w-0"
+          />
+          <button
+            type="submit"
+            className="h-10 px-4 rounded-md bg-[color:var(--color-danger)] text-white font-heading text-xs tracking-widest shrink-0"
+          >
+            DELETE ACCOUNT
+          </button>
+        </form>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">

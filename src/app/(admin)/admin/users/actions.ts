@@ -379,6 +379,95 @@ export async function setSubscriptionStatus(formData: FormData) {
   redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
 }
 
+const DeleteUserSchema = z.object({
+  user_id: z.string().uuid(),
+  /** Typed confirmation — must exactly equal the user's email. Guards
+   *  against fat-finger clicks and misrouted forms. */
+  confirm_email: z.string().min(1).max(254),
+});
+
+/**
+ * Hard-delete a user account. Removes the auth.users row (which
+ * cascades to public.users and any FK-cascaded child data via the
+ * schema) and, for safety, explicitly deletes the public.users row
+ * afterward in case the FK isn't set to cascade.
+ *
+ * Guardrails:
+ *  - Admin can't delete themselves (would lock out the caller mid-request).
+ *  - Requires typed email confirmation matching the target's email.
+ *  - Audit-logged before the delete so we still have a record after
+ *    the row is gone.
+ *
+ * This is destructive and non-reversible. There is no soft-delete
+ * flag here — cancellation lives in setSubscriptionStatus.
+ */
+export async function deleteUser(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = DeleteUserSchema.safeParse({
+    user_id: formData.get("user_id"),
+    confirm_email: String(formData.get("confirm_email") ?? "").trim().toLowerCase(),
+  });
+  if (!parsed.success) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent("Bad delete input.")}`,
+    );
+  }
+
+  if (parsed.data.user_id === admin.id) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(
+        "You can't delete your own account.",
+      )}`,
+    );
+  }
+
+  const svc = createSupabaseServiceClient();
+  const { data: userRow } = await svc
+    .from("users")
+    .select("id, email")
+    .eq("id", parsed.data.user_id)
+    .maybeSingle();
+  if (!userRow) {
+    redirect(`/admin/users?error=${encodeURIComponent("User not found.")}`);
+  }
+  const target = userRow as { id: string; email: string };
+
+  if (target.email.trim().toLowerCase() !== parsed.data.confirm_email) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(
+        "Confirmation email didn't match. Nothing deleted.",
+      )}`,
+    );
+  }
+
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.delete",
+    target_type: "user",
+    target_id: target.id,
+    metadata: { email: target.email },
+  });
+
+  const { error: authErr } = await svc.auth.admin.deleteUser(target.id);
+  if (authErr) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(
+        `Auth delete failed: ${authErr.message}`,
+      )}`,
+    );
+  }
+
+  // Safety net: if the public.users FK isn't set to ON DELETE CASCADE
+  // the row may still exist. Idempotent — deletes nothing if it's
+  // already gone.
+  await svc.from("users").delete().eq("id", target.id);
+
+  revalidatePath("/admin/users");
+  redirect(
+    `/admin/users?error=${encodeURIComponent(`Deleted ${target.email}.`)}`,
+  );
+}
+
 const AdminFlagSchema = z.object({
   user_id: z.string().uuid(),
   is_platform_admin: z.enum(["on", "off"]).transform((v) => v === "on"),
