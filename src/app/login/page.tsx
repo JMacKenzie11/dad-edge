@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { requestMagicLink, requestPasswordReset, signIn } from "./actions";
+import { SubmitButton } from "./submit-button";
 
 type Mode = "signin" | "forgot" | "magic";
 
@@ -100,12 +101,7 @@ function SignInForm({
           required
           minLength={8}
         />
-        <button
-          type="submit"
-          className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
-        >
-          SIGN IN
-        </button>
+        <SubmitButton label="SIGN IN" pendingLabel="SIGNING IN…" />
         {error ? (
           <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
         ) : null}
@@ -144,12 +140,7 @@ function ForgotForm({ error, sent }: { error?: string; sent?: string }) {
       ) : null}
       <form action={requestPasswordReset} className="space-y-3">
         <Field label="EMAIL" name="email" type="email" required autoFocus />
-        <button
-          type="submit"
-          className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
-        >
-          SEND RESET LINK
-        </button>
+        <SubmitButton label="SEND RESET LINK" pendingLabel="SENDING…" />
         {error ? (
           <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
         ) : null}
@@ -189,12 +180,7 @@ function MagicForm({
       <form action={requestMagicLink} className="space-y-3">
         <input type="hidden" name="next" value={next} />
         <Field label="EMAIL" name="email" type="email" required autoFocus />
-        <button
-          type="submit"
-          className="w-full h-11 rounded-md font-heading text-sm bg-[color:var(--color-primary)] text-white tracking-wide"
-        >
-          SEND SIGN-IN LINK
-        </button>
+        <SubmitButton label="SEND SIGN-IN LINK" pendingLabel="SENDING…" />
         {error ? (
           <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
         ) : null}
