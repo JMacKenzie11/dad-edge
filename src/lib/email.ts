@@ -37,10 +37,37 @@ async function send(opts: {
         text: opts.text,
       }),
     });
-    if (!res.ok) return { ok: false, error: `Resend ${res.status}` };
+    if (!res.ok) {
+      // Read the response body so we can see WHY Resend rejected —
+      // "domain not verified", "invalid from", auth errors, etc.
+      // The status code alone ("Resend 400") tells us nothing.
+      const detail = await res.text().catch(() => "(no body)");
+      console.warn(
+        "[email:send] Resend %d for from=%s to=%s subject=%s :: %s",
+        res.status,
+        FROM,
+        opts.to,
+        opts.subject,
+        detail.slice(0, 500),
+      );
+      return { ok: false, error: `Resend ${res.status}: ${detail.slice(0, 200)}` };
+    }
     const body = (await res.json()) as { id?: string };
+    console.info(
+      "[email:send] Resend ok id=%s from=%s to=%s subject=%s",
+      body.id ?? "(no id)",
+      FROM,
+      opts.to,
+      opts.subject,
+    );
     return { ok: true, id: body.id };
   } catch (err) {
+    console.warn(
+      "[email:send] Resend threw for from=%s to=%s :: %s",
+      FROM,
+      opts.to,
+      err instanceof Error ? err.message : String(err),
+    );
     return { ok: false, error: err instanceof Error ? err.message : "unknown" };
   }
 }
