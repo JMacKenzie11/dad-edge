@@ -61,7 +61,8 @@ export function HelpWidget({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open help"
-        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 flex flex-col items-center gap-0.5 p-2 rounded-full bg-[color:var(--color-primary)] shadow-lg hover:brightness-110 transition-all"
+        title="Help for this page"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 flex flex-col items-center gap-0.5 p-2 rounded-full bg-[color:var(--color-primary)] shadow-lg cursor-pointer hover:brightness-110 hover:scale-105 transition-all"
       >
         <Image
           src="/brand/mark-white.png"

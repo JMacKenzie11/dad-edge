@@ -24,16 +24,25 @@ type Section = { what_its_for: string; steps: string[] };
  * one-review-per-piece workflow. Fluent English JSON edits are
  * fine for a platform admin doing this once per piece.
  */
+type LintHit = {
+  rule: string;
+  match: string;
+  section_index: number;
+  step_index: number | null;
+};
+
 export function RowEditor({
   id,
   title,
   sections,
   voiceLintPassed,
+  lintHits = [],
 }: {
   id: string;
   title: string;
   sections: Section[];
   voiceLintPassed: boolean;
+  lintHits?: LintHit[];
 }) {
   const [editing, setEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(title);
@@ -95,11 +104,43 @@ export function RowEditor({
 
   return (
     <div className="space-y-3">
-      <Preview title={title} sections={sections} />
+      <Preview
+        title={title}
+        sections={sections}
+        lintHits={voiceLintPassed ? [] : lintHits}
+      />
+      {!voiceLintPassed && lintHits.length > 0 ? (
+        <div className="p-3 rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08]">
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] mb-2">
+            VOICE LINT FAILED · {lintHits.length} HIT
+            {lintHits.length === 1 ? "" : "S"}
+          </p>
+          <ul className="space-y-1 text-xs">
+            {lintHits.map((h, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-2 text-[color:var(--color-text-muted)]"
+              >
+                <span className="font-mono text-[10px] shrink-0 text-[color:var(--color-warning)]">
+                  {locationLabel(h)}
+                </span>
+                <span>
+                  <span className="font-mono text-white">
+                    "{h.match}"
+                  </span>{" "}
+                  <span className="text-[color:var(--color-text-muted)]/80">
+                    · {h.rule}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2 items-center">
-        {!voiceLintPassed ? (
+        {!voiceLintPassed && lintHits.length === 0 ? (
           <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-warning)]">
-            VOICE LINT FAILED — REGEN OR EDIT
+            VOICE LINT FAILED - REGEN OR EDIT
           </span>
         ) : null}
         <div className="flex gap-2 ml-auto">
@@ -135,25 +176,102 @@ export function RowEditor({
   );
 }
 
-function Preview({ title, sections }: { title: string; sections: Section[] }) {
+function Preview({
+  title,
+  sections,
+  lintHits,
+}: {
+  title: string;
+  sections: Section[];
+  lintHits: LintHit[];
+}) {
   return (
     <div className="text-sm">
       <p className="font-heading text-base mb-2">{title}</p>
       <ol className="space-y-3 list-none">
-        {sections.map((s, i) => (
-          <li key={i} className="pl-3 border-l-2 border-[color:var(--color-primary)]/40">
-            <p className="text-[color:var(--color-text-muted)] italic mb-1">
-              {s.what_its_for}
-            </p>
-            <ol className="list-decimal ml-5 space-y-0.5">
-              {s.steps.map((step, j) => (
-                <li key={j}>{renderBold(step)}</li>
-              ))}
-            </ol>
-          </li>
-        ))}
+        {sections.map((s, i) => {
+          const whatItsForHits = lintHits.filter(
+            (h) => h.section_index === i && h.step_index === null,
+          );
+          return (
+            <li
+              key={i}
+              className="pl-3 border-l-2 border-[color:var(--color-primary)]/40"
+            >
+              <p className="text-[color:var(--color-text-muted)] italic mb-1">
+                {highlightHits(s.what_its_for, whatItsForHits)}
+              </p>
+              <ol className="list-decimal ml-5 space-y-0.5">
+                {s.steps.map((step, j) => {
+                  const stepHits = lintHits.filter(
+                    (h) => h.section_index === i && h.step_index === j,
+                  );
+                  return (
+                    <li key={j}>
+                      {highlightHits(step, stepHits, /* alsoBold */ true)}
+                    </li>
+                  );
+                })}
+              </ol>
+            </li>
+          );
+        })}
       </ol>
     </div>
+  );
+}
+
+function locationLabel(hit: LintHit): string {
+  const s = `§${hit.section_index + 1}`;
+  return hit.step_index === null ? s : `${s}.${hit.step_index + 1}`;
+}
+
+/**
+ * Render text with two overlays:
+ *  - `**bold**` markdown → <strong>
+ *  - any lintHit `match` → highlighted background (case-insensitive
+ *    substring match, first occurrence per hit)
+ */
+function highlightHits(
+  text: string,
+  hits: LintHit[],
+  alsoBold = true,
+): React.ReactNode {
+  if (hits.length === 0) {
+    return alsoBold ? renderBold(text) : text;
+  }
+  // Build a set of char ranges to highlight, then splice.
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const h of hits) {
+    const idx = text.toLowerCase().indexOf(h.match.toLowerCase());
+    if (idx >= 0) ranges.push({ start: idx, end: idx + h.match.length });
+  }
+  ranges.sort((a, b) => a.start - b.start);
+
+  const parts: Array<{ text: string; highlight: boolean }> = [];
+  let cursor = 0;
+  for (const r of ranges) {
+    if (r.start > cursor) {
+      parts.push({ text: text.slice(cursor, r.start), highlight: false });
+    }
+    parts.push({ text: text.slice(r.start, r.end), highlight: true });
+    cursor = r.end;
+  }
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), highlight: false });
+  }
+
+  return parts.map((p, i) =>
+    p.highlight ? (
+      <mark
+        key={i}
+        className="bg-[color:var(--color-warning)]/30 text-white px-0.5 rounded-sm"
+      >
+        {alsoBold ? renderBold(p.text) : p.text}
+      </mark>
+    ) : (
+      <span key={i}>{alsoBold ? renderBold(p.text) : p.text}</span>
+    ),
   );
 }
 

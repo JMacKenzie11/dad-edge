@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { format } from "date-fns";
+import { lintSections } from "@/../scripts/help/voice-lint";
 import { RowEditor } from "./row-editor";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +133,11 @@ export default async function HelpContentReviewPage({
                 title={row.title}
                 sections={row.sections}
                 voiceLintPassed={row.voice_lint_passed}
+                lintHits={
+                  row.voice_lint_passed
+                    ? []
+                    : lintSections(row.sections).hits
+                }
               />
             </li>
           ))}
