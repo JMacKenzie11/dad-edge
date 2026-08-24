@@ -1,6 +1,16 @@
 # BRAVE MAN OS — Product Specification
 
-_Snapshot of current app behavior as of 2026-08-20. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
+_Snapshot of current app behavior as of 2026-08-24. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
+
+_Change log since 2026-08-20 snapshot:_
+- Auth phase shipped: email + password (magic-link default retired), forgot-password + activation via admin Send Invite, ITC accounts unified onto main-app auth via `users.itc_access`.
+- Resend Stage B live on verified `dadedgeoperatingsystem.com`; branded activation + reset emails.
+- Onboarding wizard: added `/onboarding/profile` step (avatar + city + phone) with Facebook-style circular cropper. Goal + mission steps temporarily hidden — 6-step flow (was 7).
+- Storage: `avatars` bucket provisioned; `users.avatar_url` + `users.city` columns.
+- ITC coachees now go through the same onboarding wizard as main-app users; land back on `/itc` at wizard end.
+- Admin `/admin/users`: bulk delete with typed confirmation, universal pending states on every button, `itc_access` toggle on user detail.
+- Platform admins auto-provisioned as leader in every community (backfill + DB triggers on new communities / new admins).
+- ITC: one active map per participant (DB unique index + app guard); admin triage dashboard with health signals; immune-system side-by-side diagram; SMART review adds `example_rewrite` fragment for coachee self-fix.
 
 ---
 
@@ -18,9 +28,10 @@ _Snapshot of current app behavior as of 2026-08-20. Reverse-engineered from the 
 - Next.js 15 (App Router) + TypeScript 5.6
 - React 19 + Tailwind CSS v4 (alpha) + custom shadcn-style components
 - PostgreSQL via Supabase, with Row Level Security everywhere
-- Supabase Auth (magic links, no passwords)
-- Anthropic Claude API (Sonnet for substantive coach turns, Haiku for routing/safety/summaries)
-- Resend for transactional email (Phase 2+; Phase 1 logs to console)
+- Supabase Auth — email + password (magic-link fallback removed); admin-driven activation via Send Invite; forgot-password via recovery link
+- Supabase Storage — `avatars` bucket (public read, authenticated write-to-own-folder RLS)
+- Anthropic Claude API (Sonnet for substantive coach turns, Haiku for routing/safety/summaries/titling)
+- Resend for transactional email (Stage B live — activation + reset + all app notifications route through verified `dadedgeoperatingsystem.com`)
 - Vercel for hosting + cron
 - PostHog + Sentry configured but not yet wired
 
@@ -60,22 +71,35 @@ Eight pillars, seven of which are self-reported daily; one is derived from missi
 ### 3.1 Auth
 | Path | File | Behavior |
 |------|------|----------|
-| `/login` | `src/app/login/page.tsx` | Email entry → Supabase magic link. First sign-in triggers `handle_new_auth_user()` which creates a `users` row with `subscription_status='trialing'`, `onboarding_step=0`. |
-| `/auth/callback` | `src/app/auth/callback/route.ts` | Handles Supabase auth code, establishes session. |
-| `/logout` | `src/app/logout/route.ts` | Destroys session, redirects to `/login`. |
-| `/reset-password` | `src/app/reset-password/page.tsx` | Stub — primary flow is magic link. |
+| `/login` | `src/app/login/page.tsx` | Email + password sign-in (default). Two modes: `signin`, `forgot`. Public sign-up is off — accounts are admin-created via `/admin/users`. After `?reset=1`, the sign-in form is hidden and a "Check your email" panel renders instead (avoids implying they can sign in while waiting on the reset email). |
+| `/auth/callback` | `src/app/auth/callback/page.tsx` + `callback-bridge.tsx` | Handles both PKCE (`?code=`) and hash-based (`#access_token=...&type=`) flows. PKCE resolves server-side via `exchangeCodeForSession`. Hash flow renders a client bridge that calls `setSession()` then routes by `type`: `recovery` → `/reset-password` (or `next`), `invite` → `/set-password`, others → `next` / `/today`. |
+| `/set-password` | `src/app/set-password/page.tsx` | Activation destination for admin Send Invite links. User arrives already-authenticated, sets a password, `updatePassword()` invalidates other sessions and lands them on `/itc` (ITC users) or `/today`. |
+| `/reset-password` | `src/app/reset-password/page.tsx` | Same shape as set-password with reset copy. Also lands on `/itc` or `/today` based on `itc_access` + admin status. |
+| `/logout` | `src/app/logout/route.ts` | POST-only. Explicit 303 redirect (default 307 preserved POST → 405 blank screen). Lands on `/login`. |
 | `/inactive` | `src/app/inactive/page.tsx` | Shown when subscription is `canceled` and the 30-day win-back window has elapsed. |
 
-### 3.2 Onboarding (7 steps, tracked by `users.onboarding_step`)
-Redirects always resume the user at their current incomplete step; completion sends them to `/today`.
+**Sign-in landing logic** (in `signIn` and `updatePassword`, `src/app/login/actions.ts`):
+- Explicit `?next=` param wins.
+- Platform admins → `/today` (their admin surface lives there).
+- Non-admin users with `itc_access=true` → `/itc`.
+- Everyone else → `/today`.
 
-1. `/onboarding` — **Identity.** first name, last name, timezone (11 presets), occupation, employment type (`w2` / `contract` / `self_employed` / `business_owner` / `other`).
-2. `/onboarding/why` — **Why you're here.** Free-text captured to `users.why_yes`; fed to the coach later.
-3. `/onboarding/partner` — **Partner profile** (optional, skippable). Name, relationship label (`wife` / `husband` / `partner` / `girlfriend` / `boyfriend` / `fiancee`), partner birthdate, relationship date, three "things you love most about her" entries.
-4. `/onboarding/kids` — **Children** (optional, skippable, repeatable). Per child: name, birthdate, three "things you love most" entries.
-5. `/onboarding/goal` — **First quarterly goal.** Pillar focus (B/R/A/V/E/M/N; A2 excluded) + description.
-6. `/onboarding/mission` — **First mission.** Description, target date, pillar; passes through concreteness validator.
-7. `/onboarding/first-checkin` — **First check-in.** Toggles across all 8 pillars for today, guaranteeing day-one activity.
+**Send Invite / activation** (Supabase quirk): `type: "invite"` in `generateLink` rejects existing users ("A user with this email address has already been registered"). Since `createAccount` always pre-creates the auth row, admin invites use `type: "recovery"` under the hood with `redirectTo=/auth/callback?next=/set-password`. From the user's POV nothing changes — they click, land on `/set-password`, set a password.
+
+### 3.2 Onboarding (6 steps, tracked by `users.onboarding_step`)
+
+Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (currently 6, was 8 before goal + mission were hidden — pages still exist and can be re-enabled by restoring them to `onboardingRouteFor` and bumping the constant back to 8). Redirects always resume the user at their current incomplete step; completion sends non-ITC users to `/today` and ITC users (`itc_access=true`) to `/itc`. Platform admins bypass the gate entirely (they can visit onboarding URLs directly but aren't force-redirected).
+
+1. `/onboarding` — **Identity.** First name, last name, timezone (11 presets), occupation, employment type (`w2` / `contract` / `self_employed` / `business_owner` / `other`).
+2. `/onboarding/profile` — **Profile.** Facebook-style circular avatar cropper (via `react-easy-crop`), city, cell phone. All optional; Skip button advances without saving. Cropper renders a 512×512 JPEG client-side and posts as a base64 data URL; server decodes and uploads to `avatars/{user_id}/profile.jpg` via the service client. Cache-busted public URL stored in `users.avatar_url`.
+3. `/onboarding/why` — **Why you're here.** Free-text captured to `users.why_yes`; fed to the coach later.
+4. `/onboarding/partner` — **Partner profile** (optional, skippable). Name, relationship label (`wife` / `husband` / `partner` / `girlfriend` / `boyfriend` / `fiancee`), partner birthdate, relationship date, three "things you love most about her" entries.
+5. `/onboarding/kids` — **Children** (optional, skippable, repeatable). Per child: name, birthdate, three "things you love most" entries.
+6. `/onboarding/first-checkin` — **First check-in.** Toggles across all 8 pillars for today, guaranteeing day-one activity.
+
+**Hidden (still routed if accessed directly):**
+- `/onboarding/goal` — first quarterly goal picker. Removed from the flow 2026-08-24 pending design work.
+- `/onboarding/mission` — first mission picker. Same status.
 
 ### 3.3 Member app (route group `(app)`)
 | Path | File | Purpose |
@@ -87,7 +111,8 @@ Redirects always resume the user at their current incomplete step; completion se
 | `/community/leaderboard` | `src/app/(app)/community/leaderboard/page.tsx` | Tabs: Weekly, Monthly (4-week rolling), Streaks. Top 3 get a medal treatment. |
 | `/coach` | `src/app/(app)/coach/page.tsx` | Coach hub — lists conversations, "new conversation" button (general or mission mode). |
 | `/coach/[id]` | `src/app/(app)/coach/[id]/page.tsx` | Threaded conversation. Coach messages get a purple accent + Centurion mark avatar. Mission suggestion cards render inline with accept/reject. |
-| `/me` | `src/app/(app)/me/page.tsx` | Profile: identity, partner summary, kids summary, latest survey composite + delta. |
+| `/me` | `src/app/(app)/me/page.tsx` | Profile: circular avatar (via `UserAvatar` component; initial fallback), name, email, city, partner summary, kids summary, latest survey composite + delta. Edit link → `/me/profile`. |
+| `/me/profile` | `src/app/(app)/me/profile/page.tsx` | Dedicated post-onboarding profile edit: first/last name, city, cell phone, avatar (reuses `AvatarCropper` from onboarding). Own server action (`saveProfileEdit`) skips `bumpStep` and redirects back to `/me`. |
 | `/me/partner` | `src/app/(app)/me/partner/page.tsx` | Full partner profile edit. |
 | `/me/kids` | `src/app/(app)/me/kids/page.tsx` | Add / edit / delete kids. |
 | `/me/survey` | `src/app/(app)/me/survey/page.tsx` | List of Partner Connection Surveys with composite + delta. |
@@ -110,8 +135,8 @@ Redirects always resume the user at their current incomplete step; completion se
 | `/admin` | Platform overview: communities, active members, this week's check-ins, disengagement. |
 | `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). |
 | `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. |
-| `/admin/users` | User list with subscription status; create invites. |
-| `/admin/users/[id]` | Edit a user; manually set `subscription_status` and `subscription_source`; view audit log entries for the user. |
+| `/admin/users` | User list with subscription status. Universal checkboxes drive two batch actions: SEND INVITES (BATCH) (fires activation via Resend) and DELETE SELECTED (opens modal requiring typed "DELETE" confirmation). New Account form creates auth + public user in one step with optional platform-admin checkbox. All buttons use the shared `<SubmitButton>` with pending state (spinner + disabled + swapped label). |
+| `/admin/users/[id]` | Edit a user: subscription status, platform-admin toggle, `itc_access` toggle (grants `/itc` access to a user not linked via the migration script), single-user Send Invite, and a Danger Zone panel with a hard-delete requiring typed email confirmation. Audit-log entries surface below. |
 | `/admin/invites` | Create / list / resend invites. |
 | `/admin/disengagement` | Platform-wide disengagement view. |
 | `/admin/coach-flags` | Review queue for messages flagged by the safety classifier (severity ≥ medium, per 2026-08-27 update). Filterable by severity + status via `?severity=` + `?status=` query params. Notes + mark reviewed. |
@@ -135,12 +160,21 @@ Cron
 ### 3.7 ITC (Immunity to Change) coaching
 | Path | File | Purpose |
 |------|------|---------|
-| `/itc` | `src/app/itc/page.tsx` | Landing — pick a BRAVE MAN pillar to start a new map, or resume any in-progress / prior map. |
-| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of four surfaces (stage note, entry thread, focus, dock). A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
-| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Lists in-progress maps only by default (`status === "in_progress"`); completed maps are hidden to keep the facilitator's watchlist tight. |
-| `/itc/admin/[mapId]` | `src/app/itc/admin/[mapId]/page.tsx` | Per-map viewer with full transcript + turn events (`itc_turn_events`) for coach debugging. |
-| `/itc/login` | `src/app/itc/login/page.tsx` | Separate email/password auth for Boardroom coachees (distinct from the member-app session). Demo login uses password `1111` behind an `itcDemoAuthEnabled()` flag; production will migrate to full auth (see §17). |
-| `/itc/logout` | `src/app/itc/logout/route.ts` | Clears the ITC session cookie, redirects to `/itc/login`. |
+| `/itc` | `src/app/itc/page.tsx` | Landing. Header carries "Main app" + (admin-only) "Admin" + "Sign out". If the coachee has exactly one in-progress map, first-login silently redirects to `/itc/{mapId}`. Start-new-map section hidden when any in-progress map exists (one-active-map rule). |
+| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Header carries "← Maps", "Main app", (admin) "Admin", Reset, Sign out. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of four surfaces (stage note, entry thread, focus, dock). Above the immune-system walkthrough: side-by-side "Improvement Goal vs Competing Commitments" diagram with opposing arrows + "Working against each other" caption. A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
+| `/itc/no-access` | `src/app/itc/no-access/page.tsx` | Friendly deny page for signed-in main-app users without `itc_access`. "Not for you yet" copy + links back to `/today` and `/me`. Not a 404. |
+| `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Triage view sorted by health signal (stuck > overdue_test > idle > stalling > ok) with counts summary; display-only, no messaging. Lists in-progress maps only by default; completed maps hidden to keep the watchlist tight. |
+| `/itc/admin/[mapId]` | `src/app/itc/admin/[mapId]/page.tsx` | Per-map viewer with full transcript + turn events (`itc_turn_events`) for coach debugging. Includes a Tests (N) section under Big Assumptions with each test's assumption tag (A1/A2/A3), type, status, target date, verdict (if run), all four Kegan/Lahey fields, and result fields when a result exists. |
+| `/itc/login` | `src/app/itc/login/page.tsx` | Legacy email-only session for coachees who haven't been migrated. If the entered email matches a user with `itc_access=true`, redirects to `/login` with an "Your account has been upgraded" banner and a "Go to the main login" button. Retained as a soft-landing during migration; ITC_DEMO_AUTH flag still enabled. |
+| `/itc/logout` | `src/app/itc/logout/route.ts` | POST-only. Clears the legacy ITC session cookie, redirects to `/itc/login`. Note: does NOT sign out the main-app Supabase session — main-app sign-out is separate (via `/logout`). |
+
+**Session resolution (`src/lib/itc/session-guards.ts::requireItcParticipant`):**
+1. Main-app path: if a Supabase session exists AND `users.itc_access=true`, upsert the participant row by email and return it. If `onboarding_step < ONBOARDING_STEPS_TOTAL` and the user isn't a platform admin, redirect to the appropriate onboarding step first. If the session exists but `itc_access=false`, redirect to `/itc/no-access`.
+2. Legacy path: fall back to the ITC session cookie (`readItcSession`). If neither resolves, redirect to `/login?next=/itc`.
+
+**One active map per participant:** enforced at the DB layer (`unique (participant_id) where status='in_progress'`, migration `20260828000001`) and at the app layer (`/itc` landing hides the start-new-map form when an in-progress map exists). Migration cleaned up any pre-existing multi-map coachees by keeping the most-recently-updated in-progress map and moving older ones to `complete`.
+
+**ITC migration script:** `npm run migrate:itc -- --dry-run | --apply` (`scripts/migrate-itc-participants.ts`). Links `itc_participants` rows to `users` rows by email match, sets `itc_access=true` on matched user rows, and populates `itc_maps.user_id`. Unmatched participants are reported so the admin can create accounts manually via `/admin/users` before re-running. Uses raw fetch against PostgREST (bypasses supabase-js JWT time validation).
 
 ---
 
@@ -149,9 +183,9 @@ Cron
 Migrations live in `supabase/migrations/`. Schema highlights below.
 
 ### Core
-- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–7), `why_yes`, `occupation`, `employment_type`. Auto-populated by `handle_new_auth_user()` trigger.
+- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–6 with current flow), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
 - **`communities`** — name, unique slug, accent color, timezone, `leaderboard_enabled`, `missions_visible`, status (`active` / `archived`), `week_lock_days` (default 3).
-- **`memberships`** — one row per (user, community). Role (`member` / `leader`), status (`active` / `inactive` / `removed`), `joined_at`, `deactivated_at`, `canceled_visible_until` (= `deactivated_at + 30 days`).
+- **`memberships`** — one row per (user, community). Role (`member` / `leader`), status (`active` / `inactive` / `removed`), `joined_at`, `deactivated_at`, `canceled_visible_until` (= `deactivated_at + 30 days`). **Platform admins are auto-provisioned as `leader` in every community** via triggers `communities_grant_admins` (fires on community insert) and `users_grant_admin_communities` (fires when `is_platform_admin` flips true on insert or update). Backfill runs at migration time (`20260824000002`) for existing state. Idempotent via `on conflict (user_id, community_id) do nothing`.
 - **`weeks`** — per community, Monday `start_date`, `is_intensive`, `locked_at`. Unique (community, start_date).
 - **`pillar_framework_versions`** — versioned JSONB definition of pillars + `weekly_max`.
 - **`daily_checkins`** — one row per (user, date, pillar). `value` is `0` or `1`. Absence of a row is meaningfully different from `value=0`.
@@ -186,16 +220,20 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - Helpers: `shares_active_community()`, `is_leader_of_target()`, `is_platform_admin()`.
 - Consolidated in `supabase/migrations/20260713000006_row_level_security.sql`.
 
+### Storage
+- **`avatars`** bucket (public read, authenticated write-to-own-folder). Path convention: `{user_id}/profile.{jpg|png}`. RLS policies enforce that a user can only insert/update/delete objects where `storage.foldername(name)[1] = auth.uid()::text`. Uploads for the onboarding + `/me/profile` flows go through the service client (server action decodes the base64 data URL from the client cropper and uploads directly) so the RLS is defense-in-depth rather than the primary gate. Cache-busted public URL (`?v=<timestamp>`) is stored in `users.avatar_url` so browsers pick up new avatars without stale-URL confusion.
+
 ---
 
 ## 5. Authentication & Access
 
-**Sign-in.** Magic link via Supabase Auth. First-time sign-in triggers app-side row creation.
+**Sign-in.** Email + password via Supabase Auth. Public sign-up is off. Accounts are admin-created via `/admin/users` (creates the auth row with `email_confirm=true` and no password) then invited via Send Invite. Users click the emailed link, land on `/set-password`, choose a password, and get signed in. On password reset the user is signed out of every other active session (mitigates the "stolen device" case where the reset was compromise-driven).
 
 **Roles.**
 - **Member** — self data + community read + coach.
 - **Community leader** — everything a member has, plus invites, member deactivation, nudges, past-week corrections, digest visibility.
-- **Platform admin** — full access; coach flag review; audit log; manual cron triggers. Bypasses RLS with the service role for admin flows.
+- **Platform admin** — full access; coach flag review; audit log; manual cron triggers. Bypasses RLS with the service role for admin flows. Auto-provisioned as `leader` in every community (see §4 memberships).
+- **ITC access** — orthogonal per-user flag (`users.itc_access`) granting `/itc` visibility. Set by the migration script for legacy ITC participants, or manually via the admin detail page toggle.
 
 **Entitlement gate** — `canAccess(user)` in `src/lib/entitlement.ts`:
 - `subscription_status ∈ {active, trialing, comped, past_due}` → `access: "full"`.
@@ -203,10 +241,15 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - `canceled` past 30 days → `access: "none"`; redirected to `/inactive`.
 
 **Session helpers** (`src/lib/session.ts`):
-- `requireUser()` — auth check + redirect.
-- `requireAccess()` — entitlement check; returns `{ user, readOnly }`.
+- `requireUser()` — auth check + redirect. Loads `SessionUser` including `avatar_url`, `city`, `phone`.
+- `requireAccess()` — entitlement check + onboarding gate. Redirects incomplete non-admin users to `onboardingRouteFor(step)`. Returns `{ user, readOnly }`.
+- `currentUserHasItcAccess()` — read-only helper for the post-onboarding/sign-in redirect decision.
 - `requirePlatformAdmin()` — admin check + redirect.
 - `resolveLeaderCommunity()` — community-scoping for `/leader/*`.
+
+**ITC session guard** — `requireItcParticipant()` in `src/lib/itc/session-guards.ts`. Two-path resolver:
+1. **Main-app path.** Read the Supabase session. If `users.itc_access=true`, upsert an `itc_participants` row for the email and return. If onboarding is incomplete for a non-admin, redirect to the wizard first. If the session exists but `itc_access=false`, redirect to `/itc/no-access`.
+2. **Legacy path.** Fall back to the ITC session cookie (`readItcSession`) for coachees not yet migrated. Redirects to `/login?next=/itc` when neither resolves.
 
 ---
 
@@ -296,7 +339,7 @@ Applied client-side for real-time UX and server-side (server action + `/api/miss
 ## 7. User Flows
 
 ### New member onboarding
-Invite → magic link → identity → why → optional partner → optional kids → first quarterly goal → first mission (concreteness-gated) → first check-in → `/today`.
+Admin creates account via `/admin/users` → admin hits Send Invite (branded Resend activation email from `dadedgeoperatingsystem.com`) → user clicks link → `/set-password` → sets password + gets signed in → wizard: identity → profile (avatar + city + phone) → why → optional partner → optional kids → first check-in → land on `/today` (or `/itc` if `itc_access=true`, or `/today` if admin regardless).
 
 ### Daily check-in
 Open `/today` → see week total + streak → tap each pillar (cycle null → 1 → 0 → null) with optimistic UI → optionally fill Wins/Learnings for the coach.
@@ -327,7 +370,7 @@ Open `/me/survey` → start new survey → sit with partner → for each of 15 q
 
 **Anthropic Claude** — Sonnet for substantive coach turns; Haiku for routing, safety classification, nudge copy, digest summarization. Prompt caching used for stable context across turns. Env: `ANTHROPIC_API_KEY`. Files: `src/lib/coach/{client,prompts,safety,send-message}.ts`.
 
-**Resend** — Magic links (once wired), reminders, nudges, disengagement ladder, weekly digests. Phase 1 logs to console. Env: `RESEND_API_KEY`, `RESEND_FROM`. `src/lib/email.ts`.
+**Resend** — Stage B live. Sends activation invites, password resets, reminders, nudges, disengagement ladder, weekly digests through the verified `dadedgeoperatingsystem.com` domain. Gated on `EMAIL_STAGE=B` + non-empty `RESEND_API_KEY`; falls back to Supabase's default sender otherwise (dev / misconfig safety net). Detailed error responses (including Resend response body on 4xx/5xx) logged via `[email:send]` and `[admin] batch invite failed` prefixes. Env: `RESEND_API_KEY`, `RESEND_FROM`, `EMAIL_STAGE`. `src/lib/email.ts` + `src/lib/copy/auth-emails.ts`. Go-live checklist: `docs/email-setup-checklist.md`.
 
 **Stripe** — Phase 3. Not yet integrated; subscription status is set manually via `/admin/users/[id]`. Planned webhooks: `customer.subscription.updated/deleted`, `invoice.payment_failed`. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
 
@@ -342,6 +385,8 @@ Open `/me/survey` → start new survey → sit with partner → for each of 15 q
 - `npm run seed` (`scripts/seed.ts`) — idempotent seed of one community ("The Basecamp", slug `basecamp`, `America/Chicago`) with 6 members (distinct behavior profiles: grinder, steady, cyclic, slipping, returning), Steve W as leader, 28 days of check-ins, one quarterly goal per member, one mission template per pillar.
 - `npm run seed:boardroom` (`scripts/seed-boardroom.ts`) — stub for Boardroom-specific seed.
 - `npm run brand:sync` (`scripts/sync-brand-assets.ts`) — reserved for auto-syncing brand assets to `/public/brand/`.
+- `npm run migrate:itc` (`scripts/migrate-itc-participants.ts`) — `--dry-run` / `--apply` modes. Links `itc_participants` to `users` by email (case-insensitive), sets `itc_access=true` on matched user rows, populates `itc_maps.user_id`. Unmatched participants reported for manual account creation. Idempotent; safe to re-run.
+- `npm run reset:onboarding` (`scripts/reset-onboarding.ts`) — `--dry-run` / `--apply` modes. Resets `onboarding_step` on existing users so they re-see newly-added wizard steps. `--email <addr>` targets a single user; `--step <N>` overrides the default (1, the new profile step); `--include-admins` overrides the default admin skip. Only moves users forward-to-backward — never pushes mid-flow users past what they were doing.
 
 ---
 
@@ -374,18 +419,19 @@ Supabase (required)
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 App (required)
-- `NEXT_PUBLIC_APP_URL` — for magic-link redirects.
+- `NEXT_PUBLIC_APP_URL` — required for auth redirects. Must match the production origin exactly (e.g. `https://dadedgeoperatingsystem.com`). If unset, activation/reset links fall back to `http://localhost:3300` and break. Also must match Supabase Auth's "Site URL" + Redirect URLs allowlist in the dashboard.
 - `ALLOW_DESIGN_ROUTE` — set to `1` to expose `/design` in production.
 
 Cron (required in prod)
 - `CRON_SECRET`
 
-Coach (required for Phase 2+)
+Coach (required)
 - `ANTHROPIC_API_KEY`
 
-Email (Phase 2+)
+Email (Stage B — live in prod)
 - `RESEND_API_KEY`
-- `RESEND_FROM`
+- `RESEND_FROM` — must be a bare email (`no-reply@dadedgeoperatingsystem.com`) or name-with-brackets (`Dad Edge <no-reply@dadedgeoperatingsystem.com>`). Local part must match the verified Resend sending domain.
+- `EMAIL_STAGE` — must be exactly `B` (case-sensitive single char) to activate Stage B. Any other value falls back to Stage A (Supabase's default sender).
 
 Stripe (Phase 3)
 - `STRIPE_SECRET_KEY`
@@ -414,14 +460,36 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 - [x] C — `/community` scorecard, leaderboard tabs, 7-step onboarding, Partner Connection Survey + delta, family layer.
 - [ ] D — admin panel + importer dry-run against `Brave Man Sheet.xlsx` (not started). Importer plan: column-scan four drifted sheets, idempotent natural keys (user + date + pillar; user + week + mission description), per-sheet dry-run report.
 
-**Phase 2 — The Coach** (partially scaffolded)
-- [ ] Context injection pipeline (4-week trends, streaks, missions, goals, family layer, reflections).
-- [ ] Mission mode with concreteness gate at coach layer.
-- [ ] General mode (five dimensions: marriage, kids, business, finance, health).
-- [ ] Safety classifier + flag queue end-to-end.
-- [ ] Model routing + allowance metering (150/month).
+**Phase 2 — The Coach** (largely shipped)
+- [x] Context injection pipeline (provider pattern — identity, family, survey, streaks, goals, missions, reflections, itc).
+- [x] Mission mode with concreteness gate at coach layer.
+- [x] General mode (five dimensions: marriage, kids, business, finance, health).
+- [x] Safety classifier + flag queue end-to-end (severity ≥ medium enqueued).
+- [x] Model routing + allowance metering (150/month soft cap, 300 hard).
 - [ ] Weekly digest generation.
-- [ ] Resend email delivery.
+- [x] Resend email delivery (Stage B live — activation + reset + nudges).
+
+**Auth phase** (shipped)
+- [x] Password sign-in + forgot-password + set-password.
+- [x] Admin Send Invite (individual + batch) via Resend recovery link (invite type rejected existing users).
+- [x] ITC migration — `users.itc_access` flag, `itc_maps.user_id` link, migration script, admin toggle for post-migration grants.
+- [x] `/itc` route unification — main-app session preferred, legacy cookie as fallback, `/itc/no-access` for signed-in users without `itc_access`.
+- [x] One-active-map rule (DB unique index + app guard).
+- [x] Universal pending states on all server-action buttons.
+- [x] Bulk delete on `/admin/users` with typed confirmation.
+
+**Onboarding wizard extension** (shipped)
+- [x] `/onboarding/profile` step with Facebook-style circular cropper, city, cell phone.
+- [x] Storage bucket + RLS for avatars.
+- [x] `UserAvatar` component with initial fallback.
+- [x] `/me/profile` dedicated edit page.
+- [x] Reset-onboarding script for existing users.
+- [x] ITC users routed through the wizard before landing on `/itc`.
+
+**Platform admin community access** (shipped)
+- [x] Backfill: admins auto-membershipped as leader in every existing community.
+- [x] Trigger on communities insert: any new community auto-grants existing admins.
+- [x] Trigger on user is_platform_admin flip-to-true: backfill memberships.
 
 **Phase 3 — Stripe Billing**
 - [ ] Checkout, customer portal, webhooks, dunning, win-back mechanics.
@@ -446,15 +514,18 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 
 | Route | Auth | Role | Notes |
 |-------|------|------|-------|
-| `/login` | none | any | Magic link |
-| `/onboarding/*` | user | member | Sequential, gated by `onboarding_step` |
+| `/login` | none | any | Email + password |
+| `/auth/callback` | pending session | any | PKCE + hash-based token handling |
+| `/set-password` | authed | any | Activation destination |
+| `/reset-password` | authed | any | Forgot-password destination |
+| `/onboarding/*` | user | member | Sequential, gated by `onboarding_step`; admins bypass |
 | `/today` | user | member | Check-ins + reflections |
 | `/missions` | user | member | Weekly planner |
 | `/goals` | user | member | Quarterly goals |
 | `/community` | user | member | Scorecard |
 | `/community/leaderboard` | user | member | Weekly / Monthly / Streaks |
 | `/coach`, `/coach/[id]` | user | member | Coach hub + thread |
-| `/me`, `/me/partner`, `/me/kids`, `/me/survey*` | user | member (self-only data) | Family layer |
+| `/me`, `/me/profile`, `/me/partner`, `/me/kids`, `/me/survey*` | user | member (self-only data) | Family layer + edit-profile |
 | `/leader/*` | user | leader | Community tools |
 | `/admin/*` | user | platform admin | Platform ops + audit + flags |
 | `/design` | public in dev; `ALLOW_DESIGN_ROUTE=1` in prod | any | Component library |
@@ -463,8 +534,10 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 | `/api/missions/quality` | user | member | Server-side concreteness |
 | `/api/missions/examples` | user | member | Exemplar library |
 | `/api/cron/*` | `CRON_SECRET` bearer | system | Vercel cron |
-| `/itc`, `/itc/[mapId]` | itc participant | boardroom coachee | ITC coaching workspace |
-| `/itc/admin` | itc participant + admin | boardroom coach | Read all maps + per-turn events |
+| `/itc`, `/itc/[mapId]` | main-app session + `itc_access` OR legacy cookie | ITC coachee | ITC coaching workspace |
+| `/itc/no-access` | main-app session | any signed-in user | Friendly deny page |
+| `/itc/admin`, `/itc/admin/[mapId]` | ITC coachee + admin allowlist | ITC coach | Triage view + per-map viewer |
+| `/itc/login` | none | any | Legacy migration soft-landing |
 
 ---
 
@@ -668,19 +741,22 @@ Migration `20260820000001_itc_tracker_link.sql`:
 
 ---
 
-## 18. ITC Auth Migration Path
+## 18. ITC Auth Migration (Shipped 2026-08-24)
 
-Current ITC login (`src/app/itc/login/`) is email + `1111` demo password. Sets a session cookie tied to `itc_participants.id`. Deliberately isolated from the main app auth (see `src/lib/itc/participant.ts:13-15`: "Never touches public.users").
+The migration described in earlier drafts of this section is done. Current state:
 
-Migration to full auth (`/login` + Supabase Auth + entitlements) is non-destructive because:
-- All ITC data FKs to `itc_participants.id`, a stable UUID that never changes.
-- `email` is normalized (trim + lowercase, unique) — a reliable join key.
+- **Sign-in surface** — ITC users use `/login` (email + password) like every other user. `/itc/login` remains as a soft-landing that detects already-migrated emails and redirects to `/login` with a "Your account has been upgraded" banner.
+- **Access flag** — `users.itc_access` boolean. Migration script (`npm run migrate:itc -- --apply`) set this on every user whose email matched an existing `itc_participants` row (case-insensitive). Admins can flip the flag via a checkbox on `/admin/users/[id]` for post-migration grants.
+- **Session guard** — `requireItcParticipant()` reads the main-app Supabase session, checks `itc_access`, and upserts the `itc_participants` row for the email. Falls back to the legacy cookie for any coachee not yet migrated. Onboarding gate applies to ITC users too (except platform admins).
+- **Data link** — `itc_maps.user_id` populated by the migration script so RLS and query paths can go through `auth.uid()` directly.
+- **Deny UX** — signed-in main-app users without `itc_access` land on `/itc/no-access` (friendly "Not for you yet" page).
 
-Recommended migration:
-1. Ship full auth (magic link via Supabase Auth is already used by the member app).
-2. Add nullable `user_id` column to `itc_participants` FK'd to `auth.users`.
-3. One-time backfill: for each ITC participant, find the auth user with matching normalized email; set `user_id`.
-4. Update `requireItcParticipant()` to resolve via `user_id = current_auth_user.id` instead of the demo session cookie.
-5. Retire `/itc/login` and the `1111` shortcut.
+**Onboarding for ITC users.** Post-activation flow: click Send Invite email → `/set-password` → wizard (identity → profile → why → partner → kids → first-checkin) → `/itc` (their existing map, or landing if none). Admins skip the wizard.
 
-Watch-outs: email typos in current ITC rows (needs admin cleanup or a "claim my ITC data" flow), users who sign up with a different email than they used for ITC (same claim flow), canonical form for case + plus-tags.
+**Auth-phase decisions worth remembering:**
+- **`invite` type → `recovery` type in `generateLink`.** Supabase's `type: "invite"` refuses users that already exist in `auth.users`, which is every user we create via CREATE ACCOUNT. Switching to `type: "recovery"` with `redirectTo=/set-password` gives the same UX and works for existing users.
+- **Two-callback flow support.** Supabase can return session tokens in either `?code=` (PKCE) or `#access_token=` (implicit hash). Our callback handles both — server-side PKCE exchange when present, otherwise a client bridge that parses the hash and calls `setSession()`.
+- **Supabase URL config gotcha.** Site URL and Redirect URLs allowlist must include the prod domain. When they don't, Supabase silently rewrites redirects back to Site URL — which manifested as reset links landing on `localhost:3300`.
+- **303 on logout.** Default `NextResponse.redirect` returns 307, which preserves POST. GET-only pages 405 back as blank screens. Explicit 303 See Other converts to GET.
+- **Never reveal account existence.** Forgot-password and (removed) magic-link paths always render the "if that account exists, we've sent…" copy regardless of whether the email matched. Same rate-limit-friendly copy on retries.
+- **Session invalidation on password change.** `updatePassword` calls `signOut({ scope: "others" })` so a reset triggered by real compromise doesn't leave a stolen device signed in.
