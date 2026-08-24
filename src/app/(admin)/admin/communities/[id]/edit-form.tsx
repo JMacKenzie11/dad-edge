@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/ui/submit-button";
 import { updateCommunity } from "../actions";
 
 export function EditCommunityForm({
@@ -38,7 +39,7 @@ export function EditCommunityForm({
       </label>
       <label className="flex flex-col gap-1 text-xs">
         <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
-          WEEK LOCK DAYS
+          EDIT GRACE (DAYS)
         </span>
         <input
           name="week_lock_days"
@@ -48,6 +49,10 @@ export function EditCommunityForm({
           defaultValue={community.week_lock_days}
           className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
         />
+        <span className="text-[10px] text-[color:var(--color-text-muted)] normal-case">
+          Members can edit a past week's check-ins for this many days
+          after it ends.
+        </span>
       </label>
       <label className="flex flex-col gap-1 text-xs">
         <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">STATUS</span>
@@ -77,12 +82,11 @@ export function EditCommunityForm({
         <span>Missions visible to group</span>
       </label>
       <div className="md:col-span-2 flex justify-end">
-        <button
-          type="submit"
-          className="h-10 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest"
-        >
-          SAVE CHANGES
-        </button>
+        <SubmitButton
+          label="SAVE CHANGES"
+          pendingLabel="SAVING…"
+          className="text-xs"
+        />
       </div>
     </form>
   );
