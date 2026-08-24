@@ -17,6 +17,7 @@ export default async function AdminOverviewPage() {
     { count: openFlags },
     { count: unreviewedCorrections },
     { count: notActivated },
+    { count: unreviewedHelp },
     { data: recentSignups },
   ] = await Promise.all([
     svc.from("communities").select("id", { count: "exact", head: true }).eq("status", "active"),
@@ -32,6 +33,10 @@ export default async function AdminOverviewPage() {
       .select("id", { count: "exact", head: true })
       .not("invited_at", "is", null)
       .is("last_seen_at", null),
+    svc
+      .from("help_content")
+      .select("id", { count: "exact", head: true })
+      .eq("reviewed", false),
     svc
       .from("users")
       .select("id, email, first_name, last_name, created_at")
@@ -50,6 +55,7 @@ export default async function AdminOverviewPage() {
     { label: "ACTIVE MEMBERSHIPS", value: activeMemberships ?? 0, href: "/admin/users" },
     { label: "NOT ACTIVATED", value: notActivated ?? 0, href: "/admin/users" },
     { label: "OPEN COACH FLAGS", value: openFlags ?? 0, href: "/admin/coach-flags" },
+    { label: "HELP TO REVIEW", value: unreviewedHelp ?? 0, href: "/admin/help-content" },
     { label: "SCORE CORRECTIONS", value: unreviewedCorrections ?? 0, href: "/admin/audit" },
   ];
 
