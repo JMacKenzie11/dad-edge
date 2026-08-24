@@ -11,14 +11,35 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
  * the help_content table, and returns approved content — or logs
  * a gap and returns null.
  *
- * Resolution ladder (per spec §6):
- *   1. (route, view_key, role)
- *   2. (route, view_key, 'all')
- *   3. (route, null, role)
- *   4. (route, null, 'all')
+ * Resolution ladder — permission-inheriting so a higher-privileged
+ * user sees content authored for anyone with equal-or-lower access.
+ * Admins see admin + leader + member. Leaders see leader + member.
+ * Members see member. Then each layer tries 'all'.
  *
- * First match wins.
+ * For a viewer with role R and roles[R] = R + inherits:
+ *   1. (route, view, R)
+ *   2. (route, view, 'all')
+ *   3. (route, view, inherit_1)
+ *   4. (route, view, inherit_2)   (etc.)
+ *   5. (route, null, R)
+ *   6. (route, null, 'all')
+ *   7. (route, null, inherit_1)
+ *   8. (route, null, inherit_2)   (etc.)
+ *
+ * First match wins. Rationale: extraction tags routes by the role
+ * they're designed for (/today = member; /admin/* = admin). An admin
+ * looking at /today gets the member-authored help without needing a
+ * separate admin-authored row for the same page.
  */
+
+const ROLE_LADDER: Record<
+  "member" | "leader" | "admin",
+  Array<"member" | "leader" | "admin">
+> = {
+  admin: ["admin", "leader", "member"],
+  leader: ["leader", "member"],
+  member: ["member"],
+};
 
 type HelpRow = {
   id: string;
@@ -38,16 +59,27 @@ export async function getHelpForPage(input: {
   const routePattern = normalizeRoute(input.pathname);
   const svc = createSupabaseServiceClient();
 
-  // Try each resolution step in order; stop at first match.
-  const ladder: Array<[string | null, string]> = [
-    [input.view_key, input.role],
-    [input.view_key, "all"],
-    [null, input.role],
-    [null, "all"],
+  // Build the full resolution ladder for this viewer:
+  //   - view first, then null-view
+  //   - within each view, try own role, then 'all', then inherited roles
+  const inheritedRoles = ROLE_LADDER[input.role];
+  const rolesToTry: string[] = [
+    inheritedRoles[0], // own role
+    "all",
+    ...inheritedRoles.slice(1), // inherited fallbacks
   ];
+  const viewsToTry: Array<string | null> = input.view_key
+    ? [input.view_key, null]
+    : [null];
+
+  const ladder: Array<[string | null, string]> = [];
+  for (const view of viewsToTry) {
+    for (const role of rolesToTry) {
+      ladder.push([view, role]);
+    }
+  }
 
   for (const [viewKey, role] of ladder) {
-    if (viewKey === null && ladder.findIndex(([v]) => v === null) < 0) continue;
     let q = svc
       .from("help_content")
       .select("id, title, sections")
