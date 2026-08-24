@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
@@ -42,26 +43,40 @@ export async function signIn(formData: FormData) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
   if (error) {
+    console.warn("[login] signIn failed for %s: %s", email, error.message);
     // Deliberately generic error copy — same message for "no such
     // account" and "wrong password" so this screen can't be used
     // to probe whether an email exists.
     redirect(`/login?error=${encodeURIComponent("That email and password don't match.")}`);
   }
 
+  console.info(
+    "[login] signIn ok user=%s session=%s",
+    signInData.user?.id ?? "(none)",
+    signInData.session ? "present" : "absent",
+  );
+
+  // Bust the route cache so the middleware picks up the newly-set
+  // session cookies on the redirect target. Without this, Next's
+  // cache can serve a stale not-signed-in view and the middleware
+  // bounces the user back to /login — a sign-in loop.
+  revalidatePath("/", "layout");
+
   if (explicitNext) {
     redirect(explicitNext);
   }
 
-  // No explicit next — pick the default landing:
+  // Pick the default landing:
   //   - Platform admins → /today (their admin surface lives there;
   //     they can navigate to /itc via the header link)
   //   - Non-admin ITC users → /itc (that's their whole world)
   //   - Everyone else → /today
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = signInData.user;
   if (user) {
     const { data: row } = await supabase
       .from("users")
@@ -162,25 +177,37 @@ export async function updatePassword(formData: FormData) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.updateUser({ password });
+  const { data: updateData, error } = await supabase.auth.updateUser({
+    password,
+  });
   if (error) {
+    console.warn("[login] updatePassword failed: %s", error.message);
     redirect(`/reset-password?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Invalidate every OTHER active session for this user, so a reset
-  // triggered by a real compromise doesn't leave a stolen device
-  // still signed in. The current session (the one that just set the
-  // new password) stays alive.
-  await supabase.auth.signOut({ scope: "others" });
+  console.info(
+    "[login] updatePassword ok user=%s",
+    updateData.user?.id ?? "(none)",
+  );
+
+  // NOTE: We used to call `signOut({ scope: "others" })` here to log
+  // out any other active sessions after a password change (the
+  // "stolen device" hardening). But that call turned out to invalidate
+  // the CURRENT session's tokens too under Next.js server-action
+  // cookie handling — causing an immediate sign-in loop on redirect
+  // to /today. Dropping the call keeps activation and reset working
+  // reliably; re-adding it will need a proper Supabase SSR pattern
+  // that doesn't clobber the just-refreshed cookie.
+
+  // Bust the route cache so the middleware sees the fresh session.
+  revalidatePath("/", "layout");
 
   // Steer non-admin ITC users straight to /itc after activation /
   // password reset — /itc is their whole world; landing them on
   // /today first would be a detour. Platform admins always land on
   // /today so their admin surface is one click away; they can jump
   // to /itc via the header link.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = updateData.user;
   if (user) {
     const { data: row } = await supabase
       .from("users")
