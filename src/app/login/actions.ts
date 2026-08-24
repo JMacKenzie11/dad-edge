@@ -31,7 +31,11 @@ function appOrigin(): string {
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/today");
+  // Empty next means "no explicit destination" — we'll pick based on
+  // itc_access after we know who signed in. If a `next` was passed
+  // (from ?next= on the URL), it's an explicit request; honor it.
+  const nextRaw = String(formData.get("next") ?? "").trim();
+  const explicitNext = nextRaw && nextRaw !== "/today" ? nextRaw : null;
 
   if (!email || !password) {
     redirect(`/login?error=${encodeURIComponent("Email and password required.")}`);
@@ -45,7 +49,26 @@ export async function signIn(formData: FormData) {
     // to probe whether an email exists.
     redirect(`/login?error=${encodeURIComponent("That email and password don't match.")}`);
   }
-  redirect(next);
+
+  if (explicitNext) {
+    redirect(explicitNext);
+  }
+
+  // No explicit next — steer ITC users to /itc, everyone else to /today.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: row } = await supabase
+      .from("users")
+      .select("itc_access")
+      .eq("id", user.id)
+      .maybeSingle();
+    if ((row as { itc_access: boolean } | null)?.itc_access) {
+      redirect(`/itc`);
+    }
+  }
+  redirect(`/today`);
 }
 
 export async function requestPasswordReset(formData: FormData) {
@@ -142,6 +165,24 @@ export async function updatePassword(formData: FormData) {
   // still signed in. The current session (the one that just set the
   // new password) stays alive.
   await supabase.auth.signOut({ scope: "others" });
+
+  // Steer ITC users straight to /itc after activation / password reset.
+  // /itc is their whole world; landing them on /today first would be
+  // a detour. Read users.itc_access — set by the migration script
+  // (and by admin flag on non-migrated ITC coachees).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: row } = await supabase
+      .from("users")
+      .select("itc_access")
+      .eq("id", user.id)
+      .maybeSingle();
+    if ((row as { itc_access: boolean } | null)?.itc_access) {
+      redirect(`/itc`);
+    }
+  }
 
   redirect(`/today`);
 }
