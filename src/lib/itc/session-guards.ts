@@ -110,10 +110,26 @@ export async function requireItcParticipant(): Promise<ItcParticipant> {
       }
     }
   } catch (err) {
-    // If the main-app session lookup itself throws (rare, e.g., cookie
-    // issue), fall through to the legacy cookie path rather than
-    // hard-erroring — we don't want a transient main-app auth glitch
-    // to lock a currently-active ITC-demo user out.
+    // CRITICAL: next/navigation's redirect() works by throwing an
+    // error with digest starting "NEXT_REDIRECT". We must re-throw
+    // those so the framework can process them — the whole reason
+    // Timothy's account was stuck in a sign-in loop was that this
+    // try/catch was swallowing his /onboarding/profile redirect
+    // (fired from the "onboarding not complete" branch above),
+    // then falling through to Path 2 (legacy cookie, missing for
+    // migrated users), which redirected to /login?next=/itc.
+    //
+    // Only genuinely unexpected errors should fall through to Path 2.
+    if (
+      err &&
+      typeof err === "object" &&
+      "digest" in err &&
+      typeof (err as { digest: unknown }).digest === "string" &&
+      ((err as { digest: string }).digest.startsWith("NEXT_REDIRECT") ||
+        (err as { digest: string }).digest === "NEXT_NOT_FOUND")
+    ) {
+      throw err;
+    }
     console.warn(
       "[itc] requireItcParticipant: main-app session read failed, falling back to legacy cookie: %s",
       err instanceof Error ? err.message : String(err),
