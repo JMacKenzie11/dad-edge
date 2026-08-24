@@ -8,9 +8,16 @@ _Change log since 2026-08-20 snapshot:_
 - Onboarding wizard: added `/onboarding/profile` step (avatar + city + phone) with Facebook-style circular cropper. Goal + mission steps temporarily hidden — 6-step flow (was 7).
 - Storage: `avatars` bucket provisioned; `users.avatar_url` + `users.city` columns.
 - ITC coachees now go through the same onboarding wizard as main-app users; land back on `/itc` at wizard end.
-- Admin `/admin/users`: bulk delete with typed confirmation, universal pending states on every button, `itc_access` toggle on user detail.
+- Admin `/admin/users`: bulk delete with typed confirmation, universal pending states on every button, `itc_access` toggle on user detail. Row shows sign-in status (`signed in Aug 24` / `NOT ACTIVATED`) via `auth.users.last_sign_in_at` instead of the old "never seen" derived from `last_seen_at`.
 - Platform admins auto-provisioned as leader in every community (backfill + DB triggers on new communities / new admins).
 - ITC: one active map per participant (DB unique index + app guard); admin triage dashboard with health signals; immune-system side-by-side diagram; SMART review adds `example_rewrite` fragment for coachee self-fix.
+- **Scoring model overhaul (2026-08-24):** daily out of 49 (7 checkable pillars × 7 days; Action removed from daily count), missions out of planned count (1 point per completed), combined weekly total displayed as `Daily N/49 · Missions N/M · Total N/(49+M)`. Composite score deleted. Leaderboard ranks by combined_total (tiebreaker: daily_total).
+- **Legacy invites removed:** `/admin/invites` page + `leaderInvite` action + `sendInviteEmail` all deleted. All invites go through `/admin/users` → CREATE ACCOUNT → SEND INVITE.
+- **Landing `/` redirects signed-in users** to their default landing (`/today` or `/itc`); marketing page only renders for signed-out visitors.
+- **Coach → Coach Larry** in nav + on `/coach` page copy.
+- **Sign-in loop fix (`f82080d`):** removed `signOut({scope:"others"})` from `updatePassword` (was invalidating the current session under Next.js server-action cookie handling); added `revalidatePath` after auth mutations. Friendly translation of Supabase's "new password can't be the same as old" error into a "you've already set that password — sign in with it" message + a GO TO SIGN IN button on `/reset-password`.
+- **Logout:** explicit 303 redirect to `/login` (was 307 to `/` → 405 blank screen).
+- Voice/tone pass across every user-facing surface: em-dashes stripped, partner form generalized ("HER" → "PARTNER"), copy tightened per `docs/coach-voice-and-tone.md`.
 
 ---
 
@@ -71,10 +78,11 @@ Eight pillars, seven of which are self-reported daily; one is derived from missi
 ### 3.1 Auth
 | Path | File | Behavior |
 |------|------|----------|
+| `/` | `src/app/page.tsx` | Marketing landing (signed-out only). Signed-in users get server-side redirected to `/today` (admins + non-ITC users) or `/itc` (non-admin `itc_access=true` users). |
 | `/login` | `src/app/login/page.tsx` | Email + password sign-in (default). Two modes: `signin`, `forgot`. Public sign-up is off — accounts are admin-created via `/admin/users`. After `?reset=1`, the sign-in form is hidden and a "Check your email" panel renders instead (avoids implying they can sign in while waiting on the reset email). |
 | `/auth/callback` | `src/app/auth/callback/page.tsx` + `callback-bridge.tsx` | Handles both PKCE (`?code=`) and hash-based (`#access_token=...&type=`) flows. PKCE resolves server-side via `exchangeCodeForSession`. Hash flow renders a client bridge that calls `setSession()` then routes by `type`: `recovery` → `/reset-password` (or `next`), `invite` → `/set-password`, others → `next` / `/today`. |
 | `/set-password` | `src/app/set-password/page.tsx` | Activation destination for admin Send Invite links. User arrives already-authenticated, sets a password, `updatePassword()` invalidates other sessions and lands them on `/itc` (ITC users) or `/today`. |
-| `/reset-password` | `src/app/reset-password/page.tsx` | Same shape as set-password with reset copy. Also lands on `/itc` or `/today` based on `itc_access` + admin status. |
+| `/reset-password` | `src/app/reset-password/page.tsx` | Same shape as set-password with reset copy. Also lands on `/itc` or `/today` based on `itc_access` + admin status. When Supabase rejects the update because the new password matches the current one, the raw error is translated to "You've already set that password. Sign in with it here — no need to reset again." + a GO TO SIGN IN button so the user isn't stuck in a reset loop. |
 | `/logout` | `src/app/logout/route.ts` | POST-only. Explicit 303 redirect (default 307 preserved POST → 405 blank screen). Lands on `/login`. |
 | `/inactive` | `src/app/inactive/page.tsx` | Shown when subscription is `canceled` and the 30-day win-back window has elapsed. |
 
@@ -107,9 +115,9 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | `/today` (also root default) | `src/app/(app)/today/page.tsx` | Daily check-in hub. Shows today's date, this week's Daily Living total (0–56), engagement streak, 8-pillar tap-to-toggle grid, and a Reflections panel with optional Wins/Learnings text. `A2` is displayed as derived from today's mission completions. |
 | `/missions` | `src/app/(app)/missions/page.tsx` | Weekly mission planner. Shows this week (and next week if today is Sunday), active quarterly goals, quarter-deadline countdown, mission creation form with concreteness validation, and mission completion controls with completed-late flag. |
 | `/goals` | `src/app/(app)/goals/page.tsx` | Quarterly goal management (create / edit / status). |
-| `/community` | `src/app/(app)/community/page.tsx` | Community scorecard. Per member: last check-in, this week's total, engagement streak, mission completion rate, composite score, delta arrow vs. prior week. Canceled-within-win-back members shown with an "INACTIVE" badge. |
+| `/community` | `src/app/(app)/community/page.tsx` | Community scorecard. Per member: daily total (0-49), mission completion (X/planned), combined weekly total, engagement streak, delta vs prior week. Canceled-within-win-back members shown with an "INACTIVE" badge. |
 | `/community/leaderboard` | `src/app/(app)/community/leaderboard/page.tsx` | Tabs: Weekly, Monthly (4-week rolling), Streaks. Top 3 get a medal treatment. |
-| `/coach` | `src/app/(app)/coach/page.tsx` | Coach hub — lists conversations, "new conversation" button (general or mission mode). |
+| `/coach` | `src/app/(app)/coach/page.tsx` | Coach Larry hub — lists conversations, "new conversation" button (general or mission mode). Nav label is "Coach Larry"; card copy uses first-name personalization ("Talk to Larry"). |
 | `/coach/[id]` | `src/app/(app)/coach/[id]/page.tsx` | Threaded conversation. Coach messages get a purple accent + Centurion mark avatar. Mission suggestion cards render inline with accept/reject. |
 | `/me` | `src/app/(app)/me/page.tsx` | Profile: circular avatar (via `UserAvatar` component; initial fallback), name, email, city, partner summary, kids summary, latest survey composite + delta. Edit link → `/me/profile`. |
 | `/me/profile` | `src/app/(app)/me/profile/page.tsx` | Dedicated post-onboarding profile edit: first/last name, city, cell phone, avatar (reuses `AvatarCropper` from onboarding). Own server action (`saveProfileEdit`) skips `bumpStep` and redirects back to `/me`. |
@@ -123,7 +131,7 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 ### 3.4 Community leader (route group `(leader)`)
 | Path | Purpose |
 |------|---------|
-| `/leader` | Dashboard: active count, disengaged buckets (3/7/14+ days), avg weekly Daily Living, mission completion rate, pending invites. |
+| `/leader` | Dashboard: active count, disengaged buckets (3/7/14+ days), avg weekly Daily Living (/49), mission completion rate. |
 | `/leader/members` | Member status table with invite / deactivate actions. |
 | `/leader/disengagement` | Members bucketed by inactivity with contextual nudge copy and send-nudge action. |
 | `/leader/nudges` | Configure daily reminder time and disengagement ladder thresholds. |
@@ -137,7 +145,6 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. |
 | `/admin/users` | User list with subscription status. Universal checkboxes drive two batch actions: SEND INVITES (BATCH) (fires activation via Resend) and DELETE SELECTED (opens modal requiring typed "DELETE" confirmation). New Account form creates auth + public user in one step with optional platform-admin checkbox. All buttons use the shared `<SubmitButton>` with pending state (spinner + disabled + swapped label). |
 | `/admin/users/[id]` | Edit a user: subscription status, platform-admin toggle, `itc_access` toggle (grants `/itc` access to a user not linked via the migration script), single-user Send Invite, and a Danger Zone panel with a hard-delete requiring typed email confirmation. Audit-log entries surface below. |
-| `/admin/invites` | Create / list / resend invites. |
 | `/admin/disengagement` | Platform-wide disengagement view. |
 | `/admin/coach-flags` | Review queue for messages flagged by the safety classifier (severity ≥ medium, per 2026-08-27 update). Filterable by severity + status via `?severity=` + `?status=` query params. Notes + mark reviewed. |
 | `/admin/audit` | Platform-wide audit log, searchable by actor / action / target. |
@@ -211,7 +218,7 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - **`audit_log`** — actor, action, target_type, target_id, metadata (JSONB). Captures admin view-as-member, data corrections, community/user changes, coach flag reviews.
 - **`nudge_settings`** — per community. `daily_reminder_time` (default 18:00), `disengagement_ladder` JSONB (`{"day3":true,"day7":true,"day14":true}`).
 - **`digests`** — one row per (community, week_start). JSONB body with rankings + mission analysis + deltas.
-- **`invites`** — community, email, name, invited_by, redeemed_by/at. Unique (community, email).
+- **`invites`** — legacy table from the pre-auth-phase magic-link flow. Retained for historical records but not written to by any current code path. Can be dropped via a future migration when comfortable losing the history.
 
 ### Row Level Security
 - Member data (checkins, missions, goals) scoped to self + community-mates (active + canceled-within-win-back).
@@ -231,7 +238,7 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 
 **Roles.**
 - **Member** — self data + community read + coach.
-- **Community leader** — everything a member has, plus invites, member deactivation, nudges, past-week corrections, digest visibility.
+- **Community leader** — everything a member has, plus member deactivation / reactivation, nudge settings, past-week corrections, digest visibility. (Leader invite flow removed 2026-08-24 — leaders now ask an admin to add new members.)
 - **Platform admin** — full access; coach flag review; audit log; manual cron triggers. Bypasses RLS with the service role for admin flows. Auto-provisioned as `leader` in every community (see §4 memberships).
 - **ITC access** — orthogonal per-user flag (`users.itc_access`) granting `/itc` visibility. Set by the migration script for legacy ITC participants, or manually via the admin detail page toggle.
 
@@ -255,25 +262,32 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 
 ## 6. Business Logic & Scoring
 
-### Daily Living total (weekly)
-- Sum of `daily_checkins.value=1` across 8 pillars for 7 days. Range 0–56.
-- `src/lib/scoring/week.ts` → `dailyLivingWeekTotal()`.
-- NULL (no row) ≠ 0 (logged but not done).
+### Weekly score (revised 2026-08-24)
+
+Two independent numbers plus a combined total:
+
+- **Daily** — sum of `daily_checkins.value=1` across the 7 manually-checkable pillars (B/R/A/V/E/M/N) × 7 days. Max 49 per week. Action (A2) is excluded from this count — Action credit comes from completed missions.
+  - `src/lib/scoring/week.ts` → `dailyLivingWeekTotal()` (excludes A2 rows)
+  - `DAILY_PILLARS_WEEKLY_MAX = 49`
+- **Missions** — 1 point per completed mission (target_date in the week, status=`completed`). Denominator is total planned missions that week (any status; excludes future planned outside the week bounds).
+  - `src/lib/scoring/week.ts` → `missionScore()` returns `{ completed, planned }`
+- **Total** — `daily + completed_missions` out of `49 + planned_missions`.
+- `/today` displays all three in the header. `/community` and `/community/leaderboard` display Daily + Missions and rank by Total.
+- NULL check-in row ≠ 0 (logged but not done).
 
 ### Mission scoring
-- `completed` on or before target_date = full credit.
-- `completed` after target_date with `completed_late=true` = full credit + "Completed · late" badge.
-- `missed` = 0 credit.
-- `planned` in the future doesn't affect rate.
-- Weekly rate = `completed / (completed + missed)`; excludes `rolled_over` and future `planned`.
-- **A2 (Action) pillar** derived daily as "had at least one mission completed today."
+- `completed` on or before target_date → full credit (1 mission point).
+- `completed` after target_date with `completed_late=true` → full credit + "Completed · late" badge.
+- `missed` → 0 credit.
+- `planned` in the future → not counted this week.
+- Weekly on-time rate = `on_time_completed / total_completed`; kept for display only, not used in ranking.
+- Action is no longer a per-day binary; each completed mission stacks a point uncapped-per-day (still capped by the 15/week mission cap).
 
-### Leaderboard composite (DECISION #1)
-```
-composite = round((dailyTotal / 56) * 100 * 0.7 + missionRate * 100 * 0.3)
-```
-- 70% habit consistency, 30% follow-through. Range 0–100. Resets weekly.
-- `src/lib/scoring/composite.ts`.
+### Leaderboard ranking (composite removed)
+- **Ranking:** by `combined_total` desc; tiebreaker `daily_total`.
+- **No composite score.** Deleted `src/lib/scoring/composite.ts` and `leaderboardComposite()` — two independent numbers beat one made-up 0-100 blend. The 70/30 split was arbitrary and mixed dissimilar things.
+- `LeaderboardRow` displays `Daily N/49`, `Missions N/M`, and `Total N/(49+M)` (accent-colored). Prior-week delta is combined-total delta (not composite).
+- `src/lib/scoring/leaderboard.ts` → `assembleWeekly()`.
 
 ### Engagement streak
 - Consecutive days ending today with **any** check-in row (any value). Used on `/today`, leaderboard, Streaks tab.
@@ -345,7 +359,7 @@ Admin creates account via `/admin/users` → admin hits Send Invite (branded Res
 Open `/today` → see week total + streak → tap each pillar (cycle null → 1 → 0 → null) with optimistic UI → optionally fill Wins/Learnings for the coach.
 
 ### Mission workflow
-Create at `/missions` with description, target date, pillar, optional goal → validator gates concreteness → capped at 15/week (5/bucket, 5/other) → mark complete (optionally flag as late) → contributes to A2, mission rate, and leaderboard composite.
+Create at `/missions` with description, target date, pillar, optional goal → validator gates concreteness → capped at 15/week (5/bucket, 5/other) → mark complete (optionally flag as late) → contributes 1 point to the weekly mission total.
 
 ### Coach conversation
 Start conversation from `/coach` (general or mission mode) → user types → Haiku safety classification → context builder pulls 4-week history + streaks + missions + goals + family layer + reflections → router picks Sonnet or Haiku → reply streams back with optional mission suggestion card → accept creates a mission → both turns persisted → flagged messages go to admin queue → allowance ticks down.
@@ -354,13 +368,13 @@ Start conversation from `/coach` (general or mission mode) → user types → Ha
 Open `/me/survey` → start new survey → sit with partner → for each of 15 questions record her score (1–5) and verbatim note → save → delta computed vs. prior survey → coach reads latest survey + delta as context.
 
 ### Community leaderboard
-`/community` scorecard shows all active members (plus canceled-within-win-back with badge). `/community/leaderboard` ranks by composite (Weekly), 4-week composite (Monthly), or raw streak (Streaks). Top 3 get medal UI; delta arrow vs. prior week.
+`/community` scorecard shows all active members (plus canceled-within-win-back with badge). `/community/leaderboard` ranks by combined weekly total (Weekly), 4-week combined total (Monthly), or raw streak (Streaks). Tiebreaker on Daily total. Top 3 get medal UI; delta vs. prior week is combined-total delta.
 
 ### Leader disengagement
 `/leader/disengagement` shows 3/7/14+ day buckets with pre-filled nudge copy → send nudge (email in Phase 2+, console in Phase 1) → day 14 escalates to leader outreach.
 
 ### Admin community setup
-`/admin/communities` → create community → `/admin/invites` → invite by email → member signs in and joins automatically.
+`/admin/communities` → create community → `/admin/users` CREATE ACCOUNT (assigns to community) → SEND INVITE → member sets password + goes through onboarding wizard.
 
 ---
 
@@ -527,7 +541,7 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 | `/coach`, `/coach/[id]` | user | member | Coach hub + thread |
 | `/me`, `/me/profile`, `/me/partner`, `/me/kids`, `/me/survey*` | user | member (self-only data) | Family layer + edit-profile |
 | `/leader/*` | user | leader | Community tools |
-| `/admin/*` | user | platform admin | Platform ops + audit + flags |
+| `/admin/*` | user | platform admin | Platform ops + audit + flags (no `/admin/invites` — deleted 2026-08-24) |
 | `/design` | public in dev; `ALLOW_DESIGN_ROUTE=1` in prod | any | Component library |
 | `/api/coach/messages` | user | member | Send coach turn |
 | `/api/coach/accept-mission` | user | member | Accept coach suggestion |
@@ -699,7 +713,7 @@ Two operating principles have driven every architectural decision on the ITC sid
 
 ## 17. ITC ↔ Tracker Link
 
-The ITC map isn't an isolated coaching artifact — an ITC improvement goal mirrors to the main-app `quarterly_goals`, and every ITC test mirrors to `missions`. Coaching work counts against the same weekly caps, composite score, and A2 pillar as the rest of the app; the man has one integrated accountability record.
+The ITC map isn't an isolated coaching artifact — an ITC improvement goal mirrors to the main-app `quarterly_goals`, and every ITC test mirrors to `missions`. Coaching work counts against the same weekly mission cap (15/week) and contributes to the same weekly total (Daily + Missions) as the rest of the app; the man has one integrated accountability record.
 
 Wiring lives in `src/lib/itc/tracker-link.ts`; called from the ITC server actions. Failure policy: tracker-link failures never block the ITC action — a save that couldn't mirror gets logged, the ITC UX proceeds, and the next re-save retries.
 
