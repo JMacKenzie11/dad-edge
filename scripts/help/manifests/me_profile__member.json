@@ -1,0 +1,41 @@
+{
+  "route_pattern": "/me/profile",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← ME"
+    },
+    {
+      "kind": "header",
+      "label": "Your details"
+    },
+    {
+      "kind": "field",
+      "label": "first_name"
+    },
+    {
+      "kind": "field",
+      "label": "last_name"
+    },
+    {
+      "kind": "field",
+      "label": "Nashville, TN"
+    },
+    {
+      "kind": "field",
+      "label": "+1 555 555 1234"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE CHANGES"
+    }
+  ],
+  "source_hash": "b3e8649e40e1da32",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/edit-form.tsx"
+  ]
+}

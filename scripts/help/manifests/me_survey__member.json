@@ -1,0 +1,32 @@
+{
+  "route_pattern": "/me/survey",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "The sit-down"
+    },
+    {
+      "kind": "link",
+      "label": "Start a survey"
+    },
+    {
+      "kind": "button",
+      "label": "Start a survey"
+    },
+    {
+      "kind": "header",
+      "label": "History"
+    },
+    {
+      "kind": "header",
+      "label": "Delta"
+    }
+  ],
+  "source_hash": "185c1c5a93878297",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/survey/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/survey/actions.ts"
+  ]
+}

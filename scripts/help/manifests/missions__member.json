@@ -1,0 +1,56 @@
+{
+  "route_pattern": "/missions",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Missions"
+    },
+    {
+      "kind": "link",
+      "label": "MANAGE GOALS"
+    },
+    {
+      "kind": "link",
+      "label": "SET A GOAL"
+    },
+    {
+      "kind": "header",
+      "label": "THIS WEEK · –"
+    },
+    {
+      "kind": "header",
+      "label": "NEXT WEEK · –"
+    },
+    {
+      "kind": "field",
+      "label": "Behavior + day. e.g. Take my wife to dinner Thursday, phone in the car."
+    },
+    {
+      "kind": "button",
+      "label": "USE"
+    },
+    {
+      "kind": "field",
+      "label": "Take Sarah on a date night."
+    },
+    {
+      "kind": "button",
+      "label": "DONE"
+    },
+    {
+      "kind": "button",
+      "label": "ROLL"
+    }
+  ],
+  "source_hash": "3532f04b5237a07c",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/complete-button.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/mission-composer.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/new-mission-form.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/weekly-planner.tsx"
+  ]
+}

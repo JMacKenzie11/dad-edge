@@ -1,0 +1,31 @@
+{
+  "route_pattern": "/onboarding/kids",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Your kids."
+    },
+    {
+      "kind": "field",
+      "label": "Name"
+    },
+    {
+      "kind": "field",
+      "label": "birthdate"
+    },
+    {
+      "kind": "field",
+      "label": "Something you love about him or her."
+    },
+    {
+      "kind": "button",
+      "label": "Add"
+    }
+  ],
+  "source_hash": "b6590e4a0b871edd",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/kids/page.tsx"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "route_pattern": "/login",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Check your email"
+    },
+    {
+      "kind": "link",
+      "label": "Back to sign in"
+    },
+    {
+      "kind": "header",
+      "label": "Sign in"
+    },
+    {
+      "kind": "field",
+      "label": "EMAIL"
+    },
+    {
+      "kind": "field",
+      "label": "PASSWORD"
+    },
+    {
+      "kind": "button",
+      "label": "SIGN IN"
+    },
+    {
+      "kind": "link",
+      "label": "Forgot password?"
+    },
+    {
+      "kind": "header",
+      "label": "Reset password"
+    },
+    {
+      "kind": "button",
+      "label": "SEND RESET LINK"
+    }
+  ],
+  "source_hash": "6d0198aac81f402b",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/login/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/login/actions.ts"
+  ]
+}

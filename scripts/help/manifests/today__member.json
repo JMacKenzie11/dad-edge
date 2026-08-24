@@ -1,0 +1,30 @@
+{
+  "route_pattern": "/today",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Log today"
+    },
+    {
+      "kind": "field",
+      "label": "days"
+    },
+    {
+      "kind": "field",
+      "label": "KEY WINS"
+    },
+    {
+      "kind": "field",
+      "label": "KEY LEARNINGS"
+    }
+  ],
+  "source_hash": "164a45959a039320",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/checkin-board.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/reflection-panel.tsx"
+  ]
+}

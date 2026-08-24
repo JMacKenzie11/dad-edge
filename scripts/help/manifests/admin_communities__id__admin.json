@@ -1,0 +1,69 @@
+{
+  "route_pattern": "/admin/communities/[id]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← COMMUNITIES"
+    },
+    {
+      "kind": "button",
+      "label": "JOIN AS LEADER"
+    },
+    {
+      "kind": "header",
+      "label": "Members ()"
+    },
+    {
+      "kind": "link",
+      "label": "Users"
+    },
+    {
+      "kind": "field",
+      "label": "name"
+    },
+    {
+      "kind": "field",
+      "label": "timezone"
+    },
+    {
+      "kind": "field",
+      "label": "week_lock_days"
+    },
+    {
+      "kind": "select",
+      "label": "status"
+    },
+    {
+      "kind": "toggle",
+      "label": "leaderboard_enabled"
+    },
+    {
+      "kind": "toggle",
+      "label": "missions_visible"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE CHANGES"
+    },
+    {
+      "kind": "button",
+      "label": "MAKE LEADER"
+    },
+    {
+      "kind": "select",
+      "label": "to_community_id"
+    },
+    {
+      "kind": "button",
+      "label": "GO"
+    }
+  ],
+  "source_hash": "97b407c0185100bd",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/edit-form.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/member-row.tsx"
+  ]
+}

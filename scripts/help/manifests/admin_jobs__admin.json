@@ -1,0 +1,16 @@
+{
+  "route_pattern": "/admin/jobs",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Jobs"
+    }
+  ],
+  "source_hash": "59a69577fd8e513e",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/jobs/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/jobs/run-panel.tsx"
+  ]
+}

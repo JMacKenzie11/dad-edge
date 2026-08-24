@@ -1,0 +1,23 @@
+{
+  "route_pattern": "/onboarding/why",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "What made you say yes to this?"
+    },
+    {
+      "kind": "field",
+      "label": "I'm sick of half-showing-up for Sarah and the kids."
+    },
+    {
+      "kind": "button",
+      "label": "Next"
+    }
+  ],
+  "source_hash": "5782c4d58b13cc4b",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/why/page.tsx"
+  ]
+}

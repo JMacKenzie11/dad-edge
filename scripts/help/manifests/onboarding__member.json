@@ -1,0 +1,42 @@
+{
+  "route_pattern": "/onboarding",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Who are you?"
+    },
+    {
+      "kind": "field",
+      "label": "first_name"
+    },
+    {
+      "kind": "field",
+      "label": "last_name"
+    },
+    {
+      "kind": "select",
+      "label": "timezone"
+    },
+    {
+      "kind": "field",
+      "label": "Software engineer, electrician, sales director…"
+    },
+    {
+      "kind": "toggle",
+      "label": "employment_type"
+    },
+    {
+      "kind": "button",
+      "label": "Next"
+    }
+  ],
+  "source_hash": "255b8fdc631d521f",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/layout.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/step-progress.tsx"
+  ]
+}

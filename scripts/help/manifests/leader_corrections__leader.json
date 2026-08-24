@@ -1,0 +1,43 @@
+{
+  "route_pattern": "/leader/corrections",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Score corrections"
+    },
+    {
+      "kind": "select",
+      "label": "target_user_id"
+    },
+    {
+      "kind": "field",
+      "label": "date"
+    },
+    {
+      "kind": "select",
+      "label": "pillar_code"
+    },
+    {
+      "kind": "select",
+      "label": "new_value"
+    },
+    {
+      "kind": "field",
+      "label": "Missed logging on the road; confirmed by member on call."
+    },
+    {
+      "kind": "button",
+      "label": "SUBMIT CORRECTION"
+    },
+    {
+      "kind": "header",
+      "label": "Recent corrections"
+    }
+  ],
+  "source_hash": "111eaf2d75d668ac",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(leader)/leader/corrections/page.tsx"
+  ]
+}

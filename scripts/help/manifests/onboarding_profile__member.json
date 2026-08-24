@@ -1,0 +1,41 @@
+{
+  "route_pattern": "/onboarding/profile",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Add your photo."
+    },
+    {
+      "kind": "field",
+      "label": "Zoom"
+    },
+    {
+      "kind": "button",
+      "label": "REMOVE"
+    },
+    {
+      "kind": "field",
+      "label": "Nashville, TN"
+    },
+    {
+      "kind": "field",
+      "label": "+1 555 555 1234"
+    },
+    {
+      "kind": "button",
+      "label": "NEXT"
+    },
+    {
+      "kind": "button",
+      "label": "SKIP"
+    }
+  ],
+  "source_hash": "122d9c8f967b6a48",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/avatar-cropper.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/profile-form.tsx"
+  ]
+}

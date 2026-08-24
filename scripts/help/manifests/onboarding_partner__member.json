@@ -1,0 +1,51 @@
+{
+  "route_pattern": "/onboarding/partner",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Your partner."
+    },
+    {
+      "kind": "field",
+      "label": "partner_name"
+    },
+    {
+      "kind": "select",
+      "label": "relationship_label"
+    },
+    {
+      "kind": "field",
+      "label": "partner_birthdate"
+    },
+    {
+      "kind": "field",
+      "label": "relationship_date"
+    },
+    {
+      "kind": "field",
+      "label": "The way they make strangers feel welcome."
+    },
+    {
+      "kind": "field",
+      "label": "…"
+    },
+    {
+      "kind": "button",
+      "label": "Next"
+    },
+    {
+      "kind": "button",
+      "label": "Skip"
+    },
+    {
+      "kind": "link",
+      "label": "Add later from Me"
+    }
+  ],
+  "source_hash": "b1ae14f4d21c0e9a",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/partner/page.tsx"
+  ]
+}

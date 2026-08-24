@@ -1,0 +1,25 @@
+{
+  "route_pattern": "/coach",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Your conversations"
+    },
+    {
+      "kind": "button",
+      "label": "+ NEW CONVERSATION"
+    },
+    {
+      "kind": "button",
+      "label": "ARCHIVE"
+    }
+  ],
+  "source_hash": "34859d807b26bc6e",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/coach/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/coach/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/coach/conversation.tsx"
+  ]
+}

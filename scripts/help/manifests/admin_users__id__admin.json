@@ -1,0 +1,59 @@
+{
+  "route_pattern": "/admin/users/[id]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← USERS"
+    },
+    {
+      "kind": "select",
+      "label": "subscription_status"
+    },
+    {
+      "kind": "field",
+      "label": "Comped for launch cohort"
+    },
+    {
+      "kind": "button",
+      "label": "UPDATE STATUS"
+    },
+    {
+      "kind": "toggle",
+      "label": "is_platform_admin"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE"
+    },
+    {
+      "kind": "toggle",
+      "label": "itc_access"
+    },
+    {
+      "kind": "header",
+      "label": "Memberships"
+    },
+    {
+      "kind": "field",
+      "label": "confirm_email"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE ACCOUNT"
+    },
+    {
+      "kind": "header",
+      "label": "Recent check-ins"
+    },
+    {
+      "kind": "header",
+      "label": "Recent missions"
+    }
+  ],
+  "source_hash": "5bb3d8356152cb52",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/[id]/page.tsx"
+  ]
+}

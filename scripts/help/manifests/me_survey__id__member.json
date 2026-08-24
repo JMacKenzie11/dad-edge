@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/me/survey/[id]",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Composite"
+    }
+  ],
+  "source_hash": "34f21748f6b1f204",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/survey/[id]/page.tsx"
+  ]
+}

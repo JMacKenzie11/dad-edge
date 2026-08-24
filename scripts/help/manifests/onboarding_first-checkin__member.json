@@ -1,0 +1,20 @@
+{
+  "route_pattern": "/onboarding/first-checkin",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Log today."
+    },
+    {
+      "kind": "button",
+      "label": "Log day one"
+    }
+  ],
+  "source_hash": "e868dfa31fe7cfe6",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/first-checkin/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/first-checkin/first-checkin-form.tsx"
+  ]
+}

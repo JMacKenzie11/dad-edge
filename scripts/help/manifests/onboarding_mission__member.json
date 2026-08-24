@@ -1,0 +1,31 @@
+{
+  "route_pattern": "/onboarding/mission",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Your first mission."
+    },
+    {
+      "kind": "toggle",
+      "label": "pillar_code"
+    },
+    {
+      "kind": "field",
+      "label": "Take Sarah on a date night."
+    },
+    {
+      "kind": "field",
+      "label": "target_date"
+    },
+    {
+      "kind": "button",
+      "label": "LOCK IT IN"
+    }
+  ],
+  "source_hash": "65ec098035eb6e70",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/mission/page.tsx"
+  ]
+}

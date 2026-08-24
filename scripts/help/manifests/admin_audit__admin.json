@@ -1,0 +1,23 @@
+{
+  "route_pattern": "/admin/audit",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Audit log"
+    },
+    {
+      "kind": "field",
+      "label": "action prefix (e.g. entitlement)"
+    },
+    {
+      "kind": "button",
+      "label": "FILTER"
+    }
+  ],
+  "source_hash": "c69644334ba22c51",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/audit/page.tsx"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "route_pattern": "/leader/members",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Members"
+    },
+    {
+      "kind": "header",
+      "label": "Members ()"
+    },
+    {
+      "kind": "button",
+      "label": "DEACTIVATE"
+    },
+    {
+      "kind": "button",
+      "label": "REACTIVATE"
+    }
+  ],
+  "source_hash": "bf1ca13976ced71c",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(leader)/leader/members/page.tsx"
+  ]
+}

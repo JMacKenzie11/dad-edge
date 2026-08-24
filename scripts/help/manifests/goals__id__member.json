@@ -1,0 +1,44 @@
+{
+  "route_pattern": "/goals/[id]",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← Back to goals"
+    },
+    {
+      "kind": "link",
+      "label": "Open your ITC maps →"
+    },
+    {
+      "kind": "field",
+      "label": "Where you are now"
+    },
+    {
+      "kind": "field",
+      "label": "Where you want to be"
+    },
+    {
+      "kind": "field",
+      "label": "Midpoint check-in"
+    },
+    {
+      "kind": "field",
+      "label": "What actually happened"
+    },
+    {
+      "kind": "field",
+      "label": "What you learned"
+    },
+    {
+      "kind": "header",
+      "label": "Mission timeline"
+    }
+  ],
+  "source_hash": "a03e99dc9ea3dc49",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/edit-goal-form.tsx"
+  ]
+}

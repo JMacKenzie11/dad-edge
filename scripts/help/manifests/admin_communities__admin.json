@@ -1,0 +1,33 @@
+{
+  "route_pattern": "/admin/communities",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Communities"
+    },
+    {
+      "kind": "field",
+      "label": "Basecamp"
+    },
+    {
+      "kind": "field",
+      "label": "timezone"
+    },
+    {
+      "kind": "field",
+      "label": "week_lock_days"
+    },
+    {
+      "kind": "button",
+      "label": "CREATE"
+    }
+  ],
+  "source_hash": "a81c7e41c7c21527",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/create-community-form.tsx"
+  ]
+}

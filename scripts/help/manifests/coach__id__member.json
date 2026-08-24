@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/coach/[id]",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← ALL"
+    },
+    {
+      "kind": "button",
+      "label": "ARCHIVE"
+    }
+  ],
+  "source_hash": "0af149127171bf7e",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/coach/[id]/page.tsx"
+  ]
+}

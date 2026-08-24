@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/leader/disengagement",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Disengagement"
+    },
+    {
+      "kind": "header",
+      "label": "()"
+    }
+  ],
+  "source_hash": "4dda4597efe867dd",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(leader)/leader/disengagement/page.tsx"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "route_pattern": "/admin/coach-flags",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Coach flags"
+    },
+    {
+      "kind": "field",
+      "label": "Severity"
+    },
+    {
+      "kind": "field",
+      "label": "Status"
+    },
+    {
+      "kind": "field",
+      "label": "Notes"
+    },
+    {
+      "kind": "button",
+      "label": "RESOLVE"
+    }
+  ],
+  "source_hash": "d845aef9d27714fc",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/coach-flags/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/coach-flags/actions.ts"
+  ]
+}

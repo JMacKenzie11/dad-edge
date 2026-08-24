@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/itc/admin/[mapId]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← All maps"
+    }
+  ],
+  "source_hash": "70e83518f84c496d",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/admin/[mapId]/page.tsx"
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "route_pattern": "/me",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "Edit"
+    },
+    {
+      "kind": "link",
+      "label": "YOUR RECORD Dashboard Daily Living, mission completion, survey delta, and any active ITC map. →"
+    },
+    {
+      "kind": "header",
+      "label": "Partner"
+    },
+    {
+      "kind": "link",
+      "label": "Add her"
+    },
+    {
+      "kind": "button",
+      "label": "Add her"
+    },
+    {
+      "kind": "header",
+      "label": "Kids"
+    },
+    {
+      "kind": "link",
+      "label": "Manage"
+    },
+    {
+      "kind": "header",
+      "label": "The sit-down"
+    },
+    {
+      "kind": "link",
+      "label": "Start survey"
+    },
+    {
+      "kind": "button",
+      "label": "Start survey"
+    },
+    {
+      "kind": "link",
+      "label": "History"
+    },
+    {
+      "kind": "button",
+      "label": "History"
+    },
+    {
+      "kind": "button",
+      "label": "SIGN OUT"
+    }
+  ],
+  "source_hash": "910118c641b3a320",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/page.tsx"
+  ]
+}

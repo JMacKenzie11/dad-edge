@@ -1,0 +1,35 @@
+{
+  "route_pattern": "/leader/nudges",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Nudge settings"
+    },
+    {
+      "kind": "field",
+      "label": "daily_reminder_time"
+    },
+    {
+      "kind": "toggle",
+      "label": "day3"
+    },
+    {
+      "kind": "toggle",
+      "label": "day7"
+    },
+    {
+      "kind": "toggle",
+      "label": "day14"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE"
+    }
+  ],
+  "source_hash": "051e381189db1568",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(leader)/leader/nudges/page.tsx"
+  ]
+}

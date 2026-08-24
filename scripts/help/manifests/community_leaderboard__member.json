@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/community/leaderboard",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Leaderboard"
+    }
+  ],
+  "source_hash": "ef8d2b8abbf6fd98",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard/page.tsx"
+  ]
+}

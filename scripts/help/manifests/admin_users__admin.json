@@ -1,0 +1,89 @@
+{
+  "route_pattern": "/admin/users",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Users"
+    },
+    {
+      "kind": "header",
+      "label": "New account"
+    },
+    {
+      "kind": "field",
+      "label": "email@example.com"
+    },
+    {
+      "kind": "field",
+      "label": "First name"
+    },
+    {
+      "kind": "field",
+      "label": "Last name"
+    },
+    {
+      "kind": "select",
+      "label": "community_id"
+    },
+    {
+      "kind": "select",
+      "label": "subscription_status"
+    },
+    {
+      "kind": "toggle",
+      "label": "is_platform_admin"
+    },
+    {
+      "kind": "button",
+      "label": "CREATE ACCOUNT"
+    },
+    {
+      "kind": "field",
+      "label": "Search by name or email"
+    },
+    {
+      "kind": "select",
+      "label": "status"
+    },
+    {
+      "kind": "button",
+      "label": "FILTER"
+    },
+    {
+      "kind": "button",
+      "label": "SEND INVITES (BATCH)"
+    },
+    {
+      "kind": "toggle",
+      "label": "user_ids"
+    },
+    {
+      "kind": "header",
+      "label": "Delete account?"
+    },
+    {
+      "kind": "field",
+      "label": "DELETE"
+    },
+    {
+      "kind": "button",
+      "label": "CANCEL"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE ACCOUNTS"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE SELECTED"
+    }
+  ],
+  "source_hash": "69e8acf9c8e65274",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/bulk-delete-button.tsx"
+  ]
+}

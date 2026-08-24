@@ -1,0 +1,23 @@
+{
+  "route_pattern": "/itc/admin",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "ITC Admin: active-map triage"
+    },
+    {
+      "kind": "link",
+      "label": "← Back to my map"
+    },
+    {
+      "kind": "link",
+      "label": "Open transcript →"
+    }
+  ],
+  "source_hash": "d326bb697527ee58",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/admin/page.tsx"
+  ]
+}

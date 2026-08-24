@@ -1,0 +1,40 @@
+{
+  "route_pattern": "/me/partner",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Your partner"
+    },
+    {
+      "kind": "field",
+      "label": "Her name"
+    },
+    {
+      "kind": "select",
+      "label": "relationship_label"
+    },
+    {
+      "kind": "field",
+      "label": "partner_birthdate"
+    },
+    {
+      "kind": "field",
+      "label": "relationship_date"
+    },
+    {
+      "kind": "field",
+      "label": "Something you love about her."
+    },
+    {
+      "kind": "button",
+      "label": "Save"
+    }
+  ],
+  "source_hash": "117049e9adae5d13",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/actions.ts"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/inactive",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Account inactive"
+    },
+    {
+      "kind": "link",
+      "label": "Home"
+    }
+  ],
+  "source_hash": "40383cfa91fdcf6c",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/inactive/page.tsx"
+  ]
+}

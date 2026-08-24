@@ -1,0 +1,40 @@
+{
+  "route_pattern": "/community",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "field",
+      "label": "THIS WEEK · DAILY LIVING"
+    },
+    {
+      "kind": "field",
+      "label": "THIS WEEK · MISSIONS"
+    },
+    {
+      "kind": "field",
+      "label": "LAST 4 WEEKS · DAILY LIVING"
+    },
+    {
+      "kind": "field",
+      "label": "LAST 4 WEEKS · MISSIONS"
+    },
+    {
+      "kind": "field",
+      "label": "MISSION QUALITY"
+    },
+    {
+      "kind": "field",
+      "label": "ENGAGEMENT STREAKS"
+    },
+    {
+      "kind": "link",
+      "label": "← back to your day"
+    }
+  ],
+  "source_hash": "b860904d47de9f4c",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard-card.tsx"
+  ]
+}

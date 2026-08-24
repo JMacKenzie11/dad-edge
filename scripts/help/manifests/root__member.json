@@ -1,0 +1,20 @@
+{
+  "route_pattern": "/",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Brave Man Operating System"
+    },
+    {
+      "kind": "link",
+      "label": "Sign in"
+    }
+  ],
+  "source_hash": "aa41d659c79b6004",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/layout.tsx"
+  ]
+}

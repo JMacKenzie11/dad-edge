@@ -1,0 +1,32 @@
+{
+  "route_pattern": "/itc/login",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Dad Edge Goal Clarifier"
+    },
+    {
+      "kind": "field",
+      "label": "email"
+    },
+    {
+      "kind": "field",
+      "label": "password"
+    },
+    {
+      "kind": "link",
+      "label": "Go to the main login"
+    },
+    {
+      "kind": "button",
+      "label": "Enter"
+    }
+  ],
+  "source_hash": "6741e9d2a546193e",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/login/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/login/actions.ts"
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "route_pattern": "/goals",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Quarterly goals"
+    },
+    {
+      "kind": "header",
+      "label": "Goals"
+    },
+    {
+      "kind": "header",
+      "label": "Adaptive goal"
+    },
+    {
+      "kind": "header",
+      "label": "Past goals"
+    },
+    {
+      "kind": "link",
+      "label": "· ITC MAP behavior mapped · test designed Open the map →"
+    },
+    {
+      "kind": "link",
+      "label": "Open →"
+    },
+    {
+      "kind": "button",
+      "label": "DONE"
+    },
+    {
+      "kind": "button",
+      "label": "DROP"
+    },
+    {
+      "kind": "field",
+      "label": "Two or three sentences. What's actually happening. Not what you meant to do."
+    },
+    {
+      "kind": "button",
+      "label": "Not now"
+    },
+    {
+      "kind": "link",
+      "label": "OPEN THE MAP"
+    },
+    {
+      "kind": "field",
+      "label": "What actually happened"
+    },
+    {
+      "kind": "field",
+      "label": "What you learned"
+    },
+    {
+      "kind": "button",
+      "label": "Yes"
+    },
+    {
+      "kind": "button",
+      "label": "Partway"
+    },
+    {
+      "kind": "button",
+      "label": "No"
+    },
+    {
+      "kind": "field",
+      "label": "Where you are now"
+    },
+    {
+      "kind": "field",
+      "label": "Where you want to be"
+    }
+  ],
+  "source_hash": "9e4a0e30a497db19",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/goal-card.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/goal-midpoint-prompt.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/goal-review-prompt.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/new-goal-form.tsx"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/admin",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Overview"
+    },
+    {
+      "kind": "header",
+      "label": "Recent signups"
+    }
+  ],
+  "source_hash": "32e66323436dd445",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/page.tsx"
+  ]
+}

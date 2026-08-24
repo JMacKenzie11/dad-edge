@@ -17,7 +17,8 @@
     "brand:sync": "tsx scripts/sync-brand-assets.ts",
     "coach:scenario": "tsx scripts/coach-scenario.ts",
     "migrate:itc": "tsx scripts/migrate-itc-participants.ts",
-    "reset:onboarding": "tsx scripts/reset-onboarding.ts"
+    "reset:onboarding": "tsx scripts/reset-onboarding.ts",
+    "help:extract": "tsx scripts/help/extract-routes.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",

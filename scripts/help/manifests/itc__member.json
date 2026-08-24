@@ -1,0 +1,54 @@
+{
+  "route_pattern": "/itc",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Dad Edge Goal Clarifier"
+    },
+    {
+      "kind": "link",
+      "label": "Main app"
+    },
+    {
+      "kind": "link",
+      "label": "Admin"
+    },
+    {
+      "kind": "button",
+      "label": "Sign out"
+    },
+    {
+      "kind": "header",
+      "label": "In progress ()"
+    },
+    {
+      "kind": "link",
+      "label": "Continue →"
+    },
+    {
+      "kind": "header",
+      "label": "Start a new map"
+    },
+    {
+      "kind": "toggle",
+      "label": "pillar_code"
+    },
+    {
+      "kind": "header",
+      "label": "History ()"
+    },
+    {
+      "kind": "link",
+      "label": "View →"
+    }
+  ],
+  "source_hash": "1905fc92881b8bf3",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/layout.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/start-map-button.tsx"
+  ]
+}

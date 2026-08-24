@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/dashboard",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Dashboard"
+    }
+  ],
+  "source_hash": "3795f381a89e89fd",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/dashboard/page.tsx"
+  ]
+}
