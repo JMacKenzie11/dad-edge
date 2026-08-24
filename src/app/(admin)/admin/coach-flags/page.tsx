@@ -51,7 +51,9 @@ export default async function CoachFlagsPage({
       <header>
         <h1 className="font-heading text-2xl">Coach flags</h1>
         <p className="text-sm text-[color:var(--color-text-muted)]">
-          Messages flagged by the safety classifier. Platform admin only (DECISION #6).
+          Coach messages the safety classifier flagged for review
+          (self-harm signals, crisis language, abuse). Only you as
+          platform admin see this queue. Community leaders don't.
         </p>
       </header>
 
