@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PILLARS } from "@/lib/pillars";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { saveFirstMission } from "../actions";
 import { StepProgress } from "../step-progress";
 
@@ -55,14 +56,14 @@ export default async function MissionStep({
             {PILLARS.map((p, i) => (
               <label
                 key={p.code}
-                className="flex flex-col items-center py-2 rounded-md border border-[color:var(--color-border)] cursor-pointer"
+                className="flex flex-col items-center py-2 rounded-md border border-[color:var(--color-border)] cursor-pointer transition-colors has-[:checked]:border-[color:var(--color-primary)] has-[:checked]:bg-[color:var(--color-primary)]/15"
               >
                 <input
                   type="radio"
                   name="pillar_code"
                   value={p.code}
                   defaultChecked={i === 0}
-                  className="sr-only peer"
+                  className="sr-only"
                 />
                 <span
                   className="h-8 w-8 rounded-md flex items-center justify-center font-heading text-sm"
@@ -101,12 +102,11 @@ export default async function MissionStep({
             {params.error}
           </p>
         ) : null}
-        <button
-          type="submit"
-          className="w-full h-12 rounded-md font-heading bg-[color:var(--color-primary)] text-white"
-        >
-          Lock it in
-        </button>
+        <SubmitButton
+          label="LOCK IT IN"
+          pendingLabel="LOCKING IN…"
+          className="w-full"
+        />
       </form>
     </div>
   );

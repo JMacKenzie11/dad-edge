@@ -108,9 +108,17 @@ export async function requireAccess(options?: {
   return { user, readOnly: decision.access === "read_only" };
 }
 
-/** Total number of onboarding steps. Bumped from 7 → 8 with the new
- *  /onboarding/profile step (picture, city, phone) inserted at step 1. */
-export const ONBOARDING_STEPS_TOTAL = 8;
+/** Total number of onboarding steps in the active wizard flow.
+ *
+ *  History:
+ *   - 7 originally (identity → why → partner → kids → goal → mission
+ *     → first-checkin).
+ *   - Bumped to 8 with the /onboarding/profile step inserted at step 1.
+ *   - Dropped back to 6 (2026-08-24) when goal + mission were hidden.
+ *     The pages themselves still exist and can be re-enabled by
+ *     restoring them to onboardingRouteFor and bumping this back to 8.
+ */
+export const ONBOARDING_STEPS_TOTAL = 6;
 
 export function onboardingRouteFor(step: number): string {
   switch (step) {
@@ -119,9 +127,7 @@ export function onboardingRouteFor(step: number): string {
     case 2: return "/onboarding/why";
     case 3: return "/onboarding/partner";
     case 4: return "/onboarding/kids";
-    case 5: return "/onboarding/goal";
-    case 6: return "/onboarding/mission";
-    case 7: return "/onboarding/first-checkin";
+    case 5: return "/onboarding/first-checkin";
     default: return "/today";
   }
 }

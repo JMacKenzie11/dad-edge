@@ -13,7 +13,7 @@ export default async function ProfileStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={2} total={8} />
+      <StepProgress step={2} total={6} />
       <h1 className="font-heading text-3xl mb-2">Add your photo.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         A photo, where you're based, and how to reach you. All optional —

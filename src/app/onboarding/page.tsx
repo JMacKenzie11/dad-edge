@@ -27,7 +27,7 @@ export default async function OnboardingStart({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={1} total={8} />
+      <StepProgress step={1} total={6} />
       <h1 className="font-heading text-3xl mb-2">Who are you?</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         This is the first Bond exercise, not a settings form.

@@ -228,8 +228,12 @@ export async function addKid(formData: FormData) {
 }
 
 export async function finishKids() {
+  // Goal + mission steps are temporarily hidden — jump straight from
+  // kids to first-checkin. The pages exist and can be reintroduced
+  // by restoring them to onboardingRouteFor + bumping the step count
+  // in session.ts.
   await bumpStep(5);
-  redirect("/onboarding/goal");
+  redirect("/onboarding/first-checkin");
 }
 
 const GoalSchema = z.object({
@@ -331,7 +335,7 @@ export async function saveFirstCheckin(formData: FormData) {
   await supabase
     .from("daily_checkins")
     .upsert(rows, { onConflict: "user_id,date,pillar_code" });
-  await bumpStep(8);
+  await bumpStep(6);
   // ITC users land back on /itc after finishing the wizard (that's
   // the surface they came in for). Everyone else goes to /today.
   const hasItc = await currentUserHasItcAccess();
