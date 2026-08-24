@@ -51,7 +51,22 @@ export async function requireItcParticipant(): Promise<ItcParticipant> {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
+      error: userErr,
     } = await supabase.auth.getUser();
+    // Diagnostic: log what /itc actually sees on entry. We want to
+    // know if cookies from /login → /itc redirects are arriving.
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const cookieNames = store
+      .getAll()
+      .map((c) => c.name)
+      .join(",");
+    console.info(
+      "[itc:guard] user=%s err=%s cookies=%s",
+      user?.id ?? "(null)",
+      userErr?.message ?? "none",
+      cookieNames || "(none)",
+    );
     if (user) {
       const { data: userRow } = await supabase
         .from("users")

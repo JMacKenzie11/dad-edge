@@ -15,14 +15,14 @@ export async function createSupabaseServerClient() {
         },
         setAll(items: CookieToSet[]) {
           // cookies().set() only works in Server Actions and Route
-          // Handlers. In Server Components the whole cookie store is
-          // read-only and set() throws. We want the throw to be
-          // silent there (nothing to do about it), BUT we want to
-          // see it if it happens in a Server Action — because that's
-          // the sign-in cookie loop everyone keeps hitting. Log the
-          // count + first error so it surfaces in Vercel logs.
+          // Handlers. In Server Components the store is read-only
+          // and set() throws. Tolerate the failure there, but always
+          // log ANY setAll call — success or fail — so we can see in
+          // Vercel Functions logs whether sign-in / reset writes are
+          // making it to the response.
           let failedCount = 0;
           let firstErr: unknown = null;
+          const names = items.map((i) => i.name).join(",");
           for (const { name, value, options } of items) {
             try {
               cookieStore.set(name, value, options);
@@ -33,10 +33,17 @@ export async function createSupabaseServerClient() {
           }
           if (failedCount > 0) {
             console.warn(
-              "[supabase:cookies] setAll failed for %d/%d cookies: %s",
+              "[supabase:cookies] setAll FAILED %d/%d cookies (names: %s): %s",
               failedCount,
               items.length,
+              names,
               firstErr instanceof Error ? firstErr.message : String(firstErr),
+            );
+          } else {
+            console.info(
+              "[supabase:cookies] setAll ok (%d cookies: %s)",
+              items.length,
+              names,
             );
           }
         },
