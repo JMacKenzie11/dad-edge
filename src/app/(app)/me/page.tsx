@@ -73,7 +73,7 @@ export default async function MePage() {
           ) : null}
         </div>
         <Link
-          href="/onboarding/profile"
+          href="/me/profile"
           className="text-xs text-[color:var(--color-text-muted)] underline shrink-0"
         >
           Edit
