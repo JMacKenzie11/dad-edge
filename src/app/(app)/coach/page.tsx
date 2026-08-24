@@ -41,12 +41,12 @@ export default async function CoachHome({
     <div className="max-w-2xl mx-auto space-y-6">
       <header>
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-primary)]">
-          COACH
+          COACH LARRY
         </p>
         <h1 className="font-heading text-3xl">Your conversations</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          Start a new coaching conversation any time. Your Dad Edge Coach knows you, your
-          family and your history.
+          Start a new conversation any time. Larry knows you, your
+          family, and your history.
         </p>
         {sp.error ? (
           <p className="mt-2 text-xs text-[color:var(--color-danger)]">{sp.error}</p>
@@ -56,7 +56,7 @@ export default async function CoachHome({
       <div className="grid gap-3 sm:grid-cols-2">
         <NewConversationCard
           mode="general"
-          title="Talk to your coach"
+          title="Talk to Larry"
           hint="Marriage, kids, work, business, health, money."
         />
         <NewConversationCard

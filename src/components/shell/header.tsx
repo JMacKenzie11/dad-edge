@@ -33,11 +33,11 @@ export function AppHeader({
         {/* LEFT — empty spacer (keeps center actually centered) */}
         <div />
 
-        {/* CENTER — full brand logo */}
-        <Link href="/today" className="justify-self-center" aria-label="The Dad Edge — Live Legendary">
+        {/* CENTER - full brand logo */}
+        <Link href="/today" className="justify-self-center" aria-label="The Dad Edge - Live Legendary">
           <Image
             src="/brand/logo-tagline-white.png"
-            alt="THE DAD EDGE — Live Legendary"
+            alt="THE DAD EDGE - Live Legendary"
             width={280}
             height={72}
             priority

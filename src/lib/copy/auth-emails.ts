@@ -46,13 +46,13 @@ export function activationEmail(opts: {
 }): EmailBody {
   const greeting = opts.firstName ? `${opts.firstName},` : "Hey,";
   const communityLine = opts.communityName
-    ? `You've been added to ${opts.communityName} on Dad Edge.`
-    : "You've been added to Dad Edge.";
+    ? `You're in ${opts.communityName} on Dad Edge.`
+    : "You're in on Dad Edge.";
   const text = `${greeting}
 
 ${communityLine}
 
-Set your password to activate your account:
+Set your password and sign in:
 ${opts.activationUrl}
 
 The link is short-lived. If it expires, ask your admin for a fresh one.
@@ -62,13 +62,13 @@ Dad Edge`;
     "Set your password.",
     `<p>${greeting}</p>
      <p>${communityLine}</p>
-     <p>Set your password to activate your account.</p>
+     <p>Set your password and sign in.</p>
      ${ctaButton(opts.activationUrl, "Set my password")}
      <p style="color:#9aa7b4;font-size:12px;">The link is short-lived. If it expires, ask your admin for a fresh one.</p>`,
   );
   return {
     subject: opts.communityName
-      ? `Set your password — ${opts.communityName}`
+      ? `Set your password for ${opts.communityName}`
       : "Set your password",
     text,
     html,
@@ -82,19 +82,19 @@ export function passwordResetEmail(opts: {
   const greeting = opts.firstName ? `${opts.firstName},` : "Hey,";
   const text = `${greeting}
 
-Someone asked to reset your Dad Edge password. If that was you, use the link below within an hour:
+You (or someone with your email) asked to reset your Dad Edge password. Use the link below within an hour:
 
 ${opts.resetUrl}
 
-If it wasn't you, ignore this email. Your password stays the same until you use the link.
+If this wasn't you, ignore the email. Your password won't change unless you use the link.
 
 Dad Edge`;
   const html = htmlShell(
     "Reset your password.",
     `<p>${greeting}</p>
-     <p>Someone asked to reset your Dad Edge password. If that was you, use the link below within an hour.</p>
+     <p>You (or someone with your email) asked to reset your Dad Edge password. Use the link below within an hour.</p>
      ${ctaButton(opts.resetUrl, "Reset my password")}
-     <p style="color:#9aa7b4;font-size:12px;">If it wasn't you, ignore this email. Your password stays the same until you use the link.</p>`,
+     <p style="color:#9aa7b4;font-size:12px;">If this wasn't you, ignore the email. Your password won't change unless you use the link.</p>`,
   );
   return {
     subject: "Reset your Dad Edge password",

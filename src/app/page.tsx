@@ -6,7 +6,7 @@ export default function LandingPage() {
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-10">
       <Image
         src="/brand/logo-tagline-white.png"
-        alt="THE DAD EDGE — Live Legendary"
+        alt="THE DAD EDGE - Live Legendary"
         width={420}
         height={120}
         priority

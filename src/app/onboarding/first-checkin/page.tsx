@@ -18,7 +18,7 @@ export default async function FirstCheckinStep({
       <StepProgress step={6} total={6} />
       <h1 className="font-heading text-3xl mb-2">Log today.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
-        Day one is never a zero. Tap once for done, twice for missed.
+        Day one is never a zero. Mark each pillar: done, missed, or blank.
       </p>
       <FirstCheckinForm date={today} error={params.error} />
     </div>

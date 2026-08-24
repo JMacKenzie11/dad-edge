@@ -70,7 +70,7 @@ function ResetSentPanel() {
       </div>
       <p className="text-xs text-[color:var(--color-text-muted)]">
         Didn't get it? Give it a minute, then check your spam folder. Still
-        nothing — the address you entered probably doesn't have an account
+        nothing? The address you entered probably doesn't have an account
         on this system.
       </p>
       <Link

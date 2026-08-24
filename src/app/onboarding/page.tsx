@@ -30,7 +30,7 @@ export default async function OnboardingStart({
       <StepProgress step={1} total={6} />
       <h1 className="font-heading text-3xl mb-2">Who are you?</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
-        This is the first Bond exercise, not a settings form.
+        Basics your coach uses. Not a settings form.
       </p>
       <form action={saveIdentity} className="space-y-4">
         <label className="block">

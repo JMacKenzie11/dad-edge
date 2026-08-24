@@ -30,7 +30,7 @@ export default async function PartnerStep() {
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">HER BIRTHDAY</span>
+            <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">PARTNER BIRTHDAY</span>
             <input type="date" name="partner_birthdate" className="mt-1 w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
           </label>
           <label className="block">
@@ -41,10 +41,10 @@ export default async function PartnerStep() {
 
         <div>
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mb-2">
-            A FEW THINGS YOU LOVE MOST ABOUT HER
+            A FEW THINGS YOU LOVE MOST ABOUT YOUR PARTNER
           </p>
           <div className="space-y-2">
-            <input name="loved_1" placeholder="How she makes strangers feel welcome." className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
+            <input name="loved_1" placeholder="The way they make strangers feel welcome." className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
             <input name="loved_2" placeholder="…" className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
             <input name="loved_3" placeholder="…" className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
           </div>

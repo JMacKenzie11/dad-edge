@@ -24,7 +24,7 @@ export default async function ItcLoginPage({
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-8">
       <Image
         src="/brand/logo-tagline-white.png"
-        alt="THE DAD EDGE — Live Legendary"
+        alt="THE DAD EDGE - Live Legendary"
         width={320}
         height={90}
         priority
