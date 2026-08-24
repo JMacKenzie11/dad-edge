@@ -138,21 +138,28 @@ export function RowEditor({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2 items-center">
-        {!voiceLintPassed && lintHits.length === 0 ? (
-          <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-warning)]">
-            VOICE LINT FAILED - REGEN OR EDIT
-          </span>
-        ) : null}
         <div className="flex gap-2 ml-auto">
+          {/* Lint-failed rows get an APPROVE ANYWAY variant instead
+              of a disabled APPROVE, since the lint sometimes flags
+              legitimate copy too literally. Visually distinct
+              (warning color) so the override is intentional. */}
           <form action={approveHelpContent} className="inline">
             <input type="hidden" name="id" value={id} />
-            <SubmitButton
-              variant="primary"
-              label="APPROVE"
-              pendingLabel="…"
-              className="h-9 px-3 text-xs"
-              disabled={!voiceLintPassed}
-            />
+            {voiceLintPassed ? (
+              <SubmitButton
+                variant="primary"
+                label="APPROVE"
+                pendingLabel="…"
+                className="h-9 px-3 text-xs"
+              />
+            ) : (
+              <SubmitButton
+                variant="warning"
+                label="APPROVE ANYWAY"
+                pendingLabel="…"
+                className="h-9 px-3 text-xs"
+              />
+            )}
           </form>
           <button
             type="button"

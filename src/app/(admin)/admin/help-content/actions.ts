@@ -40,6 +40,20 @@ export async function approveHelpContent(formData: FormData) {
   if (!id) redirect("/admin/help-content?error=Missing+id");
 
   const svc = createSupabaseServiceClient();
+
+  // Read current lint status so we can audit-log lint-override
+  // approvals distinctly. Not blocking — approve works either way,
+  // per product decision that some lint hits are too literal to
+  // require an edit.
+  const { data: existing } = await svc
+    .from("help_content")
+    .select("voice_lint_passed")
+    .eq("id", id)
+    .maybeSingle();
+  const wasLintPassed = Boolean(
+    (existing as { voice_lint_passed: boolean } | null)?.voice_lint_passed,
+  );
+
   const { error } = await svc
     .from("help_content")
     .update({
@@ -56,13 +70,20 @@ export async function approveHelpContent(formData: FormData) {
 
   await auditLog({
     actor_user_id: admin.id,
-    action: "help_content.approve",
+    action: wasLintPassed
+      ? "help_content.approve"
+      : "help_content.approve_override",
     target_type: "help_content",
     target_id: id,
+    metadata: { voice_lint_passed: wasLintPassed },
   });
 
   revalidatePath("/admin/help-content");
-  redirect("/admin/help-content?saved=Approved");
+  redirect(
+    wasLintPassed
+      ? "/admin/help-content?saved=Approved"
+      : "/admin/help-content?saved=Approved+(lint+override)",
+  );
 }
 
 // ---------------------------------------------------------------------------
