@@ -19,7 +19,8 @@
     "migrate:itc": "tsx scripts/migrate-itc-participants.ts",
     "reset:onboarding": "tsx scripts/reset-onboarding.ts",
     "help:extract": "tsx scripts/help/extract-routes.ts",
-    "help:generate": "tsx scripts/help/generate-content.ts"
+    "help:generate": "tsx scripts/help/generate-content.ts",
+    "help:check-stale": "tsx scripts/help/check-staleness.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",
