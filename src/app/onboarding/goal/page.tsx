@@ -37,7 +37,7 @@ export default async function GoalStep({
   const quarter = currentQuarterInfo();
   return (
     <div>
-      <StepProgress step={5} total={7} />
+      <StepProgress step={6} total={8} />
       <h1 className="font-heading text-3xl mb-2">
         Your Q{quarter.quarterNumber} goal.
       </h1>

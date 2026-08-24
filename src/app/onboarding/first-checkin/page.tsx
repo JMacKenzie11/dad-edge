@@ -15,7 +15,7 @@ export default async function FirstCheckinStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={7} total={7} />
+      <StepProgress step={8} total={8} />
       <h1 className="font-heading text-3xl mb-2">Log today.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Day one is never a zero. Tap once for done, twice for missed.

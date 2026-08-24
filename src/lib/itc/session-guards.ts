@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { ONBOARDING_STEPS_TOTAL, onboardingRouteFor } from "@/lib/session";
 import {
   getParticipantById,
   upsertParticipantByEmail,
@@ -54,13 +55,28 @@ export async function requireItcParticipant(): Promise<ItcParticipant> {
     if (user) {
       const { data: userRow } = await supabase
         .from("users")
-        .select("id, email, itc_access")
+        .select("id, email, itc_access, onboarding_step, is_platform_admin")
         .eq("id", user.id)
         .maybeSingle();
       const row = userRow as
-        | { id: string; email: string; itc_access: boolean }
+        | {
+            id: string;
+            email: string;
+            itc_access: boolean;
+            onboarding_step: number | null;
+            is_platform_admin: boolean;
+          }
         | null;
       if (row?.itc_access) {
+        // ITC users go through the same onboarding wizard as main-app
+        // users before landing on /itc. Platform admins bypass so
+        // testing/preview stays frictionless. When onboarding
+        // completes, saveFirstCheckin routes ITC users back to /itc
+        // via currentUserHasItcAccess.
+        const step = row.onboarding_step ?? 0;
+        if (!row.is_platform_admin && step < ONBOARDING_STEPS_TOTAL) {
+          redirect(onboardingRouteFor(step));
+        }
         // Main-app user with ITC access. Upsert the participant row
         // by email so /itc/* code that resolves via participant_id
         // continues to work. The migration script (F apply) already

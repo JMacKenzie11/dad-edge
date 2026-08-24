@@ -4,6 +4,7 @@ import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -51,9 +52,32 @@ export default async function MePage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <header>
-        <h1 className="font-heading text-3xl">Me</h1>
-        <p className="text-sm text-[color:var(--color-text-muted)] mt-1">{user.email}</p>
+      <header className="flex items-center gap-4">
+        <UserAvatar
+          url={user.avatar_url}
+          firstName={user.first_name}
+          lastName={user.last_name}
+          email={user.email}
+        />
+        <div className="min-w-0 flex-1">
+          <h1 className="font-heading text-3xl truncate">
+            {[user.first_name, user.last_name].filter(Boolean).join(" ") || "Me"}
+          </h1>
+          <p className="text-sm text-[color:var(--color-text-muted)] truncate">
+            {user.email}
+          </p>
+          {user.city ? (
+            <p className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+              {user.city}
+            </p>
+          ) : null}
+        </div>
+        <Link
+          href="/onboarding/profile"
+          className="text-xs text-[color:var(--color-text-muted)] underline shrink-0"
+        >
+          Edit
+        </Link>
       </header>
 
       <Link

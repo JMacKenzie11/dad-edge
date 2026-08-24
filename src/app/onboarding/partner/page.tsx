@@ -9,7 +9,7 @@ const LABELS = ["wife", "partner", "girlfriend", "fiancee", "husband", "boyfrien
 export default async function PartnerStep() {
   return (
     <div>
-      <StepProgress step={3} total={7} />
+      <StepProgress step={4} total={8} />
       <h1 className="font-heading text-3xl mb-2">Your partner.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Optional. Only you see this. Your coach uses it. Your group never does.

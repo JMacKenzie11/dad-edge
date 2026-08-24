@@ -21,6 +21,9 @@ export type SessionUser = {
   onboarding_step: number;
   occupation: string | null;
   employment_type: EmploymentType | null;
+  avatar_url: string | null;
+  city: string | null;
+  phone: string | null;
 };
 
 /**
@@ -34,7 +37,7 @@ export async function requireUser(): Promise<SessionUser> {
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, email, first_name, last_name, timezone, is_platform_admin, subscription_status, canceled_at, onboarding_step, occupation, employment_type")
+    .select("id, email, first_name, last_name, timezone, is_platform_admin, itc_access, subscription_status, canceled_at, onboarding_step, occupation, employment_type, avatar_url, city, phone")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -44,6 +47,10 @@ export async function requireUser(): Promise<SessionUser> {
     onboarding_step: number | null;
     occupation: string | null;
     employment_type: EmploymentType | null;
+    avatar_url: string | null;
+    city: string | null;
+    phone: string | null;
+    itc_access: boolean | null;
   } & Record<string, unknown>;
   return {
     ...(row as unknown as SessionUser),
@@ -51,7 +58,28 @@ export async function requireUser(): Promise<SessionUser> {
     onboarding_step: row.onboarding_step ?? 0,
     occupation: row.occupation,
     employment_type: row.employment_type,
+    avatar_url: row.avatar_url,
+    city: row.city,
+    phone: row.phone,
   };
+}
+
+/** Whether this session has ITC access. Read once at requireUser, kept
+ *  off SessionUser (since not all consumers care), exposed via a
+ *  helper for post-onboarding redirect decisions. Column may be null
+ *  on rows that predate the auth-phase migration — treat as false. */
+export async function currentUserHasItcAccess(): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await supabase
+    .from("users")
+    .select("itc_access")
+    .eq("id", user.id)
+    .maybeSingle();
+  return Boolean((data as { itc_access: boolean | null } | null)?.itc_access);
 }
 
 /**
@@ -73,22 +101,27 @@ export async function requireAccess(options?: {
   if (
     !options?.allowIncompleteOnboarding &&
     !user.is_platform_admin &&
-    user.onboarding_step < 7
+    user.onboarding_step < ONBOARDING_STEPS_TOTAL
   ) {
     redirect(onboardingRouteFor(user.onboarding_step));
   }
   return { user, readOnly: decision.access === "read_only" };
 }
 
+/** Total number of onboarding steps. Bumped from 7 → 8 with the new
+ *  /onboarding/profile step (picture, city, phone) inserted at step 1. */
+export const ONBOARDING_STEPS_TOTAL = 8;
+
 export function onboardingRouteFor(step: number): string {
   switch (step) {
     case 0: return "/onboarding";
-    case 1: return "/onboarding/why";
-    case 2: return "/onboarding/partner";
-    case 3: return "/onboarding/kids";
-    case 4: return "/onboarding/goal";
-    case 5: return "/onboarding/mission";
-    case 6: return "/onboarding/first-checkin";
+    case 1: return "/onboarding/profile";
+    case 2: return "/onboarding/why";
+    case 3: return "/onboarding/partner";
+    case 4: return "/onboarding/kids";
+    case 5: return "/onboarding/goal";
+    case 6: return "/onboarding/mission";
+    case 7: return "/onboarding/first-checkin";
     default: return "/today";
   }
 }

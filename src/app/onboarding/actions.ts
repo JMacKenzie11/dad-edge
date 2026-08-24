@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser } from "@/lib/session";
+import { currentUserHasItcAccess, requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
@@ -57,6 +58,88 @@ export async function saveIdentity(formData: FormData) {
     })
     .eq("id", user.id);
   await bumpStep(1);
+  redirect("/onboarding/profile");
+}
+
+const ProfileSchema = z.object({
+  city: z.string().max(120).optional(),
+  phone: z.string().max(40).optional(),
+  avatar_data_url: z.string().max(2_500_000).optional(),
+});
+
+/**
+ * Save profile step: avatar (from a data URL produced by the client-
+ * side cropper), city, and phone. All three are optional-friendly —
+ * users can skip any/all and move on.
+ *
+ * Avatar upload path: the client-side cropper renders the final image
+ * to a canvas and posts it as a base64 data URL (already square,
+ * already the target size). We decode + upload to Supabase Storage
+ * at avatars/{user_id}/profile.jpg using the service client (RLS
+ * would also let the browser upload directly but going through the
+ * server keeps the flow inside the existing form-action pattern
+ * and centralizes the cache-buster logic).
+ */
+export async function saveProfile(formData: FormData) {
+  const user = await requireUser();
+  const parsed = ProfileSchema.safeParse({
+    city: (formData.get("city") ?? undefined) as string | undefined,
+    phone: (formData.get("phone") ?? undefined) as string | undefined,
+    avatar_data_url: (formData.get("avatar_data_url") ?? undefined) as
+      | string
+      | undefined,
+  });
+  if (!parsed.success) {
+    redirect("/onboarding/profile?error=Something+about+your+input+isn%27t+valid.");
+  }
+
+  const updates: Record<string, unknown> = {
+    city: parsed.data.city?.trim() || null,
+    phone: parsed.data.phone?.trim() || null,
+  };
+
+  // Upload avatar if the cropper produced one. Data URL shape:
+  //   data:image/jpeg;base64,<payload>
+  const dataUrl = parsed.data.avatar_data_url?.trim();
+  if (dataUrl && dataUrl.startsWith("data:image/")) {
+    const commaIdx = dataUrl.indexOf(",");
+    const meta = dataUrl.slice(5, commaIdx); // "image/jpeg;base64"
+    const [mime] = meta.split(";");
+    const base64 = dataUrl.slice(commaIdx + 1);
+    const bytes = Buffer.from(base64, "base64");
+    const svc = createSupabaseServiceClient();
+    const ext = mime === "image/png" ? "png" : "jpg";
+    const path = `${user.id}/profile.${ext}`;
+    const { error: uploadErr } = await svc.storage
+      .from("avatars")
+      .upload(path, bytes, {
+        contentType: mime,
+        upsert: true,
+        cacheControl: "3600",
+      });
+    if (uploadErr) {
+      console.warn("[onboarding] avatar upload failed: %s", uploadErr.message);
+      redirect(
+        "/onboarding/profile?error=" +
+          encodeURIComponent(`Avatar upload failed: ${uploadErr.message}`),
+      );
+    }
+    const {
+      data: { publicUrl },
+    } = svc.storage.from("avatars").getPublicUrl(path);
+    // Append cache-buster so browsers pick up the new avatar even
+    // though the URL path itself is stable.
+    updates.avatar_url = `${publicUrl}?v=${Date.now()}`;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  await supabase.from("users").update(updates).eq("id", user.id);
+  await bumpStep(2);
+  redirect("/onboarding/why");
+}
+
+export async function skipProfile() {
+  await bumpStep(2);
   redirect("/onboarding/why");
 }
 
@@ -66,7 +149,7 @@ export async function saveWhy(formData: FormData) {
   if (why.length < 8) redirect("/onboarding/why?error=Give+it+a+real+answer.");
   const supabase = await createSupabaseServerClient();
   await supabase.from("users").update({ why_yes: why }).eq("id", user.id);
-  await bumpStep(2);
+  await bumpStep(3);
   redirect("/onboarding/partner");
 }
 
@@ -110,12 +193,12 @@ export async function savePartner(formData: FormData) {
       { onConflict: "user_id" },
     );
   }
-  await bumpStep(3);
+  await bumpStep(4);
   redirect("/onboarding/kids");
 }
 
 export async function skipPartner() {
-  await bumpStep(3);
+  await bumpStep(4);
   redirect("/onboarding/kids");
 }
 
@@ -145,7 +228,7 @@ export async function addKid(formData: FormData) {
 }
 
 export async function finishKids() {
-  await bumpStep(4);
+  await bumpStep(5);
   redirect("/onboarding/goal");
 }
 
@@ -178,7 +261,7 @@ export async function saveFirstGoal(formData: FormData) {
     source: "user",
     midpoint_check_at: midpointCheckAt,
   });
-  await bumpStep(5);
+  await bumpStep(6);
   redirect("/onboarding/mission");
 }
 
@@ -216,7 +299,7 @@ export async function saveFirstMission(formData: FormData) {
     target_date: parsed.data.target_date,
     created_by: "user",
   });
-  await bumpStep(6);
+  await bumpStep(7);
   redirect("/onboarding/first-checkin");
 }
 
@@ -248,6 +331,9 @@ export async function saveFirstCheckin(formData: FormData) {
   await supabase
     .from("daily_checkins")
     .upsert(rows, { onConflict: "user_id,date,pillar_code" });
-  await bumpStep(7);
-  redirect("/today");
+  await bumpStep(8);
+  // ITC users land back on /itc after finishing the wizard (that's
+  // the surface they came in for). Everyone else goes to /today.
+  const hasItc = await currentUserHasItcAccess();
+  redirect(hasItc ? "/itc" : "/today");
 }

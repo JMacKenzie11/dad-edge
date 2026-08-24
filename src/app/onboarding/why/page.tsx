@@ -13,7 +13,7 @@ export default async function WhyStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={2} total={7} />
+      <StepProgress step={3} total={8} />
       <h1 className="font-heading text-3xl mb-2">What made you say yes to this?</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Your coach reads this first.

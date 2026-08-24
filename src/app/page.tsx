@@ -24,12 +24,6 @@ export default function LandingPage() {
         >
           Sign in
         </Link>
-        <Link
-          href="/design"
-          className="px-5 py-3 font-heading text-sm rounded-md border border-[color:var(--color-border)] text-[color:var(--color-text)]"
-        >
-          Design system
-        </Link>
       </div>
     </main>
   );

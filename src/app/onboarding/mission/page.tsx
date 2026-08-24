@@ -40,7 +40,7 @@ export default async function MissionStep({
 
   return (
     <div>
-      <StepProgress step={6} total={7} />
+      <StepProgress step={7} total={8} />
       <h1 className="font-heading text-3xl mb-2">Your first mission.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Behavior plus day. That's the format.
