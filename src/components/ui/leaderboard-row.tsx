@@ -1,12 +1,24 @@
 import { cn } from "@/lib/cn";
 import { StreakChip } from "./streak-chip";
 
+/**
+ * Leaderboard row. Displays three numbers per member:
+ *   - Daily: X/49  (7 checkable pillars × 7 days)
+ *   - Missions: Y/Z  (completed / planned)
+ *   - Total: (X+Y)/(49+Z)  (combined weekly score)
+ *
+ * No composite score. Ranking upstream is by combined_total with
+ * daily as tiebreaker; this component just displays.
+ */
 export function LeaderboardRow({
   rank,
   name,
   dailyTotal,
-  missionRate,
-  composite,
+  dailyMax,
+  missionCompleted,
+  missionPlanned,
+  combinedTotal,
+  combinedMax,
   streakDays,
   delta,
   className,
@@ -14,8 +26,11 @@ export function LeaderboardRow({
   rank: number;
   name: string;
   dailyTotal: number;
-  missionRate: number;
-  composite: number;
+  dailyMax: number;
+  missionCompleted: number;
+  missionPlanned: number;
+  combinedTotal: number;
+  combinedMax: number;
   streakDays: number;
   delta?: number;
   className?: string;
@@ -38,11 +53,12 @@ export function LeaderboardRow({
       <div className="min-w-0">
         <p className="font-heading text-sm truncate">{name}</p>
         <p className="text-xs text-[color:var(--color-text-muted)]">
-          Daily {dailyTotal}/56 · Missions {Math.round(missionRate * 100)}%
+          Daily {dailyTotal}/{dailyMax} · Missions {missionCompleted}/{missionPlanned || "—"}
         </p>
       </div>
       <span className="text-2xl font-heading text-[color:var(--color-accent)]">
-        {composite.toFixed(0)}
+        {combinedTotal}
+        <span className="text-xs text-[color:var(--color-text-muted)]">/{combinedMax}</span>
       </span>
       <StreakChip days={streakDays} />
       {typeof delta === "number" ? (
@@ -52,7 +68,7 @@ export function LeaderboardRow({
             color: delta > 0 ? "var(--color-success)" : delta < 0 ? "var(--color-danger)" : "var(--color-text-muted)",
           }}
         >
-          {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"} {Math.abs(delta)}
+          {delta > 0 ? "▲" : delta < 0 ? "▼" : ""} {Math.abs(delta)}
         </span>
       ) : (
         <span />

@@ -98,11 +98,11 @@ export default async function LeaderboardPage({
     checkins: checkinsAll,
     missions: missionsAll,
     weekDates: priorWeek,
-    priorWeekComposites: {},
+    priorWeekCombined: {},
     engagementStreaks: {},
   });
-  const priorComposite: Record<string, number> = {};
-  for (const e of priorEntries) priorComposite[e.user_id] = e.composite;
+  const priorCombined: Record<string, number> = {};
+  for (const e of priorEntries) priorCombined[e.user_id] = e.combined_total;
 
   let entries;
   if (tab === "monthly") {
@@ -116,7 +116,7 @@ export default async function LeaderboardPage({
       checkins: checkinsAll,
       missions: missionsAll,
       weekDates: monthDates,
-      priorWeekComposites: {},
+      priorWeekCombined: {},
       engagementStreaks: streaks,
     });
   } else if (tab === "streaks") {
@@ -126,10 +126,12 @@ export default async function LeaderboardPage({
         first_name: u.first_name,
         last_name: u.last_name,
         daily_total: 0,
+        daily_max: 49,
         mission_completed: 0,
-        mission_missed: 0,
+        mission_planned: 0,
         mission_rate: 0,
-        composite: streaks[u.id] ?? 0,
+        combined_total: streaks[u.id] ?? 0,
+        combined_max: 49,
         streak_days: streaks[u.id] ?? 0,
         delta_vs_prior: 0,
       }))
@@ -140,7 +142,7 @@ export default async function LeaderboardPage({
       checkins: checkinsAll,
       missions: missionsAll,
       weekDates: week,
-      priorWeekComposites: priorComposite,
+      priorWeekCombined: priorCombined,
       engagementStreaks: streaks,
     });
   }
@@ -183,8 +185,11 @@ export default async function LeaderboardPage({
               rank={i + 1}
               name={[e.first_name, e.last_name].filter(Boolean).join(" ") || "Unnamed"}
               dailyTotal={e.daily_total}
-              missionRate={e.mission_rate}
-              composite={e.composite}
+              dailyMax={e.daily_max}
+              missionCompleted={e.mission_completed}
+              missionPlanned={e.mission_planned}
+              combinedTotal={e.combined_total}
+              combinedMax={e.combined_max}
               streakDays={e.streak_days}
               delta={tab === "weekly" ? e.delta_vs_prior : undefined}
             />

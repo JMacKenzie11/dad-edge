@@ -31,14 +31,15 @@ export type MemberStats = {
   role: "member" | "leader";
 
   // This week
-  weekTotal: number; // 0..56 (includes derived A2)
+  weekTotal: number; // 0..49 (7 daily-checkable pillars × 7 days; excludes Action)
   weekTotalPrev: number;
   weekMissionsCompleted: number;
+  weekMissionsPlanned: number; // total missions with target_date in the week (any status)
   weekMissionsAttempted: number; // completed + missed
   weekMissionsOnTimeRate: number; // 0..1
 
   // 4-week rolling
-  fourWeekTotal: number; // 0..(56*4)
+  fourWeekTotal: number; // 0..(49*4)
   fourWeekMissionsCompleted: number;
   fourWeekMissionsAttempted: number;
   fourWeekMissionsOnTimeRate: number;
@@ -103,20 +104,19 @@ export function computeCommunityStats(opts: {
     const missions = missionsByUser.get(m.user_id) ?? [];
 
     // Build a set of (date, pillar) with value=1 for streaks + totals.
+    // A2 is NOT counted in the weekly total (Action is scored via
+    // completed-mission count, separate from the daily-pillars total).
     const doneSet = new Set<string>();
     for (const r of rows) {
-      if (r.value === 1) doneSet.add(`${r.date}|${r.pillar_code}`);
+      if (r.value === 1 && r.pillar_code !== "A2") {
+        doneSet.add(`${r.date}|${r.pillar_code}`);
+      }
     }
-    // Inject derived A2 for each date in the 4-week window.
     const missionsInWindow = missions.filter(
       (mn) => mn.target_date >= fourWeekStart && mn.target_date <= week[6],
     );
-    for (const d of fourWeekDates) {
-      const a2 = deriveA2ForDate(missionsInWindow, d);
-      if (a2 === 1) doneSet.add(`${d}|A2`);
-    }
 
-    // Weekly totals.
+    // Weekly totals — 7 daily pillars only, max 49 per week.
     const weekTotal = totalForWindow(doneSet, week);
     const weekTotalPrev = totalForWindow(doneSet, prevWeek);
     const fourWeekTotal = totalForWindow(doneSet, fourWeekDates);
@@ -128,6 +128,7 @@ export function computeCommunityStats(opts: {
     const weekCompleted = thisWeekMissions.filter((mn) => mn.status === "completed").length;
     const weekMissed = thisWeekMissions.filter((mn) => mn.status === "missed").length;
     const weekAttempted = weekCompleted + weekMissed;
+    const weekPlanned = thisWeekMissions.length;
     const weekOnTime = thisWeekMissions.filter(
       (mn) => mn.status === "completed" && !mn.completed_late,
     ).length;
@@ -181,6 +182,7 @@ export function computeCommunityStats(opts: {
       weekTotal,
       weekTotalPrev,
       weekMissionsCompleted: weekCompleted,
+      weekMissionsPlanned: weekPlanned,
       weekMissionsAttempted: weekAttempted,
       weekMissionsOnTimeRate: weekOnTimeRate,
       fourWeekTotal,

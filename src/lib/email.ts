@@ -183,10 +183,10 @@ export async function sendDailyReminderEmail(opts: {
   return send({
     to: opts.to,
     subject: "Log today.",
-    text: `${greeting},\n\nWeek total: ${opts.weekTotal}/56. Engagement streak: ${opts.streak}.\n\nLog today: ${url}\n\n— BRAVE MAN OS`,
+    text: `${greeting},\n\nWeek total: ${opts.weekTotal}/49. Engagement streak: ${opts.streak}.\n\nLog today: ${url}\n\nBRAVE MAN OS`,
     html: shell(
       "Log today.",
-      `<p>${greeting},</p><p>Week total: <strong>${opts.weekTotal}/56</strong>. Engagement streak: <strong>${opts.streak}</strong>.</p>
+      `<p>${greeting},</p><p>Week total: <strong>${opts.weekTotal}/49</strong>. Engagement streak: <strong>${opts.streak}</strong>.</p>
        <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Log today</a></p>`,
     ),
   });
@@ -202,7 +202,7 @@ export async function sendMissionDayNudgeEmail(opts: {
   return send({
     to: opts.to,
     subject: "Mission day. Report back.",
-    text: `${greeting},\n\nToday's mission: ${opts.missionDescription}\n\nReport back: ${url}\n\n— BRAVE MAN OS`,
+    text: `${greeting},\n\nToday's mission: ${opts.missionDescription}\n\nReport back: ${url}\n\nBRAVE MAN OS`,
     html: shell(
       "Mission day.",
       `<p>${greeting},</p><p><strong>${opts.missionDescription}</strong></p>
@@ -226,7 +226,7 @@ export async function sendDisengagementEmail(opts: {
   return send({
     to: opts.to,
     subject: opts.tone === "direct" ? "You've gone quiet." : "Log today.",
-    text: `${greeting},\n\n${line}\n\n${url}\n\n— BRAVE MAN OS`,
+    text: `${greeting},\n\n${line}\n\n${url}\n\nBRAVE MAN OS`,
     html: shell(
       opts.tone === "direct" ? "You've gone quiet." : "Log today.",
       `<p>${greeting},</p><p>${line}</p>
@@ -244,7 +244,7 @@ export async function sendLeaderDisengagementAlert(opts: {
   const url = `${APP_URL}/leader/disengagement`;
   return send({
     to: opts.to,
-    subject: `${opts.memberName} — ${opts.daysSince} days silent`,
+    subject: `${opts.memberName}: ${opts.daysSince} days silent`,
     text: `${opts.memberName} (${opts.communityName}) hasn't logged in ${opts.daysSince} days. Time to reach out.\n\n${url}`,
     html: shell(
       "Reach out.",
@@ -266,11 +266,11 @@ export async function sendWeekCloseEmail(opts: {
   const url = `${APP_URL}/today`;
   const line = opts.daysUnlogged > 0
     ? `${opts.daysUnlogged} day${opts.daysUnlogged === 1 ? "" : "s"} unlogged.`
-    : `Week's in the books at ${opts.weekTotal}/56.`;
+    : `Week's in the books at ${opts.weekTotal}/49.`;
   return send({
     to: opts.to,
     subject: `Week locks ${opts.locksAt}.`,
-    text: `${greeting},\n\n${line} Week locks ${opts.locksAt}.\n\n${url}\n\n— BRAVE MAN OS`,
+    text: `${greeting},\n\n${line} Week locks ${opts.locksAt}.\n\n${url}\n\nBRAVE MAN OS`,
     html: shell(
       "Week close.",
       `<p>${greeting},</p><p>${line} Week locks <strong>${opts.locksAt}</strong>.</p>
@@ -288,8 +288,8 @@ export async function sendDigestEmail(opts: {
 }) {
   return send({
     to: opts.to,
-    subject: `${opts.communityName} — week of ${opts.weekStart}`,
+    subject: `${opts.communityName}: week of ${opts.weekStart}`,
     text: opts.textBody,
-    html: shell(`${opts.communityName} — week of ${opts.weekStart}`, opts.htmlBody),
+    html: shell(`${opts.communityName}: week of ${opts.weekStart}`, opts.htmlBody),
   });
 }

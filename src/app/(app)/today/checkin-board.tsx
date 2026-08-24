@@ -21,9 +21,11 @@ export function CheckinBoard({
 }) {
   const [values, setValues] = useState<Values>(initial);
   const [, startTransition] = useTransition();
+  // Daily count excludes A (Action) — Action is scored separately via
+  // completed missions, not the daily-pillar total.
   const count = PILLARS.reduce((n, p) => {
-    const v = p.code === "A2" ? actionValue : values[p.code];
-    return n + (v === 1 ? 1 : 0);
+    if (p.code === "A2") return n;
+    return n + (values[p.code] === 1 ? 1 : 0);
   }, 0);
 
   const update = (code: PillarCode, v: 0 | 1 | null) => {
@@ -46,7 +48,7 @@ export function CheckinBoard({
         </p>
         <p className="font-heading text-4xl text-[color:var(--color-accent)]">
           {count}
-          <span className="text-lg text-[color:var(--color-text-muted)]">/8</span>
+          <span className="text-lg text-[color:var(--color-text-muted)]">/7</span>
         </p>
       </div>
       <div className="grid grid-cols-4 gap-3">
@@ -62,7 +64,8 @@ export function CheckinBoard({
         ))}
       </div>
       <p className="text-[10px] text-[color:var(--color-text-muted)] mt-2">
-        Action (A) is auto — it flips to 1 when a mission dated today is marked done.
+        Action (A) is tracked from your missions. Each completed mission
+        counts as one Action point for the week.
       </p>
     </div>
   );

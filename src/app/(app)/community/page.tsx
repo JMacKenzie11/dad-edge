@@ -143,7 +143,7 @@ export default async function CommunityPage() {
 
   // Rows.
   const weekDailyRows = topRows(weekDaily, isSelf, (m) => ({
-    primary: `${m.weekTotal}/56`,
+    primary: `${m.weekTotal}/49`,
     secondary: `vs ${m.weekTotalPrev} last wk`,
     delta: weekDeltas[m.userId] ?? 0,
   }));
@@ -192,11 +192,11 @@ export default async function CommunityPage() {
             </p>
             <p className="font-heading text-2xl">
               {meRow.weekTotal}
-              <span className="text-sm text-[color:var(--color-text-muted)]">/56</span>
+              <span className="text-sm text-[color:var(--color-text-muted)]">/49</span>
               <span className="mx-2 text-[color:var(--color-text-muted)]">·</span>
               {meRow.weekMissionsCompleted}
               <span className="text-sm text-[color:var(--color-text-muted)]">/
-                {meRow.weekMissionsAttempted || meRow.weekMissionsCompleted} missions
+                {meRow.weekMissionsPlanned || meRow.weekMissionsCompleted} missions
               </span>
             </p>
           </div>

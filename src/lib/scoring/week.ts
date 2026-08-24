@@ -24,12 +24,57 @@ export function weekDates(mondayISO: string): string[] {
 export type CheckinRow = { date: string; pillar_code: PillarCode; value: 0 | 1 };
 
 /**
- * Weekly Daily Living total per §4: sum of 1s across 8 pillars × 7 days.
- * Blank (no row) and 0 both count as zero — the app displays them differently,
- * but scoring is identical.
+ * Max weekly Daily Living score — 7 manually-checkable pillars
+ * (B/R/A/V/E/M/N) × 7 days. A2 (Action) is scored separately via
+ * mission completion — see `missionScore` below and A2 semantics in
+ * scoring/action.ts.
+ */
+export const DAILY_PILLARS_WEEKLY_MAX = 49;
+
+/**
+ * Weekly Daily Living total: sum of 1s across the 7 manually-checkable
+ * pillars × 7 days. A2 rows are excluded (Action credit comes from
+ * completed missions, counted separately). Blank (no row) and 0 both
+ * count as zero.
+ *
+ * (Renamed conceptually from "sum of 8 pillars × 7 = 56" to "sum of
+ * 7 pillars × 7 = 49" — Action moved to per-completed-mission scoring
+ * on 2026-08-24. The name stays for callsite continuity.)
  */
 export function dailyLivingWeekTotal(rows: CheckinRow[]): number {
-  return rows.reduce((n, r) => n + (r.value === 1 ? 1 : 0), 0);
+  return rows.reduce(
+    (n, r) => n + (r.pillar_code !== "A2" && r.value === 1 ? 1 : 0),
+    0,
+  );
+}
+
+/**
+ * Mission-based score for the week: completed count + planned count.
+ * `completed` = missions where target_date is in the week AND status
+ * is 'completed'. `planned` = missions with target_date in the week
+ * regardless of status (includes completed, missed, rolled_over) —
+ * this is the denominator: "of the missions you set for the week,
+ * how many did you land." Rolled_over missions ARE included so a
+ * planned-then-rolled mission still shows in the denominator.
+ */
+export type MissionScoreRow = {
+  target_date: string;
+  status: string;
+};
+
+export function missionScore(
+  missions: MissionScoreRow[],
+  weekIsoDates: string[],
+): { completed: number; planned: number } {
+  const inWeek = new Set(weekIsoDates);
+  let completed = 0;
+  let planned = 0;
+  for (const m of missions) {
+    if (!inWeek.has(m.target_date)) continue;
+    planned += 1;
+    if (m.status === "completed") completed += 1;
+  }
+  return { completed, planned };
 }
 
 /**

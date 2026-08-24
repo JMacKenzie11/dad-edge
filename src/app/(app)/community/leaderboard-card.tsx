@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type LeaderboardRow = {
   userId: string;
   name: string;
-  primary: string; // main metric shown right-aligned (e.g. "42/56", "8/10 · 88%", "9.4")
+  primary: string; // main metric shown right-aligned (e.g. "42/49", "8/10 · 88%", "9.4")
   secondary?: string; // small caption under name (e.g. "3 exemplars", "vs 32 last wk")
   delta?: number; // rank change vs prior period (positive = moved up)
   highlight?: boolean; // self row

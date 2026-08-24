@@ -92,7 +92,7 @@ export default function DesignSystemPage() {
               <CardTitle>This week</CardTitle>
             </CardHeader>
             <CardBody>
-              <p className="font-heading text-5xl">42<span className="text-2xl text-[color:var(--color-text-muted)]">/56</span></p>
+              <p className="font-heading text-5xl">42<span className="text-2xl text-[color:var(--color-text-muted)]">/49</span></p>
               <p className="text-sm text-[color:var(--color-text-muted)] mt-2">
                 Weekly Daily Living. Locks Wednesday.
               </p>
@@ -169,10 +169,10 @@ export default function DesignSystemPage() {
 
       <Section title="Leaderboard">
         <div className="space-y-2">
-          <LeaderboardRow rank={1} name="Steve W" dailyTotal={52} missionRate={0.8} composite={60} streakDays={31} delta={2} />
-          <LeaderboardRow rank={2} name="Tim C" dailyTotal={49} missionRate={0.75} composite={57} streakDays={22} delta={-1} />
-          <LeaderboardRow rank={3} name="John Y" dailyTotal={44} missionRate={0.6} composite={49} streakDays={14} delta={0} />
-          <LeaderboardRow rank={4} name="Parker B" dailyTotal={38} missionRate={0.5} composite={42} streakDays={7} delta={1} />
+          <LeaderboardRow rank={1} name="Steve W" dailyTotal={45} dailyMax={49} missionCompleted={8} missionPlanned={10} combinedTotal={53} combinedMax={59} streakDays={31} delta={2} />
+          <LeaderboardRow rank={2} name="Tim C" dailyTotal={42} dailyMax={49} missionCompleted={7} missionPlanned={9} combinedTotal={49} combinedMax={58} streakDays={22} delta={-1} />
+          <LeaderboardRow rank={3} name="John Y" dailyTotal={38} dailyMax={49} missionCompleted={5} missionPlanned={8} combinedTotal={43} combinedMax={57} streakDays={14} delta={0} />
+          <LeaderboardRow rank={4} name="Parker B" dailyTotal={30} dailyMax={49} missionCompleted={4} missionPlanned={8} combinedTotal={34} combinedMax={57} streakDays={7} delta={1} />
         </div>
       </Section>
 

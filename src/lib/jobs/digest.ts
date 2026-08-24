@@ -171,14 +171,14 @@ function renderDigestHtml(
       <td style="padding:6px 8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;color:${
         i < 3 ? "#0075c9" : "#fff"
       };">${i + 1}. ${escape(m.name)}</td>
-      <td style="padding:6px 8px;text-align:right;">${m.weekTotal}/56</td>
+      <td style="padding:6px 8px;text-align:right;">${m.weekTotal}/49</td>
       <td style="padding:6px 8px;text-align:right;color:#0075c9;">${m.missionsCompleted}/${m.missionsPlanned}</td>
       <td style="padding:6px 8px;text-align:right;color:#ff5f00;">${m.streak}d</td>
     </tr>`,
     )
     .join("");
   return `
-    <p><strong>Avg week total:</strong> ${body.totals.avg_week_total}/56 ·
+    <p><strong>Avg week total:</strong> ${body.totals.avg_week_total}/49 ·
        <strong>Missions:</strong> ${body.totals.missions_completed}/${body.totals.missions_planned}</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;color:#fff;margin-top:12px;">
       <thead>
@@ -203,11 +203,11 @@ function renderDigestText(
 ) {
   const lines = body.members.map(
     (m, i) =>
-      `${(i + 1).toString().padStart(2, " ")}. ${m.name.padEnd(28)} ${m.weekTotal}/56  ${m.missionsCompleted}/${m.missionsPlanned} missions  ${m.streak}d`,
+      `${(i + 1).toString().padStart(2, " ")}. ${m.name.padEnd(28)} ${m.weekTotal}/49  ${m.missionsCompleted}/${m.missionsPlanned} missions  ${m.streak}d`,
   );
   return [
-    `${community} — week of ${weekStart}`,
-    `Avg ${body.totals.avg_week_total}/56 · Missions ${body.totals.missions_completed}/${body.totals.missions_planned}`,
+    `${community}: week of ${weekStart}`,
+    `Avg ${body.totals.avg_week_total}/49 · Missions ${body.totals.missions_completed}/${body.totals.missions_planned}`,
     "",
     ...lines,
   ].join("\n");

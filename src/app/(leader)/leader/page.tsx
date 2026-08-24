@@ -71,7 +71,7 @@ export default async function LeaderOverview({
   const stats = [
     { label: "ACTIVE MEMBERS", value: memberIds.length, href: "/leader/members" },
     { label: "DISENGAGED", value: disengagedCount, href: "/leader/disengagement" },
-    { label: "AVG WEEK TOTAL", value: `${avgDailyLiving}/56`, href: "/leader/members" },
+    { label: "AVG WEEK TOTAL", value: `${avgDailyLiving}/49`, href: "/leader/members" },
     {
       label: "MISSIONS THIS WEEK",
       value: `${completedMissions}/${totalMissions}`,
@@ -122,7 +122,7 @@ export default async function LeaderOverview({
                   {u ? [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email : "—"}
                 </span>
                 <span className="text-xs text-[color:var(--color-text-muted)]">
-                  {total}/56 · {last ? `${daysSince}d ago` : "no check-ins"}
+                  {total}/49 · {last ? `${daysSince}d ago` : "no check-ins"}
                 </span>
               </li>
             );
