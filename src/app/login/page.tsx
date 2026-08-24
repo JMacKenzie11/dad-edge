@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { requestPasswordReset, signIn } from "./actions";
-import { SubmitButton } from "./submit-button";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 type Mode = "signin" | "forgot";
 
@@ -102,7 +102,11 @@ function SignInForm({ error, next }: { error?: string; next: string }) {
           required
           minLength={8}
         />
-        <SubmitButton label="SIGN IN" pendingLabel="SIGNING IN…" />
+        <SubmitButton
+          label="SIGN IN"
+          pendingLabel="SIGNING IN…"
+          className="w-full"
+        />
         {error ? (
           <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
         ) : null}
@@ -135,7 +139,11 @@ function ForgotForm({ error, sent }: { error?: string; sent?: string }) {
       ) : null}
       <form action={requestPasswordReset} className="space-y-3">
         <Field label="EMAIL" name="email" type="email" required autoFocus />
-        <SubmitButton label="SEND RESET LINK" pendingLabel="SENDING…" />
+        <SubmitButton
+          label="SEND RESET LINK"
+          pendingLabel="SENDING…"
+          className="w-full"
+        />
         {error ? (
           <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
         ) : null}

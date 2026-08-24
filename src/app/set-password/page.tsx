@@ -2,7 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { updatePassword } from "@/app/login/actions";
-import { SubmitButton } from "@/app/login/submit-button";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +84,7 @@ export default async function SetPasswordPage({
           <SubmitButton
             label="SET PASSWORD AND SIGN IN"
             pendingLabel="SIGNING IN…"
+            className="w-full"
           />
           {params.error ? (
             <p className="text-xs text-[color:var(--color-danger)]">{params.error}</p>

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { format } from "date-fns";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { createAccount, sendInvitesBatch } from "./actions";
+import { BulkDeleteButton } from "./bulk-delete-button";
 
 export const dynamic = "force-dynamic";
 
@@ -135,9 +137,13 @@ export default async function UsersPage({
             />
             Platform admin (bypasses RLS, full access to /admin/*)
           </label>
-          <button className="h-10 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest sm:col-span-2">
-            CREATE ACCOUNT
-          </button>
+          <div className="sm:col-span-2">
+            <SubmitButton
+              label="CREATE ACCOUNT"
+              pendingLabel="CREATING…"
+              className="w-full"
+            />
+          </div>
         </form>
       </section>
 
@@ -165,15 +171,21 @@ export default async function UsersPage({
         </button>
       </form>
 
-      <form action={sendInvitesBatch} className="space-y-2">
-        <div className="flex items-center justify-between">
+      <form action={sendInvitesBatch} className="space-y-2" data-users-form>
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-xs text-[color:var(--color-text-muted)]">
-            Select rows below and Send Invites to the whole batch. Only accounts
-            without a prior invite show the checkbox to prevent duplicates.
+            Tick rows below. SEND INVITES (re-sends for already-invited).
+            DELETE SELECTED asks for typed confirmation.
           </p>
-          <button className="h-9 px-3 rounded-md bg-[color:var(--color-warning)] text-black font-heading text-xs tracking-widest">
-            SEND INVITES (BATCH)
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <BulkDeleteButton formSelector="form[data-users-form]" />
+            <SubmitButton
+              variant="warning"
+              label="SEND INVITES (BATCH)"
+              pendingLabel="SENDING…"
+              className="h-9 px-3 text-xs"
+            />
+          </div>
         </div>
 
         <ul className="divide-y divide-[color:var(--color-border)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] overflow-hidden">
@@ -192,23 +204,19 @@ export default async function UsersPage({
             };
             const name =
               [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
-            const invitable = row.invited_at === null;
             return (
               <li
                 key={row.id}
                 className="px-4 py-3 flex items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  {invitable ? (
-                    <input
-                      type="checkbox"
-                      name="user_ids"
-                      value={row.id}
-                      className="h-4 w-4"
-                    />
-                  ) : (
-                    <span className="h-4 w-4 shrink-0" aria-hidden />
-                  )}
+                  <input
+                    type="checkbox"
+                    name="user_ids"
+                    value={row.id}
+                    className="h-4 w-4"
+                    aria-label={`Select ${row.email}`}
+                  />
                   <div className="min-w-0">
                     <Link
                       href={`/admin/users/${row.id}`}

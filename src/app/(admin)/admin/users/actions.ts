@@ -468,6 +468,85 @@ export async function deleteUser(formData: FormData) {
   );
 }
 
+const DeleteUsersBatchSchema = z.object({
+  user_ids: z.array(z.string().uuid()).min(1).max(100),
+  /** Typed confirmation for the batch — must be the literal string
+   *  "DELETE" (case-sensitive). Same guardrail as the single-delete
+   *  but the confirmation is universal (bulk typing 50 emails is
+   *  impractical). */
+  confirm_text: z.literal("DELETE"),
+});
+
+/**
+ * Batch hard-delete. Loops through user_ids, deleting each. Any
+ * per-user failure is logged and the batch continues — a single bad
+ * row doesn't block the rest.
+ *
+ * Guardrails:
+ *  - Admin can't delete themselves (skipped silently, counted as
+ *    "self" in the summary).
+ *  - Requires typed "DELETE" confirmation from the dialog.
+ *  - Every delete is audit-logged before it fires.
+ */
+export async function deleteUsersBatch(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const raw = formData.getAll("user_ids").map((v) => String(v));
+  const parsed = DeleteUsersBatchSchema.safeParse({
+    user_ids: raw,
+    confirm_text: String(formData.get("confirm_text") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(
+      `/admin/users?error=${encodeURIComponent(
+        "Select at least one user and type DELETE to confirm.",
+      )}`,
+    );
+  }
+
+  const svc = createSupabaseServiceClient();
+  const { data: userRows } = await svc
+    .from("users")
+    .select("id, email")
+    .in("id", parsed.data.user_ids);
+  const rows = (userRows ?? []) as Array<{ id: string; email: string }>;
+
+  let deleted = 0;
+  let failed = 0;
+  let self = 0;
+
+  for (const u of rows) {
+    if (u.id === admin.id) {
+      self += 1;
+      continue;
+    }
+    await auditLog({
+      actor_user_id: admin.id,
+      action: "user.delete",
+      target_type: "user",
+      target_id: u.id,
+      metadata: { email: u.email, batch: true },
+    });
+    const { error: authErr } = await svc.auth.admin.deleteUser(u.id);
+    if (authErr) {
+      console.warn(
+        "[admin] batch delete auth failed for %s: %s",
+        u.email,
+        authErr.message,
+      );
+      failed += 1;
+      continue;
+    }
+    await svc.from("users").delete().eq("id", u.id);
+    deleted += 1;
+  }
+
+  revalidatePath("/admin/users");
+  const summary = `Deleted ${deleted}${
+    self > 0 ? `, skipped self (${self})` : ""
+  }${failed > 0 ? `, ${failed} failed (check logs)` : ""}.`;
+  redirect(`/admin/users?error=${encodeURIComponent(summary)}`);
+}
+
 const AdminFlagSchema = z.object({
   user_id: z.string().uuid(),
   is_platform_admin: z.enum(["on", "off"]).transform((v) => v === "on"),

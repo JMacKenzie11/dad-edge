@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { canAccess } from "@/lib/entitlement";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   deleteUser,
   sendInvite,
@@ -133,12 +134,12 @@ export default async function UserDetailPage({
           </div>
           <form action={sendInvite}>
             <input type="hidden" name="user_id" value={u.id} />
-            <button
-              className="h-9 px-3 rounded-md bg-[color:var(--color-warning)] text-black font-heading text-xs tracking-widest"
-              type="submit"
-            >
-              {u.invited_at ? "RESEND INVITE" : "SEND INVITE"}
-            </button>
+            <SubmitButton
+              variant="warning"
+              label={u.invited_at ? "RESEND INVITE" : "SEND INVITE"}
+              pendingLabel="SENDING…"
+              className="h-9 px-3 text-xs"
+            />
           </form>
         </div>
       </section>
@@ -186,9 +187,11 @@ export default async function UserDetailPage({
                 className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
               />
             </label>
-            <button className="h-10 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest">
-              UPDATE STATUS
-            </button>
+            <SubmitButton
+              label="UPDATE STATUS"
+              pendingLabel="UPDATING…"
+              className="text-xs"
+            />
           </form>
 
           <form action={setPlatformAdmin} className="flex items-center gap-2 text-xs">
@@ -200,9 +203,12 @@ export default async function UserDetailPage({
               id="platform_admin"
             />
             <label htmlFor="platform_admin">Platform admin</label>
-            <button className="ml-auto h-8 px-3 rounded border border-[color:var(--color-border)] font-heading text-[10px] tracking-widest">
-              SAVE
-            </button>
+            <SubmitButton
+              variant="ghost"
+              label="SAVE"
+              pendingLabel="…"
+              className="ml-auto h-8 px-3 text-[10px]"
+            />
           </form>
         </div>
       </section>
@@ -265,12 +271,12 @@ export default async function UserDetailPage({
             placeholder={`Type ${u.email} to confirm`}
             className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-xs flex-1 min-w-0"
           />
-          <button
-            type="submit"
-            className="h-10 px-4 rounded-md bg-[color:var(--color-danger)] text-white font-heading text-xs tracking-widest shrink-0"
-          >
-            DELETE ACCOUNT
-          </button>
+          <SubmitButton
+            variant="danger"
+            label="DELETE ACCOUNT"
+            pendingLabel="DELETING…"
+            className="text-xs shrink-0"
+          />
         </form>
       </section>
 
