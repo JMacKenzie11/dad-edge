@@ -12,6 +12,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/disengagement", label: "Disengagement" },
   { href: "/admin/coach-flags", label: "Coach flags" },
+  { href: "/admin/help-content", label: "Help content" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/audit", label: "Audit log" },
 ];
