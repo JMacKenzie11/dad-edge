@@ -3,12 +3,15 @@ import Image from "next/image";
 import { requireLeader } from "@/lib/admin";
 import { AdminNav } from "@/components/shell/admin-nav";
 import { LeaderCommunityPicker } from "./community-picker";
+import { HelpWidget } from "@/components/help/help-widget";
+import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeaderLayout({ children }: { children: React.ReactNode }) {
   const { user, leaderOf } = await requireLeader();
   return (
+    <CurrentHelpViewProvider>
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 bg-[color:var(--color-bg)]/95 backdrop-blur border-b border-[color:var(--color-border)]">
         <div className="mx-auto max-w-6xl h-14 px-4 flex items-center justify-between">
@@ -40,6 +43,8 @@ export default async function LeaderLayout({ children }: { children: React.React
         <AdminNav scope="leader" />
         <main>{children}</main>
       </div>
+      <HelpWidget role={user.is_platform_admin ? "admin" : "leader"} />
     </div>
+    </CurrentHelpViewProvider>
   );
 }

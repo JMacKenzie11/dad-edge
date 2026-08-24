@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCurrentHelpView } from "@/components/help/current-view-context";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
@@ -22,7 +23,6 @@ import { AssumptionsRow } from "./assumptions-row";
 import { BehaviorsRow } from "./behaviors-row";
 import { ImmuneSystemDiagram } from "./immune-system-diagram";
 import { RegenerateWalkthroughButton } from "./regenerate-walkthrough-button";
-import { CoachDock } from "./coach-dock";
 import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
@@ -78,6 +78,17 @@ export function MapCanvas({
 }) {
   const renderedAt = Date.now();
   const pillar = PILLAR_BY_CODE[map.pillar_code];
+
+  // Publish the active stage to the CurrentHelpView context so the
+  // global Help widget can serve stage-specific content. The URL
+  // doesn't change between stages, so without this signal the
+  // widget would serve the same content on every stage of an ITC
+  // map.
+  const { setCurrentView } = useCurrentHelpView();
+  useEffect(() => {
+    setCurrentView(map.current_stage);
+    return () => setCurrentView(null);
+  }, [map.current_stage, setCurrentView]);
 
   // Group messages by surface + anchor for fast per-entry lookup.
   //
@@ -142,10 +153,9 @@ export function MapCanvas({
       ),
     [messages],
   );
-  const dockMessages = useMemo(
-    () => messages.filter((m) => m.surface === "dock"),
-    [messages],
-  );
+  // dockMessages removed with the CoachDock (2026-08-24). Historical
+  // dock messages remain in the DB for audit / turn-event context but
+  // no surface renders them anymore.
   const threadsByAnchor = useMemo(() => {
     const grouped = new Map<string, ItcMessage[]>();
     for (const m of messages) {
@@ -592,7 +602,10 @@ export function MapCanvas({
           for multi-cycle tests can come back as a dedicated affordance
           later if needed. */}
 
-      <CoachDock mapId={map.id} messages={dockMessages} />
+      {/* CoachDock removed 2026-08-24. The global Help widget mounted
+          via the ITC layout occupies this visual slot; there is no
+          free-form Q&A anywhere in this system. See
+          docs/DECISIONS.md → Context-Aware Help System. */}
     </div>
   );
 }

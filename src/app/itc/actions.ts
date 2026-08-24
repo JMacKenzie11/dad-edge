@@ -17,7 +17,6 @@ import {
   draftCommitmentForWorry,
   draftTestForAssumption,
   draftWorryForBehavior,
-  generateCoachChat,
   generateCoachReaction,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
@@ -264,73 +263,11 @@ const chatSchema = z.object({
   text: z.string().min(1).max(4000),
 });
 
-/**
- * The coach dock: an "Ask the coach" drawer for open questions not
- * tied to any specific map entry. User message + coach reply both
- * persist with surface="dock" so they render in the drawer only,
- * never in the main canvas. Nothing said here writes state.
- */
-export async function sendDockMessage(formData: FormData): Promise<ActionResult> {
-  const participant = await requireItcParticipant();
-  const parsed = chatSchema.safeParse({
-    map_id: formData.get("map_id"),
-    text: formData.get("text"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid message." };
-  const map = await getMapForParticipant(parsed.data.map_id, participant.id);
-  if (!map) return { ok: false, reason: "Map not found." };
-
-  await appendMessage(map.id, "user", parsed.data.text, map.current_stage, {
-    surface: "dock",
-  });
-
-  const events = new TurnEventLog(map.id, 0);
-  events.record(
-    "dock_message",
-    { direction: "user", text: parsed.data.text },
-    { stage: map.current_stage },
-  );
-  try {
-    const { context, history } = await loadCoachContext(map.id);
-    // Coach chat sees the full transcript so it can answer with
-    // awareness of both dock and thread activity.
-    const priorHistory = history.slice(0, -1);
-    const chat = await generateCoachChat({
-      ...context,
-      history: priorHistory,
-      userMessage: parsed.data.text,
-    });
-    if (chat.reply.trim().length > 0) {
-      await appendMessage(map.id, "assistant", chat.reply, map.current_stage, {
-        surface: "dock",
-      });
-      events.record(
-        "dock_message",
-        { direction: "coach", text: chat.reply },
-        { durationMs: chat.durationMs, stage: map.current_stage },
-      );
-    }
-    events.record(
-      "llm_attempt",
-      { kind: "dock", outcome: chat.reply.trim().length > 0 ? "ok" : "empty" },
-      { durationMs: chat.durationMs, stage: map.current_stage },
-    );
-    await events.flush();
-  } catch (err) {
-    console.warn(
-      "[itc sendDockMessage] coach failure: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    events.record("error", {
-      where: "sendDockMessage",
-      message: err instanceof Error ? err.message : String(err),
-    });
-    await events.flush();
-  }
-
-  safeRevalidate(`/itc/${map.id}`);
-  return { ok: true };
-}
+// sendDockMessage + the "Ask the coach" dock were removed 2026-08-24.
+// The global Help widget (src/components/help/help-widget.tsx) replaces
+// the dock's visual slot on ITC pages. No free-form Q&A anywhere in
+// the app. dock_message enum value stays in turn-event history for
+// audit of prior dock exchanges; nothing writes new ones.
 
 /**
  * Reply within an entry's thread. The user's reply lands anchored

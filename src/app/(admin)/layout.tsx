@@ -2,12 +2,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { AdminNav } from "@/components/shell/admin-nav";
+import { HelpWidget } from "@/components/help/help-widget";
+import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePlatformAdmin();
   return (
+    <CurrentHelpViewProvider>
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 bg-[color:var(--color-bg)]/95 backdrop-blur border-b border-[color:var(--color-border)]">
         <div className="mx-auto max-w-6xl h-14 px-4 flex items-center justify-between">
@@ -38,6 +41,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav scope="admin" />
         <main>{children}</main>
       </div>
+      <HelpWidget role="admin" />
     </div>
+    </CurrentHelpViewProvider>
   );
 }
