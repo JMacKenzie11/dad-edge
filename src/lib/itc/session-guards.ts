@@ -53,19 +53,22 @@ export async function requireItcParticipant(): Promise<ItcParticipant> {
       data: { user },
       error: userErr,
     } = await supabase.auth.getUser();
-    // Diagnostic: log what /itc actually sees on entry. We want to
-    // know if cookies from /login → /itc redirects are arriving.
+    // Diagnostic: log what /itc actually sees on entry. Includes
+    // cookie value LENGTHS (not values — safe to log) so we can
+    // distinguish "cookie missing" from "cookie present but empty"
+    // from "cookie present with valid-length value but getUser
+    // rejected it".
     const { cookies } = await import("next/headers");
     const store = await cookies();
-    const cookieNames = store
+    const cookieSummary = store
       .getAll()
-      .map((c) => c.name)
+      .map((c) => `${c.name}(${c.value.length}b)`)
       .join(",");
     console.info(
       "[itc:guard] user=%s err=%s cookies=%s",
       user?.id ?? "(null)",
       userErr?.message ?? "none",
-      cookieNames || "(none)",
+      cookieSummary || "(none)",
     );
     if (user) {
       const { data: userRow } = await supabase
