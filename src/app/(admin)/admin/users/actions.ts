@@ -179,18 +179,27 @@ export async function sendInvite(formData: FormData) {
  * Deliver an activation email to a user, using the right sender for
  * the current stage.
  *
- * Stage A (default, EMAIL_STAGE unset or !== "B"): call
- * supabase.auth.admin.inviteUserByEmail — Supabase generates the
- * link AND sends its own default template. Ugly, unbranded, but
- * unblocks testing without any DNS work. Safe for internal use;
- * MUST NOT be used to invite a real person (spec Section 4).
+ * Uses Supabase's RECOVERY link, not INVITE. Rationale: createAccount
+ * has already created the auth.users row (email_confirm=true, no
+ * password), so the user *already exists*. Supabase's invite type
+ * (inviteUserByEmail / generateLink type=invite) refuses existing
+ * users with "A user with this email address has already been
+ * registered". Recovery works whether the user has a password or
+ * not, drops them into a session, and — with redirectTo pointing at
+ * /set-password — lands them on the same activation flow.
  *
- * Stage B (EMAIL_STAGE=B + RESEND_API_KEY set): generate the
- * activation link via supabase.auth.admin.generateLink({type:
- * 'invite'}) but skip Supabase's sender; deliver our own branded
- * email via Resend using the copy in src/lib/copy/auth-emails.ts.
- * This is what a real invited person sees. Requires DNS work per
- * docs/email-setup-checklist.md.
+ * Stage A (default, EMAIL_STAGE unset or !== "B"): call
+ * supabase.auth.resetPasswordForEmail — Supabase generates the link
+ * AND sends its own default template. Ugly, unbranded, but unblocks
+ * testing without any DNS work. Safe for internal use; MUST NOT be
+ * used to invite a real person.
+ *
+ * Stage B (EMAIL_STAGE=B + RESEND_API_KEY set): generate the recovery
+ * link via svc.auth.admin.generateLink({type: 'recovery'}) but skip
+ * Supabase's sender; deliver our own branded email via Resend using
+ * the activation copy in src/lib/copy/auth-emails.ts. Copy still
+ * reads as "activation" — from the user's POV this is their first
+ * password-set, even though under the hood it's a recovery flow.
  *
  * Returns a string error message on failure, null on success.
  */
@@ -203,8 +212,12 @@ async function deliverActivationInvite(user: {
   const redirectTo = `${appOrigin()}/auth/callback?next=/set-password`;
 
   if (!isStageBEmailLive()) {
-    // Stage A: let Supabase send its default email.
-    const { error } = await svc.auth.admin.inviteUserByEmail(user.email, {
+    // Stage A: let Supabase send its default reset email.
+    const { createSupabaseServerClient } = await import(
+      "@/lib/supabase/server"
+    );
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
       redirectTo,
     });
     return error?.message ?? null;
@@ -213,7 +226,7 @@ async function deliverActivationInvite(user: {
   // Stage B: generate the link without sending Supabase's default,
   // then deliver our own branded email via Resend.
   const { data, error: linkErr } = await svc.auth.admin.generateLink({
-    type: "invite",
+    type: "recovery",
     email: user.email,
     options: { redirectTo },
   });
