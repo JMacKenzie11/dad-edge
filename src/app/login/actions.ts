@@ -54,17 +54,24 @@ export async function signIn(formData: FormData) {
     redirect(explicitNext);
   }
 
-  // No explicit next — steer ITC users to /itc, everyone else to /today.
+  // No explicit next — pick the default landing:
+  //   - Platform admins → /today (their admin surface lives there;
+  //     they can navigate to /itc via the header link)
+  //   - Non-admin ITC users → /itc (that's their whole world)
+  //   - Everyone else → /today
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
     const { data: row } = await supabase
       .from("users")
-      .select("itc_access")
+      .select("itc_access, is_platform_admin")
       .eq("id", user.id)
       .maybeSingle();
-    if ((row as { itc_access: boolean } | null)?.itc_access) {
+    const r = row as
+      | { itc_access: boolean | null; is_platform_admin: boolean | null }
+      | null;
+    if (r?.itc_access && !r?.is_platform_admin) {
       redirect(`/itc`);
     }
   }
@@ -166,20 +173,24 @@ export async function updatePassword(formData: FormData) {
   // new password) stays alive.
   await supabase.auth.signOut({ scope: "others" });
 
-  // Steer ITC users straight to /itc after activation / password reset.
-  // /itc is their whole world; landing them on /today first would be
-  // a detour. Read users.itc_access — set by the migration script
-  // (and by admin flag on non-migrated ITC coachees).
+  // Steer non-admin ITC users straight to /itc after activation /
+  // password reset — /itc is their whole world; landing them on
+  // /today first would be a detour. Platform admins always land on
+  // /today so their admin surface is one click away; they can jump
+  // to /itc via the header link.
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
     const { data: row } = await supabase
       .from("users")
-      .select("itc_access")
+      .select("itc_access, is_platform_admin")
       .eq("id", user.id)
       .maybeSingle();
-    if ((row as { itc_access: boolean } | null)?.itc_access) {
+    const r = row as
+      | { itc_access: boolean | null; is_platform_admin: boolean | null }
+      | null;
+    if (r?.itc_access && !r?.is_platform_admin) {
       redirect(`/itc`);
     }
   }

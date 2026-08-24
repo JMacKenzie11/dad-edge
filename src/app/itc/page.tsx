@@ -68,6 +68,12 @@ export default async function ItcLandingPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/today"
+            className="text-xs underline text-[color:var(--color-muted)] hover:text-white"
+          >
+            Main app
+          </Link>
           {isAdmin ? (
             <Link
               href="/itc/admin"

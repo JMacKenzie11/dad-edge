@@ -115,6 +115,12 @@ export default async function ItcMapPage({
             </Link>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/today"
+              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
+            >
+              Main app
+            </Link>
             {isItcAdmin(participant.email) ? (
               <Link
                 href="/itc/admin"
