@@ -36,8 +36,8 @@ export function ImmuneSystemDiagram({
 
         <div className="flex sm:flex-col items-center justify-center gap-1 py-1 sm:py-0 sm:px-1">
           <OpposingArrowsIcon />
-          <span className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)] whitespace-nowrap">
-            Pulling against
+          <span className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)] whitespace-nowrap text-center">
+            Working against each other
           </span>
         </div>
 
