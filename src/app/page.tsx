@@ -1,7 +1,41 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default function LandingPage() {
+export const dynamic = "force-dynamic";
+
+/**
+ * Marketing landing page for signed-out visitors. If a user is
+ * already signed in, bounce them to their normal landing (main app
+ * or /itc) instead of showing them the "SIGN IN" prompt they don't
+ * need. Same routing rules the sign-in action uses:
+ *
+ *   - Platform admins → /today
+ *   - Non-admin ITC users → /itc
+ *   - Everyone else → /today
+ */
+export default async function LandingPage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: row } = await supabase
+      .from("users")
+      .select("itc_access, is_platform_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+    const r = row as
+      | { itc_access: boolean | null; is_platform_admin: boolean | null }
+      | null;
+    if (r?.itc_access && !r?.is_platform_admin) {
+      redirect("/itc");
+    }
+    redirect("/today");
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 gap-10">
       <Image
