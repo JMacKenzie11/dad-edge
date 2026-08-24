@@ -4,20 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
+/**
+ * Bottom nav (mobile only) — 5 core routes at the ergonomic cap.
+ * Leaderboard shows on mobile too since it's a first-class member
+ * surface, not a side dish.
+ */
 const items = [
   { href: "/today", label: "Today", icon: "▣" },
   { href: "/missions", label: "Missions", icon: "◆" },
   { href: "/coach", label: "Coach Larry", icon: "◐" },
-  { href: "/community", label: "Brothers", icon: "◈" },
+  { href: "/community", label: "Leaderboard", icon: "◈" },
   { href: "/me", label: "Me", icon: "●" },
 ] as const;
 
-/** Left-menu-only entries. Not in the mobile bottom nav (which is
- *  at its 5-slot ergonomic cap). Dashboard is reachable on mobile
- *  via /me's top card; Goals is reachable via the "Manage goals"
- *  button on /missions. */
-const dashboardItem = { href: "/dashboard", label: "Dashboard", icon: "▤" } as const;
+/**
+ * Left-nav-only entries. My Braveman (personal analytics) sits at
+ * the top; Goals under it. Leaderboard immediately follows on the
+ * desktop nav per product decision 2026-08-24 — planning and
+ * comparison surfaces group together above the daily work items.
+ */
+const dashboardItem = { href: "/dashboard", label: "My Braveman", icon: "▤" } as const;
 const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
+const leaderboardItem = { href: "/community", label: "Leaderboard", icon: "◈" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
 
@@ -52,14 +60,14 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
-  // Dashboard + Goals sit at the top of the desktop left menu
-  // (planning/analytical surfaces above the daily work). Neither is
-  // in the mobile bottom nav (5-slot ergonomic cap); mobile users
-  // reach Dashboard via /me and Goals via the /missions "Manage
-  // goals" button.
+  // Desktop order: My Braveman → Leaderboard → Goals → daily
+  // items (Today, Missions, Coach Larry, Me) → Admin (if platform
+  // admin). "Brothers" in the bottom nav is called "Leaderboard"
+  // here too — same route, one label everywhere.
+  const dailyItems = items.filter((it) => it.href !== "/community");
   const navItems = isPlatformAdmin
-    ? [dashboardItem, goalsItem, ...items, adminItem]
-    : [dashboardItem, goalsItem, ...items];
+    ? [dashboardItem, leaderboardItem, goalsItem, ...dailyItems, adminItem]
+    : [dashboardItem, leaderboardItem, goalsItem, ...dailyItems];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
