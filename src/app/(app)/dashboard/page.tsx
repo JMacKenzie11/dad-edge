@@ -28,7 +28,7 @@ export default async function DashboardPage() {
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           YOUR RECORD
         </p>
-        <h1 className="font-heading text-3xl">Dashboard</h1>
+        <h1 className="font-heading text-3xl">My Brave Man</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
           What your numbers show. Self only, not community.
         </p>

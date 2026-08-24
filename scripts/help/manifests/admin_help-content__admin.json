@@ -1,0 +1,45 @@
+{
+  "route_pattern": "/admin/help-content",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Help content review"
+    },
+    {
+      "kind": "field",
+      "label": "title"
+    },
+    {
+      "kind": "field",
+      "label": "sections_json"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE AND APPROVE"
+    },
+    {
+      "kind": "button",
+      "label": "CANCEL"
+    },
+    {
+      "kind": "button",
+      "label": "APPROVE"
+    },
+    {
+      "kind": "button",
+      "label": "EDIT"
+    },
+    {
+      "kind": "button",
+      "label": "REGEN"
+    }
+  ],
+  "source_hash": "777760cbcb316056",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/row-editor.tsx"
+  ]
+}

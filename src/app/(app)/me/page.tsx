@@ -88,7 +88,7 @@ export default async function MePage() {
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
             YOUR RECORD
           </p>
-          <p className="font-heading text-lg mt-1">Dashboard</p>
+          <p className="font-heading text-lg mt-1">My Brave Man</p>
           <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
             Daily Living, mission completion, survey delta, and any active ITC map.
           </p>

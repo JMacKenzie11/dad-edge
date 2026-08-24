@@ -5,10 +5,10 @@
   "elements": [
     {
       "kind": "header",
-      "label": "Dashboard"
+      "label": "My Brave Man"
     }
   ],
-  "source_hash": "3795f381a89e89fd",
+  "source_hash": "5b9fded9ffcedd58",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/dashboard/page.tsx"
   ]
