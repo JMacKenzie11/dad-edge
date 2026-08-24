@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PILLARS, PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+import { PILLARS, type PillarCode } from "@/lib/pillars";
 import {
   computeCommunityStats,
   rankDeltas,
@@ -12,11 +12,9 @@ import {
   type Member,
   type MemberStats,
 } from "@/lib/scoring/community-stats";
-import { LeaderboardCard, GridSection, type LeaderboardRow } from "./leaderboard-card";
 
 export const dynamic = "force-dynamic";
 
-const TOP_N = 3;
 
 export default async function CommunityPage() {
   const { user } = await requireAccess();
@@ -113,184 +111,211 @@ export default async function CommunityPage() {
   });
 
   const meRow = stats.members.find((m) => m.userId === user.id);
-  const isSelf = (id: string) => id === user.id;
 
-  // ---- Leaderboards ----
-  const weekDaily = sortDesc(stats.members, (m) => m.weekTotal);
-  const weekDailyPrev = sortDesc(stats.members, (m) => m.weekTotalPrev);
-  const weekDeltas = rankDeltas(weekDaily, weekDailyPrev);
-
-  const weekMissionsRanked = [...stats.members].sort((a, b) => {
-    if (b.weekMissionsCompleted !== a.weekMissionsCompleted) {
-      return b.weekMissionsCompleted - a.weekMissionsCompleted;
-    }
-    return b.weekMissionsOnTimeRate - a.weekMissionsOnTimeRate;
+  // ---- Tier 1: combined weekly ranking (Daily + Missions) ----
+  // Ranking rule: combined_total (daily + completed missions) desc,
+  // tiebreaker on daily. Matches the leaderboard.ts sort used on
+  // /community/leaderboard so both surfaces read the same.
+  const combinedWeek = [...stats.members].sort((a, b) => {
+    const aCombined = a.weekTotal + a.weekMissionsCompleted;
+    const bCombined = b.weekTotal + b.weekMissionsCompleted;
+    if (bCombined !== aCombined) return bCombined - aCombined;
+    return b.weekTotal - a.weekTotal;
   });
+  const meRank = meRow
+    ? combinedWeek.findIndex((m) => m.userId === user.id) + 1
+    : 0;
 
-  const fourDaily = sortDesc(stats.members, (m) => m.fourWeekTotal);
-  const fourMissions = [...stats.members].sort((a, b) => {
-    if (b.fourWeekMissionsCompleted !== a.fourWeekMissionsCompleted) {
-      return b.fourWeekMissionsCompleted - a.fourWeekMissionsCompleted;
-    }
-    return b.fourWeekMissionsOnTimeRate - a.fourWeekMissionsOnTimeRate;
+  // Prior-week combined for delta.
+  const combinedWeekPrev = [...stats.members].sort(
+    (a, b) => b.weekTotalPrev - a.weekTotalPrev,
+  );
+  const priorDeltas = rankDeltas(combinedWeek, combinedWeekPrev);
+
+  // ---- Tier 2 (collapsed): 4-week, quality, streaks, pillar kings ----
+  const combinedFour = [...stats.members].sort((a, b) => {
+    const aCombined = a.fourWeekTotal + a.fourWeekMissionsCompleted;
+    const bCombined = b.fourWeekTotal + b.fourWeekMissionsCompleted;
+    return bCombined - aCombined;
   });
-
   const qualityRanked = stats.members
     .filter((m) => m.avgQualityScore !== null && m.qualityScoredCount >= 3)
     .sort((a, b) => (b.avgQualityScore ?? 0) - (a.avgQualityScore ?? 0));
-
-  const engagementStreakRanked = sortDesc(stats.members, (m) => m.engagementStreak);
-
-  // Rows.
-  const weekDailyRows = topRows(weekDaily, isSelf, (m) => ({
-    primary: `${m.weekTotal}/49`,
-    secondary: `vs ${m.weekTotalPrev} last wk`,
-    delta: weekDeltas[m.userId] ?? 0,
-  }));
-
-  const weekMissionsRows = topRows(weekMissionsRanked, isSelf, (m) => ({
-    primary: `${m.weekMissionsCompleted}/${m.weekMissionsAttempted || m.weekMissionsCompleted}`,
-    secondary: m.weekMissionsCompleted > 0
-      ? `${Math.round(m.weekMissionsOnTimeRate * 100)}% on time`
-      : "no missions yet",
-  }));
-
-  const fourDailyRows = topRows(fourDaily, isSelf, (m) => ({
-    primary: `${m.fourWeekTotal}`,
-    secondary: "over 28 days",
-  }));
-
-  const fourMissionsRows = topRows(fourMissions, isSelf, (m) => ({
-    primary: `${m.fourWeekMissionsCompleted}`,
-    secondary: `${Math.round(m.fourWeekMissionsOnTimeRate * 100)}% on time`,
-  }));
-
-  const qualityRows = topRows(qualityRanked, isSelf, (m) => ({
-    primary: (m.avgQualityScore ?? 0).toFixed(1),
-    secondary: `${m.qualityScoredCount} missions scored`,
-  }));
-
-  const streakRows = topRows(engagementStreakRanked, isSelf, (m) => ({
-    primary: `${m.engagementStreak}d`,
-    secondary: m.engagementStreak > 0 ? "consecutive days" : "none",
-  }));
+  const engagementStreakRanked = sortDesc(
+    stats.members,
+    (m) => m.engagementStreak,
+  );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 py-2">
-      <header className="flex items-baseline justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-            WEEK OF {format(new Date(`${stats.weekMonday}T00:00:00`), "MMM d")} · {members.length}{" "}
-            BROTHERS
-          </p>
-          <h1 className="font-heading text-3xl">{communityName}</h1>
-        </div>
-        {meRow ? (
-          <div className="text-right">
-            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-              YOU THIS WEEK
-            </p>
-            <p className="font-heading text-2xl">
-              {meRow.weekTotal}
-              <span className="text-sm text-[color:var(--color-text-muted)]">/49</span>
-              <span className="mx-2 text-[color:var(--color-text-muted)]">·</span>
-              {meRow.weekMissionsCompleted}
-              <span className="text-sm text-[color:var(--color-text-muted)]">/
-                {meRow.weekMissionsPlanned || meRow.weekMissionsCompleted} missions
-              </span>
-            </p>
-          </div>
-        ) : null}
+    <div className="max-w-3xl mx-auto space-y-6 py-2">
+      <header>
+        <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+          WEEK OF {format(new Date(`${stats.weekMonday}T00:00:00`), "MMM d")} ·{" "}
+          {members.length} BROTHERS
+        </p>
+        <h1 className="font-heading text-3xl">{communityName}</h1>
       </header>
 
-      <GridSection>
-        <LeaderboardCard
-          label="THIS WEEK · DAILY LIVING"
-          title="Consistency"
-          hint="Sum of check-ins across 8 pillars × 7 days. ▲/▼ shows rank vs last week."
-          rows={weekDailyRows}
-          emptyText="Log a check-in to get on the board."
-        />
-        <LeaderboardCard
-          label="THIS WEEK · MISSIONS"
-          title="Execution"
-          hint="Completed / attempted. Tie-breaker: on-time %."
-          rows={weekMissionsRows}
-          emptyText="Set a mission to get on the board."
-        />
-        <LeaderboardCard
-          label="LAST 4 WEEKS · DAILY LIVING"
-          title="Endurance"
-          hint="Running 28-day total. Shows who compounds."
-          rows={fourDailyRows}
-        />
-        <LeaderboardCard
-          label="LAST 4 WEEKS · MISSIONS"
-          title="Volume"
-          hint="Completed missions over the last month."
-          rows={fourMissionsRows}
-        />
-        <LeaderboardCard
-          label="MISSION QUALITY"
-          title="Aim"
-          hint="Avg quality score (0–10) across missions in the last 28 days. Min 3 to qualify."
-          rows={qualityRows}
-          emptyText="Set at least 3 scored missions to qualify."
-        />
-        <LeaderboardCard
-          label="ENGAGEMENT STREAKS"
-          title="Show up"
-          hint="Consecutive days ending today with at least one log."
-          rows={streakRows}
-        />
-      </GridSection>
-
-      <section>
-        <div className="mb-5">
+      {/* Tier 1a — You this week: big prominent card */}
+      {meRow ? (
+        <section className="p-5 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border-2 border-[color:var(--color-primary)]/40">
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-primary)]">
-            PILLAR KINGS · THIS WEEK
+            YOU THIS WEEK
           </p>
-          <p className="text-sm text-[color:var(--color-text-muted)] mt-2">
-            Top man in each pillar this week. Everyone can lead something.
+          <p className="font-heading text-3xl mt-1">
+            {meRank > 0 ? ordinal(meRank) : "—"}
+            <span className="text-base text-[color:var(--color-text-muted)]">
+              {" "}
+              of {members.length}
+            </span>
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-4">
+            <MeStat
+              label="DAILY"
+              value={meRow.weekTotal}
+              max={49}
+            />
+            <MeStat
+              label="MISSIONS"
+              value={meRow.weekMissionsCompleted}
+              max={meRow.weekMissionsPlanned || meRow.weekMissionsCompleted}
+            />
+            <MeStat
+              label="TOTAL"
+              value={meRow.weekTotal + meRow.weekMissionsCompleted}
+              max={49 + meRow.weekMissionsPlanned}
+              accent
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {/* Tier 1b — Combined weekly leaderboard, one card, one list */}
+      <section className="rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[color:var(--color-border)]">
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-primary)]">
+            THIS WEEK · LEADERBOARD
+          </p>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+            Ranked by combined total (daily + completed missions).
           </p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {PILLARS.map((p) => {
-            const king = stats.pillarKings[p.code];
-            const label = p.code === "A2" ? "Action" : p.label;
+        <ol className="divide-y divide-[color:var(--color-border)]">
+          {combinedWeek.map((m, i) => {
+            const combined = m.weekTotal + m.weekMissionsCompleted;
+            const combinedMax = 49 + m.weekMissionsPlanned;
+            const delta = priorDeltas[m.userId] ?? 0;
+            const isMe = m.userId === user.id;
             return (
-              <div
-                key={p.code}
-                className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]"
-                style={{ borderLeft: `3px solid ${p.colorVar}` }}
+              <li
+                key={m.userId}
+                className={
+                  "px-5 py-3 grid grid-cols-[32px_1fr_auto] items-center gap-3 " +
+                  (isMe
+                    ? "bg-[color:var(--color-primary)]/[0.08]"
+                    : "")
+                }
               >
-                <p
-                  className="text-[10px] font-heading tracking-widest"
-                  style={{ color: p.colorVar }}
+                <span
+                  className={
+                    "text-sm font-heading " +
+                    (i === 0
+                      ? "text-[color:var(--color-accent)]"
+                      : "text-[color:var(--color-text-muted)]")
+                  }
                 >
-                  {label.toUpperCase()}
-                </p>
-                {king ? (
-                  <>
-                    <p className="text-sm font-heading mt-2 break-words">
-                      {king.name}
-                    </p>
-                    <p className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
-                      {king.score}/7 this week
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-[10px] text-[color:var(--color-text-muted)] mt-2">
-                    Throne is open.
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-heading text-sm truncate">
+                    {m.name}
+                    {isMe ? (
+                      <span className="ml-1.5 text-[10px] tracking-widest text-[color:var(--color-primary)]">
+                        (YOU)
+                      </span>
+                    ) : null}
                   </p>
-                )}
-              </div>
+                  <p className="text-[11px] text-[color:var(--color-text-muted)]">
+                    Daily {m.weekTotal}/49 · Missions{" "}
+                    {m.weekMissionsCompleted}/
+                    {m.weekMissionsPlanned || m.weekMissionsCompleted}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-heading text-lg text-[color:var(--color-accent)]">
+                    {combined}
+                    <span className="text-[10px] text-[color:var(--color-text-muted)]">
+                      /{combinedMax}
+                    </span>
+                  </p>
+                  {delta !== 0 ? (
+                    <p
+                      className="text-[10px] font-heading"
+                      style={{
+                        color:
+                          delta > 0
+                            ? "var(--color-success)"
+                            : "var(--color-danger)",
+                      }}
+                    >
+                      {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
             );
           })}
-        </div>
+        </ol>
       </section>
 
-      <p className="text-[11px] text-[color:var(--color-text-muted)] text-center pt-4">
+      {/* Tier 2 — collapsed by default. Native <details> for a
+          server-friendly expand with zero client code. */}
+      <details className="group rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] overflow-hidden">
+        <summary className="px-5 py-3 cursor-pointer list-none flex items-center justify-between font-heading text-xs tracking-widest text-[color:var(--color-text-muted)] hover:text-white">
+          <span>MORE METRICS</span>
+          <span className="transition-transform group-open:rotate-180">▼</span>
+        </summary>
+        <div className="border-t border-[color:var(--color-border)] px-5 py-5 space-y-6">
+          <MetricList
+            title="Last 4 weeks · Combined"
+            hint="Running 28-day total. Shows who compounds."
+            rows={combinedFour.map((m, i) => ({
+              rank: i + 1,
+              name: m.name,
+              isMe: m.userId === user.id,
+              primary: `${m.fourWeekTotal + m.fourWeekMissionsCompleted}`,
+              secondary: `Daily ${m.fourWeekTotal} · Missions ${m.fourWeekMissionsCompleted}`,
+            }))}
+          />
+          <MetricList
+            title="Mission quality · last 28 days"
+            hint="Avg quality score (0-10). Min 3 scored missions to qualify."
+            emptyText="Set at least 3 scored missions to qualify."
+            rows={qualityRanked.map((m, i) => ({
+              rank: i + 1,
+              name: m.name,
+              isMe: m.userId === user.id,
+              primary: (m.avgQualityScore ?? 0).toFixed(1),
+              secondary: `${m.qualityScoredCount} missions scored`,
+            }))}
+          />
+          <MetricList
+            title="Engagement streaks"
+            hint="Consecutive days ending today with at least one log."
+            rows={engagementStreakRanked.map((m, i) => ({
+              rank: i + 1,
+              name: m.name,
+              isMe: m.userId === user.id,
+              primary: `${m.engagementStreak}d`,
+              secondary:
+                m.engagementStreak > 0 ? "consecutive days" : "none",
+            }))}
+          />
+          <PillarKings pillarKings={stats.pillarKings} />
+        </div>
+      </details>
+
+      <p className="text-[11px] text-[color:var(--color-text-muted)] text-center pt-2">
         <Link href="/today" className="hover:text-[color:var(--color-primary)]">
           ← back to your day
         </Link>
@@ -299,36 +324,166 @@ export default async function CommunityPage() {
   );
 }
 
+function ordinal(n: number): string {
+  if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+function MeStat({
+  label,
+  value,
+  max,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <p
+        className={
+          "font-heading text-2xl leading-none " +
+          (accent ? "text-[color:var(--color-accent)]" : "")
+        }
+      >
+        {value}
+        <span className="text-sm text-[color:var(--color-text-muted)]">
+          /{max}
+        </span>
+      </p>
+      <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mt-1">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function MetricList({
+  title,
+  hint,
+  rows,
+  emptyText,
+}: {
+  title: string;
+  hint: string;
+  rows: Array<{
+    rank: number;
+    name: string;
+    isMe: boolean;
+    primary: string;
+    secondary: string;
+  }>;
+  emptyText?: string;
+}) {
+  return (
+    <div>
+      <div className="mb-3">
+        <p className="font-heading text-sm">{title}</p>
+        <p className="text-[11px] text-[color:var(--color-text-muted)] mt-0.5">
+          {hint}
+        </p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-[color:var(--color-text-muted)] italic">
+          {emptyText ?? "No data yet."}
+        </p>
+      ) : (
+        <ol className="space-y-1.5">
+          {rows.slice(0, 5).map((r) => (
+            <li
+              key={r.rank}
+              className={
+                "grid grid-cols-[28px_1fr_auto] items-center gap-2 text-sm px-2 py-1 rounded " +
+                (r.isMe ? "bg-[color:var(--color-primary)]/[0.08]" : "")
+              }
+            >
+              <span className="text-xs text-[color:var(--color-text-muted)]">
+                {r.rank}
+              </span>
+              <span className="truncate">
+                {r.name}
+                {r.isMe ? (
+                  <span className="ml-1.5 text-[10px] tracking-widest text-[color:var(--color-primary)]">
+                    (YOU)
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-right">
+                <span className="font-heading">{r.primary}</span>
+                <span className="block text-[10px] text-[color:var(--color-text-muted)]">
+                  {r.secondary}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function PillarKings({
+  pillarKings,
+}: {
+  pillarKings: Record<PillarCode, { userId: string; name: string; score: number } | null>;
+}) {
+  return (
+    <div>
+      <div className="mb-3">
+        <p className="font-heading text-sm">Pillar Kings · this week</p>
+        <p className="text-[11px] text-[color:var(--color-text-muted)] mt-0.5">
+          Top man in each pillar. Everyone can lead something.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {PILLARS.map((p) => {
+          const king = pillarKings[p.code];
+          const label = p.code === "A2" ? "Action" : p.label;
+          return (
+            <div
+              key={p.code}
+              className="p-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
+              style={{ borderLeft: `3px solid ${p.colorVar}` }}
+            >
+              <p
+                className="text-[10px] font-heading tracking-widest"
+                style={{ color: p.colorVar }}
+              >
+                {label.toUpperCase()}
+              </p>
+              {king ? (
+                <>
+                  <p className="text-xs font-heading mt-1.5 break-words">
+                    {king.name}
+                  </p>
+                  <p className="text-[10px] text-[color:var(--color-text-muted)] mt-0.5">
+                    {king.score}/7 this week
+                  </p>
+                </>
+              ) : (
+                <p className="text-[10px] text-[color:var(--color-text-muted)] mt-1.5">
+                  Throne is open.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---- helpers ----
 
 function sortDesc<T>(items: T[], key: (t: T) => number): T[] {
   return [...items].sort((a, b) => key(b) - key(a));
-}
-
-function topRows(
-  ranked: MemberStats[],
-  isSelf: (id: string) => boolean,
-  map: (m: MemberStats) => Omit<LeaderboardRow, "userId" | "name" | "highlight">,
-): LeaderboardRow[] {
-  const top = ranked.slice(0, TOP_N);
-  const selfIdx = ranked.findIndex((m) => isSelf(m.userId));
-  const rows: LeaderboardRow[] = top.map((m) => ({
-    userId: m.userId,
-    name: m.name,
-    highlight: isSelf(m.userId),
-    ...map(m),
-  }));
-  // If self is outside the top N, append a divider row showing them.
-  if (selfIdx >= TOP_N && ranked[selfIdx]) {
-    const m = ranked[selfIdx];
-    rows.push({
-      userId: `self-${m.userId}`,
-      name: `${m.name} (you · #${selfIdx + 1})`,
-      highlight: true,
-      ...map(m),
-    });
-  }
-  return rows;
 }
 
 function todayMondayISO(tz: string): string {
