@@ -191,6 +191,19 @@ function detectRoleOverride(
  * Extract labels from JSX text nodes and label-like attributes.
  * Ignores dynamic {expr} content unless it's a string literal.
  */
+/** Names of BRAVE MAN pillars, used when the extractor encounters a
+ *  `<PillarToggle>` inside a `.map()` — we can't get the individual
+ *  labels statically, but we know the set. */
+const PILLAR_TILE_LABELS = [
+  "Bond tile",
+  "Raise tile",
+  "Amplify tile",
+  "Vitality tile",
+  "Enjoy tile",
+  "Movement tile",
+  "Network tile",
+];
+
 function extractElements(sourceText: string): ExtractedElement[] {
   const sf = ts.createSourceFile(
     "extract.tsx",
@@ -200,10 +213,15 @@ function extractElements(sourceText: string): ExtractedElement[] {
     ts.ScriptKind.TSX,
   );
   const out: ExtractedElement[] = [];
+  let sawPillarToggleMap = false;
 
   function visit(node: ts.Node): void {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const tagName = getTagName(node);
+      if (tagName === "PillarToggle") {
+        sawPillarToggleMap = true;
+        return; // don't classify — synthetic elements added below
+      }
       const attrs = getAttrs(node);
       const kind = classifyKind(tagName, attrs);
       if (kind) {
@@ -216,6 +234,12 @@ function extractElements(sourceText: string): ExtractedElement[] {
     ts.forEachChild(node, visit);
   }
   visit(sf);
+
+  if (sawPillarToggleMap) {
+    for (const label of PILLAR_TILE_LABELS) {
+      out.push({ kind: "toggle", label });
+    }
+  }
   return dedupe(out);
 }
 
@@ -255,6 +279,19 @@ function getAttrs(
   return attrs;
 }
 
+/**
+ * Display-only components that carry a `label` prop for their own
+ * cosmetic label (e.g. StreakChip label="days" is the units suffix
+ * next to a number, not something the user interacts with). Skip
+ * these so they don't leak into the manifest as fake "fields".
+ */
+const DISPLAY_ONLY_COMPONENTS = new Set([
+  "StreakChip",
+  "ChipButton", // decorative chip that fires a synthetic input event
+  "Image",
+  "Suspense",
+]);
+
 function classifyKind(
   tag: string,
   attrs: Record<string, string | null>,
@@ -274,16 +311,16 @@ function classifyKind(
   if (t === "select") return "select";
   if (t === "h1" || t === "h2") return "header";
 
+  if (!/^[A-Z]/.test(tag)) return null;
+  if (DISPLAY_ONLY_COMPONENTS.has(tag)) return null;
+
   // Custom PascalCase components — infer from props + name.
-  // Any component that takes a `label` prop with a string literal is
-  // acting as a labelled interactive element. Name-based hints:
   //   *Button / *Btn → button
   //   *Toggle / *Switch / *Checkbox → toggle
   //   *Field / *Input / *Textarea / *Select → field
   // Fallback: if it has a placeholder or a label string prop, treat
   // as field. This catches ReflectionField, PillarToggle, and other
   // wrappers without a per-component allowlist.
-  if (!/^[A-Z]/.test(tag)) return null;
   if (/(Button|Btn)$/.test(tag)) return "button";
   if (/(Toggle|Switch|Checkbox|Radio)$/.test(tag)) return "toggle";
   if (/(Field|Input|Textarea)$/.test(tag)) return "field";

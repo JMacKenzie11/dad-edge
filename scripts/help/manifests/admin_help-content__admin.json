@@ -29,6 +29,10 @@
     },
     {
       "kind": "button",
+      "label": "APPROVE ANYWAY"
+    },
+    {
+      "kind": "button",
       "label": "EDIT"
     },
     {
@@ -36,7 +40,7 @@
       "label": "REGEN"
     }
   ],
-  "source_hash": "777760cbcb316056",
+  "source_hash": "be491b504964e29b",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/actions.ts",
