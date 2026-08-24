@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import {
   deleteUser,
   sendInvite,
+  setItcAccess,
   setPlatformAdmin,
   setSubscriptionStatus,
 } from "../actions";
@@ -30,7 +31,7 @@ export default async function UserDetailPage({
 
   const { data: user } = await svc
     .from("users")
-    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step, invited_at")
+    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, itc_access, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step, invited_at")
     .eq("id", id)
     .maybeSingle();
   if (!user) notFound();
@@ -43,6 +44,9 @@ export default async function UserDetailPage({
     phone: string | null;
     timezone: string;
     is_platform_admin: boolean;
+    /** Null on rows that predate the auth-phase migration (column
+     *  doesn't exist yet on that DB); treat as false. */
+    itc_access: boolean | null;
     subscription_status: "trialing" | "active" | "past_due" | "canceled" | "comped";
     subscription_source: string;
     canceled_at: string | null;
@@ -203,6 +207,23 @@ export default async function UserDetailPage({
               id="platform_admin"
             />
             <label htmlFor="platform_admin">Platform admin</label>
+            <SubmitButton
+              variant="ghost"
+              label="SAVE"
+              pendingLabel="…"
+              className="ml-auto h-8 px-3 text-[10px]"
+            />
+          </form>
+
+          <form action={setItcAccess} className="flex items-center gap-2 text-xs">
+            <input type="hidden" name="user_id" value={u.id} />
+            <input
+              type="checkbox"
+              name="itc_access"
+              defaultChecked={u.itc_access ?? false}
+              id="itc_access"
+            />
+            <label htmlFor="itc_access">ITC access (can use /itc)</label>
             <SubmitButton
               variant="ghost"
               label="SAVE"

@@ -587,3 +587,44 @@ export async function setPlatformAdmin(formData: FormData) {
   revalidatePath(`/admin/users/${parsed.data.user_id}`);
   redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
 }
+
+const ItcAccessFlagSchema = z.object({
+  user_id: z.string().uuid(),
+  itc_access: z.enum(["on", "off"]).transform((v) => v === "on"),
+});
+
+/**
+ * Set the users.itc_access flag. Enables /itc for coachees who
+ * weren't migrated via the ITC migration script — e.g., new admin-
+ * created coachees, or platform admins who need to preview the
+ * coaching flow. Audit-logged.
+ */
+export async function setItcAccess(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = ItcAccessFlagSchema.safeParse({
+    user_id: formData.get("user_id"),
+    itc_access: formData.get("itc_access") ? "on" : "off",
+  });
+  if (!parsed.success) return;
+  const svc = createSupabaseServiceClient();
+  const { error } = await svc
+    .from("users")
+    .update({ itc_access: parsed.data.itc_access })
+    .eq("id", parsed.data.user_id);
+  if (error) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(
+        error.message,
+      )}`,
+    );
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.set_itc_access",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { value: parsed.data.itc_access },
+  });
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
