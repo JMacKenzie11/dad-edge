@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAccess } from "@/lib/session";
+import { currentUserHasItcAccess, requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { NewGoalForm } from "./new-goal-form";
@@ -95,8 +95,25 @@ export default async function GoalsPage() {
   const activeUserGoals = active.filter((g) => g.source === "user");
   const activeItcGoal = active.find((g) => g.source === "itc") ?? null;
 
-  // Look up the ITC map + stage for the adaptive section. Service client
-  // used because itc_maps is not RLS-scoped to the tracker user id.
+  // Adaptive-goal section only exists for users with ITC access. Users
+  // without it never see the header / empty-state / card at all — no
+  // reason to advertise a feature they can't reach.
+  const hasItcAccess = await currentUserHasItcAccess();
+
+  // Look up the ITC map + stage for the adaptive section. Two paths:
+  //
+  //   1. Preferred: the quarterly_goals row (source='itc') has a
+  //      linked itc_maps row (itc_maps.quarterly_goal_id = goal.id).
+  //      This is the path new maps take via syncItcGoalToTracker.
+  //
+  //   2. Fallback: look up any in-progress map for the user's linked
+  //      participant, regardless of quarterly_goal_id. This surfaces
+  //      migrated maps that never went through syncItcGoalToTracker
+  //      (goal saved pre-user-link, or sync failed silently). Without
+  //      this, an active /itc map would be invisible on /goals.
+  //
+  // Service client used because itc_maps is not RLS-scoped to the
+  // tracker user id.
   let adaptive: {
     mapId: string;
     stage: string;
@@ -105,12 +122,44 @@ export default async function GoalsPage() {
     behaviorCount: number;
     testCount: number;
   } | null = null;
-  if (activeItcGoal) {
-    const { data: itcRow } = await service
-      .from("itc_maps")
-      .select("id, current_stage, pillar_code, improvement_goal")
-      .eq("quarterly_goal_id", activeItcGoal.id)
-      .maybeSingle();
+  if (hasItcAccess) {
+    type ItcRow = {
+      id: string;
+      current_stage: string;
+      pillar_code: PillarCode;
+      improvement_goal: string | null;
+    };
+    let itcRow: ItcRow | null = null;
+
+    if (activeItcGoal) {
+      const { data } = await service
+        .from("itc_maps")
+        .select("id, current_stage, pillar_code, improvement_goal")
+        .eq("quarterly_goal_id", activeItcGoal.id)
+        .maybeSingle();
+      itcRow = (data as ItcRow | null) ?? null;
+    }
+
+    if (!itcRow) {
+      const { data: participant } = await service
+        .from("itc_participants")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const participantId = (participant as { id: string } | null)?.id ?? null;
+      if (participantId) {
+        const { data } = await service
+          .from("itc_maps")
+          .select("id, current_stage, pillar_code, improvement_goal")
+          .eq("participant_id", participantId)
+          .eq("status", "in_progress")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        itcRow = (data as ItcRow | null) ?? null;
+      }
+    }
+
     if (itcRow) {
       const [{ count: behaviorCount }, { count: testCount }] = await Promise.all([
         service
@@ -123,10 +172,13 @@ export default async function GoalsPage() {
           .eq("map_id", itcRow.id),
       ]);
       adaptive = {
-        mapId: itcRow.id as string,
-        stage: itcRow.current_stage as string,
-        pillarCode: itcRow.pillar_code as PillarCode,
-        goalText: (itcRow.improvement_goal as string | null) ?? activeItcGoal.desired_end_state,
+        mapId: itcRow.id,
+        stage: itcRow.current_stage,
+        pillarCode: itcRow.pillar_code,
+        goalText:
+          itcRow.improvement_goal ??
+          activeItcGoal?.desired_end_state ??
+          "Goal not yet locked",
         behaviorCount: behaviorCount ?? 0,
         testCount: testCount ?? 0,
       };
@@ -197,18 +249,20 @@ export default async function GoalsPage() {
         )}
       </section>
 
-      <section>
-        <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
-          Adaptive goal
-        </h2>
-        {adaptive ? (
-          <AdaptiveGoalCard adaptive={adaptive} />
-        ) : (
-          <p className="text-sm text-[color:var(--color-text-muted)] italic">
-            No active ITC map. If you build one, its goal shows up here alongside your other goals.
-          </p>
-        )}
-      </section>
+      {hasItcAccess ? (
+        <section>
+          <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
+            Adaptive goal
+          </h2>
+          {adaptive ? (
+            <AdaptiveGoalCard adaptive={adaptive} />
+          ) : (
+            <p className="text-sm text-[color:var(--color-text-muted)] italic">
+              No active ITC map. If you build one, its goal shows up here alongside your other goals.
+            </p>
+          )}
+        </section>
+      ) : null}
 
       {closed.length > 0 ? (
         <section>
