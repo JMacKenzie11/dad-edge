@@ -65,13 +65,19 @@ export default async function DisengagementPage() {
       name: [u?.first_name, u?.last_name].filter(Boolean).join(" ") || (u?.email ?? "—"),
       subscriptionStatus: u?.subscription_status ?? "—",
       lastCheckin: last,
-      daysSince: Number.isFinite(daysSince) ? daysSince : 999,
+      daysSince,
       bucket,
     };
   });
 
+  // Split "never activated" (no check-ins ever) out of the silent
+  // bucket — those users haven't disengaged, they never engaged, so
+  // the outreach playbook is different (welcome nudge, not re-engage).
+  const neverActivated = rows.filter((r) => r.lastCheckin === null);
   const byBucket = {
-    day14plus: rows.filter((r) => r.bucket === "day14plus"),
+    day14plus: rows.filter(
+      (r) => r.bucket === "day14plus" && r.lastCheckin !== null,
+    ),
     day14: rows.filter((r) => r.bucket === "day14"),
     day7: rows.filter((r) => r.bucket === "day7"),
     day3: rows.filter((r) => r.bucket === "day3"),
@@ -86,10 +92,11 @@ export default async function DisengagementPage() {
         </p>
       </header>
 
-      <Section title="14+ days silent" color="var(--color-danger)" rows={byBucket.day14plus} />
-      <Section title="14 days" color="var(--color-danger)" rows={byBucket.day14} />
-      <Section title="7 days" color="var(--color-warning)" rows={byBucket.day7} />
-      <Section title="3 days" color="var(--color-accent)" rows={byBucket.day3} />
+      <Section title="Never activated" color="var(--color-text-muted)" rows={neverActivated} />
+      <Section title="21+ days inactive" color="var(--color-danger)" rows={byBucket.day14plus} />
+      <Section title="14–20 days inactive" color="var(--color-danger)" rows={byBucket.day14} />
+      <Section title="7–13 days inactive" color="var(--color-warning)" rows={byBucket.day7} />
+      <Section title="3–6 days inactive" color="var(--color-accent)" rows={byBucket.day3} />
     </div>
   );
 }
