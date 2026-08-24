@@ -3,6 +3,8 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { format } from "date-fns";
 import { lintSections } from "@/../scripts/help/voice-lint";
 import { RowEditor } from "./row-editor";
+import { findStaleHelpContentIds, regenerateStaleHelpContent } from "./actions";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -26,26 +28,29 @@ export default async function HelpContentReviewPage({
   const { saved, error } = await searchParams;
   const svc = createSupabaseServiceClient();
 
-  const [{ data: unreviewed }, { count: approvedCount }] = await Promise.all([
-    svc
-      .from("help_content")
-      .select(
-        "id, route_pattern, view_key, role, title, sections, voice_lint_passed, generated_at",
-      )
-      .eq("reviewed", false)
-      // Sort lint-failed first so reviewers hit those before easy approvals.
-      .order("voice_lint_passed", { ascending: true })
-      .order("route_pattern", { ascending: true })
-      .order("view_key", { ascending: true, nullsFirst: true })
-      .order("role", { ascending: true }),
-    svc
-      .from("help_content")
-      .select("id", { count: "exact", head: true })
-      .eq("reviewed", true),
-  ]);
+  const [{ data: unreviewed }, { count: approvedCount }, staleIds] =
+    await Promise.all([
+      svc
+        .from("help_content")
+        .select(
+          "id, route_pattern, view_key, role, title, sections, voice_lint_passed, generated_at",
+        )
+        .eq("reviewed", false)
+        // Sort lint-failed first so reviewers hit those before easy approvals.
+        .order("voice_lint_passed", { ascending: true })
+        .order("route_pattern", { ascending: true })
+        .order("view_key", { ascending: true, nullsFirst: true })
+        .order("role", { ascending: true }),
+      svc
+        .from("help_content")
+        .select("id", { count: "exact", head: true })
+        .eq("reviewed", true),
+      findStaleHelpContentIds(),
+    ]);
 
   const rows = (unreviewed ?? []) as HelpRow[];
   const failedCount = rows.filter((r) => !r.voice_lint_passed).length;
+  const staleCount = staleIds.length;
 
   return (
     <div className="space-y-6">
@@ -80,8 +85,40 @@ export default async function HelpContentReviewPage({
               {approvedCount ?? 0}
             </span>
           </span>
+          <span className="text-[color:var(--color-text-muted)]">
+            Stale:{" "}
+            <span
+              className={
+                staleCount > 0
+                  ? "text-[color:var(--color-warning)] font-heading"
+                  : "text-white font-heading"
+              }
+            >
+              {staleCount}
+            </span>
+          </span>
         </div>
       </header>
+
+      {staleCount > 0 ? (
+        <div className="p-3 rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-[color:var(--color-text-muted)]">
+            <span className="text-[color:var(--color-warning)] font-heading">
+              {staleCount} row{staleCount === 1 ? "" : "s"} stale
+            </span>{" "}
+            — underlying UI changed since generation. Regenerate to pull
+            fresh drafts (resets review).
+          </p>
+          <form action={regenerateStaleHelpContent}>
+            <SubmitButton
+              variant="warning"
+              label="REGEN ALL STALE"
+              pendingLabel="REGENERATING…"
+              className="h-9 px-3 text-xs"
+            />
+          </form>
+        </div>
+      ) : null}
 
       {saved ? (
         <p className="text-xs text-[color:var(--color-success)]">{saved}.</p>

@@ -200,34 +200,32 @@ function findRoutePurpose(routePattern: string, spec: string): string | null {
   return null;
 }
 
-export async function regenerateHelpContent(formData: FormData) {
-  const admin = await requirePlatformAdmin();
-  const id = String(formData.get("id") ?? "");
-  if (!id) redirect("/admin/help-content?error=Missing+id");
-
-  const svc = createSupabaseServiceClient();
-  const { data: existing } = await svc
-    .from("help_content")
-    .select("route_pattern, view_key, role")
-    .eq("id", id)
-    .maybeSingle();
-  if (!existing) {
-    redirect("/admin/help-content?error=Row+not+found");
-  }
-  const row = existing as {
-    route_pattern: string;
-    view_key: string | null;
-    role: string;
-  };
-
+/**
+ * Regenerate a single row against its manifest. Returns a discriminated
+ * result so bulk callers can tally successes vs failures without a
+ * try/catch dance. Does not touch the DB — caller writes the result.
+ */
+async function generateForRow(row: {
+  route_pattern: string;
+  view_key: string | null;
+  role: string;
+}): Promise<
+  | {
+      ok: true;
+      title: string;
+      sections: Sections;
+      source_hash: string;
+      voice_lint_passed: boolean;
+    }
+  | { ok: false; reason: string }
+> {
   const filename = manifestFilenameFor(row.route_pattern, row.view_key, row.role);
   const manifest = loadManifest(filename);
   if (!manifest) {
-    redirect(
-      `/admin/help-content?error=${encodeURIComponent(
-        `Manifest not found: ${filename} — run npm run help:extract first.`,
-      )}`,
-    );
+    return {
+      ok: false,
+      reason: `Manifest not found: ${filename} — run npm run help:extract first.`,
+    };
   }
 
   const spec = fs.readFileSync(
@@ -284,8 +282,6 @@ ${elementLines || "(no interactive elements — display-only surface)"}
 
 Produce the JSON now.`;
 
-  let title: string;
-  let sections: Sections;
   try {
     const { object } = await generateObject({
       model: utilityModel(),
@@ -294,25 +290,58 @@ Produce the JSON now.`;
       prompt,
       maxOutputTokens: 1500,
     });
-    title = object.title;
-    sections = object.sections;
+    const lint = lintSections(object.sections);
+    return {
+      ok: true,
+      title: object.title,
+      sections: object.sections,
+      source_hash: manifest.source_hash,
+      voice_lint_passed: lint.passed,
+    };
   } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function regenerateHelpContent(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect("/admin/help-content?error=Missing+id");
+
+  const svc = createSupabaseServiceClient();
+  const { data: existing } = await svc
+    .from("help_content")
+    .select("route_pattern, view_key, role")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing) {
+    redirect("/admin/help-content?error=Row+not+found");
+  }
+  const row = existing as {
+    route_pattern: string;
+    view_key: string | null;
+    role: string;
+  };
+
+  const result = await generateForRow(row);
+  if (!result.ok) {
     redirect(
       `/admin/help-content?error=${encodeURIComponent(
-        `Regenerate failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Regenerate failed: ${result.reason}`,
       )}`,
     );
   }
 
-  const lint = lintSections(sections);
-
   const { error } = await svc
     .from("help_content")
     .update({
-      title,
-      sections,
-      source_hash: manifest.source_hash,
-      voice_lint_passed: lint.passed,
+      title: result.title,
+      sections: result.sections,
+      source_hash: result.source_hash,
+      voice_lint_passed: result.voice_lint_passed,
       // Regenerate resets review — new content, new approval needed.
       reviewed: false,
       reviewed_by: null,
@@ -331,9 +360,135 @@ Produce the JSON now.`;
     action: "help_content.regenerate",
     target_type: "help_content",
     target_id: id,
-    metadata: { voice_lint_passed: lint.passed },
+    metadata: { voice_lint_passed: result.voice_lint_passed },
   });
 
   revalidatePath("/admin/help-content");
   redirect("/admin/help-content?saved=Regenerated");
+}
+
+// ---------------------------------------------------------------------------
+// Regenerate stale — re-run generation for every row whose stored
+// source_hash no longer matches its manifest's fresh source_hash.
+// Used after an extractor fix ripples through many pages, so the
+// admin doesn't have to click REGEN one row at a time.
+// ---------------------------------------------------------------------------
+
+/**
+ * Load all committed manifests, keyed by (route|view|role). Bulk
+ * staleness check reads this once instead of doing per-row disk I/O.
+ */
+function loadAllManifestsByKey(): Map<string, string> {
+  const dir = path.join(process.cwd(), "scripts", "help", "manifests");
+  if (!fs.existsSync(dir)) return new Map();
+  const out = new Map<string, string>();
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const m = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8")) as {
+      route_pattern: string;
+      view_key: string | null;
+      role: string;
+      source_hash: string;
+    };
+    out.set(`${m.route_pattern}||${m.view_key ?? ""}||${m.role}`, m.source_hash);
+  }
+  return out;
+}
+
+/**
+ * Compare every DB row's source_hash against its manifest's fresh
+ * hash. Returns the row IDs that need regeneration. Exported so the
+ * review page can show a "N stale" count in the header.
+ */
+export async function findStaleHelpContentIds(): Promise<string[]> {
+  const svc = createSupabaseServiceClient();
+  const { data } = await svc
+    .from("help_content")
+    .select("id, route_pattern, view_key, role, source_hash");
+  const rows = (data ?? []) as Array<{
+    id: string;
+    route_pattern: string;
+    view_key: string | null;
+    role: string;
+    source_hash: string;
+  }>;
+  const manifests = loadAllManifestsByKey();
+  const stale: string[] = [];
+  for (const r of rows) {
+    const fresh = manifests.get(
+      `${r.route_pattern}||${r.view_key ?? ""}||${r.role}`,
+    );
+    // Skip rows whose manifest is missing (orphans) — those need
+    // manual deletion, not regeneration.
+    if (fresh && fresh !== r.source_hash) stale.push(r.id);
+  }
+  return stale;
+}
+
+export async function regenerateStaleHelpContent() {
+  const admin = await requirePlatformAdmin();
+  const svc = createSupabaseServiceClient();
+
+  const staleIds = await findStaleHelpContentIds();
+  if (staleIds.length === 0) {
+    redirect("/admin/help-content?saved=No+stale+rows");
+  }
+
+  const { data } = await svc
+    .from("help_content")
+    .select("id, route_pattern, view_key, role")
+    .in("id", staleIds);
+  const rows = (data ?? []) as Array<{
+    id: string;
+    route_pattern: string;
+    view_key: string | null;
+    role: string;
+  }>;
+
+  let regenerated = 0;
+  const failures: string[] = [];
+  for (const row of rows) {
+    const result = await generateForRow(row);
+    if (!result.ok) {
+      failures.push(`${row.route_pattern} (${row.role}): ${result.reason}`);
+      continue;
+    }
+    const { error } = await svc
+      .from("help_content")
+      .update({
+        title: result.title,
+        sections: result.sections,
+        source_hash: result.source_hash,
+        voice_lint_passed: result.voice_lint_passed,
+        reviewed: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        generated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (error) {
+      failures.push(`${row.route_pattern} (${row.role}): ${error.message}`);
+      continue;
+    }
+    regenerated += 1;
+  }
+
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "help_content.regenerate_stale",
+    target_type: "help_content",
+    target_id: null,
+    metadata: {
+      stale_total: staleIds.length,
+      regenerated,
+      failures: failures.length,
+    },
+  });
+
+  revalidatePath("/admin/help-content");
+  const msg =
+    failures.length === 0
+      ? `Regenerated ${regenerated} stale row${regenerated === 1 ? "" : "s"}`
+      : `Regenerated ${regenerated} of ${staleIds.length} (${failures.length} failed)`;
+  redirect(`/admin/help-content?saved=${encodeURIComponent(msg)}`);
 }
