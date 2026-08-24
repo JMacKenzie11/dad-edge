@@ -26,7 +26,7 @@ export default async function LeaderOverview({
     .eq("status", "active");
 
   const memberIds = (memberships ?? []).map((m) => (m as { user_id: string }).user_id);
-  const [{ data: checkins }, { data: missions }, { data: pendingInvites }] = await Promise.all([
+  const [{ data: checkins }, { data: missions }] = await Promise.all([
     memberIds.length
       ? svc.from("daily_checkins").select("user_id, date, value").in("user_id", memberIds).gte("date", isoDateNDaysAgo(30))
       : Promise.resolve({ data: [] }),
@@ -38,7 +38,6 @@ export default async function LeaderOverview({
           .gte("target_date", monday)
           .lte("target_date", week[6])
       : Promise.resolve({ data: [] }),
-    svc.from("invites").select("id").eq("community_id", communityId).is("redeemed_at", null),
   ]);
 
   const lastByUser = new Map<string, string>();
@@ -77,7 +76,6 @@ export default async function LeaderOverview({
       value: `${completedMissions}/${totalMissions}`,
       href: "/leader/members",
     },
-    { label: "PENDING INVITES", value: (pendingInvites ?? []).length, href: "/leader/members" },
   ];
 
   return (

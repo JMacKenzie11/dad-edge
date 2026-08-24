@@ -85,29 +85,10 @@ function shell(headline: string, body: string): string {
 </body></html>`;
 }
 
-export async function sendInviteEmail(opts: {
-  to: string;
-  firstName: string | null;
-  communityName: string;
-}) {
-  // Legacy magic-link invite body from the pre-password era. Retained so
-  // any older caller still compiles; new callers should use
-  // sendActivationEmail (below), which uses the Stage B activation copy
-  // from src/lib/copy/auth-emails.ts.
-  const greeting = opts.firstName ? `${opts.firstName},` : "Man,";
-  const url = `${APP_URL}/login`;
-  return send({
-    to: opts.to,
-    subject: `You're in, ${opts.communityName}`,
-    text: `${greeting}\n\nYou've been added to ${opts.communityName} on the BRAVE MAN Operating System.\n\nSign in with your email at ${url}. No password.\n\n, BRAVE MAN OS`,
-    html: shell(
-      "You're in.",
-      `<p>${greeting}</p><p>You've been added to <strong>${opts.communityName}</strong>.</p>
-       <p><a href="${url}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Sign in</a></p>
-       <p style="color:#9aa7b4;font-size:12px;">No password. Magic link only.</p>`,
-    ),
-  });
-}
+// sendInviteEmail removed 2026-08-24 — legacy magic-link body from
+// the pre-password era. Its only callers (/admin/invites and the
+// leader /leader/members invite form) are gone. All invites go
+// through sendActivationEmail via /admin/users → Send Invite.
 
 // -------------------------------------------------------------------------
 // Auth-phase transactional emails (Section 4 of the 2026-08-22 spec).

@@ -1,0 +1,7 @@
+Mission mode (touches goals + missions + family):
+  npm run coach:scenario -- steve.w@example.com mission "I keep saying I'll be more present with my kids at dinner but three weeks in a
+   row I've been on my phone. What do I actually do this week?"
+
+  General mode (touches marriage + business — the two-dimension check the spec asks for):
+  npm run coach:scenario -- dave.k@example.com general "My wife barely talks to me anymore and my top salesperson just gave notice on
+  the same day. I don't know what fire to put out first and I feel like I'm failing at both."

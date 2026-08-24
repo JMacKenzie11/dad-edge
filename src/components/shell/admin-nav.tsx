@@ -10,7 +10,6 @@ const adminItems: NavItem[] = [
   { href: "/admin", label: "Overview", exact: true },
   { href: "/admin/communities", label: "Communities" },
   { href: "/admin/users", label: "Users" },
-  { href: "/admin/invites", label: "Invites" },
   { href: "/admin/disengagement", label: "Disengagement" },
   { href: "/admin/coach-flags", label: "Coach flags" },
   { href: "/admin/jobs", label: "Jobs" },

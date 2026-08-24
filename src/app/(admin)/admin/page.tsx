@@ -16,7 +16,7 @@ export default async function AdminOverviewPage() {
     { count: activeMemberships },
     { count: openFlags },
     { count: unreviewedCorrections },
-    { count: pendingInvites },
+    { count: notActivated },
     { data: recentSignups },
   ] = await Promise.all([
     svc.from("communities").select("id", { count: "exact", head: true }).eq("status", "active"),
@@ -24,7 +24,14 @@ export default async function AdminOverviewPage() {
     svc.from("memberships").select("id", { count: "exact", head: true }).eq("status", "active"),
     svc.from("coach_flags_queue").select("id", { count: "exact", head: true }).eq("status", "open"),
     svc.from("score_corrections").select("id", { count: "exact", head: true }),
-    svc.from("invites").select("id", { count: "exact", head: true }).is("redeemed_at", null),
+    // "Not yet activated" = users with a row but no successful sign-in
+    // yet. Proxy: invited_at set + last_seen_at null. Good enough for
+    // an at-a-glance count; the /admin/users list shows per-row status.
+    svc
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .not("invited_at", "is", null)
+      .is("last_seen_at", null),
     svc
       .from("users")
       .select("id, email, first_name, last_name, created_at")
@@ -41,7 +48,7 @@ export default async function AdminOverviewPage() {
     { label: "COMMUNITIES", value: communityCount ?? 0, href: "/admin/communities" },
     { label: "USERS", value: memberCount ?? 0, href: "/admin/users" },
     { label: "ACTIVE MEMBERSHIPS", value: activeMemberships ?? 0, href: "/admin/users" },
-    { label: "PENDING INVITES", value: pendingInvites ?? 0, href: "/admin/invites" },
+    { label: "NOT ACTIVATED", value: notActivated ?? 0, href: "/admin/users" },
     { label: "OPEN COACH FLAGS", value: openFlags ?? 0, href: "/admin/coach-flags" },
     { label: "SCORE CORRECTIONS", value: unreviewedCorrections ?? 0, href: "/admin/audit" },
   ];

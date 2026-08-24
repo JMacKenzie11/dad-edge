@@ -154,11 +154,11 @@ export default async function CommunityDetailPage({
           })}
           {(members ?? []).length === 0 ? (
             <li className="px-4 py-8 text-sm text-[color:var(--color-text-muted)] text-center">
-              No members yet. Send an invite from{" "}
-              <Link href="/admin/invites" className="text-[color:var(--color-accent)]">
-                Invites
+              No members yet. Create an account from{" "}
+              <Link href="/admin/users" className="text-[color:var(--color-accent)]">
+                Users
               </Link>
-              .
+              , then Send Invite.
             </li>
           ) : null}
         </ul>

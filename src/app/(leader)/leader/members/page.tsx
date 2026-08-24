@@ -1,8 +1,7 @@
 import { resolveLeaderCommunity } from "@/lib/leader-context";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { leaderInvite, deactivateMember, reactivateMember } from "../actions";
+import { deactivateMember, reactivateMember } from "../actions";
 import { classifyDisengagement, isoDateNDaysAgo } from "@/lib/scoring/disengagement";
-import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +34,6 @@ export default async function LeaderMembersPage({
     if (!prev || c.date > prev) lastByUser.set(c.user_id, c.date);
   }
 
-  const { data: invites } = await svc
-    .from("invites")
-    .select("id, email, first_name, last_name, redeemed_at, created_at")
-    .eq("community_id", communityId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
   return (
     <div className="space-y-6">
       <header className="flex items-baseline justify-between">
@@ -52,38 +44,11 @@ export default async function LeaderMembersPage({
       {sp.saved ? <p className="text-xs text-[color:var(--color-success)]">Saved.</p> : null}
       {sp.error ? <p className="text-xs text-[color:var(--color-danger)]">{sp.error}</p> : null}
 
-      <form
-        action={leaderInvite}
-        className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] grid gap-3 md:grid-cols-[1.5fr_1fr_1fr_100px]"
-      >
-        <input type="hidden" name="community_id" value={communityId} />
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">EMAIL</span>
-          <input
-            name="email"
-            type="email"
-            required
-            className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">FIRST</span>
-          <input
-            name="first_name"
-            className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">LAST</span>
-          <input
-            name="last_name"
-            className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
-          />
-        </label>
-        <button className="h-10 self-end px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest">
-          INVITE
-        </button>
-      </form>
+      <p className="text-xs text-[color:var(--color-text-muted)]">
+        To add a new member, ask an admin to create their account and
+        send an invite. You can deactivate / reactivate existing
+        members below.
+      </p>
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-2">
@@ -162,40 +127,6 @@ export default async function LeaderMembersPage({
         </ul>
       </section>
 
-      <section>
-        <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-2">
-          Invites
-        </h2>
-        <ul className="divide-y divide-[color:var(--color-border)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] overflow-hidden text-sm">
-          {(invites ?? []).map((i) => {
-            const row = i as {
-              id: string;
-              email: string;
-              first_name: string | null;
-              last_name: string | null;
-              redeemed_at: string | null;
-              created_at: string;
-            };
-            return (
-              <li key={row.id} className="px-4 py-2 flex items-center justify-between">
-                <span>
-                  {[row.first_name, row.last_name].filter(Boolean).join(" ") || row.email}
-                </span>
-                <span className="text-xs text-[color:var(--color-text-muted)]">
-                  {row.redeemed_at
-                    ? `Redeemed ${format(new Date(row.redeemed_at), "MMM d")}`
-                    : `Sent ${format(new Date(row.created_at), "MMM d")}`}
-                </span>
-              </li>
-            );
-          })}
-          {(invites ?? []).length === 0 ? (
-            <li className="px-4 py-4 text-xs text-[color:var(--color-text-muted)] text-center">
-              No invites yet.
-            </li>
-          ) : null}
-        </ul>
-      </section>
     </div>
   );
 }

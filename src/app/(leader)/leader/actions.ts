@@ -6,7 +6,6 @@ import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireLeader } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
-import { sendInviteEmail } from "@/lib/email";
 
 /**
  * Assert the acting user leads the given community. Redirects to /today otherwise.
@@ -18,74 +17,10 @@ async function assertLeaderOf(communityId: string) {
   return user;
 }
 
-const InviteSchema = z.object({
-  community_id: z.string().uuid(),
-  email: z.string().email().max(200),
-  first_name: z.string().max(80).optional(),
-  last_name: z.string().max(80).optional(),
-});
-
-export async function leaderInvite(formData: FormData) {
-  const parsed = InviteSchema.safeParse({
-    community_id: formData.get("community_id"),
-    email: String(formData.get("email") ?? "").trim().toLowerCase(),
-    first_name: (formData.get("first_name") as string) || undefined,
-    last_name: (formData.get("last_name") as string) || undefined,
-  });
-  if (!parsed.success) redirect(`/leader/members?error=${encodeURIComponent("Bad input.")}`);
-  const leader = await assertLeaderOf(parsed.data.community_id);
-  const svc = createSupabaseServiceClient();
-
-  const { data: community } = await svc
-    .from("communities")
-    .select("name")
-    .eq("id", parsed.data.community_id)
-    .maybeSingle();
-  if (!community) redirect(`/leader/members?error=${encodeURIComponent("Community not found.")}`);
-
-  const { data: existing } = await svc
-    .from("invites")
-    .select("id")
-    .eq("email", parsed.data.email)
-    .eq("community_id", parsed.data.community_id)
-    .maybeSingle();
-
-  let inviteId: string;
-  if (existing) {
-    inviteId = (existing as { id: string }).id;
-  } else {
-    const { data, error } = await svc
-      .from("invites")
-      .insert({
-        email: parsed.data.email,
-        first_name: parsed.data.first_name ?? null,
-        last_name: parsed.data.last_name ?? null,
-        community_id: parsed.data.community_id,
-        invited_by: leader.id,
-      })
-      .select("id")
-      .single();
-    if (error) redirect(`/leader/members?c=${parsed.data.community_id}&error=${encodeURIComponent(error.message)}`);
-    inviteId = (data as { id: string }).id;
-  }
-
-  await sendInviteEmail({
-    to: parsed.data.email,
-    firstName: parsed.data.first_name ?? null,
-    communityName: (community as { name: string }).name,
-  });
-
-  await auditLog({
-    actor_user_id: leader.id,
-    action: "leader.invite",
-    target_type: "invite",
-    target_id: inviteId,
-    metadata: { email: parsed.data.email, community_id: parsed.data.community_id },
-  });
-
-  revalidatePath("/leader/members");
-  redirect(`/leader/members?c=${parsed.data.community_id}&saved=1`);
-}
+// leaderInvite removed 2026-08-24: the legacy path wrote to the
+// `invites` table and sent a magic-link email that no longer works
+// under password auth. New members are added via /admin/users
+// (CREATE ACCOUNT + SEND INVITE). Leaders ask an admin.
 
 const DeactivateSchema = z.object({
   community_id: z.string().uuid(),
