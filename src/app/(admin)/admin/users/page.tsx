@@ -25,35 +25,51 @@ export default async function UsersPage({
     await searchParams;
   const svc = createSupabaseServiceClient();
 
-  const [{ data: users }, { data: communities }] = await Promise.all([
-    (() => {
-      let query = svc
-        .from("users")
-        .select(
-          "id, email, first_name, last_name, subscription_status, subscription_source, created_at, last_seen_at, canceled_at, invited_at",
-        )
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (q) {
-        query = query.or(
-          `email.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`,
-        );
-      }
-      if (status) query = query.eq("subscription_status", status);
-      return query;
-    })(),
-    svc
-      .from("communities")
-      .select("id, name, slug")
-      .eq("status", "active")
-      .order("name", { ascending: true }),
-  ]);
+  const [{ data: users }, { data: communities }, authUsersRes] =
+    await Promise.all([
+      (() => {
+        let query = svc
+          .from("users")
+          .select(
+            "id, email, first_name, last_name, subscription_status, subscription_source, created_at, canceled_at, invited_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (q) {
+          query = query.or(
+            `email.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`,
+          );
+        }
+        if (status) query = query.eq("subscription_status", status);
+        return query;
+      })(),
+      svc
+        .from("communities")
+        .select("id, name, slug")
+        .eq("status", "active")
+        .order("name", { ascending: true }),
+      // auth.users.last_sign_in_at is only readable via the admin
+      // API. Fetch a big enough page to cover the 200-user list.
+      // Real signal for "has this guy successfully signed in at least
+      // once" — stamped by Supabase on every successful
+      // signInWithPassword regardless of what happens after.
+      svc.auth.admin.listUsers({ page: 1, perPage: 500 }),
+    ]);
 
   const communityList = (communities ?? []) as Array<{
     id: string;
     name: string;
     slug: string;
   }>;
+
+  const authSignInByUserId = new Map<string, string | null>();
+  const authUsers = (authUsersRes?.data?.users ?? []) as Array<{
+    id: string;
+    last_sign_in_at: string | null;
+  }>;
+  for (const u of authUsers) {
+    authSignInByUserId.set(u.id, u.last_sign_in_at);
+  }
 
   return (
     <div className="space-y-6">
@@ -198,7 +214,6 @@ export default async function UsersPage({
               subscription_status: string;
               subscription_source: string;
               created_at: string;
-              last_seen_at: string | null;
               canceled_at: string | null;
               invited_at: string | null;
             };
@@ -247,11 +262,9 @@ export default async function UsersPage({
                   >
                     {row.subscription_status.toUpperCase()}
                   </span>
-                  <span className="text-[color:var(--color-text-muted)]">
-                    {row.last_seen_at
-                      ? `seen ${format(new Date(row.last_seen_at), "MMM d")}`
-                      : "never seen"}
-                  </span>
+                  <SignInStatus
+                    lastSignInAt={authSignInByUserId.get(row.id) ?? null}
+                  />
                 </div>
               </li>
             );
@@ -280,6 +293,29 @@ function InviteStatus({ invitedAt }: { invitedAt: string | null }) {
   return (
     <span className="text-[color:var(--color-text-muted)]">
       invited {format(new Date(invitedAt), "MMM d")}
+    </span>
+  );
+}
+
+/**
+ * "Has this user successfully signed in at least once?"
+ *
+ * lastSignInAt comes from auth.users.last_sign_in_at (via the admin
+ * API) — Supabase stamps it on every successful signInWithPassword
+ * regardless of what the app does after. Null = never signed in
+ * (they may have been invited but haven't activated + signed in yet).
+ */
+function SignInStatus({ lastSignInAt }: { lastSignInAt: string | null }) {
+  if (lastSignInAt === null) {
+    return (
+      <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
+        NOT ACTIVATED
+      </span>
+    );
+  }
+  return (
+    <span className="text-[color:var(--color-text-muted)]">
+      signed in {format(new Date(lastSignInAt), "MMM d")}
     </span>
   );
 }

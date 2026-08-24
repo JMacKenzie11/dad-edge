@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { deleteUsersBatch } from "./actions";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -26,6 +27,16 @@ export function BulkDeleteButton({ formSelector }: { formSelector: string }) {
   const [ids, setIds] = useState<string[]>([]);
   const [confirmText, setConfirmText] = useState("");
   const [emptyHint, setEmptyHint] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Portal target is document.body — the modal MUST render outside
+  // the parent users-list <form>, since nested <form> elements are
+  // invalid HTML (browsers ignore the inner form and submit to the
+  // outer action). The BulkDeleteButton itself sits inside the outer
+  // form so it can read the checked user_ids from siblings.
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   function openDialog() {
     setEmptyHint(false);
@@ -46,6 +57,69 @@ export function BulkDeleteButton({ formSelector }: { formSelector: string }) {
     setOpen(true);
   }
 
+  const modal =
+    open && mounted
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="w-full max-w-md bg-[color:var(--color-surface)] border border-[color:var(--color-danger)]/60 rounded-[var(--radius-card)] p-5 space-y-3">
+              <div>
+                <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-danger)]">
+                  DANGER ZONE
+                </p>
+                <h2 className="text-lg font-semibold text-white mt-1">
+                  Delete {ids.length} account{ids.length === 1 ? "" : "s"}?
+                </h2>
+                <p className="text-sm text-[color:var(--color-text-muted)] mt-2">
+                  Permanent. Removes the auth users, their user rows,
+                  and cascades any child data with cascade-on-delete
+                  FKs. Not reversible. Not for cancellations. Use
+                  ENTITLEMENT set to canceled for that.
+                </p>
+              </div>
+              <form action={deleteUsersBatch} className="space-y-3">
+                {ids.map((id) => (
+                  <input key={id} type="hidden" name="user_ids" value={id} />
+                ))}
+                <label className="block">
+                  <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+                    TYPE DELETE TO CONFIRM
+                  </span>
+                  <input
+                    name="confirm_text"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    autoFocus
+                    autoComplete="off"
+                    className="mt-1 w-full h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
+                    placeholder="DELETE"
+                  />
+                </label>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="h-10 px-4 rounded-md bg-transparent text-[color:var(--color-text-muted)] hover:text-white font-heading text-xs tracking-widest"
+                  >
+                    CANCEL
+                  </button>
+                  <SubmitButton
+                    variant="danger"
+                    label="DELETE ACCOUNTS"
+                    pendingLabel="DELETING…"
+                    disabled={confirmText !== "DELETE"}
+                  />
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <>
       <button
@@ -60,65 +134,7 @@ export function BulkDeleteButton({ formSelector }: { formSelector: string }) {
           Select at least one user first.
         </span>
       ) : null}
-
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md bg-[color:var(--color-surface)] border border-[color:var(--color-danger)]/60 rounded-[var(--radius-card)] p-5 space-y-3">
-            <div>
-              <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-danger)]">
-                DANGER ZONE
-              </p>
-              <h2 className="text-lg font-semibold text-white mt-1">
-                Delete {ids.length} account{ids.length === 1 ? "" : "s"}?
-              </h2>
-              <p className="text-sm text-[color:var(--color-text-muted)] mt-2">
-                Permanent. Removes the auth users, their user rows, and
-                cascades any child data with cascade-on-delete FKs. Not
-                reversible. Not for cancellations — ENTITLEMENT →
-                canceled handles that.
-              </p>
-            </div>
-            <form action={deleteUsersBatch} className="space-y-3">
-              {ids.map((id) => (
-                <input key={id} type="hidden" name="user_ids" value={id} />
-              ))}
-              <label className="block">
-                <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-                  TYPE DELETE TO CONFIRM
-                </span>
-                <input
-                  name="confirm_text"
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  autoFocus
-                  autoComplete="off"
-                  className="mt-1 w-full h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
-                  placeholder="DELETE"
-                />
-              </label>
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="h-10 px-4 rounded-md bg-transparent text-[color:var(--color-text-muted)] hover:text-white font-heading text-xs tracking-widest"
-                >
-                  CANCEL
-                </button>
-                <SubmitButton
-                  variant="danger"
-                  label="DELETE ACCOUNTS"
-                  pendingLabel="DELETING…"
-                  disabled={confirmText !== "DELETE"}
-                />
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+      {modal}
     </>
   );
 }
