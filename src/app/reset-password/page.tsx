@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { updatePassword } from "@/app/login/actions";
@@ -72,7 +73,20 @@ export default async function ResetPasswordPage({
             className="w-full"
           />
           {params.error ? (
-            <p className="text-xs text-[color:var(--color-danger)]">{params.error}</p>
+            <div className="text-xs text-[color:var(--color-danger)] space-y-2">
+              <p>{params.error}</p>
+              {/* When the error is the "already set that password"
+                  case, offer a direct sign-in path so the user isn't
+                  stuck in a reset loop. */}
+              {/already set/i.test(params.error) ? (
+                <Link
+                  href="/login"
+                  className="inline-block h-9 px-3 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-[11px] tracking-widest leading-9"
+                >
+                  GO TO SIGN IN
+                </Link>
+              ) : null}
+            </div>
           ) : null}
         </form>
       </div>

@@ -182,7 +182,17 @@ export async function updatePassword(formData: FormData) {
   });
   if (error) {
     console.warn("[login] updatePassword failed: %s", error.message);
-    redirect(`/reset-password?error=${encodeURIComponent(error.message)}`);
+    // Supabase rejects when the new password equals the current one.
+    // Raw error copy ("New password should be different from the old
+    // password") reads as scary; translate to a friendlier hint that
+    // acknowledges they might have already set this password on a
+    // prior attempt and can just sign in.
+    const friendly = /different from the old|same as the old/i.test(
+      error.message,
+    )
+      ? "You've already set that password. Sign in with it here — no need to reset again."
+      : error.message;
+    redirect(`/reset-password?error=${encodeURIComponent(friendly)}`);
   }
 
   console.info(
