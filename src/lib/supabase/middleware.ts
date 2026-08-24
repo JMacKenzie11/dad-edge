@@ -29,7 +29,7 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
 
   const url = request.nextUrl;
   const isProtected =
@@ -45,6 +45,23 @@ export async function updateSession(request: NextRequest) {
     url.pathname.startsWith("/admin");
 
   if (isProtected && !user) {
+    // Sign-in loop diagnostic: log every unauthenticated protected-
+    // page hit so we can see when a redirect chain from /login is
+    // failing to carry the session cookie. Includes cookie names
+    // (not values) so we can tell whether the session cookie was
+    // present at all vs missing entirely.
+    const referrer = request.headers.get("referer") ?? "(none)";
+    const cookieNames = request.cookies
+      .getAll()
+      .map((c) => c.name)
+      .join(",");
+    console.warn(
+      "[middleware] unauth on protected path %s · getUser err=%s · referer=%s · cookies=%s",
+      url.pathname,
+      userErr?.message ?? "none",
+      referrer,
+      cookieNames || "(none)",
+    );
     const redirect = url.clone();
     redirect.pathname = "/login";
     redirect.searchParams.set("next", url.pathname);
