@@ -27,6 +27,7 @@ const items = [
 const dashboardItem = { href: "/dashboard", label: "My Braveman", icon: "▤" } as const;
 const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
 const communityItem = { href: "/community", label: "Community", icon: "◈" } as const;
+const coachItem = { href: "/coach", label: "Coach Larry", icon: "◐" } as const;
 const messagesItem = { href: "/messages", label: "Messages", icon: "✉" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
@@ -62,15 +63,18 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
   const pathname = usePathname();
-  // Desktop order: My Braveman → Community → Goals → daily
-  // items (Today, Missions, Coach Larry, Me) → Messages → Admin
-  // (if platform admin). Messages sits below daily items so the
-  // eye lands on the daily work first; the header messages icon
-  // is the fast-access path when there's an unread ping.
-  const dailyItems = items.filter((it) => it.href !== "/community");
+  // Desktop order: My Braveman → Community → Coach Larry → Goals →
+  // daily items (Today, Missions, Me) → Messages → Admin (if
+  // platform admin). Coach Larry sits directly under Community
+  // per product decision 2026-08-25 — the coach conversation is
+  // paired with the peer surface rather than buried in the daily
+  // items block.
+  const dailyItems = items.filter(
+    (it) => it.href !== "/community" && it.href !== "/coach",
+  );
   const navItems = isPlatformAdmin
-    ? [dashboardItem, communityItem, goalsItem, ...dailyItems, messagesItem, adminItem]
-    : [dashboardItem, communityItem, goalsItem, ...dailyItems, messagesItem];
+    ? [dashboardItem, communityItem, coachItem, goalsItem, ...dailyItems, messagesItem, adminItem]
+    : [dashboardItem, communityItem, coachItem, goalsItem, ...dailyItems, messagesItem];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
