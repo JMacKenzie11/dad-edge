@@ -290,6 +290,7 @@ export function ThreadView({
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message"
           maxLength={4000}
+          autoFocus
           className="flex-1 h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm focus:outline-none focus:border-[color:var(--color-accent)]"
         />
         <button
