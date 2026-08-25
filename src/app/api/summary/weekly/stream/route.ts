@@ -294,8 +294,12 @@ function safeReadFile(p: string): string {
  * Parse the model output into { highlight, what_worked, opportunity }.
  * Tolerates extra whitespace around markers. Returns null if any
  * section is missing so we don't persist a half-broken row.
+ *
+ * NOT exported — Next.js route files reject non-handler exports. If
+ * this parser ever needs sharing (e.g. a test suite), lift it into
+ * src/lib/weekly-summary/parse.ts and import it from both sides.
  */
-export function parseSections(text: string): {
+function parseSections(text: string): {
   highlight: string;
   what_worked: string;
   opportunity: string;
