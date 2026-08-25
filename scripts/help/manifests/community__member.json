@@ -18,11 +18,33 @@
     {
       "kind": "link",
       "label": "← back to your day"
+    },
+    {
+      "kind": "field",
+      "label": "Leaderboard"
+    },
+    {
+      "kind": "field",
+      "label": "People"
+    },
+    {
+      "kind": "field",
+      "label": "Search by name"
+    },
+    {
+      "kind": "field",
+      "label": "STREAK"
+    },
+    {
+      "kind": "link",
+      "label": "MESSAGE →"
     }
   ],
-  "source_hash": "79e993a4ca54733f",
+  "source_hash": "11f4dccb95883d2a",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard-card.tsx"
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/community-tabs.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard-card.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/people-tab.tsx"
   ]
 }

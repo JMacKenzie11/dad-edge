@@ -1,0 +1,21 @@
+{
+  "route_pattern": "/messages",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "+ NEW"
+    },
+    {
+      "kind": "link",
+      "label": "BROWSE COMMUNITY"
+    }
+  ],
+  "source_hash": "f6ddf2f4167c816f",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/messages/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/messages/inbox-pane.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/messages/layout.tsx"
+  ]
+}

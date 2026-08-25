@@ -32,8 +32,28 @@
       "label": "itc_access"
     },
     {
+      "kind": "toggle",
+      "label": "is_admin_only"
+    },
+    {
       "kind": "header",
       "label": "Memberships"
+    },
+    {
+      "kind": "select",
+      "label": "role"
+    },
+    {
+      "kind": "button",
+      "label": "REMOVE"
+    },
+    {
+      "kind": "select",
+      "label": "community_id"
+    },
+    {
+      "kind": "button",
+      "label": "ADD"
     },
     {
       "kind": "field",
@@ -52,7 +72,7 @@
       "label": "Recent missions"
     }
   ],
-  "source_hash": "5bb3d8356152cb52",
+  "source_hash": "68b801021c969109",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/[id]/page.tsx"
   ]

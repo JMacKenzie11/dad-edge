@@ -36,6 +36,10 @@
       "label": "is_platform_admin"
     },
     {
+      "kind": "toggle",
+      "label": "is_admin_only"
+    },
+    {
       "kind": "button",
       "label": "CREATE ACCOUNT"
     },
@@ -80,7 +84,7 @@
       "label": "DELETE SELECTED"
     }
   ],
-  "source_hash": "69e8acf9c8e65274",
+  "source_hash": "5508f511066d6148",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/actions.ts",

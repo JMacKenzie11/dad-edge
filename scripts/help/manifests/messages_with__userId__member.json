@@ -1,0 +1,10 @@
+{
+  "route_pattern": "/messages/with/[userId]",
+  "view_key": null,
+  "role": "member",
+  "elements": [],
+  "source_hash": "e3b0c44298fc1c14",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/messages/with/[userId]/page.tsx"
+  ]
+}

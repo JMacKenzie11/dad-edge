@@ -8,6 +8,10 @@
       "label": "Help content review"
     },
     {
+      "kind": "button",
+      "label": "REGEN ALL STALE"
+    },
+    {
       "kind": "field",
       "label": "title"
     },
@@ -40,7 +44,7 @@
       "label": "REGEN"
     }
   ],
-  "source_hash": "be491b504964e29b",
+  "source_hash": "af3f354ba27b06c2",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/actions.ts",

@@ -18,6 +18,17 @@ _Change log since 2026-08-20 snapshot:_
 - **Sign-in loop fix (`f82080d`):** removed `signOut({scope:"others"})` from `updatePassword` (was invalidating the current session under Next.js server-action cookie handling); added `revalidatePath` after auth mutations. Friendly translation of Supabase's "new password can't be the same as old" error into a "you've already set that password — sign in with it" message + a GO TO SIGN IN button on `/reset-password`.
 - **Logout:** explicit 303 redirect to `/login` (was 307 to `/` → 405 blank screen).
 - Voice/tone pass across every user-facing surface: em-dashes stripped, partner form generalized ("HER" → "PARTNER"), copy tightened per `docs/coach-voice-and-tone.md`.
+- **In-app notifications (bell)** shipped: `notifications` table with per-kind dedup, header bell with unread badge + dropdown, five kinds (daily_reminder, week_lock, weekly_digest, quarter_closing, goal_midpoint). New nightly job `goal-midpoint-check`.
+- **Weekly summary card** on `/dashboard` — grace-period-gated streaming recap ({ highlight, what_worked, opportunity }) persisted to `weekly_summaries`. Streams via `[HIGHLIGHT]/[WHAT WORKED]/[OPPORTUNITY]` markers with typewriter reveal.
+- **Pillar Consistency chart** replaces the old grouped bar chart on `/dashboard`; Action pillar dropped (derived from missions). Daily Living trend card removed — weekly summary now carries the trend narrative.
+- **Community tabs shipped:** `/community` is now Leaderboard + People (new). People tab renders a 6-week rolling directory with tenure-normalized activity + streak + mission metrics, gold/silver/bronze pips, search + sort, MESSAGE button.
+- **1-on-1 messaging shipped:** `message_threads` + `messages` + `message_reactions` with canonical (a<b) pair ordering, RLS gated on shared-active-community at thread creation, realtime publication. Messages nav item + speech-bubble header icon with unread badge. Two-pane `/messages` shell, quick reactions, day-dividers, optimistic send.
+- **Admin memberships management:** `/admin/users/[id]` now edits per-membership role, removes memberships, and adds new ones via community dropdown + role selector. Audit-logged.
+- **Admin-only users:** new `users.is_admin_only` flag (requires `is_platform_admin`). `requireAccess()` short-circuits admin-only users to `/admin`; coachee shell hidden. New Account form gains an "Admin only" checkbox.
+- **Goals page:** entire adaptive-goal section now hidden for users without `itc_access`. Multi-lookup fallback finds the ITC map by `participant_id` when the goal-link is missing (legacy migrated users).
+- **Nav reordered:** Today → My Braveman → Community → Coach Larry → Goals → Missions → Me → Messages → Admin. "Community" replaced "Leaderboard" as the label since the page now has both tabs.
+- **Admin polish:** `/admin/jobs` FORCE checkbox on daily reminders + mission-day nudges; new `goal-midpoint-check` + `mark-goals-for-review` jobs. `/admin/help-content` REGEN ALL STALE button. `/admin/disengagement` renamed "Silent" → "Inactive", split "Never activated" out, corrected ranges to 21+/14-20/7-13/3-6 days.
+- **Cron dedup fix:** `daily-reminders`, `week-lock`, `disengagement-scan` now dedupe email + notifications per user_id across communities via in-memory Set. Digest stays intentionally per-community.
 
 ---
 
@@ -114,9 +125,13 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 |------|------|---------|
 | `/today` (also root default) | `src/app/(app)/today/page.tsx` | Daily check-in hub. Shows today's date, this week's Daily Living total (0–56), engagement streak, 8-pillar tap-to-toggle grid, and a Reflections panel with optional Wins/Learnings text. `A2` is displayed as derived from today's mission completions. |
 | `/missions` | `src/app/(app)/missions/page.tsx` | Weekly mission planner. Shows this week (and next week if today is Sunday), active quarterly goals, quarter-deadline countdown, mission creation form with concreteness validation, and mission completion controls with completed-late flag. |
-| `/goals` | `src/app/(app)/goals/page.tsx` | Quarterly goal management (create / edit / status). |
-| `/community` | `src/app/(app)/community/page.tsx` | Community scorecard. Per member: daily total (0-49), mission completion (X/planned), combined weekly total, engagement streak, delta vs prior week. Canceled-within-win-back members shown with an "INACTIVE" badge. |
+| `/goals` | `src/app/(app)/goals/page.tsx` | Quarterly goal management (create / edit / status). "Adaptive Goal" section (ITC map card) is gated on `users.itc_access=true`; hidden entirely for coachees without ITC access. When ITC access is on but no active map exists, renders a "No active ITC map" placeholder. Multi-lookup fallback: if the `quarterly_goals.itc_map_id` link is missing (legacy migrated users whose map predates the goal-mirror hook), looks up the map by `participant_id`. |
+| `/community` | `src/app/(app)/community/page.tsx` | Two-tab shell (`community-tabs.tsx`) driven by `?tab=` param: **Leaderboard** (existing scorecard content — daily/49, mission completion, combined total, streak, delta, INACTIVE badge for canceled-within-win-back) and **People** (new — see §6 People directory). Multi-community members see rosters from every community they're in, deduped by user_id, with all community names listed in the header. |
 | `/community/leaderboard` | `src/app/(app)/community/leaderboard/page.tsx` | Tabs: Weekly, Monthly (4-week rolling), Streaks. Top 3 get a medal treatment. |
+| `/dashboard` (aka "My Braveman") | `src/app/(app)/dashboard/page.tsx` | Personal dashboard. Top card: streaming **Weekly Summary** (`weekly-summary-card.tsx`) — grace-period-gated, three sections ({ highlight, what_worked, opportunity }), typewriter reveal on first generation, static on subsequent loads. Pillar Consistency chart (`pillar-progress-chart.tsx`) replaces the older grouped bar chart — brand-colored progress bars per pillar, denominator = days elapsed in quarter, last-quarter overlay tick + delta pill, sorted strongest → weakest, Action pillar dropped (derived from missions). Old "Daily Living trend" card removed — the weekly summary now carries the trend narrative. |
+| `/messages` | `src/app/(app)/messages/page.tsx` + `layout.tsx` | Inbox. Two-pane on desktop (thread list left, message pane right); stacked on mobile. Root `page.tsx` renders empty right-pane state; layout owns the inbox rail. |
+| `/messages/[threadId]` | `src/app/(app)/messages/[threadId]/page.tsx` + `thread-view.tsx` | Server fetches messages + reactions for the thread; `ThreadView` client component owns realtime subscription per-thread, optimistic send, day-divider bubbles, 5 quick reactions (👍 ❤️ 💪 🔥 🙏), autofocus input. |
+| `/messages/with/[userId]` | `src/app/(app)/messages/with/[userId]/page.tsx` | Server-side resolver: finds or creates a thread with `userId` (canonical pair, shared-community precheck), redirects into `/messages/[threadId]`. Used by the MESSAGE button on the People tab and elsewhere. |
 | `/coach` | `src/app/(app)/coach/page.tsx` | Coach Larry hub — lists conversations, "new conversation" button (general or mission mode). Nav label is "Coach Larry"; card copy uses first-name personalization ("Talk to Larry"). |
 | `/coach/[id]` | `src/app/(app)/coach/[id]/page.tsx` | Threaded conversation. Coach messages get a purple accent + Centurion mark avatar. Mission suggestion cards render inline with accept/reject. |
 | `/me` | `src/app/(app)/me/page.tsx` | Profile: circular avatar (via `UserAvatar` component; initial fallback), name, email, city, partner summary, kids summary, latest survey composite + delta. Edit link → `/me/profile`. |
@@ -143,12 +158,13 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | `/admin` | Platform overview: communities, active members, this week's check-ins, disengagement. |
 | `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). |
 | `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. |
-| `/admin/users` | User list with subscription status. Universal checkboxes drive two batch actions: SEND INVITES (BATCH) (fires activation via Resend) and DELETE SELECTED (opens modal requiring typed "DELETE" confirmation). New Account form creates auth + public user in one step with optional platform-admin checkbox. All buttons use the shared `<SubmitButton>` with pending state (spinner + disabled + swapped label). |
-| `/admin/users/[id]` | Edit a user: subscription status, platform-admin toggle, `itc_access` toggle (grants `/itc` access to a user not linked via the migration script), single-user Send Invite, and a Danger Zone panel with a hard-delete requiring typed email confirmation. Audit-log entries surface below. |
-| `/admin/disengagement` | Platform-wide disengagement view. |
+| `/admin/users` | User list with subscription status. Universal checkboxes drive two batch actions: SEND INVITES (BATCH) (fires activation via Resend) and DELETE SELECTED (opens modal requiring typed "DELETE" confirmation). New Account form creates auth + public user in one step with optional platform-admin checkbox and an **"Admin only"** checkbox (community selector becomes optional; server refuses admin-only without platform-admin). All buttons use the shared `<SubmitButton>` with pending state (spinner + disabled + swapped label). |
+| `/admin/users/[id]` | Edit a user: subscription status, platform-admin toggle, `itc_access` toggle, **admin-only toggle** (`setAdminOnly` force-sets `is_platform_admin=true` alongside), single-user Send Invite, and a Danger Zone panel with a hard-delete requiring typed email confirmation. **Memberships management** section: per active membership a role dropdown (Member/Leader) with save action + REMOVE button, plus an "Add to community" form (community dropdown that excludes ones the user is already in + role selector + ADD). Backed by `addMembership` / `removeMembership` / `setMembershipRole` server actions in `src/app/(admin)/admin/users/actions.ts`, all audit-logged. Audit-log entries surface below. |
+| `/admin/disengagement` | Platform-wide disengagement view. Split into "Never activated" + "Inactive" sections (renamed from "Silent" on 2026-08-24). Inactive ranges: **21+ / 14-20 / 7-13 / 3-6 days inactive**. |
 | `/admin/coach-flags` | Review queue for messages flagged by the safety classifier (severity ≥ medium, per 2026-08-27 update). Filterable by severity + status via `?severity=` + `?status=` query params. Notes + mark reviewed. |
 | `/admin/audit` | Platform-wide audit log, searchable by actor / action / target. |
-| `/admin/jobs` | Manual trigger for daily jobs with recent run history. |
+| `/admin/jobs` | Manual trigger for daily jobs with recent run history. **FORCE checkbox** next to Daily reminders + Mission-day nudges bypasses the time-of-day gate for testing. Includes `goal-midpoint-check` and `mark-goals-for-review` alongside the existing jobs. |
+| `/admin/help-content` | Manages the help-content library (source manifests → DB rows). **REGEN ALL STALE** button appears when stale count > 0; recomputes `source_hash` across manifests + DB rows and regenerates every mismatched row in one click. |
 
 ### 3.6 API routes
 Coach
@@ -190,7 +206,7 @@ Cron
 Migrations live in `supabase/migrations/`. Schema highlights below.
 
 ### Core
-- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–6 with current flow), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
+- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `is_admin_only` (backstage-only admin; CHECK `users_admin_only_requires_platform_admin` forces `is_platform_admin=true` when true), `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–6 with current flow), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
 - **`communities`** — name, unique slug, accent color, timezone, `leaderboard_enabled`, `missions_visible`, status (`active` / `archived`), `week_lock_days` (default 3).
 - **`memberships`** — one row per (user, community). Role (`member` / `leader`), status (`active` / `inactive` / `removed`), `joined_at`, `deactivated_at`, `canceled_visible_until` (= `deactivated_at + 30 days`). **Platform admins are auto-provisioned as `leader` in every community** via triggers `communities_grant_admins` (fires on community insert) and `users_grant_admin_communities` (fires when `is_platform_admin` flips true on insert or update). Backfill runs at migration time (`20260824000002`) for existing state. Idempotent via `on conflict (user_id, community_id) do nothing`.
 - **`weeks`** — per community, Monday `start_date`, `is_intensive`, `locked_at`. Unique (community, start_date).
@@ -199,6 +215,27 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - **`quarterly_goals`** — user + quarter_start + focus_area (pillar) + `desired_end_state` (renamed from `description` in migration `20260826000002`; both user and ITC goals use this column) + `current_state` (start line, user goals only) + `source` (`user`/`itc`, from migration `20260826000001`) + `status` (`active`/`completed`/`abandoned`/`needs_review`) + `midpoint_check_at` + `midpoint_check_answer` + `retrospective_what_happened` + `retrospective_what_learned`. DB trigger `enforce_active_goals_cap_trg` enforces a split cap: 2 user-authored active goals + 1 ITC-mirrored (3 total) per user per quarter. See §6 for the review flow that transitions goals into `needs_review`.
 - **`missions`** — user, community, optional `quarterly_goal_id`, description (≥ 8 chars, DB CHECK), pillar, target_date, status (`planned` / `completed` / `missed` / `rolled_over`), `rolled_over_from_mission_id`, `created_by` (`user` / `coach_suggested`), `completed_at`, `completed_late`, `legacy_import`, `is_exemplar`. Trigger `enforce_mission_weekly_cap_trg` enforces cap of 15/week total, 5/goal-bucket, 5/other; rolled-over missions excluded from count.
 - **`daily_reflections`** — one row per (user, date) with optional `wins` + `learnings`. Self-only RLS; coach reads via service role.
+
+### Notifications (migration `20260824000004`)
+- **`notifications`** — `user_id → users(id)`, `kind text`, `title text`, `body text nullable`, `deep_link text`, `target_type text nullable`, `target_id uuid nullable`, `dedup_key text`, `metadata jsonb`, `created_at`, `read_at nullable`.
+- **Unique** `(user_id, kind, dedup_key)` — writers use `ON CONFLICT DO NOTHING` for idempotency (same kind fires many times per day across communities without duplicating rows for the user).
+- **Indexes:** `(user_id, created_at desc)` powers the dropdown; partial `(user_id) WHERE read_at IS NULL` powers the unread badge count.
+- **RLS:** user reads their own; user updates their own (used only to stamp `read_at`).
+
+### Weekly summaries (migration `20260825000001`)
+- **`weekly_summaries`** — PK `(user_id, week_start)`, `body jsonb` (shape `{ highlight, what_worked, opportunity }`), `model text`, `generated_at`.
+- **RLS:** read own. Insert/update via service role (`onFinish` of the stream).
+
+### Messaging (migration `20260825000002`)
+- **`message_threads`** — `(participant_a, participant_b)` unique + CHECK `a < b` (canonical ordering — thread lookups always sort the pair) + CHECK `a <> b` (no self-threads). `last_message_at timestamptz` denormalized so inbox sort doesn't need a join. Created via `findOrCreateThread` which also enforces the shared-community precheck.
+- **`messages`** — `thread_id`, `sender_id`, `body text` (CHECK length 1..4000), `read_at` (recipient stamps on view), `created_at`. Immutable content after insert.
+- **`message_reactions`** — PK `(message_id, user_id)`, `emoji text`. One emoji per user per message (toggle replaces).
+- **RLS:**
+  - Threads: readable if participant. Insert allowed only if caller is a participant AND both participants share ≥1 active community membership. Once created, further messages don't re-check the shared-community gate (Slack "left the group" semantics).
+  - Messages: read if participant. Insert if `sender_id = auth.uid()` and caller participates. Update `read_at` only if caller is the recipient (never the sender).
+  - Reactions: read if participant. Insert/delete own only.
+- **Realtime:** `messages`, `message_reactions`, `message_threads` added to `supabase_realtime` publication.
+- **Excluded (never):** group chats, attachments, coach visibility. **Excluded from v1:** reporting/blocking, typing indicators.
 
 ### Family layer (self-only RLS everywhere)
 - **`partner_profiles`** — unique per user. Name, relationship_label enum, partner_birthdate, relationship_date, `things_loved` TEXT[].
@@ -257,6 +294,19 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 **ITC session guard** — `requireItcParticipant()` in `src/lib/itc/session-guards.ts`. Two-path resolver:
 1. **Main-app path.** Read the Supabase session. If `users.itc_access=true`, upsert an `itc_participants` row for the email and return. If onboarding is incomplete for a non-admin, redirect to the wizard first. If the session exists but `itc_access=false`, redirect to `/itc/no-access`.
 2. **Legacy path.** Fall back to the ITC session cookie (`readItcSession`) for coachees not yet migrated. Redirects to `/login?next=/itc` when neither resolves.
+
+**Admin-only users.** `users.is_admin_only` (migration `20260825000003`) toggles a user into backstage-only mode. DB CHECK forces `is_platform_admin=true` when `is_admin_only=true`. Three valid states:
+
+| `is_platform_admin` | `is_admin_only` | Effect |
+|---|---|---|
+| `false` | `false` | Coachee (default). |
+| `true`  | `false` | Coachee + admin. Lands on `/today`, can visit `/admin/*`. |
+| `true`  | `true`  | Backstage admin only. No coachee shell. |
+
+Behavior:
+- `requireAccess()` in `src/lib/session.ts` short-circuits to `/admin` when `is_admin_only`. Every coachee route redirects automatically.
+- Sign-in landing (`src/app/login/actions.ts`) and marketing landing (`src/app/page.tsx`) both check `is_admin_only` first and route to `/admin`.
+- New Account form gates the "Admin only" checkbox on the "platform admin" checkbox being on; server refuses admin-only-without-platform-admin. User detail page `setAdminOnly` action force-sets `is_platform_admin=true` alongside so the flag combination is always valid.
 
 ---
 
@@ -336,6 +386,53 @@ Two independent numbers plus a combined total:
 - ITC coach loads only the shared doc via `src/lib/itc/prompts/preamble.ts`. Its voice is calibrated and working; the stricter rules would over-constrain a scoped surface for no gain.
 - Defensive em-dash / en-dash / double-hyphen strip on main-coach output via `src/lib/coach/scrub-reply.ts`, applied in `send-message.ts` before persist + return. Belt-and-suspenders for the punctuation ban.
 
+### Notification kinds + dedup
+- Writers insert with `ON CONFLICT (user_id, kind, dedup_key) DO NOTHING`; every kind has its own dedup key semantics so re-runs and multi-community fan-out don't multiply rows.
+- Kinds:
+
+| Kind | Emitter | Dedup key | Cadence |
+|------|---------|-----------|---------|
+| `daily_reminder`   | `src/lib/jobs/daily-reminders.ts` cron | `YYYY-MM-DD` local date | One per user per day (alongside existing email). |
+| `week_lock`        | `src/lib/jobs/week-lock.ts` cron | `week_start` of the locking week | One per user, 2 days before lock. Deduped across communities via in-memory Set. |
+| `weekly_digest`    | `src/lib/jobs/digest.ts` | `community_id + week_start` | One per leader per community — leaders of N communities intentionally get N. |
+| `quarter_closing`  | `src/lib/jobs/mark-goals-for-review.ts` | `goal_id` | Fires when a goal flips to `needs_review`. |
+| `goal_midpoint`    | `src/lib/jobs/goal-midpoint-check.ts` (nightly, new) | `goal_id` | One per goal whose `midpoint_check_at <= today` and `midpoint_check_answer IS NULL`. |
+
+- **Bell UI** (`src/components/shell/notification-bell.tsx`): icon in the app header (right of avatar), unread count badge (max `"9+"`), dropdown with last 20 rows, MARK ALL READ, row click → follow `deep_link` + mark read via `src/lib/notifications/actions.ts`.
+- **Voice:** titles are terse per `docs/coach-voice-and-tone.md` — "Log today.", "Week locks Friday.", "Wrap this goal."
+- **Cron dedup (2026-08-24):** `daily-reminders`, `week-lock`, `disengagement-scan` all dedupe email + notifications per user_id across communities via in-memory Set. Digest is intentionally still per-community.
+
+### Weekly summary flow (`/dashboard` top card)
+State machine in `src/lib/weekly-summary/state.ts` returns one of `ready | generating | not_yet | no_activity`:
+1. **Grace-period gate.** `not_yet` until last week's Sunday + `earliest(week_lock_days)` across the user's memberships. Prevents generating a recap before the week has settled for at least one of the user's communities.
+2. **Zero-activity check.** If the user had zero check-ins in the target week → `no_activity` (skip generation entirely, card renders a light empty state).
+3. **Persisted row.** If a `weekly_summaries` row exists → `ready` (static render).
+4. Otherwise → `generating` (stream on card mount).
+
+**Streaming API:** `POST /api/summary/weekly/stream` with `weekStart` body. Server **re-resolves state** (never trusts the client) to prevent replay-triggered regeneration. Gathers 7 days of check-ins per pillar, missions planned vs completed, `daily_reflections`, active goals. Calls `streamText` from AI SDK against Claude with structured `[HIGHLIGHT] / [WHAT WORKED] / [OPPORTUNITY]` markers baked into the prompt. `onFinish` parses on the delimiters and persists `{ highlight, what_worked, opportunity }` to `weekly_summaries`.
+
+**Client card** (`src/app/(app)/dashboard/cards/weekly-summary-card.tsx`) splits the incoming text on the markers as it arrives → typewriter reveal per section with a blinking cursor at the tail. Static section-by-section render on subsequent loads.
+
+**Voice rules baked into the prompt:** no em-dashes, no "read" as a noun, positively framed but honest, opportunity-oriented forward-facing close.
+
+**Failure handling:** the state resolver is wrapped in try/catch — DB failure returns `null` and the card hides silently so the dashboard stays alive. Stream fetch failure renders a compact "Recap couldn't generate. TRY AGAIN" state on the card.
+
+### Community messaging boundary rule
+- Threads can only be created between users who share ≥1 **active** community membership at the moment of thread creation (`findOrCreateThread` in `src/lib/messages/threads.ts` does the precheck and returns a plain-English error string when the pair doesn't qualify).
+- Once a thread exists, subsequent messages never re-check the shared-community gate — mirrors Slack's "left the group" semantics. A member who is later removed from every shared community can still exchange messages in existing threads.
+- Reactions: 5 quick picks only (👍 ❤️ 💪 🔥 🙏). Emoji picker not shipped.
+- No group chats, attachments, or coach visibility (never). No reporting/blocking or typing indicators in v1.
+
+### People directory (rolling 6-week window)
+- Server aggregates per member in `src/lib/community/people-directory.ts`; consumed by `src/app/(app)/community/people-tab.tsx`.
+- **`dailyLivingAvg`** = check-ins over the last 6 weeks ÷ `min(6, tenureWeeks)` — tenure-normalized so new members aren't punished for not having 6 weeks of history.
+- **`missionPct`** = completed / planned over the last 6 weeks (`null` when the member had no planned missions in-window).
+- **`streak`** = current engagement streak (same calc as `/today`).
+- **Top-3 pips per metric** — gold / silver / bronze pip on the top three members in each of Activity / Streak / Missions.
+- **Card layout:** `<UserAvatar>`, name + role tag, city + tenure line ("3 weeks in" for new members), pillar-colored goal chips (max 3), metric strip, MESSAGE button (routes to `/messages/with/[userId]`).
+- **Client controls:** search box + sort dropdown (activity / streak / missions / newest / A→Z).
+- **Multi-community handling:** rosters union across every community the viewer is in, deduped by user_id, all community names listed in the header. Rare — no picker.
+
 ### Concreteness validator (`src/lib/validation/mission.ts`)
 1. Description length ≥ 8 chars.
 2. Target date must be an ISO `YYYY-MM-DD` real date.
@@ -376,6 +473,12 @@ Open `/me/survey` → start new survey → sit with partner → for each of 15 q
 ### Admin community setup
 `/admin/communities` → create community → `/admin/users` CREATE ACCOUNT (assigns to community) → SEND INVITE → member sets password + goes through onboarding wizard.
 
+### Messaging
+Open `/messages` or hit the MESSAGE button on a People-tab card → server resolves the canonical pair (`a < b`) → `findOrCreateThread` runs the shared-active-community precheck → new thread inserted or existing one reused → redirect to `/messages/[threadId]` → `ThreadView` subscribes to realtime for that thread → sender types → optimistic bubble appears → server insert → recipient sees it live and stamps `read_at` on view. Reactions: tap one of the 5 quick emoji, `toggleReaction` server action inserts or deletes. Header bell + Messages nav item show unread thread counts and refetch via realtime subscription on new messages.
+
+### Weekly summary
+Land on `/dashboard` → state resolver runs → if within grace period, card renders "not yet" empty state; if zero check-ins that week, renders "no activity" state; if a persisted row exists, static render; otherwise card mounts, POSTs to `/api/summary/weekly/stream`, and streams `[HIGHLIGHT] / [WHAT WORKED] / [OPPORTUNITY]` sections with typewriter reveal. `onFinish` persists to `weekly_summaries`; subsequent loads are static. Stream failure → compact "TRY AGAIN" state; state-resolver failure → card hides silently.
+
 ---
 
 ## 8. Integrations
@@ -401,6 +504,8 @@ Open `/me/survey` → start new survey → sit with partner → for each of 15 q
 - `npm run brand:sync` (`scripts/sync-brand-assets.ts`) — reserved for auto-syncing brand assets to `/public/brand/`.
 - `npm run migrate:itc` (`scripts/migrate-itc-participants.ts`) — `--dry-run` / `--apply` modes. Links `itc_participants` to `users` by email (case-insensitive), sets `itc_access=true` on matched user rows, populates `itc_maps.user_id`. Unmatched participants reported for manual account creation. Idempotent; safe to re-run.
 - `npm run reset:onboarding` (`scripts/reset-onboarding.ts`) — `--dry-run` / `--apply` modes. Resets `onboarding_step` on existing users so they re-see newly-added wizard steps. `--email <addr>` targets a single user; `--step <N>` overrides the default (1, the new profile step); `--include-admins` overrides the default admin skip. Only moves users forward-to-backward — never pushes mid-flow users past what they were doing.
+- `npm run backfill:itc-goals` (`scripts/backfill-itc-quarterly-goals.ts`) — `--apply` writes; default is dry-run. Mirrors ITC map goals into `quarterly_goals` for maps whose link never got created (goal saved before the participant → user bridge existed, or before `syncItcGoalToTracker` shipped). Idempotent via `WHERE quarterly_goal_id IS NULL`. Pairs with the `/goals` multi-lookup fallback that also finds the map by `participant_id` at render time.
+- `npm run help:extract` / `npm run help:generate` / `npm run help:check-stale` (`scripts/help/`) — Help System pipeline for `/admin/help-content`. `extract-routes.ts` walks the app tree and produces per-route manifests (elements + roles) with a stable `source_hash`. `generate-content.ts` calls Haiku against each manifest (grounded in the manifest elements + this spec's route purpose + `docs/app-voice-adaptation.md`) and writes `help_content` rows with `reviewed=false`. `check-staleness.ts` re-extracts, diffs `source_hash`, and writes `docs/help-content-stale.md` — reports only, never silently overwrites reviewed content. `/admin/help-content` REGEN ALL STALE fires the same detect + regenerate loop from the browser.
 
 ---
 
@@ -514,11 +619,10 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 - [ ] Basecamp / Ascent funnel integrations.
 
 **Intentionally out of scope (Phase 1)**
-- In-app messaging.
 - Custom pillar frameworks per community.
 - Light mode.
-- Member-to-member communication.
 - Third-party job queue.
+- Messaging v1 exclusions: group chats, attachments, coach visibility (never); reporting/blocking, typing indicators (deferred).
 
 **Code hygiene** — no TODO/FIXME markers found in `src/`.
 
