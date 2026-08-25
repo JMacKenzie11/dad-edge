@@ -78,7 +78,7 @@ export function NotificationBell({
             : "Notifications"
         }
         aria-expanded={open}
-        className="relative flex items-center justify-center h-10 w-10 rounded-full bg-[color:var(--color-surface-2)] border border-[color:var(--color-border)] hover:border-[color:var(--color-accent)] transition-colors"
+        className="relative flex items-center justify-center h-10 w-10 rounded-full bg-[color:var(--color-surface-2)] border border-[color:var(--color-border)] hover:border-[color:var(--color-accent)] transition-colors cursor-pointer"
       >
         <BellIcon />
         {unreadCount > 0 ? (
@@ -105,7 +105,7 @@ export function NotificationBell({
               <button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-white"
+                className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-white cursor-pointer"
               >
                 MARK ALL READ
               </button>
@@ -124,7 +124,7 @@ export function NotificationBell({
                   <button
                     type="button"
                     onClick={() => handleRowClick(n)}
-                    className={`w-full text-left px-3 py-2.5 flex items-start gap-3 hover:bg-[color:var(--color-surface-2)] transition-colors ${
+                    className={`w-full text-left px-3 py-2.5 flex items-start gap-3 hover:bg-[color:var(--color-surface-2)] transition-colors cursor-pointer ${
                       n.read_at === null
                         ? "bg-[color:var(--color-accent)]/[0.06]"
                         : ""
