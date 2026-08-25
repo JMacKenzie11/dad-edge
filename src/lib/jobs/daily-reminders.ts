@@ -23,6 +23,14 @@ export async function runDailyReminders(
 
   const errors: string[] = [];
   let sent = 0;
+  // Users in multiple communities would otherwise get one email per
+  // community they're in — the outer loop is per-community and the
+  // check-in table itself isn't community-scoped, so the "did they
+  // log today?" filter fires per-community independently. Track the
+  // set of users we've already reminded this run and skip repeats.
+  // Force mode surfaced this most sharply since it processes every
+  // community regardless of reminder-hour alignment.
+  const sentUserIds = new Set<string>();
 
   for (const c of (communities ?? []) as {
     id: string;
@@ -79,8 +87,10 @@ export async function runDailyReminders(
       users: { email: string; first_name: string | null } | { email: string; first_name: string | null }[] | null;
     }[]) {
       if (loggedToday.has(m.user_id)) continue;
+      if (sentUserIds.has(m.user_id)) continue;
       const u = Array.isArray(m.users) ? m.users[0] : m.users;
       if (!u) continue;
+      sentUserIds.add(m.user_id);
       const res = await sendDailyReminderEmail({
         to: u.email,
         firstName: u.first_name,

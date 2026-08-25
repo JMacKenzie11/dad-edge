@@ -25,6 +25,11 @@ export async function runWeekLock(now: Date = new Date()): Promise<JobResult> {
   let processed = 0;
   let sent = 0;
   const errors: string[] = [];
+  // Same shape as daily-reminders: users in multiple communities
+  // would otherwise get one week-lock warning per community. Dedup
+  // by user_id within a run — the warning is per-person, not
+  // per-community. Bell rows are already dedup'd via dedup_key.
+  const warnedUserIds = new Set<string>();
 
   for (const c of (communities ?? []) as { id: string; timezone: string; week_lock_days: number }[]) {
     const thisMonday = localMonday(now, c.timezone);
@@ -95,8 +100,10 @@ export async function runWeekLock(now: Date = new Date()): Promise<JobResult> {
         user_id: string;
         users: { email: string; first_name: string | null } | { email: string; first_name: string | null }[] | null;
       }[]) {
+        if (warnedUserIds.has(m.user_id)) continue;
         const u = Array.isArray(m.users) ? m.users[0] : m.users;
         if (!u) continue;
+        warnedUserIds.add(m.user_id);
         const days = loggedDaysByUser.get(m.user_id) ?? new Set<string>();
         const unlogged = week.filter((d) => !days.has(d)).length;
         const res = await sendWeekCloseEmail({

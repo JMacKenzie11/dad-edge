@@ -25,6 +25,13 @@ export async function runDisengagementScan(now: Date = new Date()): Promise<JobR
 
   let sent = 0;
   const errors: string[] = [];
+  // Cross-community dedup. A user in two communities who hit day 3
+  // in one hits day 3 in the other too — same person, one email.
+  // Leader alerts also dedup: if a member's day-14 rolls across two
+  // communities, each leader is emailed once about that member (the
+  // leader key includes their email so different leaders still hear).
+  const notifiedForMember = new Set<string>();
+  const notifiedLeaderForMember = new Set<string>();
 
   for (const c of (communities ?? []) as {
     id: string;
@@ -77,6 +84,9 @@ export async function runDisengagementScan(now: Date = new Date()): Promise<JobR
       const name = u.first_name ?? u.email;
 
       if (daysSince === 3 && ladder.day3 !== false) {
+        const key = `${m.user_id}:day3`;
+        if (notifiedForMember.has(key)) continue;
+        notifiedForMember.add(key);
         const res = await sendDisengagementEmail({
           to: u.email,
           firstName: u.first_name,
@@ -85,6 +95,9 @@ export async function runDisengagementScan(now: Date = new Date()): Promise<JobR
         });
         res.ok ? sent++ : errors.push(`day3 ${u.email}: ${res.error}`);
       } else if (daysSince === 7 && ladder.day7 !== false) {
+        const key = `${m.user_id}:day7`;
+        if (notifiedForMember.has(key)) continue;
+        notifiedForMember.add(key);
         const res = await sendDisengagementEmail({
           to: u.email,
           firstName: u.first_name,
@@ -94,6 +107,9 @@ export async function runDisengagementScan(now: Date = new Date()): Promise<JobR
         res.ok ? sent++ : errors.push(`day7 ${u.email}: ${res.error}`);
       } else if (daysSince === 14 && ladder.day14 !== false) {
         for (const leaderEmail of leaderEmails) {
+          const leaderKey = `${m.user_id}:day14:${leaderEmail}`;
+          if (notifiedLeaderForMember.has(leaderKey)) continue;
+          notifiedLeaderForMember.add(leaderKey);
           const res = await sendLeaderDisengagementAlert({
             to: leaderEmail,
             memberName: name,
