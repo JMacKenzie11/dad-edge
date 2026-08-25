@@ -3,9 +3,11 @@ import { AppHeader } from "@/components/shell/header";
 import { BottomNav, SideNav } from "@/components/shell/nav";
 import { HelpWidget } from "@/components/help/help-widget";
 import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
+import { getNotificationsForBell } from "@/lib/notifications/read";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, readOnly } = await requireAccess();
+  const { unreadCount, recent } = await getNotificationsForBell();
 
   const initials =
     `${(user.first_name ?? user.email[0] ?? "?").slice(0, 1)}${(user.last_name ?? "").slice(0, 1)}`.toUpperCase();
@@ -16,6 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppHeader
           userInitials={initials || "•"}
           readOnly={readOnly}
+          unreadCount={unreadCount}
+          recentNotifications={recent}
         />
         <div className="mx-auto max-w-5xl md:grid md:grid-cols-[220px_1fr]">
           <aside className="hidden md:block border-r border-[color:var(--color-border)] min-h-[calc(100vh-96px)]">

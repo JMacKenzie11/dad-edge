@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { localMonday, weekDates } from "@/lib/scoring/week";
 import { sendWeekCloseEmail } from "@/lib/email";
+import { enqueueNotification } from "@/lib/notifications/enqueue";
 import { format, addDays, differenceInCalendarDays } from "date-fns";
 import type { JobResult } from "@/lib/jobs/utils";
 
@@ -107,6 +108,20 @@ export async function runWeekLock(now: Date = new Date()): Promise<JobResult> {
         });
         if (res.ok) sent += 1;
         else errors.push(`week-close ${u.email}: ${res.error}`);
+        // Bell row. Dedup by the week's Monday — re-running the job
+        // inside the 2-day-before window won't double-post.
+        await enqueueNotification({
+          userId: m.user_id,
+          kind: "week_lock",
+          dedupKey: lastMonday,
+          title: `Week locks ${locksAt}.`,
+          body:
+            unlogged > 0
+              ? `${unlogged} day${unlogged === 1 ? "" : "s"} unlogged.`
+              : "All days logged. Finish strong.",
+          deepLink: "/today",
+          targetType: "week",
+        });
       }
     }
   }

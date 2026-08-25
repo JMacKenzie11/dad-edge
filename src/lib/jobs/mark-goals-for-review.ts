@@ -1,5 +1,6 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { daysUntilQuarterEnd, getCurrentQuarter } from "@/lib/scoring/quarters";
+import { enqueueNotification } from "@/lib/notifications/enqueue";
 import type { JobResult } from "@/lib/jobs/utils";
 
 /** Days before quarter-end at which the retrospective prompt starts
@@ -40,7 +41,7 @@ export async function runMarkGoalsForReview(
     .update({ status: "needs_review" })
     .eq("status", "active")
     .lt("quarter_start", q.startIso)
-    .select("id");
+    .select("id, user_id, quarter_start, desired_end_state");
   if (staleErr) {
     return {
       job: "mark-goals-for-review",
@@ -50,14 +51,20 @@ export async function runMarkGoalsForReview(
   }
 
   // Case 2: current-quarter goals within the lead window.
-  let currentCount = 0;
+  type FlippedGoal = {
+    id: string;
+    user_id: string;
+    quarter_start: string;
+    desired_end_state: string;
+  };
+  let currentRows: FlippedGoal[] = [];
   if (daysLeft <= REVIEW_LEAD_DAYS) {
     const { data: current, error: currentErr } = await svc
       .from("quarterly_goals")
       .update({ status: "needs_review" })
       .eq("status", "active")
       .eq("quarter_start", q.startIso)
-      .select("id");
+      .select("id, user_id, quarter_start, desired_end_state");
     if (currentErr) {
       return {
         job: "mark-goals-for-review",
@@ -65,12 +72,33 @@ export async function runMarkGoalsForReview(
         errors: [currentErr.message],
       };
     }
-    currentCount = (current ?? []).length;
+    currentRows = (current ?? []) as FlippedGoal[];
+  }
+
+  // One bell row per goal that just flipped. Dedup by
+  // (quarter_start, goal_id) so re-runs post-flip (goal is no longer
+  // 'active', so the UPDATE returns nothing) can't double-notify.
+  const flipped = ([...((stale ?? []) as FlippedGoal[]), ...currentRows]);
+  for (const g of flipped) {
+    await enqueueNotification({
+      userId: g.user_id,
+      kind: "quarter_closing",
+      dedupKey: `${g.quarter_start}:${g.id}`,
+      title: "Wrap this goal.",
+      body: truncate(g.desired_end_state, 90),
+      deepLink: "/goals",
+      targetType: "goal",
+      targetId: g.id,
+    });
   }
 
   return {
     job: "mark-goals-for-review",
     ok: true,
-    processed: (stale ?? []).length + currentCount,
+    processed: (stale ?? []).length + currentRows.length,
   };
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }

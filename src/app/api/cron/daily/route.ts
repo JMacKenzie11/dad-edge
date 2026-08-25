@@ -6,6 +6,7 @@ import { runMarkMissedMissions } from "@/lib/jobs/mark-missed-missions";
 import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
 import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
+import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
     runDisengagementScan(now),
     runWeeklyDigest(now),
     runExemplarNovelty(now),
+    runGoalMidpointCheck(now),
   ]);
   const ok = results.every((r) => r.ok);
   return NextResponse.json({ ok, results });

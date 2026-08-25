@@ -2,6 +2,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { sendDigestEmail } from "@/lib/email";
 import { localMonday, weekDates } from "@/lib/scoring/week";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
+import { enqueueNotification } from "@/lib/notifications/enqueue";
 import { addDays, format } from "date-fns";
 import type { JobResult } from "@/lib/jobs/utils";
 
@@ -130,26 +131,42 @@ export async function runWeeklyDigest(now: Date = new Date()): Promise<JobResult
     });
     if (insErr) errors.push(`insert ${c.id}: ${insErr.message}`);
 
-    const leaderEmails = ((memberships ?? []) as {
+    const leaders = ((memberships ?? []) as {
+      user_id: string;
       role: string;
       users: { email: string } | { email: string }[] | null;
     }[])
       .filter((m) => m.role === "leader")
-      .map((l) => (Array.isArray(l.users) ? l.users[0]?.email : l.users?.email))
-      .filter((e): e is string => Boolean(e));
+      .map((l) => ({
+        userId: l.user_id,
+        email: Array.isArray(l.users) ? l.users[0]?.email : l.users?.email,
+      }))
+      .filter((l): l is { userId: string; email: string } => Boolean(l.email));
 
     const html = renderDigestHtml(c.name, lastMonday, body);
     const text = renderDigestText(c.name, lastMonday, body);
-    for (const to of leaderEmails) {
+    for (const l of leaders) {
       const res = await sendDigestEmail({
-        to,
+        to: l.email,
         communityName: c.name,
         weekStart: lastMonday,
         htmlBody: html,
         textBody: text,
       });
       if (res.ok) sent += 1;
-      else errors.push(`digest ${to}: ${res.error}`);
+      else errors.push(`digest ${l.email}: ${res.error}`);
+      // Bell row for the leader. Dedup on week start so a re-run
+      // that finds no existing digests row (rare edge) still can't
+      // double-notify the same leader for the same week.
+      await enqueueNotification({
+        userId: l.userId,
+        kind: "weekly_digest",
+        dedupKey: lastMonday,
+        title: `Weekly digest ready — ${c.name}.`,
+        body: `Avg ${body.totals.avg_week_total}/49 · missions ${body.totals.missions_completed}/${body.totals.missions_planned}`,
+        deepLink: "/leader",
+        targetType: "digest",
+      });
     }
   }
 

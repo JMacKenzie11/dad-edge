@@ -3,6 +3,7 @@ import { sendDailyReminderEmail } from "@/lib/email";
 import { localDate, localMonday, weekDates } from "@/lib/scoring/week";
 import { isWithinReminderWindow } from "@/lib/jobs/timezones";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
+import { enqueueNotification } from "@/lib/notifications/enqueue";
 import type { JobResult } from "@/lib/jobs/utils";
 
 /**
@@ -76,6 +77,17 @@ export async function runDailyReminders(now: Date = new Date()): Promise<JobResu
       });
       if (res.ok) sent += 1;
       else errors.push(`${u.email}: ${res.error}`);
+      // In-app bell row alongside the email. Dedup on today so a
+      // reminder that fires once per day never doubles up if the
+      // job re-runs within the window.
+      await enqueueNotification({
+        userId: m.user_id,
+        kind: "daily_reminder",
+        dedupKey: today,
+        title: "Log today.",
+        body: `${weekTotal.get(m.user_id) ?? 0}/49 this week.`,
+        deepLink: "/today",
+      });
     }
   }
 

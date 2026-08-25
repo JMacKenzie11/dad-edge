@@ -7,6 +7,8 @@ import { runWeekLock } from "@/lib/jobs/week-lock";
 import { runMarkMissedMissions } from "@/lib/jobs/mark-missed-missions";
 import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
+import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
+import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
 import { auditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -58,6 +60,12 @@ export async function POST(req: NextRequest) {
     case "exemplar-novelty":
       result = await runExemplarNovelty(now);
       break;
+    case "goal-midpoint-check":
+      result = await runGoalMidpointCheck(now);
+      break;
+    case "mark-goals-for-review":
+      result = await runMarkGoalsForReview(now);
+      break;
     default:
       return NextResponse.json(
         {
@@ -70,6 +78,8 @@ export async function POST(req: NextRequest) {
             "mark-missed",
             "digest",
             "exemplar-novelty",
+            "goal-midpoint-check",
+            "mark-goals-for-review",
           ],
         },
         { status: 400 },

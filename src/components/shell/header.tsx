@@ -1,12 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
+import { NotificationBell } from "./notification-bell";
+import type { NotificationRow } from "@/lib/notifications/read";
 
 export function AppHeader({
   userInitials,
   readOnly,
+  unreadCount,
+  recentNotifications,
 }: {
   userInitials: string;
   readOnly: boolean;
+  unreadCount: number;
+  recentNotifications: NotificationRow[];
 }) {
   return (
     <header className="sticky top-0 z-10 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/95 backdrop-blur">
@@ -52,6 +58,11 @@ export function AppHeader({
               READ-ONLY
             </span>
           ) : null}
+
+          <NotificationBell
+            unreadCount={unreadCount}
+            recent={recentNotifications}
+          />
 
           <Link
             href="/me"
