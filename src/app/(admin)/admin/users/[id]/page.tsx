@@ -5,9 +5,12 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { canAccess } from "@/lib/entitlement";
 import { SubmitButton } from "@/components/ui/submit-button";
 import {
+  addMembership,
   deleteUser,
+  removeMembership,
   sendInvite,
   setItcAccess,
+  setMembershipRole,
   setPlatformAdmin,
   setSubscriptionStatus,
 } from "../actions";
@@ -58,8 +61,26 @@ export default async function UserDetailPage({
 
   const { data: memberships } = await svc
     .from("memberships")
-    .select("id, role, status, communities:community_id(id, name, slug)")
+    .select("id, role, status, community_id, communities:community_id(id, name, slug)")
     .eq("user_id", id);
+
+  // All active communities, sorted by name — feeds the "Add to
+  // community" dropdown. Exclude communities the user is already in
+  // so the dropdown never offers a no-op.
+  const memberCommunityIds = new Set(
+    ((memberships ?? []) as Array<{ community_id: string }>).map(
+      (m) => m.community_id,
+    ),
+  );
+  const { data: allCommunities } = await svc
+    .from("communities")
+    .select("id, name")
+    .eq("status", "active")
+    .order("name", { ascending: true });
+  const addableCommunities = ((allCommunities ?? []) as Array<{
+    id: string;
+    name: string;
+  }>).filter((c) => !memberCommunityIds.has(c.id));
 
   const { data: recentCheckins } = await svc
     .from("daily_checkins")
@@ -247,25 +268,99 @@ export default async function UserDetailPage({
             const c = Array.isArray(raw.communities) ? raw.communities[0] : raw.communities;
             if (!c) return null;
             return (
-              <li key={raw.id} className="px-4 py-2 flex items-center justify-between">
-                <Link href={`/admin/communities/${c.id}`} className="hover:text-[color:var(--color-accent)]">
-                  {c.name}
-                </Link>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
-                    {raw.role.toUpperCase()}
-                  </span>
-                  <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
-                    {raw.status.toUpperCase()}
-                  </span>
+              <li key={raw.id} className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <Link
+                    href={`/admin/communities/${c.id}`}
+                    className="font-heading text-sm hover:text-[color:var(--color-accent)]"
+                  >
+                    {c.name}
+                  </Link>
+                  <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mt-0.5">
+                    {raw.role.toUpperCase()} · {raw.status.toUpperCase()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <form action={setMembershipRole} className="flex items-center gap-1">
+                    <input type="hidden" name="user_id" value={u.id} />
+                    <input type="hidden" name="membership_id" value={raw.id} />
+                    <select
+                      name="role"
+                      defaultValue={raw.role}
+                      className="h-8 px-2 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-xs cursor-pointer"
+                    >
+                      <option value="member">Member</option>
+                      <option value="leader">Leader</option>
+                    </select>
+                    <SubmitButton
+                      variant="ghost"
+                      label="SAVE"
+                      pendingLabel="…"
+                      className="h-8 px-2 text-[10px]"
+                    />
+                  </form>
+                  <form action={removeMembership}>
+                    <input type="hidden" name="user_id" value={u.id} />
+                    <input type="hidden" name="membership_id" value={raw.id} />
+                    <SubmitButton
+                      variant="danger"
+                      label="REMOVE"
+                      pendingLabel="…"
+                      className="h-8 px-2 text-[10px]"
+                    />
+                  </form>
                 </div>
               </li>
             );
           })}
           {(memberships ?? []).length === 0 ? (
-            <li className="px-4 py-4 text-xs text-[color:var(--color-text-muted)]">No memberships.</li>
+            <li className="px-4 py-4 text-xs text-[color:var(--color-text-muted)]">
+              No memberships. Add one below.
+            </li>
           ) : null}
         </ul>
+
+        {addableCommunities.length > 0 ? (
+          <form
+            action={addMembership}
+            className="mt-3 flex items-center gap-2 flex-wrap"
+          >
+            <input type="hidden" name="user_id" value={u.id} />
+            <select
+              name="community_id"
+              required
+              defaultValue=""
+              className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm cursor-pointer flex-1 min-w-[220px]"
+            >
+              <option value="" disabled>
+                Add to community…
+              </option>
+              {addableCommunities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="role"
+              defaultValue="member"
+              className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm cursor-pointer"
+            >
+              <option value="member">Member</option>
+              <option value="leader">Leader</option>
+            </select>
+            <SubmitButton
+              variant="primary"
+              label="ADD"
+              pendingLabel="ADDING…"
+              className="text-xs"
+            />
+          </form>
+        ) : (
+          <p className="mt-3 text-[11px] text-[color:var(--color-text-muted)]">
+            User is in every active community. Nothing to add.
+          </p>
+        )}
       </section>
 
       <section className="p-4 rounded-[var(--radius-card)] border border-[color:var(--color-danger)]/50 bg-[color:var(--color-danger)]/[0.06] space-y-2">

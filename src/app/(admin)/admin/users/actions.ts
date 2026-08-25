@@ -628,3 +628,138 @@ export async function setItcAccess(formData: FormData) {
   revalidatePath(`/admin/users/${parsed.data.user_id}`);
   redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
 }
+
+// ---------------------------------------------------------------------------
+// Memberships — add / remove / role change on the user detail page.
+// The New Account form takes a community + role at create time, but
+// once the user exists there was no way to move them or add a second
+// community. These three actions cover that.
+// ---------------------------------------------------------------------------
+
+const AddMembershipSchema = z.object({
+  user_id: z.string().uuid(),
+  community_id: z.string().uuid(),
+  role: z.enum(["member", "leader"]).default("member"),
+});
+
+export async function addMembership(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = AddMembershipSchema.safeParse({
+    user_id: formData.get("user_id"),
+    community_id: formData.get("community_id"),
+    role: formData.get("role") ?? "member",
+  });
+  if (!parsed.success) {
+    redirect(
+      `/admin/users/${formData.get("user_id")}?error=${encodeURIComponent(
+        "Invalid membership input",
+      )}`,
+    );
+  }
+  const svc = createSupabaseServiceClient();
+  // Upsert on (user_id, community_id) so re-adding a previously
+  // removed membership flips it back to active + preserves the
+  // original id rather than orphaning it.
+  const { error } = await svc.from("memberships").upsert(
+    {
+      user_id: parsed.data.user_id,
+      community_id: parsed.data.community_id,
+      role: parsed.data.role,
+      status: "active",
+    },
+    { onConflict: "user_id,community_id" },
+  );
+  if (error) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(error.message)}`,
+    );
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.add_membership",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: {
+      community_id: parsed.data.community_id,
+      role: parsed.data.role,
+    },
+  });
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
+
+const RemoveMembershipSchema = z.object({
+  user_id: z.string().uuid(),
+  membership_id: z.string().uuid(),
+});
+
+/**
+ * Hard-delete the membership row. Simplest semantics: gone = gone.
+ * If the user re-joins later, addMembership above creates a fresh
+ * row (or resurrects if the row wasn't fully deleted, thanks to the
+ * upsert). Their check-ins + missions stay on the users row and
+ * remain visible on personal pages; they just stop appearing in the
+ * community's roster / leaderboard.
+ */
+export async function removeMembership(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = RemoveMembershipSchema.safeParse({
+    user_id: formData.get("user_id"),
+    membership_id: formData.get("membership_id"),
+  });
+  if (!parsed.success) return;
+  const svc = createSupabaseServiceClient();
+  const { error } = await svc
+    .from("memberships")
+    .delete()
+    .eq("id", parsed.data.membership_id);
+  if (error) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(error.message)}`,
+    );
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.remove_membership",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { membership_id: parsed.data.membership_id },
+  });
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
+
+const SetRoleSchema = z.object({
+  user_id: z.string().uuid(),
+  membership_id: z.string().uuid(),
+  role: z.enum(["member", "leader"]),
+});
+
+export async function setMembershipRole(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = SetRoleSchema.safeParse({
+    user_id: formData.get("user_id"),
+    membership_id: formData.get("membership_id"),
+    role: formData.get("role"),
+  });
+  if (!parsed.success) return;
+  const svc = createSupabaseServiceClient();
+  const { error } = await svc
+    .from("memberships")
+    .update({ role: parsed.data.role })
+    .eq("id", parsed.data.membership_id);
+  if (error) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(error.message)}`,
+    );
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.set_membership_role",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { membership_id: parsed.data.membership_id, role: parsed.data.role },
+  });
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
