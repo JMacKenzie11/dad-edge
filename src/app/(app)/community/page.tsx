@@ -15,6 +15,7 @@ import {
 import { loadPeopleDirectory } from "@/lib/community/people-directory";
 import { PeopleTab } from "./people-tab";
 import { CommunityTabs } from "./community-tabs";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -86,12 +87,75 @@ export default async function CommunityPage({
   const communityName = community?.name ?? "Brothers";
   const communityTz = community?.timezone ?? "America/Chicago";
 
-  // Roster.
+  // Roster. Also pulls avatar_url + email so the leaderboard rows
+  // can render <UserAvatar> and the message-button deep link.
   const { data: roster } = await supabase
     .from("memberships")
-    .select("user_id, status, role, users:user_id(first_name, last_name)")
+    .select(
+      "user_id, status, role, users:user_id(first_name, last_name, email, avatar_url)",
+    )
     .eq("community_id", communityId)
     .eq("status", "active");
+
+  // Enrichment map for the leaderboard render — avatar + email
+  // aren't part of the community-stats Member type, so we build a
+  // parallel lookup keyed by user_id.
+  const enrichmentByUser = new Map<
+    string,
+    {
+      avatar_url: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      email: string;
+    }
+  >();
+  for (const r of (roster ?? []) as Array<{
+    user_id: string;
+    users:
+      | {
+          first_name: string | null;
+          last_name: string | null;
+          email: string;
+          avatar_url: string | null;
+        }
+      | {
+          first_name: string | null;
+          last_name: string | null;
+          email: string;
+          avatar_url: string | null;
+        }[]
+      | null;
+  }>) {
+    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+    if (!u) continue;
+    enrichmentByUser.set(r.user_id, {
+      avatar_url: u.avatar_url ?? null,
+      first_name: u.first_name ?? null,
+      last_name: u.last_name ?? null,
+      email: u.email,
+    });
+  }
+
+  // Threads the viewer already has with any member — so the MESSAGE
+  // button deep-links straight into the existing thread instead of
+  // going through the resolver.
+  const [{ data: threadsA }, { data: threadsB }] = await Promise.all([
+    supabase
+      .from("message_threads")
+      .select("id, participant_b")
+      .eq("participant_a", user.id),
+    supabase
+      .from("message_threads")
+      .select("id, participant_a")
+      .eq("participant_b", user.id),
+  ]);
+  const threadByOtherUser = new Map<string, string>();
+  for (const r of (threadsA ?? []) as Array<{ id: string; participant_b: string }>) {
+    threadByOtherUser.set(r.participant_b, r.id);
+  }
+  for (const r of (threadsB ?? []) as Array<{ id: string; participant_a: string }>) {
+    threadByOtherUser.set(r.participant_a, r.id);
+  }
 
   const members: Member[] = ((roster ?? []) as {
     user_id: string;
@@ -246,11 +310,15 @@ export default async function CommunityPage({
             const combinedMax = 49 + m.weekMissionsPlanned;
             const delta = priorDeltas[m.userId] ?? 0;
             const isMe = m.userId === user.id;
+            const e = enrichmentByUser.get(m.userId);
+            const messageHref = threadByOtherUser.get(m.userId)
+              ? `/messages/${threadByOtherUser.get(m.userId)}`
+              : `/messages/with/${m.userId}`;
             return (
               <li
                 key={m.userId}
                 className={
-                  "px-5 py-3 grid grid-cols-[32px_1fr_auto] items-center gap-3 " +
+                  "px-4 sm:px-5 py-3 grid grid-cols-[24px_32px_1fr_auto_auto] items-center gap-3 " +
                   (isMe
                     ? "bg-[color:var(--color-primary)]/[0.08]"
                     : "")
@@ -266,6 +334,13 @@ export default async function CommunityPage({
                 >
                   {i + 1}
                 </span>
+                <UserAvatar
+                  url={e?.avatar_url ?? null}
+                  firstName={e?.first_name ?? null}
+                  lastName={e?.last_name ?? null}
+                  email={e?.email ?? ""}
+                  size="sm"
+                />
                 <div className="min-w-0">
                   <p className="font-heading text-sm truncate">
                     {m.name}
@@ -302,6 +377,33 @@ export default async function CommunityPage({
                     </p>
                   ) : null}
                 </div>
+                {/* Message action — hidden for the viewer's own row
+                    (can't message yourself). Icon-only to keep the
+                    row compact; hover reveals the tooltip. */}
+                {isMe ? (
+                  <span aria-hidden className="w-8" />
+                ) : (
+                  <Link
+                    href={messageHref}
+                    aria-label={`Message ${m.name}`}
+                    title={`Message ${m.name}`}
+                    className="h-8 w-8 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[color:var(--color-text-muted)] hover:text-white transition-colors cursor-pointer"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
+                      aria-hidden
+                    >
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </Link>
+                )}
               </li>
             );
           })}
