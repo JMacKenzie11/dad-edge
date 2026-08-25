@@ -166,7 +166,7 @@ function MemberCard({
 
         <Link
           href={messageHref}
-          aria-label={`Message ${member.name}`}
+          aria-label="Message this brother"
           title={`Message ${member.name}`}
           className="shrink-0 h-9 w-9 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[color:var(--color-text-muted)] hover:text-white transition-colors cursor-pointer"
         >

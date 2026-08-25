@@ -17,7 +17,7 @@
     },
     {
       "kind": "link",
-      "label": "← back to your day"
+      "label": "Message this brother"
     },
     {
       "kind": "field",
@@ -34,13 +34,9 @@
     {
       "kind": "field",
       "label": "STREAK"
-    },
-    {
-      "kind": "link",
-      "label": "MESSAGE"
     }
   ],
-  "source_hash": "2a93f5797979126f",
+  "source_hash": "9fdf02fad4ef8b4a",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/community-tabs.tsx",

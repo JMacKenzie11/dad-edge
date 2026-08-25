@@ -358,7 +358,14 @@ function extractLabel(
   if (ts.isJsxSelfClosingElement(node)) {
     return normalize(getAttrs(node)["aria-label"]) || "";
   }
-  return collectJsxText(node);
+  // Regular JsxElement: prefer text content, but fall back to
+  // aria-label when the element wraps only an icon (e.g. a <Link>
+  // whose only child is an <svg> — icon-only message buttons work
+  // this way). Without this fallback icon-only actions vanish from
+  // the manifest and Claude has nothing to describe.
+  const text = collectJsxText(node);
+  if (text.trim().length > 0) return text;
+  return normalize(getAttrs(node.openingElement)["aria-label"]) || "";
 }
 
 function collectJsxText(node: ts.JsxElement): string {
