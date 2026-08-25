@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PILLARS, type PillarCode } from "@/lib/pillars";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { CardEmpty, DashboardCard } from "./card-shell";
-import { PillarComparisonChart } from "./pillar-comparison-chart";
+import { PillarProgressChart } from "./pillar-progress-chart";
 
 /**
  * Card 3.1 — pillar comparison. Server-side fetches per-pillar
@@ -49,26 +49,46 @@ export async function PillarComparisonCard({ userId }: { userId: string }) {
     );
   }
 
-  // Use the full pillar name on the axis so the chart is legible
-  // without the reader knowing the BRAVEMAN codes.
-  const data = PILLARS.map((p) => ({
-    pillar: p.label,
-    thisQuarter: thisCounts.get(p.code) ?? 0,
-    lastQuarter: lastCounts.get(p.code) ?? 0,
+  // Days elapsed in this quarter so far — denominator for the "you
+  // could have checked in this many times" bar. Cap at the full
+  // quarter length so post-quarter views don't show >100%. If we're
+  // on day 1, force min=1 to avoid a divide-by-zero on the fill %.
+  const today = new Date().toISOString().slice(0, 10);
+  const daysElapsed = Math.max(1, daysBetweenInclusive(q.startIso, today > q.endIso ? q.endIso : today));
+  const lastQuarterDays = daysBetweenInclusive(lastQuarterStart, lastQuarterEnd);
+
+  // A2 (Action) is derived from mission completion — it lives on the
+  // mission card, not here, so we drop it. Otherwise it renders as
+  // an empty slot which reads as a bug.
+  const pillarRows = PILLARS.filter((p) => p.code !== "A2").map((p) => ({
+    code: p.code,
+    label: p.label,
+    colorVar: p.colorVar,
+    count: thisCounts.get(p.code) ?? 0,
+    max: daysElapsed,
+    lastCount: hasLastQuarter ? (lastCounts.get(p.code) ?? 0) : null,
+    lastMax: lastQuarterDays,
   }));
 
   return (
     <DashboardCard
-      title="Pillars this quarter vs last"
+      title="Pillar consistency this quarter"
       subtitle={
         hasLastQuarter
-          ? `${q.label} check-ins next to the quarter before.`
-          : `${q.label} check-ins. Last quarter shows here once you have history to compare against.`
+          ? `Filled bar = check-ins so far this quarter. Tick mark shows where you were at end of last quarter.`
+          : `Filled bar = check-ins so far this quarter (out of ${daysElapsed} days elapsed). Comparison to last quarter shows here once you have history.`
       }
     >
-      <PillarComparisonChart data={data} hasLastQuarter={hasLastQuarter} />
+      <PillarProgressChart rows={pillarRows} hasLastQuarter={hasLastQuarter} />
     </DashboardCard>
   );
+}
+
+/** Inclusive day count between two ISO dates. Both endpoints count. */
+function daysBetweenInclusive(startIso: string, endIso: string): number {
+  const a = new Date(`${startIso}T00:00:00Z`).getTime();
+  const b = new Date(`${endIso}T00:00:00Z`).getTime();
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
 }
 
 function shiftQuarterStart(startIso: string, delta: number): string {
