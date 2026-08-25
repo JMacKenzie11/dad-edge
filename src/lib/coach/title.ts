@@ -21,11 +21,14 @@ export async function suggestConversationTitle(opts: {
 
   const system = `You title conversations in a men's coaching app. Given the first message a man sent, return a short label (3–6 words, plain sentence case, no quotes, no ending punctuation) that a busy man could scan later and remember what this thread was about.
 
-Rules:
-- No fluff. No "chat about" / "conversation about" / "discussion of" prefixes.
+Voice:
+- POSITIVELY FRAMED. Frame the title as what he's working on or moving toward, NOT what's broken. "Strengthening my marriage" beats "Problem with my wife". "Reconnecting with Dave" beats "Fight with Dave". "Getting sharper at work" beats "Business struggles".
+- OPPORTUNITY, not diagnosis. Even when the message is a vent, the title should read as forward-facing.
+- BANNED prefixes/framings: "problem with", "issue with", "trouble with", "struggling with", "dealing with", "fighting with", "difficulty with", "stuck on".
+- No fluff prefixes: no "chat about" / "conversation about" / "discussion of".
 - Concrete over abstract: "Hard talk with my COO" beats "Business challenge".
 - Never include his name or personally-identifying info.
-- Never emojis.
+- Never em-dashes (—). Never emojis. Never exclamation points.
 
 Return JSON only.`;
 
