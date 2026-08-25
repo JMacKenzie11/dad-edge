@@ -24,6 +24,7 @@ const items = [
  * group together above the daily work items. Messages lives at the
  * bottom of this group since it's peer-driven, not planning.
  */
+const todayItem = { href: "/today", label: "Today", icon: "▣" } as const;
 const dashboardItem = { href: "/dashboard", label: "My Braveman", icon: "▤" } as const;
 const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
 const communityItem = { href: "/community", label: "Community", icon: "◈" } as const;
@@ -63,18 +64,20 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
   const pathname = usePathname();
-  // Desktop order: My Braveman → Community → Coach Larry → Goals →
-  // daily items (Today, Missions, Me) → Messages → Admin (if
-  // platform admin). Coach Larry sits directly under Community
-  // per product decision 2026-08-25 — the coach conversation is
-  // paired with the peer surface rather than buried in the daily
-  // items block.
-  const dailyItems = items.filter(
-    (it) => it.href !== "/community" && it.href !== "/coach",
+  // Desktop order: Today (first — daily entry point) → My Braveman →
+  // Community → Coach Larry → Goals → remaining daily items
+  // (Missions, Me) → Messages → Admin (if platform admin). Today
+  // moved to top per product decision 2026-08-25 — it's the first
+  // surface most men land on, no reason to make them scan for it.
+  const remainingDaily = items.filter(
+    (it) =>
+      it.href !== "/community" &&
+      it.href !== "/coach" &&
+      it.href !== "/today",
   );
   const navItems = isPlatformAdmin
-    ? [dashboardItem, communityItem, coachItem, goalsItem, ...dailyItems, messagesItem, adminItem]
-    : [dashboardItem, communityItem, coachItem, goalsItem, ...dailyItems, messagesItem];
+    ? [todayItem, dashboardItem, communityItem, coachItem, goalsItem, ...remainingDaily, messagesItem, adminItem]
+    : [todayItem, dashboardItem, communityItem, coachItem, goalsItem, ...remainingDaily, messagesItem];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
