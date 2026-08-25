@@ -25,19 +25,18 @@ export function initPostHog(distinctId: string | null): void {
   if (!initialized) {
     posthog.init(key, {
       api_host: host,
-      // Manual events only. Page views stay auto ($pageview) because
-      // that's PostHog's core retention primitive.
+      // Manual clicks etc — no autocapture noise.
       autocapture: false,
-      capture_pageview: true,
+      // IMPORTANT: false here. Next.js App Router does soft navigation
+      // (no full page reload), so PostHog's default only-on-init
+      // pageview capture misses everything after the first landing.
+      // PostHogPageview component below fires $pageview manually on
+      // every pathname / searchParams change instead.
+      capture_pageview: false,
       // Session recording off for MVP. Enable later with a masking
       // policy if we need to debug specific UX issues.
       disable_session_recording: true,
-      // Server-side rendering: skip cookies during SSR (posthog-js
-      // handles this itself if window is defined, but be explicit).
       persistence: "localStorage+cookie",
-      // Only send default $set person props (browser, os, etc).
-      // Don't auto-attach user-agent-detected geo — PostHog does
-      // that server-side from the request IP if we want it.
       loaded: () => {
         if (distinctId) posthog.identify(distinctId);
       },
@@ -60,6 +59,21 @@ export function captureBrowserEvent(event: AnalyticsEvent): void {
       event.name,
       err instanceof Error ? err.message : String(err),
     );
+  }
+}
+
+/**
+ * Fire a $pageview event. Called by PostHogPageview on every route
+ * change (App Router doesn't trigger PostHog's built-in init-only
+ * capture). Safe when uninitialized — no-op.
+ */
+export function capturePageview(url: string): void {
+  if (typeof window === "undefined") return;
+  if (!initialized) return;
+  try {
+    posthog.capture("$pageview", { $current_url: url });
+  } catch {
+    // best-effort
   }
 }
 
