@@ -16,6 +16,10 @@ export type SessionUser = {
   last_name: string | null;
   timezone: string;
   is_platform_admin: boolean;
+  /** True → user is backstage-only. Skips onboarding, has no
+   *  community, coachee shell is not rendered. See migration
+   *  20260825000003_users_admin_only.sql. Requires is_platform_admin. */
+  is_admin_only: boolean;
   subscription_status: SubscriptionStatus;
   deactivated_at: string | null;
   onboarding_step: number;
@@ -37,7 +41,7 @@ export async function requireUser(): Promise<SessionUser> {
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, email, first_name, last_name, timezone, is_platform_admin, itc_access, subscription_status, canceled_at, onboarding_step, occupation, employment_type, avatar_url, city, phone")
+    .select("id, email, first_name, last_name, timezone, is_platform_admin, is_admin_only, itc_access, subscription_status, canceled_at, onboarding_step, occupation, employment_type, avatar_url, city, phone")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -51,6 +55,8 @@ export async function requireUser(): Promise<SessionUser> {
     city: string | null;
     phone: string | null;
     itc_access: boolean | null;
+    // Null on rows that predate the admin-only migration; treat as false.
+    is_admin_only: boolean | null;
   } & Record<string, unknown>;
   return {
     ...(row as unknown as SessionUser),
@@ -61,6 +67,7 @@ export async function requireUser(): Promise<SessionUser> {
     avatar_url: row.avatar_url,
     city: row.city,
     phone: row.phone,
+    is_admin_only: Boolean(row.is_admin_only),
   };
 }
 
@@ -91,6 +98,11 @@ export async function requireAccess(options?: {
   allowIncompleteOnboarding?: boolean;
 }): Promise<{ user: SessionUser; readOnly: boolean }> {
   const user = await requireUser();
+  // Admin-only users never render the coachee shell. Anywhere in
+  // the (app) route group calling requireAccess sends them straight
+  // to /admin. The /admin routes themselves use requirePlatformAdmin
+  // (not requireAccess) so no cycle.
+  if (user.is_admin_only) redirect("/admin");
   const decision = canAccess({
     subscription_status: user.subscription_status,
     deactivated_at: user.deactivated_at,

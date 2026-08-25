@@ -125,10 +125,9 @@ export default async function UsersPage({
           />
           <select
             name="community_id"
-            required
             className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
           >
-            <option value="">Community…</option>
+            <option value="">Community… (skip for admin-only)</option>
             {communityList.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -152,6 +151,15 @@ export default async function UsersPage({
               className="h-4 w-4"
             />
             Platform admin (bypasses RLS, full access to /admin/*)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] sm:col-span-2">
+            <input
+              type="checkbox"
+              name="is_admin_only"
+              className="h-4 w-4"
+            />
+            Admin only (no onboarding, no community, lands on /admin —
+            requires Platform admin)
           </label>
           <div className="sm:col-span-2">
             <SubmitButton

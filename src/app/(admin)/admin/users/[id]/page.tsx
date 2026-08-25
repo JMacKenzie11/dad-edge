@@ -9,6 +9,7 @@ import {
   deleteUser,
   removeMembership,
   sendInvite,
+  setAdminOnly,
   setItcAccess,
   setMembershipRole,
   setPlatformAdmin,
@@ -34,7 +35,7 @@ export default async function UserDetailPage({
 
   const { data: user } = await svc
     .from("users")
-    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, itc_access, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step, invited_at")
+    .select("id, email, first_name, last_name, phone, timezone, is_platform_admin, is_admin_only, itc_access, subscription_status, subscription_source, canceled_at, created_at, last_seen_at, onboarding_step, invited_at")
     .eq("id", id)
     .maybeSingle();
   if (!user) notFound();
@@ -50,6 +51,7 @@ export default async function UserDetailPage({
     /** Null on rows that predate the auth-phase migration (column
      *  doesn't exist yet on that DB); treat as false. */
     itc_access: boolean | null;
+    is_admin_only: boolean | null;
     subscription_status: "trialing" | "active" | "past_due" | "canceled" | "comped";
     subscription_source: string;
     canceled_at: string | null;
@@ -245,6 +247,25 @@ export default async function UserDetailPage({
               id="itc_access"
             />
             <label htmlFor="itc_access">ITC access (can use /itc)</label>
+            <SubmitButton
+              variant="ghost"
+              label="SAVE"
+              pendingLabel="…"
+              className="ml-auto h-8 px-3 text-[10px]"
+            />
+          </form>
+
+          <form action={setAdminOnly} className="flex items-center gap-2 text-xs">
+            <input type="hidden" name="user_id" value={u.id} />
+            <input
+              type="checkbox"
+              name="is_admin_only"
+              defaultChecked={u.is_admin_only ?? false}
+              id="is_admin_only"
+            />
+            <label htmlFor="is_admin_only">
+              Admin only (skip onboarding, no community, lands on /admin)
+            </label>
             <SubmitButton
               variant="ghost"
               label="SAVE"

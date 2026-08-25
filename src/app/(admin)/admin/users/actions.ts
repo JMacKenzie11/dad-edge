@@ -12,19 +12,44 @@ function appOrigin(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
 }
 
-const CreateAccountSchema = z.object({
-  email: z.string().email().max(254),
-  first_name: z.string().max(80).optional(),
-  last_name: z.string().max(80).optional(),
-  community_id: z.string().uuid(),
-  subscription_status: z
-    .enum(["trialing", "active", "past_due", "canceled", "comped"])
-    .default("comped"),
-  // Checkbox on the New Account form. When true, sets is_platform_admin
-  // on the users row in the same insert so creating an admin is a
-  // single step (was: create then flip on the detail page).
-  is_platform_admin: z.string().optional(),
-});
+const CreateAccountSchema = z
+  .object({
+    email: z.string().email().max(254),
+    first_name: z.string().max(80).optional(),
+    last_name: z.string().max(80).optional(),
+    // Optional so admin-only accounts can be created without a
+    // community assignment. When present must be a uuid; when
+    // absent the account creates with no membership.
+    community_id: z.string().uuid().optional(),
+    subscription_status: z
+      .enum(["trialing", "active", "past_due", "canceled", "comped"])
+      .default("comped"),
+    // Checkbox on the New Account form. When true, sets
+    // is_platform_admin on the users row in the same insert so
+    // creating an admin is a single step (was: create then flip on
+    // the detail page).
+    is_platform_admin: z.string().optional(),
+    // Admin-only: skips onboarding, no community assignment, no
+    // coachee shell. Must be paired with is_platform_admin=on
+    // (enforced by the users_admin_only_requires_platform_admin
+    // DB CHECK; validated here too so we can return a friendly error).
+    is_admin_only: z.string().optional(),
+  })
+  .refine(
+    (v) =>
+      // When NOT admin-only, community_id is required (matches
+      // pre-admin-only behavior — a coachee without a community is
+      // broken).
+      v.is_admin_only === "on" || !!v.community_id,
+    { message: "Community required unless Admin-only is checked." },
+  )
+  .refine(
+    (v) =>
+      // Admin-only requires platform admin. Otherwise the user has
+      // literally no accessible surface.
+      v.is_admin_only !== "on" || v.is_platform_admin === "on",
+    { message: "Admin-only requires Platform Admin." },
+  );
 
 /**
  * Create an account. NEVER sends any email. The user exists in
@@ -35,18 +60,25 @@ const CreateAccountSchema = z.object({
  */
 export async function createAccount(formData: FormData) {
   const admin = await requirePlatformAdmin();
+  const rawCommunityId = formData.get("community_id");
   const parsed = CreateAccountSchema.safeParse({
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
     first_name: String(formData.get("first_name") ?? "").trim() || undefined,
     last_name: String(formData.get("last_name") ?? "").trim() || undefined,
-    community_id: formData.get("community_id"),
+    community_id:
+      typeof rawCommunityId === "string" && rawCommunityId.length > 0
+        ? rawCommunityId
+        : undefined,
     subscription_status:
       formData.get("subscription_status") || undefined,
     is_platform_admin: formData.get("is_platform_admin") ?? undefined,
+    is_admin_only: formData.get("is_admin_only") ?? undefined,
   });
   if (!parsed.success) {
     redirect(
-      `/admin/users?error=${encodeURIComponent("Bad input: email, community required.")}`,
+      `/admin/users?error=${encodeURIComponent(
+        parsed.error.issues[0]?.message ?? "Bad input.",
+      )}`,
     );
   }
 
@@ -79,6 +111,7 @@ export async function createAccount(formData: FormData) {
   const userId = authRes.user.id;
 
   const isPlatformAdmin = parsed.data.is_platform_admin === "on";
+  const isAdminOnly = parsed.data.is_admin_only === "on";
   await svc
     .from("users")
     .update({
@@ -87,15 +120,20 @@ export async function createAccount(formData: FormData) {
       subscription_status: parsed.data.subscription_status,
       subscription_source: "manual",
       is_platform_admin: isPlatformAdmin,
+      is_admin_only: isAdminOnly,
     })
     .eq("id", userId);
 
-  await svc.from("memberships").insert({
-    user_id: userId,
-    community_id: parsed.data.community_id,
-    role: "member",
-    status: "active",
-  });
+  // Membership only when NOT admin-only. Admin-only users have
+  // no community by design.
+  if (!isAdminOnly && parsed.data.community_id) {
+    await svc.from("memberships").insert({
+      user_id: userId,
+      community_id: parsed.data.community_id,
+      role: "member",
+      status: "active",
+    });
+  }
 
   await auditLog({
     actor_user_id: admin.id,
@@ -104,9 +142,10 @@ export async function createAccount(formData: FormData) {
     target_id: userId,
     metadata: {
       email: parsed.data.email,
-      community_id: parsed.data.community_id,
+      community_id: parsed.data.community_id ?? null,
       subscription_status: parsed.data.subscription_status,
       is_platform_admin: isPlatformAdmin,
+      is_admin_only: isAdminOnly,
     },
   });
 
@@ -599,6 +638,50 @@ const ItcAccessFlagSchema = z.object({
  * created coachees, or platform admins who need to preview the
  * coaching flow. Audit-logged.
  */
+const AdminOnlyFlagSchema = z.object({
+  user_id: z.string().uuid(),
+  is_admin_only: z.enum(["on", "off"]).transform((v) => v === "on"),
+});
+
+/**
+ * Flip users.is_admin_only. Enforces the invariant that admin-only
+ * requires is_platform_admin — silently sets is_platform_admin=true
+ * alongside so the DB CHECK doesn't reject. (The alternative is
+ * returning a friendly error, but the admin UI already exposes both
+ * checkboxes and this pairing is what the admin obviously means.)
+ */
+export async function setAdminOnly(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = AdminOnlyFlagSchema.safeParse({
+    user_id: formData.get("user_id"),
+    is_admin_only: formData.get("is_admin_only") ? "on" : "off",
+  });
+  if (!parsed.success) return;
+  const svc = createSupabaseServiceClient();
+  const update: { is_admin_only: boolean; is_platform_admin?: boolean } = {
+    is_admin_only: parsed.data.is_admin_only,
+  };
+  if (parsed.data.is_admin_only) update.is_platform_admin = true;
+  const { error } = await svc
+    .from("users")
+    .update(update)
+    .eq("id", parsed.data.user_id);
+  if (error) {
+    redirect(
+      `/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(error.message)}`,
+    );
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.set_admin_only",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { value: parsed.data.is_admin_only },
+  });
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
+
 export async function setItcAccess(formData: FormData) {
   const admin = await requirePlatformAdmin();
   const parsed = ItcAccessFlagSchema.safeParse({

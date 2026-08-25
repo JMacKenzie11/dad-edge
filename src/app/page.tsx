@@ -24,12 +24,19 @@ export default async function LandingPage() {
   if (user) {
     const { data: row } = await supabase
       .from("users")
-      .select("itc_access, is_platform_admin")
+      .select("itc_access, is_platform_admin, is_admin_only")
       .eq("id", user.id)
       .maybeSingle();
     const r = row as
-      | { itc_access: boolean | null; is_platform_admin: boolean | null }
+      | {
+          itc_access: boolean | null;
+          is_platform_admin: boolean | null;
+          is_admin_only: boolean | null;
+        }
       | null;
+    // Admin-only users have no coachee shell — send them straight to
+    // /admin, matching the sign-in flow's destination.
+    if (r?.is_admin_only) redirect("/admin");
     if (r?.itc_access && !r?.is_platform_admin) {
       redirect("/itc");
     }
