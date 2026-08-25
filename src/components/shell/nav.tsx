@@ -13,19 +13,21 @@ const items = [
   { href: "/today", label: "Today", icon: "▣" },
   { href: "/missions", label: "Missions", icon: "◆" },
   { href: "/coach", label: "Coach Larry", icon: "◐" },
-  { href: "/community", label: "Leaderboard", icon: "◈" },
+  { href: "/community", label: "Community", icon: "◈" },
   { href: "/me", label: "Me", icon: "●" },
 ] as const;
 
 /**
  * Left-nav-only entries. My Braveman (personal analytics) sits at
- * the top; Goals under it. Leaderboard immediately follows on the
- * desktop nav per product decision 2026-08-24 — planning and
- * comparison surfaces group together above the daily work items.
+ * the top; Goals under it. Community follows on the desktop nav per
+ * product decision 2026-08-24 — planning and comparison surfaces
+ * group together above the daily work items. Messages lives at the
+ * bottom of this group since it's peer-driven, not planning.
  */
 const dashboardItem = { href: "/dashboard", label: "My Braveman", icon: "▤" } as const;
 const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
-const leaderboardItem = { href: "/community", label: "Leaderboard", icon: "◈" } as const;
+const communityItem = { href: "/community", label: "Community", icon: "◈" } as const;
+const messagesItem = { href: "/messages", label: "Messages", icon: "✉" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
 
@@ -58,16 +60,17 @@ export function BottomNav() {
   );
 }
 
-export function SideNav({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
+export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
   const pathname = usePathname();
-  // Desktop order: My Braveman → Leaderboard → Goals → daily
-  // items (Today, Missions, Coach Larry, Me) → Admin (if platform
-  // admin). "Brothers" in the bottom nav is called "Leaderboard"
-  // here too — same route, one label everywhere.
+  // Desktop order: My Braveman → Community → Goals → daily
+  // items (Today, Missions, Coach Larry, Me) → Messages → Admin
+  // (if platform admin). Messages sits below daily items so the
+  // eye lands on the daily work first; the header messages icon
+  // is the fast-access path when there's an unread ping.
   const dailyItems = items.filter((it) => it.href !== "/community");
   const navItems = isPlatformAdmin
-    ? [dashboardItem, leaderboardItem, goalsItem, ...dailyItems, adminItem]
-    : [dashboardItem, leaderboardItem, goalsItem, ...dailyItems];
+    ? [dashboardItem, communityItem, goalsItem, ...dailyItems, messagesItem, adminItem]
+    : [dashboardItem, communityItem, goalsItem, ...dailyItems, messagesItem];
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
@@ -84,7 +87,15 @@ export function SideNav({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean
             )}
           >
             <span className="text-base">{it.icon}</span>
-            {it.label.toUpperCase()}
+            <span className="flex-1">{it.label.toUpperCase()}</span>
+            {it.href === "/messages" && unreadMessageThreads > 0 ? (
+              <span
+                aria-label={`${unreadMessageThreads} unread`}
+                className="min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--color-accent)] text-black text-[10px] font-heading flex items-center justify-center"
+              >
+                {unreadMessageThreads > 9 ? "9+" : unreadMessageThreads}
+              </span>
+            ) : null}
           </Link>
         );
       })}

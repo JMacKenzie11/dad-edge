@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { NotificationBell } from "./notification-bell";
+import { MessagesIcon } from "./messages-icon";
 import type { NotificationRow } from "@/lib/notifications/read";
 
 export function AppHeader({
@@ -8,11 +9,15 @@ export function AppHeader({
   readOnly,
   unreadCount,
   recentNotifications,
+  viewerId,
+  unreadMessageThreads,
 }: {
   userInitials: string;
   readOnly: boolean;
   unreadCount: number;
   recentNotifications: NotificationRow[];
+  viewerId: string;
+  unreadMessageThreads: number;
 }) {
   return (
     <header className="sticky top-0 z-10 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/95 backdrop-blur">
@@ -58,6 +63,11 @@ export function AppHeader({
               READ-ONLY
             </span>
           ) : null}
+
+          <MessagesIcon
+            viewerId={viewerId}
+            initialUnreadThreads={unreadMessageThreads}
+          />
 
           <NotificationBell
             unreadCount={unreadCount}

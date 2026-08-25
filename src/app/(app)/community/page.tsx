@@ -12,12 +12,50 @@ import {
   type Member,
   type MemberStats,
 } from "@/lib/scoring/community-stats";
+import { loadPeopleDirectory } from "@/lib/community/people-directory";
+import { PeopleTab } from "./people-tab";
+import { CommunityTabs } from "./community-tabs";
 
 export const dynamic = "force-dynamic";
 
+type Tab = "leaderboard" | "people";
 
-export default async function CommunityPage() {
+export default async function CommunityPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: Tab }>;
+}) {
   const { user } = await requireAccess();
+  const params = await searchParams;
+  const tab: Tab = params.tab === "people" ? "people" : "leaderboard";
+
+  // People tab renders on top of the same /community route via
+  // ?tab=people. Keeps a single nav item, single route, one shared
+  // header — matches how the existing /community/leaderboard sub-page
+  // uses ?tab= to switch weekly/monthly/streaks.
+  if (tab === "people") {
+    const dir = await loadPeopleDirectory(user.id);
+    return (
+      <div className="max-w-3xl mx-auto space-y-6 py-2">
+        <PeopleHeader communityNames={dir?.communityNames ?? []} count={dir?.members.length ?? 0} />
+        <CommunityTabs active="people" />
+        {dir === null ? (
+          <EmptyState
+            title="People directory unavailable."
+            body="Refresh in a minute. Server hiccup."
+          />
+        ) : dir.members.length === 0 ? (
+          <EmptyState
+            title="No brothers to show yet."
+            body="Once other men in your community are active, they'll appear here."
+          />
+        ) : (
+          <PeopleTab members={dir.members} viewerId={user.id} />
+        )}
+      </div>
+    );
+  }
+
   const supabase = await createSupabaseServerClient();
 
   const { data: membership } = await supabase
@@ -155,6 +193,8 @@ export default async function CommunityPage() {
         </p>
         <h1 className="font-heading text-3xl">{communityName}</h1>
       </header>
+
+      <CommunityTabs active="leaderboard" />
 
       {/* Tier 1a — You this week: big prominent card */}
       {meRow ? (
@@ -321,6 +361,26 @@ export default async function CommunityPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+function PeopleHeader({
+  communityNames,
+  count,
+}: {
+  communityNames: string[];
+  count: number;
+}) {
+  const title = communityNames.length === 0
+    ? "Community"
+    : communityNames.join(", ");
+  return (
+    <header>
+      <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+        {count} {count === 1 ? "BROTHER" : "BROTHERS"}
+      </p>
+      <h1 className="font-heading text-3xl">{title}</h1>
+    </header>
   );
 }
 
