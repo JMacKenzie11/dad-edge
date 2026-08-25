@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { requireAccess } from "@/lib/session";
 import { CardSkeleton } from "./cards/card-shell";
 import { PillarComparisonCard } from "./cards/pillar-comparison-card";
-import { DailyLivingTrendCard } from "./cards/daily-living-trend-card";
 import { SurveyDeltaCard } from "./cards/survey-delta-card";
 import { MissionFollowThroughCard } from "./cards/mission-followthrough-card";
 import { ItcStatusCard } from "./cards/itc-status-card";
@@ -41,10 +40,6 @@ export default async function DashboardPage() {
 
       <Suspense fallback={<CardSkeleton title="Pillars this quarter vs last" />}>
         <PillarComparisonCard userId={user.id} />
-      </Suspense>
-
-      <Suspense fallback={<CardSkeleton title="Daily Living trend" />}>
-        <DailyLivingTrendCard userId={user.id} />
       </Suspense>
 
       <Suspense fallback={<CardSkeleton title="Mission completion trend" />}>
