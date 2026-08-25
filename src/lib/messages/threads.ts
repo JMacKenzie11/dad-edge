@@ -187,6 +187,31 @@ type UserBits = {
 };
 
 /**
+ * Mark every unread message addressed to the viewer as read. Called
+ * when the viewer lands on the /messages inbox — visiting the inbox
+ * counts as "consuming the notification" (we don't surface read
+ * receipts anywhere, so this only affects the unread badge). Opening
+ * a specific thread later still works fine; there just won't be
+ * anything left to mark.
+ */
+export async function markAllMessagesReadForViewer(viewerId: string): Promise<void> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    await supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .neq("sender_id", viewerId)
+      .is("read_at", null);
+  } catch (err) {
+    console.warn(
+      "[messages] markAllMessagesReadForViewer failed for user=%s: %s",
+      viewerId,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/**
  * Total distinct threads with at least one unread message. Drives
  * the header speech-bubble badge and the nav item badge.
  */

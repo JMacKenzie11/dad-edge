@@ -168,7 +168,9 @@ export function CoachConversation({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              // Enter sends. Shift+Enter (and IME composition) inserts
+              // a newline. Matches Slack / iMessage / most chat UIs.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 send();
               }
@@ -204,7 +206,7 @@ export function CoachConversation({
         </form>
         <AllowanceLine allowance={allowance} />
         <p className="text-[10px] text-[color:var(--color-text-muted)] mt-1">
-          ⌘/Ctrl + Enter to send · Coach is not a therapist. In crisis call 911 or 988.
+          Enter to send · Shift+Enter for a new line · Coach is not a therapist. In crisis call 911 or 988.
         </p>
       </div>
     </div>

@@ -23,6 +23,15 @@ export function MessagesIcon({
 }) {
   const [unread, setUnread] = useState(initialUnreadThreads);
 
+  // The app layout is a persistent parent across route changes, so
+  // this component doesn't unmount when the user navigates. Without
+  // this sync, `useState(initialUnreadThreads)` freezes on the value
+  // seen at first mount and later server-rendered counts (e.g. after
+  // /messages marks everything read) never reach the badge.
+  useEffect(() => {
+    setUnread(initialUnreadThreads);
+  }, [initialUnreadThreads]);
+
   // Realtime: any new message where sender != me is a potentially
   // unread ping. We can't easily know "is this from a new thread I
   // haven't yet counted?" client-side without re-querying, so we

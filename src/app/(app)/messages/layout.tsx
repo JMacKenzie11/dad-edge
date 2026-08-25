@@ -1,5 +1,5 @@
 import { requireAccess } from "@/lib/session";
-import { loadInbox } from "@/lib/messages/threads";
+import { loadInbox, markAllMessagesReadForViewer } from "@/lib/messages/threads";
 import { InboxPane } from "./inbox-pane";
 
 /**
@@ -20,6 +20,10 @@ export default async function MessagesLayout({
   children: React.ReactNode;
 }) {
   const { user } = await requireAccess();
+  // Visiting the inbox counts as consuming the unread notification.
+  // Run before loadInbox so the per-thread unread counts reflect zero
+  // and match the header badge on this render.
+  await markAllMessagesReadForViewer(user.id);
   const inbox = await loadInbox(user.id);
 
   return (

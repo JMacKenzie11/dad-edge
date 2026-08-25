@@ -9,6 +9,10 @@ export default defineConfig({
       "tests/form-first/**/*.test.ts",
       // Coach context pipeline unit tests.
       "tests/coach/**/*.test.ts",
+      // Integration tests — hit real dev Supabase to verify RLS +
+      // boundary behavior. Slower than units; skip if the required
+      // env vars aren't present (see helpers/supabase.ts).
+      "tests/integration/**/*.test.ts",
     ],
     // Behavior tests hit the Anthropic API — slower than unit tests but
     // still bounded. State-machine tests are fast because they mock the LLM.
