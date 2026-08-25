@@ -6,6 +6,8 @@ import { DailyLivingTrendCard } from "./cards/daily-living-trend-card";
 import { SurveyDeltaCard } from "./cards/survey-delta-card";
 import { MissionFollowThroughCard } from "./cards/mission-followthrough-card";
 import { ItcStatusCard } from "./cards/itc-status-card";
+import { WeeklySummaryCard } from "./cards/weekly-summary-card";
+import { getWeeklySummaryState } from "@/lib/weekly-summary/state";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function DashboardPage() {
   const { user } = await requireAccess();
+  const summaryState = await getWeeklySummaryState(user.id);
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <header>
@@ -33,6 +36,8 @@ export default async function DashboardPage() {
           What your numbers show. Self only, not community.
         </p>
       </header>
+
+      <WeeklySummaryCard state={summaryState} />
 
       <Suspense fallback={<CardSkeleton title="Pillars this quarter vs last" />}>
         <PillarComparisonCard userId={user.id} />
