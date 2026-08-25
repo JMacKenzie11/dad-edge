@@ -365,7 +365,7 @@ function extractLabel(
   // the manifest and Claude has nothing to describe.
   const text = collectJsxText(node);
   if (text.trim().length > 0) return text;
-  return normalize(getAttrs(node.openingElement)["aria-label"]) || "";
+  return normalize(getAttrs(node)["aria-label"]) || "";
 }
 
 function collectJsxText(node: ts.JsxElement): string {

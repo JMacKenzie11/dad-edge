@@ -9,6 +9,7 @@ import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
 import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
 import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
+import { runHelpContentAutoRegen } from "@/lib/jobs/help-content-auto-regen";
 import { auditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -71,6 +72,9 @@ export async function POST(req: NextRequest) {
     case "mark-goals-for-review":
       result = await runMarkGoalsForReview(now);
       break;
+    case "help-content-auto-regen":
+      result = await runHelpContentAutoRegen(now);
+      break;
     default:
       return NextResponse.json(
         {
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest) {
             "exemplar-novelty",
             "goal-midpoint-check",
             "mark-goals-for-review",
+            "help-content-auto-regen",
           ],
         },
         { status: 400 },

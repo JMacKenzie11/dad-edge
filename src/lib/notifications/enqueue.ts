@@ -9,7 +9,8 @@ export type NotificationKind =
   | "week_lock"
   | "weekly_digest"
   | "quarter_closing"
-  | "goal_midpoint";
+  | "goal_midpoint"
+  | "help_content_stale";
 
 type EnqueueInput = {
   userId: string;

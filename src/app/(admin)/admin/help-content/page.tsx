@@ -3,7 +3,8 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { format } from "date-fns";
 import { lintSections } from "@/../scripts/help/voice-lint";
 import { RowEditor } from "./row-editor";
-import { findStaleHelpContentIds, regenerateStaleHelpContent } from "./actions";
+import { regenerateStaleHelpContent } from "./actions";
+import { findStaleHelpContentIds } from "@/lib/help/regenerate";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 export const dynamic = "force-dynamic";

@@ -7,6 +7,7 @@ import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
 import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
 import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
+import { runHelpContentAutoRegen } from "@/lib/jobs/help-content-auto-regen";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
     runWeeklyDigest(now),
     runExemplarNovelty(now),
     runGoalMidpointCheck(now),
+    runHelpContentAutoRegen(now),
   ]);
   const ok = results.every((r) => r.ok);
   return NextResponse.json({ ok, results });

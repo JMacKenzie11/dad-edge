@@ -196,6 +196,7 @@ const LABEL_BY_KIND: Record<NotificationKind, string> = {
   weekly_digest: "∑",
   quarter_closing: "Q",
   goal_midpoint: "½",
+  help_content_stale: "?",
 };
 
 function relativeTime(iso: string): string {
