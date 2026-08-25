@@ -3,13 +3,15 @@
 import { useState, useTransition } from "react";
 
 const JOBS = [
-  { key: "daily-reminders", label: "Daily reminders", note: "Log-today emails to members who haven't checked in yet." },
+  { key: "daily-reminders", label: "Daily reminders", note: "Log-today emails + bell notifications to members who haven't checked in yet." },
   { key: "mission-nudges", label: "Mission-day nudges", note: "Morning-of email for missions dated today." },
   { key: "disengagement", label: "Disengagement scan", note: "Day 3 / 7 / 14 emails." },
-  { key: "week-lock", label: "Week lock", note: "Insert current-week rows, lock last week, warn members 2 days before lock." },
+  { key: "week-lock", label: "Week lock", note: "Insert current-week rows, lock last week, warn members 2 days before lock (email + bell)." },
   { key: "mark-missed", label: "Mark missed", note: "Move planned missions past their target date to missed." },
-  { key: "digest", label: "Weekly digest", note: "Generate and email last week's digest to leaders." },
+  { key: "digest", label: "Weekly digest", note: "Generate and email last week's digest to leaders (+ bell notification)." },
   { key: "exemplar-novelty", label: "Exemplar novelty scan", note: "Prune near-duplicate exemplar missions per pillar (weekly)." },
+  { key: "mark-goals-for-review", label: "Mark goals for review", note: "Flip active goals to needs_review when quarter is closing; bell notifies each coachee." },
+  { key: "goal-midpoint-check", label: "Goal midpoint check", note: "Bell-notify coachees whose midpoint_check_at has arrived and isn't answered." },
 ];
 
 type RunResult = { ok: boolean; sent?: number; processed?: number; errors?: string[] };
