@@ -37,10 +37,10 @@
     },
     {
       "kind": "link",
-      "label": "MESSAGE →"
+      "label": "MESSAGE"
     }
   ],
-  "source_hash": "11f4dccb95883d2a",
+  "source_hash": "2a93f5797979126f",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/community-tabs.tsx",
