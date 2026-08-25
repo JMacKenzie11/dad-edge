@@ -5,6 +5,7 @@ import { HelpWidget } from "@/components/help/help-widget";
 import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
 import { getNotificationsForBell } from "@/lib/notifications/read";
 import { getUnreadThreadCount } from "@/lib/messages/threads";
+import { PostHogBridge } from "@/components/analytics/posthog-bridge";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, readOnly } = await requireAccess();
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <BottomNav />
         <HelpWidget role={user.is_platform_admin ? "admin" : "member"} />
+        <PostHogBridge userId={user.id} />
       </div>
     </CurrentHelpViewProvider>
   );

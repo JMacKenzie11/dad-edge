@@ -35,6 +35,8 @@
     "exceljs": "^4.4.0",
     "framer-motion": "^11.11.7",
     "next": "^15.1.6",
+    "posthog-js": "^1.418.17",
+    "posthog-node": "^5.51.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-easy-crop": "^6.2.3",

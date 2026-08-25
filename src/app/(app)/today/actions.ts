@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 const InputSchema = z.object({
@@ -54,6 +55,10 @@ export async function setCheckin(input: unknown): Promise<{ ok: boolean; error?:
       { onConflict: "user_id,date,pillar_code" },
     );
   if (error) return { ok: false, error: error.message };
+  captureServerEvent(user.id, {
+    name: "daily_checkin_logged",
+    props: { pillar_code, value },
+  });
   revalidatePath("/today");
   return { ok: true };
 }

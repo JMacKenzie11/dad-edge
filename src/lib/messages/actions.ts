@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { captureServerEvent } from "@/lib/analytics/server";
 
 /**
  * Send a text message in a thread. RLS enforces sender_id = auth.uid()
@@ -60,6 +61,11 @@ export async function sendMessage(
     .from("message_threads")
     .update({ last_message_at: row.created_at })
     .eq("id", threadId);
+
+  captureServerEvent(user.id, {
+    name: "message_sent",
+    props: { thread_id: threadId, body_length: trimmed.length },
+  });
 
   // Layout-scoped revalidate so the inbox + header unread badge on
   // OTHER routes pick up the change on the sender's next navigation.

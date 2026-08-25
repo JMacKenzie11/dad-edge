@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { isStageBEmailLive, sendPasswordResetEmail } from "@/lib/email";
+import { captureServerEvent } from "@/lib/analytics/server";
 
 /**
  * Auth actions for the public login screen. Per the auth-phase spec
@@ -78,6 +79,7 @@ export async function signIn(formData: FormData) {
   //   - Everyone else → /today
   const user = signInData.user;
   if (user) {
+    captureServerEvent(user.id, { name: "signed_in", props: { method: "password" } });
     const { data: row } = await supabase
       .from("users")
       .select("itc_access, is_platform_admin, is_admin_only")

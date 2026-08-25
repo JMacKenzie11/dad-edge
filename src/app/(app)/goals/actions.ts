@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { computeMidpointCheckAt, getCurrentQuarter } from "@/lib/scoring/quarters";
+import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -34,6 +35,10 @@ export async function createGoal(input: unknown) {
     midpoint_check_at: midpointCheckAt,
   });
   if (error) return { ok: false, error: error.message };
+  captureServerEvent(user.id, {
+    name: "goal_created",
+    props: { pillar_code: parsed.data.focus_area, source: "user" },
+  });
   revalidatePath("/goals");
   return { ok: true };
 }

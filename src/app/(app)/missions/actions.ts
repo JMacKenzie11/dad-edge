@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
+import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -50,6 +51,10 @@ export async function createMission(
     .single();
 
   if (error) return { ok: false, error: error.message };
+  captureServerEvent(user.id, {
+    name: "mission_created",
+    props: { pillar_code: data.pillar_code, source: "user" },
+  });
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true, id: inserted!.id };
@@ -89,6 +94,19 @@ export async function completeMission(
     .eq("id", missionId)
     .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
+
+  // Fetch pillar for the analytics event. Small extra roundtrip is
+  // fine — this action is user-triggered, not hot-path.
+  const { data: pill } = await supabase
+    .from("missions")
+    .select("pillar_code")
+    .eq("id", missionId)
+    .maybeSingle();
+  const pillar = (pill as { pillar_code: string } | null)?.pillar_code ?? "unknown";
+  captureServerEvent(user.id, {
+    name: "mission_completed",
+    props: { pillar_code: pillar, completed_late: late },
+  });
 
   // Deterministic auto-exemplar: quality_score >= 9 AND on-time completion.
   // (Score 9+ mathematically requires no zero-scored criterion.)
