@@ -168,7 +168,7 @@ function MemberCard({
           href={messageHref}
           aria-label={`Message ${member.name}`}
           title={`Message ${member.name}`}
-          className="shrink-0 h-9 px-3 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-[11px] tracking-widest flex items-center gap-1.5 hover:bg-[color:var(--color-primary)]/90 transition-colors cursor-pointer"
+          className="shrink-0 h-9 w-9 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[color:var(--color-text-muted)] hover:text-white transition-colors cursor-pointer"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -183,7 +183,6 @@ function MemberCard({
           >
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
-          MESSAGE
         </Link>
       </div>
     </li>
