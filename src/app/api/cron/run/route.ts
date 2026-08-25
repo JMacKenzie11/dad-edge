@@ -35,15 +35,20 @@ export async function POST(req: NextRequest) {
 
   const url = new URL(req.url);
   const job = url.searchParams.get("job") ?? "";
+  // ?force=1 bypasses time-of-day gates on the two hourly jobs
+  // (daily-reminders, mission-nudges) so a platform admin can trigger
+  // a full pass from /admin/jobs without waiting for the reminder
+  // window. Other jobs ignore the flag.
+  const force = url.searchParams.get("force") === "1";
   const now = new Date();
 
   let result;
   switch (job) {
     case "daily-reminders":
-      result = await runDailyReminders(now);
+      result = await runDailyReminders(now, { force });
       break;
     case "mission-nudges":
-      result = await runMissionDayNudges(now);
+      result = await runMissionDayNudges(now, { force });
       break;
     case "disengagement":
       result = await runDisengagementScan(now);
@@ -89,7 +94,11 @@ export async function POST(req: NextRequest) {
   await auditLog({
     actor_user_id: user.id,
     action: "job.manual_run",
-    metadata: { job, result: result as unknown as Record<string, unknown> },
+    metadata: {
+      job,
+      force,
+      result: result as unknown as Record<string, unknown>,
+    },
   });
 
   return NextResponse.json(result);

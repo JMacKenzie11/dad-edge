@@ -11,7 +11,10 @@ import type { JobResult } from "@/lib/jobs/utils";
  * hour has just passed (in the *community* timezone; per-user preferences can
  * come later — §8 lists per-user time as a phase 1 nice-to-have).
  */
-export async function runDailyReminders(now: Date = new Date()): Promise<JobResult> {
+export async function runDailyReminders(
+  now: Date = new Date(),
+  options?: { force?: boolean },
+): Promise<JobResult> {
   const svc = createSupabaseServiceClient();
   const { data: communities } = await svc
     .from("communities")
@@ -28,7 +31,16 @@ export async function runDailyReminders(now: Date = new Date()): Promise<JobResu
   }[]) {
     const nudge = Array.isArray(c.nudge) ? c.nudge[0] : c.nudge;
     const reminderTime = nudge?.daily_reminder_time ?? "18:00";
-    if (!isWithinReminderWindow(now, c.timezone, reminderTime.slice(0, 5))) continue;
+    // Force bypass: skip the time-of-day gate so a platform admin
+    // can trigger a full pass from /admin/jobs regardless of the
+    // clock. Emails + bell rows still respect per-user dedup + the
+    // "already logged today?" filter, so force can't produce dupes.
+    if (
+      !options?.force &&
+      !isWithinReminderWindow(now, c.timezone, reminderTime.slice(0, 5))
+    ) {
+      continue;
+    }
 
     const today = localDate(now, c.timezone);
     const monday = localMonday(now, c.timezone);

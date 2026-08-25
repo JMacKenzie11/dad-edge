@@ -12,7 +12,10 @@ import type { JobResult } from "@/lib/jobs/utils";
  * already emailed for this mission today. Since we don't persist a marker,
  * we send only when localHour is 8, giving a single hourly window.
  */
-export async function runMissionDayNudges(now: Date = new Date()): Promise<JobResult> {
+export async function runMissionDayNudges(
+  now: Date = new Date(),
+  options?: { force?: boolean },
+): Promise<JobResult> {
   const svc = createSupabaseServiceClient();
   const { data: communities } = await svc
     .from("communities")
@@ -23,7 +26,10 @@ export async function runMissionDayNudges(now: Date = new Date()): Promise<JobRe
   let sent = 0;
 
   for (const c of (communities ?? []) as { id: string; timezone: string }[]) {
-    if (localHour(now, c.timezone) !== 8) continue;
+    // Force bypass mirrors runDailyReminders — the target_date filter
+    // still limits the send to missions dated today in the community's
+    // local calendar, so force can't blast future missions.
+    if (!options?.force && localHour(now, c.timezone) !== 8) continue;
     const today = localDate(now, c.timezone);
 
     const { data: missions } = await svc
