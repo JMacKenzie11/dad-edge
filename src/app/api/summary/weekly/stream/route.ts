@@ -37,6 +37,24 @@ export const dynamic = "force-dynamic";
  * next page load is a static render.
  */
 export async function POST(req: NextRequest) {
+  try {
+    return await handleStreamRequest(req);
+  } catch (err) {
+    // Data-gathering / model-setup failures land here. Any error
+    // that happens once streaming has actually started is caught by
+    // streamText's own error surfacing (client sees the stream cut
+    // short, we log via onError). Errors here mean we never sent
+    // the first byte — return a clean 500 so the client's retry
+    // path takes over instead of dumping raw error text into the UI.
+    console.warn(
+      "[weekly-summary] stream route failed before send: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return Response.json({ error: "generation failed" }, { status: 500 });
+  }
+}
+
+async function handleStreamRequest(req: NextRequest): Promise<Response> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -52,6 +70,10 @@ export async function POST(req: NextRequest) {
   // arbitrary week — the summary must be for the week the state
   // resolver currently considers "generating" for this user.
   const state = await getWeeklySummaryState(user.id);
+  if (!state) {
+    // Resolver failed (DB down etc.). Treat as retryable.
+    return Response.json({ error: "state unavailable" }, { status: 500 });
+  }
   if (state.status !== "generating") {
     return Response.json(
       { error: `summary not eligible: state=${state.status}` },
@@ -221,6 +243,16 @@ Write the recap now.`;
     system,
     prompt,
     maxOutputTokens: 700,
+    onError({ error }) {
+      // Mid-stream LLM error (rate limit, network, model rejection).
+      // streamText already terminates the stream — client sees a
+      // truncated body and shows the "stream cut off" hint. We just
+      // need to make sure the failure gets logged instead of swallowed.
+      console.warn(
+        "[weekly-summary] streamText error mid-stream: %s",
+        error instanceof Error ? error.message : String(error),
+      );
+    },
     onFinish: async ({ text }) => {
       const parsed = parseSections(text);
       if (!parsed) {

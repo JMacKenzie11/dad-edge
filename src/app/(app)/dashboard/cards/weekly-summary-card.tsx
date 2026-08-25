@@ -24,7 +24,15 @@ import type {
  * three-section rhythm as a persisted row — so first-view and repeat-
  * view look the same after the reveal finishes.
  */
-export function WeeklySummaryCard({ state }: { state: WeeklySummaryState }) {
+export function WeeklySummaryCard({
+  state,
+}: {
+  state: WeeklySummaryState | null;
+}) {
+  // Server-side resolver failed (DB down, migration missing, etc.).
+  // Hide the card entirely rather than showing a stub or error — the
+  // rest of /dashboard is the actual "record" surface.
+  if (state === null) return null;
   if (state.status === "ready") {
     return (
       <SummaryShell weekStart={state.weekStart}>
@@ -57,14 +65,19 @@ export function WeeklySummaryCard({ state }: { state: WeeklySummaryState }) {
 
 function StreamingSummary({ weekStart }: { weekStart: string }) {
   const [text, setText] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [errored, setErrored] = useState(false);
   const [done, setDone] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   // Guard against React strict-mode double-mount kicking off two POSTs.
-  const startedRef = useRef(false);
+  const startedRef = useRef(0);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    if (startedRef.current === attempt + 1) return;
+    startedRef.current = attempt + 1;
+
+    setText("");
+    setErrored(false);
+    setDone(false);
 
     const controller = new AbortController();
     (async () => {
@@ -75,9 +88,19 @@ function StreamingSummary({ weekStart }: { weekStart: string }) {
           body: JSON.stringify({ weekStart }),
           signal: controller.signal,
         });
+        // 409 = row already exists (another tab beat us) or state
+        // changed under us. Not really an error — reload will pick
+        // up the persisted row.
+        if (res.status === 409) {
+          if (typeof window !== "undefined") window.location.reload();
+          return;
+        }
         if (!res.ok || !res.body) {
-          const errBody = await res.text().catch(() => "");
-          setError(errBody || `Stream error (${res.status})`);
+          console.warn(
+            "[weekly-summary] stream POST failed status=%d",
+            res.status,
+          );
+          setErrored(true);
           return;
         }
         const reader = res.body.getReader();
@@ -90,43 +113,74 @@ function StreamingSummary({ weekStart }: { weekStart: string }) {
         setDone(true);
       } catch (err) {
         if ((err as { name?: string })?.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "unknown error");
+        console.warn(
+          "[weekly-summary] stream failed: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+        setErrored(true);
       }
     })();
 
     return () => controller.abort();
-  }, [weekStart]);
+  }, [weekStart, attempt]);
 
   const sections = splitSections(text);
 
+  // Errored with no text yet → collapse to a compact "try again" state.
+  // Errored mid-stream → keep the partial text visible + offer retry.
+  if (errored && text.length === 0) {
+    return (
+      <SummaryShell weekStart={weekStart}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-[color:var(--color-text-muted)]">
+            Recap couldn't generate just now.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAttempt((n) => n + 1)}
+            className="h-8 px-3 rounded-md border border-[color:var(--color-border)] font-heading text-[10px] tracking-widest text-[color:var(--color-text-muted)] hover:text-white cursor-pointer"
+          >
+            TRY AGAIN
+          </button>
+        </div>
+      </SummaryShell>
+    );
+  }
+
   return (
     <SummaryShell weekStart={weekStart}>
-      {error ? (
-        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
-      ) : (
-        <div className="space-y-4">
+      <div className="space-y-4">
+        <RevealSection
+          label="HIGHLIGHT"
+          text={sections.highlight}
+          emphasize
+          showCursor={
+            !done &&
+            !errored &&
+            sections.opportunity.length === 0 &&
+            sections.what_worked.length === 0
+          }
+        />
+        {sections.what_worked ? (
           <RevealSection
-            label="HIGHLIGHT"
-            text={sections.highlight}
-            emphasize
-            showCursor={!done && sections.opportunity.length === 0 && sections.what_worked.length === 0}
+            label="WHAT WORKED"
+            text={sections.what_worked}
+            showCursor={!done && !errored && sections.opportunity.length === 0}
           />
-          {sections.what_worked ? (
-            <RevealSection
-              label="WHAT WORKED"
-              text={sections.what_worked}
-              showCursor={!done && sections.opportunity.length === 0}
-            />
-          ) : null}
-          {sections.opportunity ? (
-            <RevealSection
-              label="OPPORTUNITY"
-              text={sections.opportunity}
-              showCursor={!done}
-            />
-          ) : null}
-        </div>
-      )}
+        ) : null}
+        {sections.opportunity ? (
+          <RevealSection
+            label="OPPORTUNITY"
+            text={sections.opportunity}
+            showCursor={!done && !errored}
+          />
+        ) : null}
+        {errored ? (
+          <p className="text-xs text-[color:var(--color-text-muted)]">
+            Stream cut off. Reload the page to pick it up again.
+          </p>
+        ) : null}
+      </div>
     </SummaryShell>
   );
 }

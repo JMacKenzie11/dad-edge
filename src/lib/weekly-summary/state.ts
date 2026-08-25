@@ -57,6 +57,26 @@ export type WeeklySummaryBody = {
 export async function getWeeklySummaryState(
   userId: string,
   now: Date = new Date(),
+): Promise<WeeklySummaryState | null> {
+  try {
+    return await resolveWeeklySummaryState(userId, now);
+  } catch (err) {
+    // Never blow up /dashboard on a summary-state read failure. The
+    // card is a nice-to-have; the rest of the page (pillars, trends,
+    // missions, survey, ITC) is the actual "record" surface. Log,
+    // hide the card, keep the page rendering.
+    console.warn(
+      "[weekly-summary] getWeeklySummaryState failed for user=%s: %s",
+      userId,
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
+async function resolveWeeklySummaryState(
+  userId: string,
+  now: Date,
 ): Promise<WeeklySummaryState> {
   const svc = createSupabaseServiceClient();
 
