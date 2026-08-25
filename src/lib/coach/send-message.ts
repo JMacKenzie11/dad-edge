@@ -310,10 +310,15 @@ export async function sendCoachMessage(opts: {
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversationId);
 
-  // Fire-and-forget: if this was the first turn, generate a title. Failure
-  // leaves title null and doesn't affect the reply.
+  // First-turn title generation. Uses next/server's `after()` so the
+  // Haiku call outlives the HTTP response — a raw `void (async…)()`
+  // gets orphaned when Vercel terminates the serverless invocation
+  // right after the reply ships, which was why prod conversations
+  // were staying labeled "New conversation" forever. `after` keeps
+  // the work alive within the same invocation until it settles.
   if (!convo.hasTitle) {
-    void (async () => {
+    const { after } = await import("next/server");
+    after(async () => {
       try {
         const { suggestConversationTitle } = await import("@/lib/coach/title");
         const title = await suggestConversationTitle({ mode, firstUserMessage: text });
@@ -325,7 +330,7 @@ export async function sendCoachMessage(opts: {
       } catch (err) {
         console.error("title backfill failed", err);
       }
-    })();
+    });
   }
 
   const allowanceAfter = await readAllowance(opts.user.id);
