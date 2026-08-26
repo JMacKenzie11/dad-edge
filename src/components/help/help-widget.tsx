@@ -62,7 +62,10 @@ export function HelpWidget({
         onClick={() => setOpen(true)}
         aria-label="Open help"
         title="Help for this page"
-        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 flex flex-col items-center gap-0.5 p-2 rounded-full bg-[color:var(--color-primary)] shadow-lg cursor-pointer hover:brightness-110 hover:scale-105 transition-all"
+        // bottom-20 on mobile clears the fixed BottomNav (~56px tall,
+        // sits at bottom-0). md: viewport has no bottom nav so falls
+        // back to the original bottom-6 offset.
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-30 flex flex-col items-center gap-0.5 p-2 rounded-full bg-[color:var(--color-primary)] shadow-lg cursor-pointer hover:brightness-110 hover:scale-105 transition-all"
       >
         <Image
           src="/brand/mark-white.png"
