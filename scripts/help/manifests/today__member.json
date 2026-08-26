@@ -4,10 +4,6 @@
   "role": "member",
   "elements": [
     {
-      "kind": "header",
-      "label": "Log today"
-    },
-    {
       "kind": "toggle",
       "label": "Bond tile"
     },
@@ -37,6 +33,14 @@
     },
     {
       "kind": "field",
+      "label": "Previous day"
+    },
+    {
+      "kind": "field",
+      "label": "Next day"
+    },
+    {
+      "kind": "field",
       "label": "KEY WINS"
     },
     {
@@ -44,11 +48,12 @@
       "label": "KEY LEARNINGS"
     }
   ],
-  "source_hash": "65f5abe21cd4d6c9",
+  "source_hash": "f1ac9ef478d454c5",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/actions.ts",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/checkin-board.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/date-navigator.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/reflection-panel.tsx"
   ]
 }

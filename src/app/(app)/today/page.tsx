@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PILLARS, type PillarCode } from "@/lib/pillars";
 import {
   DAILY_PILLARS_WEEKLY_MAX,
   dailyLivingWeekTotal,
+  getEarliestEditableDate,
   localDate,
   localMonday,
   missionScore,
@@ -12,6 +14,7 @@ import {
 import { deriveA2ForDate } from "@/lib/scoring/action";
 import { CheckinBoard } from "./checkin-board";
 import { ReflectionPanel } from "./reflection-panel";
+import { DateNavigator } from "./date-navigator";
 import { StreakChip } from "@/components/ui/streak-chip";
 import { GoalReviewPrompt } from "@/app/(app)/goals/goal-review-prompt";
 import { GoalMidpointPrompt } from "@/app/(app)/goals/goal-midpoint-prompt";
@@ -19,12 +22,41 @@ import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-export default async function TodayPage() {
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const { user, readOnly } = await requireAccess();
   const supabase = await createSupabaseServerClient();
 
-  const today = localDate(new Date(), user.timezone);
-  const monday = localMonday(new Date(), user.timezone);
+  const now = new Date();
+  const today = localDate(now, user.timezone);
+  const params = await searchParams;
+  const requestedDate = params.date;
+  const earliest = await getEarliestEditableDate(user.id, now);
+
+  // Validate the ?date= param. Anything out-of-range or malformed
+  // silently redirects to the canonical /today so a stale bookmark
+  // (pointing at a since-locked day) still works.
+  let date = today;
+  if (requestedDate && DATE_PARAM_RE.test(requestedDate)) {
+    if (requestedDate === today) {
+      // Canonicalize — no ?date= for today itself.
+      redirect("/today");
+    }
+    if (requestedDate >= earliest && requestedDate < today) {
+      date = requestedDate;
+    } else {
+      redirect("/today");
+    }
+  } else if (requestedDate !== undefined) {
+    redirect("/today");
+  }
+
+  const monday = localMonday(new Date(`${date}T12:00:00Z`), user.timezone);
   const week = weekDates(monday);
 
   const [
@@ -48,7 +80,7 @@ export default async function TodayPage() {
       .from("daily_reflections")
       .select("wins, learnings")
       .eq("user_id", user.id)
-      .eq("date", today)
+      .eq("date", date)
       .maybeSingle(),
     supabase
       .from("quarterly_goals")
@@ -65,7 +97,7 @@ export default async function TodayPage() {
       .not("midpoint_check_at", "is", null)
       .lte("midpoint_check_at", today),
   ]);
-  const todayReflection = (reflection ?? { wins: "", learnings: "" }) as {
+  const dateReflection = (reflection ?? { wins: "", learnings: "" }) as {
     wins: string | null;
     learnings: string | null;
   };
@@ -79,13 +111,15 @@ export default async function TodayPage() {
   const missions_ = missionScore(missionRows, week);
   const combinedTotal = weekTotal + missions_.completed;
   const combinedMax = DAILY_PILLARS_WEEKLY_MAX + missions_.planned;
-  // Today's derived Action value drives the disabled tile visual only.
-  const actionToday = deriveA2ForDate(missionRows, today);
+  // Derived Action value for the day being viewed — drives the
+  // disabled tile visual only.
+  const actionForDate = deriveA2ForDate(missionRows, date);
+  const isToday = date === today;
 
   const initial: Partial<Record<PillarCode, 0 | 1 | null>> = {};
   for (const p of PILLARS) initial[p.code] = null;
   for (const r of rowsSafe) {
-    if (r.date === today && r.pillar_code !== "A2") {
+    if (r.date === date && r.pillar_code !== "A2") {
       initial[r.pillar_code as PillarCode] = r.value as 0 | 1;
     }
   }
@@ -105,12 +139,12 @@ export default async function TodayPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <header>
-        <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-          {format(new Date(`${today}T00:00:00`), "EEEE").toUpperCase()} · {today}
-        </p>
-        <h1 className="font-heading text-3xl">Log today</h1>
-        <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
+      <header className="space-y-3">
+        <DateNavigator date={date} today={today} earliest={earliest} />
+        <h1 className="font-heading text-3xl">
+          {isToday ? "Log today" : `Edit ${format(new Date(`${date}T00:00:00`), "MMM d")}`}
+        </h1>
+        <p className="text-sm text-[color:var(--color-text-muted)]">
           Tap to mark done. Tap again to undo.
         </p>
       </header>
@@ -165,21 +199,21 @@ export default async function TodayPage() {
               </div>
             </div>
           </div>
-          <StreakChip days={computeEngagementStreak(rowsSafe, today)} label="days" />
+          <StreakChip days={computeEngagementStreak(rowsSafe, date)} label="days" />
         </div>
       </section>
 
       <CheckinBoard
-        date={today}
+        date={date}
         initial={initial}
         readOnly={readOnly}
-        actionValue={actionToday}
+        actionValue={actionForDate}
       />
 
       <ReflectionPanel
-        date={today}
-        initialWins={todayReflection.wins ?? ""}
-        initialLearnings={todayReflection.learnings ?? ""}
+        date={date}
+        initialWins={dateReflection.wins ?? ""}
+        initialLearnings={dateReflection.learnings ?? ""}
         readOnly={readOnly}
       />
     </div>
@@ -188,12 +222,15 @@ export default async function TodayPage() {
 
 function computeEngagementStreak(
   rows: { date: string; value: number }[],
-  today: string,
+  endDate: string,
 ): number {
-  // Engagement streak: consecutive prior days ending today with at least one row (any value).
+  // Engagement streak: consecutive prior days ending on endDate with
+  // at least one row (any value). When viewing a past day the streak
+  // reflects that day's state, not today's — matches the rest of the
+  // page's "as of this date" framing.
   const byDate = new Set(rows.map((r) => r.date));
   let streak = 0;
-  const cursor = new Date(`${today}T00:00:00`);
+  const cursor = new Date(`${endDate}T00:00:00`);
   while (true) {
     const key = format(cursor, "yyyy-MM-dd");
     if (byDate.has(key)) {

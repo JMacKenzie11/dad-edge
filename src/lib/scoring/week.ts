@@ -1,6 +1,7 @@
 import { addDays, format, startOfWeek } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import type { PillarCode } from "@/lib/pillars";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * Compute a user's local Monday for a given moment.
@@ -75,6 +76,70 @@ export function missionScore(
     if (m.status === "completed") completed += 1;
   }
   return { completed, planned };
+}
+
+/**
+ * Earliest date the user can still edit on `/today` when navigating back
+ * in time. Returns YYYY-MM-DD in the user's community timezone.
+ *
+ * Rule: users can edit any day up through today, back to the day AFTER
+ * their community's most recent locked week. Fully-locked weeks are
+ * immutable — the score would otherwise drift after the fact and
+ * digests / leaderboards would silently rewrite.
+ *
+ * Multi-community users get the MOST RESTRICTIVE boundary — if any of
+ * their communities has locked a week, that week is off-limits
+ * everywhere. Rare edge case in practice but the alternative (per-
+ * community edit windows) would need per-day UI, not worth it.
+ *
+ * Falls back to the current week's Monday when nothing is locked yet
+ * (fresh app, dev DB, etc.).
+ */
+export async function getEarliestEditableDate(
+  userId: string,
+  now: Date = new Date(),
+): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("community_id, communities:community_id(timezone)")
+    .eq("user_id", userId)
+    .eq("status", "active");
+  const rows = ((memberships ?? []) as Array<{
+    community_id: string;
+    communities:
+      | { timezone: string }
+      | { timezone: string }[]
+      | null;
+  }>);
+  const communityIds = rows.map((r) => r.community_id);
+  const timezone =
+    (Array.isArray(rows[0]?.communities)
+      ? rows[0]?.communities[0]?.timezone
+      : rows[0]?.communities?.timezone) ?? "UTC";
+
+  const fallback = localMonday(now, timezone);
+  if (communityIds.length === 0) return fallback;
+
+  const { data: locked } = await supabase
+    .from("weeks")
+    .select("start_date")
+    .in("community_id", communityIds)
+    .not("locked_at", "is", null)
+    .order("start_date", { ascending: false })
+    .limit(1);
+  const latestLockedStart = ((locked ?? []) as Array<{ start_date: string }>)[0]?.start_date;
+  if (!latestLockedStart) return fallback;
+
+  // Locked week runs latestLockedStart..+6. Earliest editable = +7 (next Monday).
+  const earliest = format(
+    addDays(new Date(`${latestLockedStart}T00:00:00Z`), 7),
+    "yyyy-MM-dd",
+  );
+  // Guard against a future-dated week row somehow being "locked" — the
+  // earliest editable should never be later than today.
+  const todayLocal = localDate(now, timezone);
+  return earliest > todayLocal ? todayLocal : earliest;
 }
 
 /**
