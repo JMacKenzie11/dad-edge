@@ -257,9 +257,7 @@ export default async function GoalsPage() {
           {adaptive ? (
             <AdaptiveGoalCard adaptive={adaptive} />
           ) : (
-            <p className="text-sm text-[color:var(--color-text-muted)] italic">
-              No active improvement map. If you build one, its goal shows up here alongside your other goals.
-            </p>
+            <NoImprovementMapCard />
           )}
         </section>
       ) : null}
@@ -282,6 +280,33 @@ export default async function GoalsPage() {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Empty state for the Improvement Goal section when the user has
+ * ITC access but no map yet. Real CTA, not the italic dead-end
+ * sentence it replaces — a coachee who reads "if you build one, its
+ * goal shows up here" has no way to actually go build one from this
+ * page, which is exactly the wayfinding gap that made ITC feel
+ * disconnected from the rest of the app.
+ */
+function NoImprovementMapCard() {
+  return (
+    <div className="p-5 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
+      <p className="font-heading text-base">Start an improvement map</p>
+      <p className="text-sm text-[color:var(--color-text-muted)] mt-1 leading-relaxed">
+        A 4-column ITC map — the change you want, the behaviors in the
+        way, the hidden commitments underneath, and a test to run this
+        week. Coach-guided; ~20 minutes to draft.
+      </p>
+      <Link
+        href="/itc"
+        className="inline-block mt-4 h-9 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest hover:bg-[color:var(--color-primary)]/90 cursor-pointer"
+      >
+        START
+      </Link>
+    </div>
+  );
 }
 
 /**

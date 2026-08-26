@@ -68,12 +68,8 @@ export default async function ItcLandingPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            href="/today"
-            className="text-xs underline text-[color:var(--color-muted)] hover:text-white"
-          >
-            Main app
-          </Link>
+          {/* "Back to main app" moved to ItcTopBar (layout-level) so
+              it's on every /itc route. Just admin + sign out here. */}
           {isAdmin ? (
             <Link
               href="/itc/admin"

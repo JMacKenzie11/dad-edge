@@ -9,10 +9,6 @@
     },
     {
       "kind": "link",
-      "label": "Main app"
-    },
-    {
-      "kind": "link",
       "label": "Admin"
     },
     {
@@ -42,12 +38,17 @@
     {
       "kind": "link",
       "label": "View →"
+    },
+    {
+      "kind": "link",
+      "label": "← DAD EDGE OS"
     }
   ],
-  "source_hash": "1905fc92881b8bf3",
+  "source_hash": "fc07c0b9b07753cc",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/actions.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/itc-top-bar.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/layout.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/start-map-button.tsx"
   ]

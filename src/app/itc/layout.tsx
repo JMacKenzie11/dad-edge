@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { itcDemoAuthEnabled } from "@/lib/itc/session";
 import { HelpWidget } from "@/components/help/help-widget";
 import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
+import { ItcTopBar } from "./itc-top-bar";
 
 /**
  * Gate for the entire /itc/* tree. When ITC_DEMO_AUTH != "1", every ITC
@@ -25,6 +26,7 @@ export default function ItcLayout({ children }: { children: React.ReactNode }) {
   }
   return (
     <CurrentHelpViewProvider>
+      <ItcTopBar />
       {children}
       <HelpWidget role="member" />
     </CurrentHelpViewProvider>
