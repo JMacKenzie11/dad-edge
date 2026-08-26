@@ -324,15 +324,33 @@ export default async function CommunityPage({
                     : "")
                 }
               >
+                {/* Rank + week-over-week delta. Delta stacked directly
+                    under the rank number so "2 / ▲1" reads as
+                    "currently ranked 2, moved up 1 vs last week." */}
                 <span
                   className={
-                    "text-sm font-heading " +
+                    "text-sm font-heading flex flex-col items-start leading-tight " +
                     (i === 0
                       ? "text-[color:var(--color-accent)]"
                       : "text-[color:var(--color-text-muted)]")
                   }
                 >
-                  {i + 1}
+                  <span>{i + 1}</span>
+                  {delta !== 0 ? (
+                    <span
+                      className="text-[9px]"
+                      title={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} vs last week`}
+                      style={{
+                        color:
+                          delta > 0
+                            ? "var(--color-success)"
+                            : "var(--color-danger)",
+                      }}
+                    >
+                      {delta > 0 ? "▲" : "▼"}
+                      {Math.abs(delta)}
+                    </span>
+                  ) : null}
                 </span>
                 <UserAvatar
                   url={e?.avatar_url ?? null}
@@ -354,24 +372,6 @@ export default async function CommunityPage({
                     Daily {m.weekTotal}/49 · Missions{" "}
                     {m.weekMissionsCompleted}/
                     {m.weekMissionsPlanned || m.weekMissionsCompleted}
-                    {delta !== 0 ? (
-                      <>
-                        {" · "}
-                        <span
-                          className="font-heading"
-                          title={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} vs last week`}
-                          style={{
-                            color:
-                              delta > 0
-                                ? "var(--color-success)"
-                                : "var(--color-danger)",
-                          }}
-                        >
-                          {delta > 0 ? "▲" : "▼"}
-                          {Math.abs(delta)}
-                        </span>
-                      </>
-                    ) : null}
                   </p>
                 </div>
                 <div className="text-right">
