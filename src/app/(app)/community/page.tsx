@@ -354,6 +354,24 @@ export default async function CommunityPage({
                     Daily {m.weekTotal}/49 · Missions{" "}
                     {m.weekMissionsCompleted}/
                     {m.weekMissionsPlanned || m.weekMissionsCompleted}
+                    {delta !== 0 ? (
+                      <>
+                        {" · "}
+                        <span
+                          className="font-heading"
+                          title={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} vs last week`}
+                          style={{
+                            color:
+                              delta > 0
+                                ? "var(--color-success)"
+                                : "var(--color-danger)",
+                          }}
+                        >
+                          {delta > 0 ? "▲" : "▼"}
+                          {Math.abs(delta)}
+                        </span>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <div className="text-right">
@@ -363,19 +381,6 @@ export default async function CommunityPage({
                       /{combinedMax}
                     </span>
                   </p>
-                  {delta !== 0 ? (
-                    <p
-                      className="text-[10px] font-heading"
-                      style={{
-                        color:
-                          delta > 0
-                            ? "var(--color-success)"
-                            : "var(--color-danger)",
-                      }}
-                    >
-                      {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
-                    </p>
-                  ) : null}
                 </div>
                 {/* Message action — hidden for the viewer's own row
                     (can't message yourself). Icon-only to keep the
