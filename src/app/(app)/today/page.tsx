@@ -203,7 +203,12 @@ export default async function TodayPage({
         </div>
       </section>
 
+      {/* key={date} forces a remount when the user pages through days
+          — otherwise useState(initial) inside these components would
+          hold onto the first-mounted day's values because Next.js
+          doesn't unmount the segment on a search-param-only nav. */}
       <CheckinBoard
+        key={date}
         date={date}
         initial={initial}
         readOnly={readOnly}
@@ -211,6 +216,7 @@ export default async function TodayPage({
       />
 
       <ReflectionPanel
+        key={date}
         date={date}
         initialWins={dateReflection.wins ?? ""}
         initialLearnings={dateReflection.learnings ?? ""}
