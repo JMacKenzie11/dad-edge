@@ -261,8 +261,20 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - Member data (checkins, missions, goals) scoped to self + community-mates (active + canceled-within-win-back).
 - Family layer + coach data + reflections: self-only. Coach reads via service role for context.
 - Coach flag queue, audit log, score corrections: platform admin only.
-- Helpers: `shares_active_community()`, `is_leader_of_target()`, `is_platform_admin()`.
+- Helpers: `shares_active_community()`, `is_leader_of_target()`, `is_platform_admin()`, `is_leader_of_community()`, `users_share_active_community()`.
 - Consolidated in `supabase/migrations/20260713000006_row_level_security.sql`.
+
+**Policy authoring rule — when to use `SECURITY DEFINER` (audit 2026-08-26).**
+
+Any RLS policy on table `X` whose `USING` / `WITH CHECK` uses an inline `EXISTS (SELECT ... FROM Y ...)` against an RLS-enabled `Y` must first check whether the check depends on rows the *caller* can see under `Y`'s own RLS.
+
+- **Safe as an inline subquery:**
+  - SELECT-only policies (worst case is the caller sees fewer rows).
+  - Self-referencing checks — the subquery only needs the caller's own row on `Y` (e.g. "the caller is a leader of this community", "the caller is a participant of this thread"), which they always see via `user_id = auth.uid()` or equivalent.
+- **Requires a `SECURITY DEFINER` helper** (or the check will silently fail or leak):
+  - INSERT / UPDATE / DELETE policies where the check needs to verify a fact about *another* user's rows on `Y` (e.g. "these two users share an active community"). The other user's rows are hidden from the caller by `Y`'s RLS, so the inline subquery returns nothing regardless of the underlying fact.
+
+This rule was learned the hard way from the `message_threads_insert_shared_community` leak (fixed in `supabase/migrations/20260828000002_fix_messaging_cross_community_leak.sql`). The audit found no other instances of the anti-pattern in the schema. `SECURITY DEFINER` helpers already exist for every established cross-user check; add one when introducing a new one rather than inlining.
 
 ### Storage
 - **`avatars`** bucket (public read, authenticated write-to-own-folder). Path convention: `{user_id}/profile.{jpg|png}`. RLS policies enforce that a user can only insert/update/delete objects where `storage.foldername(name)[1] = auth.uid()::text`. Uploads for the onboarding + `/me/profile` flows go through the service client (server action decodes the base64 data URL from the client cropper and uploads directly) so the RLS is defense-in-depth rather than the primary gate. Cache-busted public URL (`?v=<timestamp>`) is stored in `users.avatar_url` so browsers pick up new avatars without stale-URL confusion.
