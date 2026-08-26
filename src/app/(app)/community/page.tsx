@@ -92,7 +92,12 @@ export default async function CommunityPage({
   const { data: roster } = await supabase
     .from("memberships")
     .select(
-      "user_id, status, role, users:user_id(first_name, last_name, email, avatar_url)",
+      // is_admin_only is included so backstage-only platform admins
+      // (auto-provisioned as leader in every community by the trigger
+      // in migration 20260824000002) can be filtered out below. They
+      // aren't coachees; they don't belong on the leaderboard or in
+      // the People tab.
+      "user_id, status, role, users:user_id(first_name, last_name, email, avatar_url, is_admin_only)",
     )
     .eq("community_id", communityId)
     .eq("status", "active");
@@ -109,23 +114,26 @@ export default async function CommunityPage({
       email: string;
     }
   >();
-  for (const r of (roster ?? []) as Array<{
+  type RosterUser = {
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    avatar_url: string | null;
+    is_admin_only: boolean | null;
+  };
+  const rosterRows = (roster ?? []) as Array<{
     user_id: string;
-    users:
-      | {
-          first_name: string | null;
-          last_name: string | null;
-          email: string;
-          avatar_url: string | null;
-        }
-      | {
-          first_name: string | null;
-          last_name: string | null;
-          email: string;
-          avatar_url: string | null;
-        }[]
-      | null;
-  }>) {
+    status: "active" | "inactive";
+    role: "member" | "leader";
+    users: RosterUser | RosterUser[] | null;
+  }>;
+  // Filter out admin-only accounts (backstage platform admins that
+  // the auto-provision trigger stuffs into every community).
+  const rosterVisible = rosterRows.filter((r) => {
+    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+    return u && !u.is_admin_only;
+  });
+  for (const r of rosterVisible) {
     const u = Array.isArray(r.users) ? r.users[0] : r.users;
     if (!u) continue;
     enrichmentByUser.set(r.user_id, {
@@ -157,21 +165,12 @@ export default async function CommunityPage({
     threadByOtherUser.set(r.participant_a, r.id);
   }
 
-  const members: Member[] = ((roster ?? []) as {
-    user_id: string;
-    status: "active" | "inactive";
-    role: "member" | "leader";
-    users:
-      | { first_name: string | null; last_name: string | null }
-      | { first_name: string | null; last_name: string | null }[]
-      | null;
-  }[])
-    .map((r) => {
-      const u = Array.isArray(r.users) ? r.users[0] : r.users;
-      const name =
-        [u?.first_name, u?.last_name].filter(Boolean).join(" ") || "Unnamed brother";
-      return { user_id: r.user_id, name, role: r.role, status: r.status };
-    });
+  const members: Member[] = rosterVisible.map((r) => {
+    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+    const name =
+      [u?.first_name, u?.last_name].filter(Boolean).join(" ") || "Unnamed brother";
+    return { user_id: r.user_id, name, role: r.role, status: r.status };
+  });
   const memberIds = members.map((m) => m.user_id);
 
   if (memberIds.length === 0) {
@@ -318,18 +317,17 @@ export default async function CommunityPage({
               <li
                 key={m.userId}
                 className={
-                  "px-4 sm:px-5 py-3 grid grid-cols-[24px_32px_1fr_auto_auto] items-center gap-3 " +
+                  "px-4 sm:px-5 py-3 grid grid-cols-[48px_32px_1fr_auto_auto] items-center gap-3 " +
                   (isMe
                     ? "bg-[color:var(--color-primary)]/[0.08]"
                     : "")
                 }
               >
-                {/* Rank + week-over-week delta. Delta stacked directly
-                    under the rank number so "2 / ▲1" reads as
-                    "currently ranked 2, moved up 1 vs last week." */}
+                {/* Rank + week-over-week delta on the same line so
+                    "2 ▲1" reads as "currently 2nd, up 1 vs last week." */}
                 <span
                   className={
-                    "text-sm font-heading flex flex-col items-start leading-tight " +
+                    "text-sm font-heading flex items-baseline gap-1.5 " +
                     (i === 0
                       ? "text-[color:var(--color-accent)]"
                       : "text-[color:var(--color-text-muted)]")
@@ -338,7 +336,7 @@ export default async function CommunityPage({
                   <span>{i + 1}</span>
                   {delta !== 0 ? (
                     <span
-                      className="text-[9px]"
+                      className="text-[10px]"
                       title={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} vs last week`}
                       style={{
                         color:

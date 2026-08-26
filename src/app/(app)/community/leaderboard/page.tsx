@@ -46,18 +46,28 @@ export default async function LeaderboardPage({
 
   const { data: roster } = await supabase
     .from("memberships")
-    .select("user_id, users:user_id(first_name, last_name)")
+    .select("user_id, users:user_id(first_name, last_name, is_admin_only)")
     .eq("community_id", communityId)
     .eq("status", "active");
 
-  const users = (roster ?? []).map((r) => {
-    const raw = (r.users as unknown) as
-      | { first_name: string | null; last_name: string | null }
-      | { first_name: string | null; last_name: string | null }[]
-      | null;
-    const u = Array.isArray(raw) ? raw[0] ?? null : raw;
-    return { id: r.user_id as string, first_name: u?.first_name ?? null, last_name: u?.last_name ?? null };
-  });
+  const users = (roster ?? [])
+    .map((r) => {
+      const raw = (r.users as unknown) as
+        | { first_name: string | null; last_name: string | null; is_admin_only: boolean | null }
+        | { first_name: string | null; last_name: string | null; is_admin_only: boolean | null }[]
+        | null;
+      const u = Array.isArray(raw) ? raw[0] ?? null : raw;
+      return {
+        id: r.user_id as string,
+        first_name: u?.first_name ?? null,
+        last_name: u?.last_name ?? null,
+        is_admin_only: Boolean(u?.is_admin_only),
+      };
+    })
+    // Backstage-only platform admins are auto-provisioned as leaders
+    // in every community (migration 20260824000002) but aren't
+    // coachees — hide them from the leaderboard.
+    .filter((u) => !u.is_admin_only);
   const memberIds = users.map((u) => u.id);
 
   const today = localDate(new Date(), user.timezone);
