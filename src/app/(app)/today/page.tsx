@@ -142,7 +142,7 @@ export default async function TodayPage({
       <header className="space-y-3">
         <DateNavigator date={date} today={today} earliest={earliest} />
         <h1 className="font-heading text-3xl">
-          {isToday ? "Log today" : `Edit ${format(new Date(`${date}T00:00:00`), "MMM d")}`}
+          {isToday ? "Log today" : format(new Date(`${date}T00:00:00`), "MMM d")}
         </h1>
         <p className="text-sm text-[color:var(--color-text-muted)]">
           Tap to mark done. Tap again to undo.
