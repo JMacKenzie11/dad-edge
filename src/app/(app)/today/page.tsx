@@ -203,20 +203,19 @@ export default async function TodayPage({
         </div>
       </section>
 
-      {/* key={date} forces a remount when the user pages through days
-          — otherwise useState(initial) inside these components would
-          hold onto the first-mounted day's values because Next.js
-          doesn't unmount the segment on a search-param-only nav. */}
+      {/* Both components sync their local state to `date` internally
+          via useEffect. We intentionally do NOT set key={date} — a
+          forced remount during App Router's search-param transition
+          keeps the outgoing tree mounted and shows two of everything. */}
       <CheckinBoard
-        key={date}
         date={date}
         initial={initial}
         readOnly={readOnly}
         actionValue={actionForDate}
+        countLabel={isToday ? "TODAY" : format(new Date(`${date}T00:00:00`), "EEE").toUpperCase()}
       />
 
       <ReflectionPanel
-        key={date}
         date={date}
         initialWins={dateReflection.wins ?? ""}
         initialLearnings={dateReflection.learnings ?? ""}

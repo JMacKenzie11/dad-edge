@@ -23,6 +23,19 @@ export function ReflectionPanel({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSignatureRef = useRef(`${initialWins}\u0000${initialLearnings}`);
 
+  // Reset local state when the viewed date changes. /today reuses
+  // this component across date navigation (search-param nav doesn't
+  // unmount), so without this the wins/learnings text and the
+  // savedSignatureRef stay stuck on the first-mounted day.
+  useEffect(() => {
+    setWins(initialWins);
+    setLearnings(initialLearnings);
+    savedSignatureRef.current = `${initialWins}\u0000${initialLearnings}`;
+    setStatus("idle");
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
   useEffect(() => {
     if (readOnly) return;
     const signature = `${wins}\u0000${learnings}`;
@@ -56,7 +69,7 @@ export function ReflectionPanel({
     <div className="space-y-4">
       <ReflectionCard
         label="KEY WINS"
-        placeholder="What worked today? Any small victory counts."
+        placeholder="What worked? Any small victory counts."
         value={wins}
         onChange={setWins}
         readOnly={readOnly}
@@ -65,7 +78,7 @@ export function ReflectionPanel({
       />
       <ReflectionCard
         label="KEY LEARNINGS"
-        placeholder="What did today teach you? What'll you do differently?"
+        placeholder="What did the day teach you? What'll you do differently?"
         value={learnings}
         onChange={setLearnings}
         readOnly={readOnly}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { PILLARS, type PillarCode } from "@/lib/pillars";
 import { PillarToggle } from "@/components/ui/pillar-toggle";
 import { setCheckin } from "./actions";
@@ -12,15 +12,28 @@ export function CheckinBoard({
   initial,
   readOnly,
   actionValue,
+  countLabel,
 }: {
   date: string;
   initial: Values;
   readOnly: boolean;
   /** Derived A2 value for `date`. null = no mission was due that day. */
   actionValue: 0 | 1 | null;
+  /** Small-caps label above the pillar-count number. "TODAY" today,
+   *  the day-of-week (e.g. "MON") when viewing a past day. */
+  countLabel: string;
 }) {
   const [values, setValues] = useState<Values>(initial);
   const [, startTransition] = useTransition();
+
+  // /today reuses this component across date navigation
+  // (search-param nav doesn't unmount). Re-sync state whenever the
+  // viewed date changes so pillar checks reflect the new day's rows.
+  // Keyed on `date` (not `initial`, which is a fresh object per render).
+  useEffect(() => {
+    setValues(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
   // Daily count excludes A (Action) — Action is scored separately via
   // completed missions, not the daily-pillar total.
   const count = PILLARS.reduce((n, p) => {
@@ -44,7 +57,7 @@ export function CheckinBoard({
     <div>
       <div className="flex items-baseline justify-between mb-3">
         <p className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">
-          TODAY
+          {countLabel}
         </p>
         <p className="font-heading text-4xl text-[color:var(--color-accent)]">
           {count}
