@@ -26,7 +26,12 @@ export async function runWeeklyDigest(now: Date = new Date()): Promise<JobResult
   const { data: communities } = await svc
     .from("communities")
     .select("id, name, timezone")
-    .eq("status", "active");
+    .eq("status", "active")
+    // Integration tests create real communities with the "[IT-TEST]"
+    // prefix. Because the platform-admin auto-provision trigger adds
+    // every admin as a leader of every community, an orphaned test
+    // community would blast admins with a digest email. Filter here.
+    .not("name", "ilike", "[IT-TEST]%");
 
   let sent = 0;
   let processed = 0;

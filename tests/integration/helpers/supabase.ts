@@ -64,17 +64,30 @@ export async function createTestUser(labelHint = "user"): Promise<TestUser> {
   return { id: data.user.id, email, password };
 }
 
-export async function createCommunity(name = "IT community"): Promise<{ id: string; slug: string }> {
+export async function createCommunity(labelHint = "community"): Promise<{ id: string; slug: string }> {
   const svc = service();
   const suffix = randomUUID().slice(0, 8);
   const slug = `it-${suffix}`;
+  // "[IT-TEST]" prefix so orphans left behind by an interrupted test run
+  // are trivially identifiable + sweepable via SQL. The nightly digest
+  // job filters these out (see runWeeklyDigest) so a lingering test
+  // community can't blast platform admins with a spurious digest email.
+  const name = `[IT-TEST] ${labelHint} ${suffix}`;
   const { data, error } = await svc
     .from("communities")
-    .insert({ name: `${name} ${suffix}`, slug })
+    .insert({ name, slug })
     .select("id, slug")
     .single();
   if (error || !data) throw new Error(`[integration test] createCommunity: ${error?.message}`);
-  return { id: data.id as string, slug: data.slug as string };
+  const communityId = data.id as string;
+
+  // Migration 20260824000002 installs a trigger that auto-provisions
+  // every platform admin as a leader of every new community. Great for
+  // real communities; catastrophic for tests, which end up shipping
+  // digest emails to real admins. Purge those synthetic memberships
+  // so the test community has ONLY the users the test explicitly adds.
+  await svc.from("memberships").delete().eq("community_id", communityId);
+  return { id: communityId, slug: data.slug as string };
 }
 
 export async function addMembership(
