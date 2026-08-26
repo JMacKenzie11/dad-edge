@@ -71,10 +71,10 @@ export default async function GoalDetailPage({
       {itcSourced ? (
         <div className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
           <p className="text-sm">
-            This goal is managed by your ITC map. Editing happens in the ITC tool.
+            This goal is managed by your improvement map. Editing happens there.
           </p>
           <p className="text-xs text-[color:var(--color-primary)] mt-2">
-            <Link href="/itc">Open your ITC maps →</Link>
+            <Link href="/itc">Open your improvement maps →</Link>
           </p>
         </div>
       ) : canEdit ? (

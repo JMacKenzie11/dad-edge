@@ -9,7 +9,7 @@
     },
     {
       "kind": "link",
-      "label": "YOUR RECORD My Brave Man Daily Living, mission completion, survey delta, and any active ITC map. →"
+      "label": "YOUR RECORD My Brave Man Daily Living, mission completion, survey delta, and any active improvement map. →"
     },
     {
       "kind": "header",
@@ -56,7 +56,7 @@
       "label": "SIGN OUT"
     }
   ],
-  "source_hash": "ea853d631a89900f",
+  "source_hash": "632f529a2fa2d977",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/page.tsx"
   ]

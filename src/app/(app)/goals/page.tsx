@@ -252,13 +252,13 @@ export default async function GoalsPage() {
       {hasItcAccess ? (
         <section>
           <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">
-            Adaptive goal
+            Improvement goal
           </h2>
           {adaptive ? (
             <AdaptiveGoalCard adaptive={adaptive} />
           ) : (
             <p className="text-sm text-[color:var(--color-text-muted)] italic">
-              No active ITC map. If you build one, its goal shows up here alongside your other goals.
+              No active improvement map. If you build one, its goal shows up here alongside your other goals.
             </p>
           )}
         </section>
@@ -318,7 +318,7 @@ function AdaptiveGoalCard({
         />
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] flex items-center gap-2 flex-wrap">
-            <span>{p.label.toUpperCase()} · ITC MAP</span>
+            <span>{p.label.toUpperCase()} · IMPROVEMENT MAP</span>
             <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]">
               {stageLabel}
             </span>

@@ -9,7 +9,7 @@
     },
     {
       "kind": "link",
-      "label": "Open your ITC maps →"
+      "label": "Open your improvement maps →"
     },
     {
       "kind": "field",
@@ -36,7 +36,7 @@
       "label": "Mission timeline"
     }
   ],
-  "source_hash": "a03e99dc9ea3dc49",
+  "source_hash": "9384427fabdbb249",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/edit-goal-form.tsx"

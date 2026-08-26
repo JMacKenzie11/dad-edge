@@ -50,7 +50,7 @@ export default async function DashboardPage() {
         <SurveyDeltaCard userId={user.id} />
       </Suspense>
 
-      <Suspense fallback={<CardSkeleton title="ITC map" />}>
+      <Suspense fallback={<CardSkeleton title="Improvement map" />}>
         <ItcStatusCard userId={user.id} />
       </Suspense>
     </div>

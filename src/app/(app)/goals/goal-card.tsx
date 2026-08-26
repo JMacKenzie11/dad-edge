@@ -51,9 +51,9 @@ export function GoalCard({ goal, readOnly }: { goal: Goal; readOnly: boolean }) 
             {itcSourced ? (
               <span
                 className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest border border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]"
-                title="This goal comes from your ITC map. Edit it in the ITC tool."
+                title="This goal comes from your improvement map. Edit it there."
               >
-                From your ITC map
+                From your improvement map
               </span>
             ) : null}
             {goal.status === "needs_review" ? (

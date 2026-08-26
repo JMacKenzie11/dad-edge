@@ -70,7 +70,7 @@ export function GoalReviewPrompt({ goal }: { goal: ReviewableGoal }) {
       </div>
       <p className="text-sm leading-relaxed">
         {isItc
-          ? "This goal came from an ITC map that's still open. Close out the map to finish the quarter clean."
+          ? "This goal came from an improvement map that's still open. Close out the map to finish the quarter clean."
           : `Time to close this out. "${goal.desired_end_state}"`}
       </p>
 

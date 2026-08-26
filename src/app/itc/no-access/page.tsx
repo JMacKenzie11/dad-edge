@@ -33,8 +33,8 @@ export default async function ItcNoAccessPage() {
         <div>
           <h1 className="font-heading text-2xl">Not for you yet</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            The ITC coaching tool isn't part of your current group. It's
-            a smaller cohort track running alongside the main app.
+            The improvement map coaching tool isn't part of your current
+            group. It's a smaller cohort track running alongside the main app.
           </p>
         </div>
         <p className="text-sm text-[color:var(--color-text-muted)]">

@@ -13,7 +13,7 @@
     },
     {
       "kind": "header",
-      "label": "Adaptive goal"
+      "label": "Improvement goal"
     },
     {
       "kind": "header",
@@ -21,7 +21,7 @@
     },
     {
       "kind": "link",
-      "label": "· ITC MAP behavior mapped · test designed Open the map →"
+      "label": "· IMPROVEMENT MAP behavior mapped · test designed Open the map →"
     },
     {
       "kind": "link",
@@ -76,7 +76,7 @@
       "label": "Where you want to be"
     }
   ],
-  "source_hash": "9e4a0e30a497db19",
+  "source_hash": "44baac62a6df67ff",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/actions.ts",

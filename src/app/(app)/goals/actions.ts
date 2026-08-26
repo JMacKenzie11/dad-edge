@@ -71,7 +71,7 @@ export async function updateGoal(input: unknown) {
   if (goal.source === "itc") {
     return {
       ok: false,
-      error: "This goal is managed by your ITC map. Edit it in the ITC tool.",
+      error: "This goal is managed by your improvement map. Edit it there.",
     };
   }
   const { error } = await supabase
@@ -130,7 +130,7 @@ export async function submitGoalReview(input: unknown) {
   if (goal.source === "itc") {
     return {
       ok: false,
-      error: "This goal is managed by your ITC map. Close it in the ITC tool.",
+      error: "This goal is managed by your improvement map. Close it there.",
     };
   }
   const nextStatus = parsed.data.answer === "no" ? "abandoned" : "completed";
@@ -227,7 +227,7 @@ export async function closeGoal(goalId: string, status: "completed" | "abandoned
   if (goal.source === "itc") {
     return {
       ok: false,
-      error: "This goal is managed by your ITC map. Close it in the ITC tool.",
+      error: "This goal is managed by your improvement map. Close it there.",
     };
   }
   const { error } = await supabase

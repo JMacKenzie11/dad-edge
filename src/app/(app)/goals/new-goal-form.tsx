@@ -97,7 +97,7 @@ export function NewGoalForm({
         <p className="text-xs text-[color:var(--color-text-muted)]">
           You already have 2 goals this quarter, which is the cap. Close
           or complete one above to free up a slot. The third slot is held
-          for an ITC map goal if you build one.
+          for an improvement map goal if you build one.
         </p>
       ) : null}
       {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}

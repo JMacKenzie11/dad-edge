@@ -56,7 +56,7 @@ export async function ItcStatusCard({
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <DashboardCard title="ITC map">
+    <DashboardCard title="Improvement map">
       <div className="flex items-start gap-3">
         <span
           className="mt-1 inline-block h-8 w-1.5 rounded-full"

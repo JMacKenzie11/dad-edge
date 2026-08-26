@@ -131,7 +131,7 @@ function MemberCard({
                 >
                   {g.pillarLabel.toUpperCase()}
                   {g.isItc ? (
-                    <span className="text-[8px] opacity-70">ITC</span>
+                    <span className="text-[8px] opacity-70">IMPROVEMENT</span>
                   ) : null}
                 </li>
               ))}
