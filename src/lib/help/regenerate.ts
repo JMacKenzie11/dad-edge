@@ -43,8 +43,9 @@ export type HelpContentRow = {
  * Route-slug convention borrowed from scripts/help/extract-routes.ts.
  * Kept in sync manually — a mismatch here just means we can't find
  * the manifest, which lands as a graceful failure in the caller.
+ * Exported for the drift-guard test in src/lib/__tests__/help-regenerate.test.ts.
  */
-function manifestFilenameFor(
+export function manifestFilenameFor(
   routePattern: string,
   viewKey: string | null,
   role: string,
