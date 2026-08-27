@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { isItcAdmin } from "@/lib/itc/admin";
 import {
   getMapForParticipant,
   listAssumptionDrafts,
@@ -22,7 +21,6 @@ import {
   getAdvanceGate,
 } from "../actions";
 import { MapCanvas } from "./map-canvas";
-import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
 import { CurrentStageBroadcaster } from "./current-stage-broadcaster";
 
@@ -101,40 +99,17 @@ export default async function ItcMapPage({
 
   return (
     <main className="flex flex-col">
-      {/* In-page utility strip. Stage progress lives in the left
-          rail on desktop (ItcStageNav) so it isn't repeated here;
-          on mobile the rail is hidden, so we surface a horizontal
-          stage strip just below this row. */}
-      <div className="flex items-center justify-between gap-4 mb-2">
+      {/* In-page utility strip. Clear map + Admin moved into the
+          ItcStageNav rail (bottom); Sign out lives in the main-app
+          avatar menu on /me. Only "← Maps" remains here as the
+          in-context back-out for browsing another map. */}
+      <div className="flex items-center gap-4 mb-2">
         <Link
           href="/itc"
           className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
         >
           ← Maps
         </Link>
-        <div className="flex items-center gap-3">
-          {isItcAdmin(participant.email) ? (
-            <Link
-              href="/itc/admin"
-              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-            >
-              Admin
-            </Link>
-          ) : null}
-          <ResetMapButton mapId={map.id} />
-          {/* Sign out kept here for the legacy-cookie fallback path
-              (users on /itc/[mapId] without a main-app session — layout
-              renders bare children, no header avatar with a sign-out).
-              Main-app coachees can also use /me → SIGN OUT. */}
-          <form action="/itc/logout" method="POST">
-            <button
-              type="submit"
-              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
       </div>
 
       {/* Mobile-only stage progress strip. Desktop uses ItcStageNav

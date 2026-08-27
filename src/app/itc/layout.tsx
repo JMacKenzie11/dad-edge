@@ -90,10 +90,12 @@ export default async function ItcLayout({ children }: { children: React.ReactNod
           unreadMessageThreads={unreadMessageThreads}
         />
         <div className="mx-auto max-w-5xl md:grid md:grid-cols-[220px_1fr]">
-          {/* Sticky rail so the ItcStageNav (or main-app SideNav)
-              stays visible as the map canvas scrolls — the coachee
-              always wants to see where they are in the flow. */}
-          <aside className="hidden md:block border-r border-[color:var(--color-border)] min-h-[calc(100vh-96px)] self-start sticky top-4">
+          {/* Sticky rail. top-24 (6rem) matches the AppHeader height
+              (h-24 on md+) so the rail parks right below the sticky
+              header rather than behind it. h-[calc(100vh-6rem)]
+              caps it to the remaining viewport so the rail itself
+              never scrolls off. */}
+          <aside className="hidden md:block border-r border-[color:var(--color-border)] self-start sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto">
             <ItcNavSwitcher
               isPlatformAdmin={row.is_platform_admin}
               unreadMessageThreads={unreadMessageThreads}

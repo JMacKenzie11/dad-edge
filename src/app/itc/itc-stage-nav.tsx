@@ -1,12 +1,14 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import Link from "next/link";
 import {
   STAGE_LABELS,
   stageIndex,
   type ItcStage,
 } from "@/lib/itc/stage";
 import { currentStageStore } from "@/lib/itc/current-stage-store";
+import { ResetMapButton } from "./[mapId]/reset-map-button";
 
 /**
  * Left-rail nav shown on /itc/[mapId] in place of the main-app SideNav.
@@ -42,7 +44,13 @@ const NAV_STAGES: ItcStage[] = [
   "results",
 ];
 
-export function ItcStageNav({ mapId }: { mapId: string }) {
+export function ItcStageNav({
+  mapId,
+  isPlatformAdmin,
+}: {
+  mapId: string;
+  isPlatformAdmin: boolean;
+}) {
   const state = useSyncExternalStore(
     currentStageStore.subscribe,
     () => currentStageStore.get(),
@@ -62,7 +70,7 @@ export function ItcStageNav({ mapId }: { mapId: string }) {
   const currentIdx = current ? stageIndex(current) : -1;
 
   return (
-    <nav className="hidden md:flex flex-col gap-1 p-4">
+    <nav className="hidden md:flex flex-col gap-1 p-4 h-full">
       <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mb-2 px-3">
         IMPROVEMENT MAP
       </p>
@@ -78,6 +86,25 @@ export function ItcStageNav({ mapId }: { mapId: string }) {
                 : "locked";
         return <StageRow key={stage} label={STAGE_LABELS[stage]} state={state} />;
       })}
+
+      {/* Utility actions parked at the bottom of the rail. Separated
+          by mt-auto so they always float to the bottom regardless of
+          how many stages are above. Clear map on top, Admin (platform
+          admins only) below it. */}
+      <div className="mt-auto pt-4 border-t border-[color:var(--color-border)] flex flex-col gap-1">
+        <div className="px-3 h-11 flex items-center">
+          <ResetMapButton mapId={mapId} />
+        </div>
+        {isPlatformAdmin ? (
+          <Link
+            href="/itc/admin"
+            className="flex items-center gap-3 h-11 px-3 rounded-md font-heading text-sm tracking-wide text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-white"
+          >
+            <span className="text-base">⚙</span>
+            <span className="flex-1">ADMIN</span>
+          </Link>
+        ) : null}
+      </div>
     </nav>
   );
 }

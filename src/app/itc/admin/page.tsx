@@ -4,6 +4,7 @@ import { isItcAdmin } from "@/lib/itc/admin";
 import { listAllMaps } from "@/lib/itc/maps";
 import { listAllParticipants } from "@/lib/itc/participant";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { STAGE_LABELS } from "@/lib/itc/stage";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import {
@@ -26,7 +27,27 @@ export const dynamic = "force-dynamic";
  */
 export default async function ItcAdminPage() {
   const viewer = await requireItcParticipant();
-  if (!isItcAdmin(viewer.email)) notFound();
+  // Two-gate access: hardcoded ITC-admin email allowlist OR main-app
+  // platform admin. The latter was added 2026-08-27 so platform
+  // admins (who already have full access everywhere else) don't need
+  // to be double-registered in ITC_ADMIN_EMAILS to open the triage
+  // view — matches the "Admin" link now surfaced in ItcStageNav.
+  let allowed = isItcAdmin(viewer.email);
+  if (!allowed) {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      const { data: row } = await supabase
+        .from("users")
+        .select("is_platform_admin")
+        .eq("id", authUser.id)
+        .maybeSingle();
+      allowed = Boolean(
+        (row as { is_platform_admin: boolean } | null)?.is_platform_admin,
+      );
+    }
+  }
+  if (!allowed) notFound();
 
   const [participants, allMaps] = await Promise.all([
     listAllParticipants(),

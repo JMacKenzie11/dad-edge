@@ -33,7 +33,7 @@ export function ItcNavSwitcher({
   const isMapRoute = Boolean(second) && !RESERVED.has(second!);
 
   if (isMapRoute) {
-    return <ItcStageNav mapId={second!} />;
+    return <ItcStageNav mapId={second!} isPlatformAdmin={isPlatformAdmin} />;
   }
   return (
     <SideNav
