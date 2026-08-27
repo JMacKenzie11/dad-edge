@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMapForParticipant } from "@/lib/itc/maps";
+import { upsertParticipantByEmail } from "@/lib/itc/participant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,10 @@ export async function GET(
   }
 
   // Resolve the participant row for this main-app user by email.
+  // Reuse upsertParticipantByEmail so we mirror requireItcParticipant's
+  // email normalization (lowercased + trimmed) — a case-differing
+  // lookup would silently miss the participant record even though the
+  // /itc/[mapId] page found it, and the nav would look stuck.
   const { data: userRow } = await supabase
     .from("users")
     .select("email")
@@ -39,16 +44,11 @@ export async function GET(
   if (!userRow) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const { data: participant } = await supabase
-    .from("itc_participants")
-    .select("id")
-    .eq("email", (userRow as { email: string }).email)
-    .maybeSingle();
-  if (!participant) {
-    return NextResponse.json({ error: "no_participant" }, { status: 404 });
-  }
+  const participant = await upsertParticipantByEmail(
+    (userRow as { email: string }).email,
+  );
 
-  const map = await getMapForParticipant(mapId, (participant as { id: string }).id);
+  const map = await getMapForParticipant(mapId, participant.id);
   if (!map) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
