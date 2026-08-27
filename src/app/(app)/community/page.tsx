@@ -366,8 +366,14 @@ export default async function CommunityPage({
                       </span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] text-[color:var(--color-text-muted)]">
-                    Daily {m.weekTotal}/49 · Missions{" "}
+                  <p className="text-[11px] text-[color:var(--color-text-muted)] truncate">
+                    {/* Hide "Daily "/"Missions " prefixes on the narrow
+                        375px viewport so the caption doesn't truncate
+                        mid-number. Reads as "19/49 · 0/0" on mobile,
+                        full labels on sm+ where there's room. */}
+                    <span className="hidden sm:inline">Daily </span>
+                    {m.weekTotal}/49 ·{" "}
+                    <span className="hidden sm:inline">Missions </span>
                     {m.weekMissionsCompleted}/
                     {m.weekMissionsPlanned || m.weekMissionsCompleted}
                   </p>

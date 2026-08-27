@@ -219,7 +219,9 @@ export function ThreadView({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[70vh] border border-[color:var(--color-border)] rounded-[var(--radius-card)] bg-[color:var(--color-surface)] overflow-hidden">
+    // Mobile: viewport minus AppHeader (8rem) minus BottomNav (~5rem)
+    // so the message input doesn't sit under the fixed bottom nav.
+    <div className="flex flex-col h-[calc(100vh-13rem)] md:h-[70vh] border border-[color:var(--color-border)] rounded-[var(--radius-card)] bg-[color:var(--color-surface)] overflow-hidden">
       <header className="flex items-center gap-3 px-4 py-3 border-b border-[color:var(--color-border)]">
         <Link
           href="/messages"
@@ -336,7 +338,7 @@ function MessageBubble({
         "flex " + (isMine ? "justify-end" : "justify-start") + " group relative"
       }
     >
-      <div className="max-w-[80%]">
+      <div className="max-w-[85%] sm:max-w-[80%]">
         <div
           className={
             "inline-block px-3 py-2 rounded-2xl text-sm leading-snug " +
