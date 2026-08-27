@@ -261,6 +261,7 @@ export function MapCanvas({
 
       <div className="space-y-4">
         <Section
+          stage="goal"
           title="1. Improvement goal (Big Commitment)"
           active={map.current_stage === "goal"}
           liveIntro={liveIntroFor("goal")}
@@ -297,6 +298,7 @@ export function MapCanvas({
 
         <Section
           title="2. Doing / not-doing"
+          stage="behaviors"
           active={map.current_stage === "behaviors"}
           liveIntro={liveIntroFor("behaviors")}
           chipTarget={chipTargetForStage(map.current_stage)}
@@ -323,6 +325,7 @@ export function MapCanvas({
 
         <Section
           title="3. Worry box"
+          stage="worries"
           active={map.current_stage === "worries"}
           liveIntro={liveIntroFor("worries")}
           chipTarget={chipTargetForStage(map.current_stage)}
@@ -347,6 +350,7 @@ export function MapCanvas({
 
         <Section
           title="4. Competing Commitments"
+          stage="commitments"
           active={map.current_stage === "commitments"}
           liveIntro={liveIntroFor("commitments")}
           chipTarget={chipTargetForStage(map.current_stage)}
@@ -372,6 +376,7 @@ export function MapCanvas({
 
         <Section
           title="5. Big Assumptions"
+          stage="assumptions"
           active={map.current_stage === "assumptions"}
           liveIntro={liveIntroFor("assumptions")}
           chipTarget={chipTargetForStage(map.current_stage)}
@@ -397,6 +402,7 @@ export function MapCanvas({
         {stageIndex(map.current_stage) >= stageIndex("immune_system") ? (
           <Section
             title="Your immune system"
+            stage="immune_system"
             active={map.current_stage === "immune_system"}
             liveIntro={liveIntroFor("immune_system")}
             beforeNotes={
@@ -416,6 +422,7 @@ export function MapCanvas({
         {stageIndex(map.current_stage) >= stageIndex("prioritize") ? (
           <Section
             title="Which assumption to test first"
+            stage="prioritize"
             active={map.current_stage === "prioritize"}
             stageNotes={prioritizeNotes}
           >
@@ -433,6 +440,7 @@ export function MapCanvas({
         {stageIndex(map.current_stage) >= stageIndex("test_design") ? (
           <Section
             title="Design the test"
+            stage="test_design"
             active={map.current_stage === "test_design"}
             liveIntro={liveIntroFor("test_design")}
             stageNotes={
@@ -473,6 +481,7 @@ export function MapCanvas({
         {stageIndex(map.current_stage) >= stageIndex("test_running") ? (
           <Section
             title="Run the test"
+            stage="test_running"
             active={map.current_stage === "test_running"}
             liveIntro={liveIntroFor("test_running")}
             stageNotes={
@@ -522,6 +531,7 @@ export function MapCanvas({
         {stageIndex(map.current_stage) >= stageIndex("results") ? (
           <Section
             title="Debrief the test"
+            stage="results"
             active={map.current_stage === "results"}
             liveIntro={liveIntroFor("results")}
             stageNotes={
@@ -572,6 +582,7 @@ export function MapCanvas({
 
         {map.current_stage === "done" ? (
           <Section
+            stage="done"
             title="Closing the map"
             active
             stageNotes={doneNotes}
@@ -614,6 +625,7 @@ function Section({
   title,
   children,
   active = false,
+  stage,
   liveIntro,
   beforeNotes,
   stageNotes,
@@ -625,6 +637,12 @@ function Section({
    *  content IS the walkthrough delivered as a stage_note. */
   children?: React.ReactNode;
   active?: boolean;
+  /** Stage this section represents. Rendered as an id
+   *  ("stage-section-{stage}") so the CurrentStageBroadcaster can
+   *  scroll to the newly-active section after an advance. Optional
+   *  because a few historical / one-off sections don't map to a
+   *  stage. */
+  stage?: ItcStage;
   /** Live-interpolated stage intro rendered above stored stage notes.
    *  Comes from STAGE_INTROS with the current map state so quotes of
    *  the goal etc. always reflect present values, not a stale snapshot. */
@@ -652,8 +670,12 @@ function Section({
     : filteredNotes;
   return (
     <section
+      id={stage ? `stage-section-${stage}` : undefined}
+      // scroll-mt matches the AppHeader sticky height (h-24 = 6rem)
+      // so scrollIntoView / anchor navigation lands the section
+      // title below the header instead of behind it.
       className={
-        "rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-5 " +
+        "scroll-mt-24 rounded-[var(--radius-card)] border bg-[color:var(--color-surface)] p-5 " +
         (active
           ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.04]"
           : "border-[color:var(--color-primary)]/25")

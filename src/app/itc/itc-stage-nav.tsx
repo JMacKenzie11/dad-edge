@@ -70,7 +70,7 @@ export function ItcStageNav({
   const currentIdx = current ? stageIndex(current) : -1;
 
   return (
-    <nav className="hidden md:flex flex-col gap-1 p-4 h-full">
+    <nav className="hidden md:flex flex-col gap-1 p-4">
       <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mb-2 px-3">
         IMPROVEMENT MAP
       </p>
@@ -87,24 +87,19 @@ export function ItcStageNav({
         return <StageRow key={stage} label={STAGE_LABELS[stage]} state={state} />;
       })}
 
-      {/* Utility actions parked at the bottom of the rail. Separated
-          by mt-auto so they always float to the bottom regardless of
-          how many stages are above. Clear map on top, Admin (platform
-          admins only) below it. */}
-      <div className="mt-auto pt-4 border-t border-[color:var(--color-border)] flex flex-col gap-1">
-        <div className="px-3 h-11 flex items-center">
-          <ResetMapButton mapId={mapId} />
-        </div>
-        {isPlatformAdmin ? (
-          <Link
-            href="/itc/admin"
-            className="flex items-center gap-3 h-11 px-3 rounded-md font-heading text-sm tracking-wide text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-white"
-          >
-            <span className="text-base">⚙</span>
-            <span className="flex-1">ADMIN</span>
-          </Link>
-        ) : null}
-      </div>
+      {/* Utility items styled to match StageRow so the rail reads
+          as one continuous list. Clear map sits directly after
+          RESULTS (no divider); Admin follows for platform admins. */}
+      <ResetMapButton mapId={mapId} />
+      {isPlatformAdmin ? (
+        <Link
+          href="/itc/admin"
+          className="flex items-center gap-3 h-11 px-3 rounded-md font-heading text-sm tracking-wide text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-white"
+        >
+          <span className="text-base">⚙</span>
+          <span className="flex-1">ADMIN</span>
+        </Link>
+      ) : null}
     </nav>
   );
 }

@@ -40,9 +40,14 @@ export function ResetMapButton({ mapId }: { mapId: string }) {
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="text-xs text-[color:var(--color-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+        // Styled to match ItcStageNav's StageRow / Admin link so it
+        // reads as another item in the same left rail instead of a
+        // floating utility control. h-11, heading font, uppercase,
+        // widest tracking, muted default → danger red on hover.
+        className="flex items-center gap-3 h-11 px-3 rounded-md font-heading text-sm tracking-wide w-full text-left text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-danger)] disabled:opacity-50 cursor-pointer"
       >
-        {pending ? "Clearing…" : "Clear map"}
+        <span className="text-base">↺</span>
+        <span className="flex-1">{pending ? "CLEARING…" : "CLEAR MAP"}</span>
       </button>
     </>
   );
