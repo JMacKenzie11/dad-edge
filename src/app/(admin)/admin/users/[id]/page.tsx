@@ -26,11 +26,17 @@ export default async function UserDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; created?: string; invited?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    error?: string;
+    created?: string;
+    invited?: string;
+    invite_error?: string;
+  }>;
 }) {
   await requirePlatformAdmin();
   const { id } = await params;
-  const { saved, error, created, invited } = await searchParams;
+  const { saved, error, created, invited, invite_error } = await searchParams;
   const svc = createSupabaseServiceClient();
 
   const { data: user } = await svc
@@ -135,12 +141,19 @@ export default async function UserDetailPage({
       </header>
 
       {saved ? <p className="text-xs text-[color:var(--color-success)]">Saved.</p> : null}
-      {created ? (
+      {created && invited ? (
         <p className="text-xs text-[color:var(--color-success)]">
-          Account created. Send Invite is a separate action below.
+          Account created and invite sent. The activation link is short-lived.
         </p>
-      ) : null}
-      {invited ? (
+      ) : created && invite_error ? (
+        <p className="text-xs text-[color:var(--color-warning)]">
+          Account created, but the invite email failed to send: {invite_error}. Use the Send Invite button below to retry.
+        </p>
+      ) : created ? (
+        <p className="text-xs text-[color:var(--color-success)]">
+          Account created.
+        </p>
+      ) : invited ? (
         <p className="text-xs text-[color:var(--color-success)]">
           Invite sent. The activation link is short-lived.
         </p>

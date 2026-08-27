@@ -149,8 +149,46 @@ export async function createAccount(formData: FormData) {
     },
   });
 
+  // Auto-send the activation invite as part of account creation.
+  // Previously admins had to click Send Invite as a separate step,
+  // which made "I created three accounts and no emails went out"
+  // an easy failure mode to hit. If delivery fails we still succeed
+  // the create (account is real, invite can be re-sent from the
+  // detail page) but surface the reason in the redirect so it's not
+  // silent.
+  let inviteError: string | null = null;
+  try {
+    inviteError = await deliverActivationInvite({
+      id: userId,
+      email: parsed.data.email,
+      first_name: parsed.data.first_name ?? null,
+    });
+    if (!inviteError) {
+      await svc
+        .from("users")
+        .update({ invited_at: new Date().toISOString() })
+        .eq("id", userId);
+      await auditLog({
+        actor_user_id: admin.id,
+        action: "user.invite_sent",
+        target_type: "user",
+        target_id: userId,
+        metadata: {
+          email: parsed.data.email,
+          stage: isStageBEmailLive() ? "B" : "A",
+          trigger: "auto_on_create",
+        },
+      });
+    }
+  } catch (err) {
+    inviteError = err instanceof Error ? err.message : String(err);
+  }
+
   revalidatePath("/admin/users");
-  redirect(`/admin/users/${userId}?created=1`);
+  const qs = inviteError
+    ? `?created=1&invite_error=${encodeURIComponent(inviteError)}`
+    : `?created=1&invited=1`;
+  redirect(`/admin/users/${userId}${qs}`);
 }
 
 const SendInviteSchema = z.object({
