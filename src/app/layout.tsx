@@ -3,7 +3,11 @@ import { fontHeading, fontBody } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BRAVE MAN OS",
+  // "Dad Edge OS" everywhere the user-facing brand shows up. iOS
+  // Safari falls back to <title> if it doesn't pick up
+  // apple-mobile-web-app-title, and Add-to-Home-Screen defaults to
+  // <title> when creating the shortcut label. Keep them aligned.
+  title: "Dad Edge OS",
   description: "Daily check-ins, day-anchored missions, community leaderboards.",
   // icon.tsx and apple-icon.tsx (both file-based routes in this dir)
   // supply the actual PNGs — Next.js auto-injects the <link> tags.

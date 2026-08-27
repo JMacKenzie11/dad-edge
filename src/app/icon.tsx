@@ -22,10 +22,10 @@ export default function Icon() {
     (
       <div
         style={{
-          background: "#000000",
-          width: "100%",
-          height: "100%",
           display: "flex",
+          width: 32,
+          height: 32,
+          backgroundColor: "#000000",
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -34,8 +34,8 @@ export default function Icon() {
         <img
           src={markDataUrl}
           alt=""
-          width={24}
-          height={27}
+          width={26}
+          height={29}
           style={{ objectFit: "contain" }}
         />
       </div>

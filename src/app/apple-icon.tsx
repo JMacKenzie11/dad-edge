@@ -30,12 +30,16 @@ const markDataUrl = `data:image/png;base64,${fs
 export default function AppleIcon() {
   return new ImageResponse(
     (
+      // Satori (the renderer behind next/og) is picky: percentage
+      // width/height on the root element can leave transparent
+      // margins that iOS then fills with WHITE. Fix width/height as
+      // pixels so the black background covers the entire 180×180.
       <div
         style={{
-          background: "#000000",
-          width: "100%",
-          height: "100%",
           display: "flex",
+          width: 180,
+          height: 180,
+          backgroundColor: "#000000",
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -44,8 +48,10 @@ export default function AppleIcon() {
         <img
           src={markDataUrl}
           alt=""
-          width={128}
-          height={143}
+          // Larger mark: ~80% of the tile so the icon reads at
+          // launcher-thumbnail sizes without wasted padding.
+          width={144}
+          height={161}
           style={{ objectFit: "contain" }}
         />
       </div>
