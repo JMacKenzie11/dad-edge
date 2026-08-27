@@ -1,14 +1,31 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { fontHeading, fontBody } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "BRAVE MAN OS",
   description: "Daily check-ins, day-anchored missions, community leaderboards.",
-  icons: {
-    icon: "/brand/mark-white.png",
-    apple: "/brand/mark-white.png",
+  // icon.tsx and apple-icon.tsx (both file-based routes in this dir)
+  // supply the actual PNGs — Next.js auto-injects the <link> tags.
+  // manifest.ts provides the Android/Chrome web-app manifest.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    // Title shown under the icon when added to iOS home screen.
+    // Kept short so it doesn't truncate at 12 chars on the launcher.
+    title: "Dad Edge OS",
+    // Black-translucent lets our own dark chrome show through the
+    // notch area when launched in standalone mode from the home
+    // screen (matches the black-first design across the app).
+    statusBarStyle: "black-translucent",
   },
+};
+
+export const viewport: Viewport = {
+  // Matches manifest.theme_color + background_color so the browser
+  // toolbar and iOS standalone launch splash stay black instead of
+  // flashing white before the app paints.
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
