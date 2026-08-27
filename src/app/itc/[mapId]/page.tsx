@@ -24,6 +24,7 @@ import {
 import { MapCanvas } from "./map-canvas";
 import { ResetMapButton } from "./reset-map-button";
 import { StageProgress } from "./stage-progress";
+import { CurrentStageBroadcaster } from "./current-stage-broadcaster";
 
 /**
  * Full-width single-column ITC canvas. Layout Amendment: the two-
@@ -142,6 +143,11 @@ export default async function ItcMapPage({
       <div className="md:hidden border-y border-[color:var(--color-border)]/50 -mx-4 px-4 py-2 mb-4">
         <StageProgress current={map.current_stage} />
       </div>
+
+      {/* Broadcasts current_stage to the layout-level ItcStageNav so
+          the left-rail highlight tracks stage advances without a
+          client-side refetch. See src/lib/itc/current-stage-store.ts. */}
+      <CurrentStageBroadcaster mapId={map.id} stage={map.current_stage} />
 
       <div className="flex-1 mx-auto w-full max-w-4xl">
         <MapCanvas

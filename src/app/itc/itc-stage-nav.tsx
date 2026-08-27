@@ -1,31 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   STAGE_LABELS,
   stageIndex,
   type ItcStage,
 } from "@/lib/itc/stage";
+import { currentStageStore } from "@/lib/itc/current-stage-store";
 
 /**
  * Left-rail nav shown on /itc/[mapId] in place of the main-app SideNav.
  *
- * Renders the 10 canonical stages the coachee moves through. Behavior:
+ * Reads the current stage from `currentStageStore`, which is pushed by
+ * the `CurrentStageBroadcaster` rendered on the map page. This means
+ * every server re-render of the map page (including post-advance
+ * revalidation) automatically flows through to the nav highlight
+ * without a client-side re-fetch.
+ *
+ * Rendering behavior:
  *   - CURRENT stage: strongly highlighted — accent color, filled surface
  *     background, left accent bar, bold weight. Impossible to miss.
- *   - COMPLETED stages: dimmed but visible, with a checkmark. Rendered
- *     as inert spans (no link) because there's nothing to "navigate"
- *     to — the full canvas is on one page and completed sections stay
- *     rendered above the current one.
- *   - LOCKED stages: dimmer still, small "•" indicator. Also inert.
- *     Prevents the coachee from clicking ahead and rewriting the map
- *     out of order; the stage machine only lets you advance one step
- *     at a time (via the coach's flow, not by clicking).
+ *   - COMPLETED stages: dimmed with a success-color checkmark.
+ *   - LOCKED stages: dimmer still, hollow-circle indicator, rendered as
+ *     inert spans (no link) so a coachee can't click ahead. The stage
+ *     machine only lets you advance one step at a time via the coach's
+ *     flow — clicking a future step here would be a false affordance.
  *
- * "review" is deliberately excluded — assumptions → immune_system
- * skips it per canTransitionTo(), matching the existing StageProgress
- * component's HEADER_STAGES list. "done" also omitted (terminal
- * state, not a step to reach for).
+ * "review" is deliberately excluded (assumptions → immune_system
+ * skips it per canTransitionTo). "done" also omitted (terminal state).
  */
 const NAV_STAGES: ItcStage[] = [
   "goal",
@@ -41,24 +43,22 @@ const NAV_STAGES: ItcStage[] = [
 ];
 
 export function ItcStageNav({ mapId }: { mapId: string }) {
-  const [current, setCurrent] = useState<ItcStage | null>(null);
+  const state = useSyncExternalStore(
+    currentStageStore.subscribe,
+    () => currentStageStore.get(),
+    // Server snapshot — matches the initial client snapshot to avoid
+    // hydration mismatch. On the very first render (before the map
+    // page's broadcaster has fired its useEffect) we render every
+    // stage as locked; the broadcaster fires immediately after and
+    // the nav re-renders with the correct highlight.
+    () => ({ mapId: null, stage: null }),
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/itc/maps/${mapId}/current-stage`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { stage?: ItcStage } | null) => {
-        if (!cancelled && d?.stage) setCurrent(d.stage);
-      })
-      .catch(() => {
-        /* Non-fatal — the nav renders in a neutral "not yet loaded"
-           state until the fetch resolves. */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mapId]);
-
+  // Only trust the store if it's talking about the same map. If the
+  // coachee just navigated to a different map (rare — one active map
+  // per participant — but possible during history browsing) we don't
+  // want to leak stage from the previous one.
+  const current = state.mapId === mapId ? state.stage : null;
   const currentIdx = current ? stageIndex(current) : -1;
 
   return (
@@ -94,10 +94,10 @@ function StageRow({
       <div
         aria-current="step"
         // 4-way emphasis so the current step is unmistakable:
-        //  - filled surface bg (matches SideNav active)
+        //  - filled surface bg
         //  - accent-color text
         //  - left accent bar (2px)
-        //  - bold weight from font-heading + text-sm
+        //  - bold heading weight
         className="flex items-center gap-3 h-11 pl-2.5 pr-3 rounded-md font-heading text-sm tracking-wide bg-[color:var(--color-surface)] text-[color:var(--color-accent)] border-l-2 border-[color:var(--color-accent)]"
       >
         <span className="text-base">●</span>
@@ -113,7 +113,6 @@ function StageRow({
       </div>
     );
   }
-  // Locked — future stage, not yet reachable.
   return (
     <div
       aria-disabled
