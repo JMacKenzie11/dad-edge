@@ -5,7 +5,7 @@
   "elements": [
     {
       "kind": "header",
-      "label": "Dad Edge Goal Clarifier"
+      "label": "Improvement maps"
     },
     {
       "kind": "link",
@@ -38,17 +38,14 @@
     {
       "kind": "link",
       "label": "View →"
-    },
-    {
-      "kind": "link",
-      "label": "← DAD EDGE OS"
     }
   ],
-  "source_hash": "fc07c0b9b07753cc",
+  "source_hash": "d1eab55d6a736668",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/itc-top-bar.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/itc-nav-switcher.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/itc-stage-nav.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/layout.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/start-map-button.tsx"
   ]

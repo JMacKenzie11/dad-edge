@@ -99,50 +99,51 @@ export default async function ItcMapPage({
   ]);
 
   return (
-    <main className="min-h-screen flex flex-col">
-      {/* Sticky top strip — nav bar + stage progress. Keeps the
-          coachee's location in the flow visible while they scroll
-          through a long map (walkthrough + assumptions can easily
-          fill more than one screen). */}
-      <div className="sticky top-0 z-20 bg-[color:var(--color-background)]/95 backdrop-blur border-b border-[color:var(--color-border)]">
-        <header className="px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+    <main className="flex flex-col">
+      {/* In-page utility strip. Stage progress lives in the left
+          rail on desktop (ItcStageNav) so it isn't repeated here;
+          on mobile the rail is hidden, so we surface a horizontal
+          stage strip just below this row. */}
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <Link
+          href="/itc"
+          className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
+        >
+          ← Maps
+        </Link>
+        <div className="flex items-center gap-3">
+          {isItcAdmin(participant.email) ? (
             <Link
-              href="/itc"
+              href="/itc/admin"
               className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
             >
-              ← Maps
+              Admin
             </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* "Back to main app" moved to ItcTopBar (layout-level).
-                Just utility links here. */}
-            {isItcAdmin(participant.email) ? (
-              <Link
-                href="/itc/admin"
-                className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-              >
-                Admin
-              </Link>
-            ) : null}
-            <ResetMapButton mapId={map.id} />
-            <form action="/itc/logout" method="POST">
-              <button
-                type="submit"
-                className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </header>
-
-        <div className="px-4 py-2 border-t border-[color:var(--color-border)]/50">
-          <StageProgress current={map.current_stage} />
+          ) : null}
+          <ResetMapButton mapId={map.id} />
+          {/* Sign out kept here for the legacy-cookie fallback path
+              (users on /itc/[mapId] without a main-app session — layout
+              renders bare children, no header avatar with a sign-out).
+              Main-app coachees can also use /me → SIGN OUT. */}
+          <form action="/itc/logout" method="POST">
+            <button
+              type="submit"
+              className="text-xs text-[color:var(--color-text-muted)] hover:text-white"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
 
-      <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-8 md:py-10">
+      {/* Mobile-only stage progress strip. Desktop uses ItcStageNav
+          in the left rail — where the coachee looks for orientation
+          anyway. */}
+      <div className="md:hidden border-y border-[color:var(--color-border)]/50 -mx-4 px-4 py-2 mb-4">
+        <StageProgress current={map.current_stage} />
+      </div>
+
+      <div className="flex-1 mx-auto w-full max-w-4xl">
         <MapCanvas
           map={map}
           behaviors={behaviors}

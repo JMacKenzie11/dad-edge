@@ -57,31 +57,33 @@ export default async function ItcLandingPage({
   const isAdmin = isItcAdmin(participant.email);
 
   return (
-    <main className="min-h-screen flex flex-col px-6 py-8 gap-6 max-w-3xl mx-auto w-full">
-      <header className="flex items-center justify-between">
+    <main className="flex flex-col gap-6 max-w-3xl mx-auto w-full">
+      {/* AppHeader (layout-level) carries brand + main-app nav. Just
+          the section title + admin/sign-out utility links here. */}
+      <header className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            Dad Edge Goal Clarifier
+          <h1 className="font-heading text-2xl tracking-tight">
+            Improvement maps
           </h1>
-          <p className="text-xs text-[color:var(--color-muted)]">
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
             Signed in as <span className="text-white">{participant.email}</span>
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* "Back to main app" moved to ItcTopBar (layout-level) so
-              it's on every /itc route. Just admin + sign out here. */}
+        <div className="flex items-center gap-3 shrink-0">
           {isAdmin ? (
             <Link
               href="/itc/admin"
-              className="text-xs underline text-[color:var(--color-muted)] hover:text-white"
+              className="text-xs underline text-[color:var(--color-text-muted)] hover:text-white"
             >
               Admin
             </Link>
           ) : null}
+          {/* Sign out kept for the legacy-cookie fallback (no shell = no
+              /me sign-out). Main-app coachees can also use /me. */}
           <form action="/itc/logout" method="POST">
             <button
               type="submit"
-              className="text-xs underline text-[color:var(--color-muted)] hover:text-white"
+              className="text-xs underline text-[color:var(--color-text-muted)] hover:text-white"
             >
               Sign out
             </button>
