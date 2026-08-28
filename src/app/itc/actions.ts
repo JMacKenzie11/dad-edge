@@ -19,7 +19,6 @@ import {
   draftWorryForBehavior,
   generateCoachReaction,
   generateColumnReview,
-  generateHoneDiagnostic,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -28,11 +27,13 @@ import {
   reviewTestResult,
   reviseTestFromReview,
   scrubReply,
+  synthesizeAuditProse,
   WORRY_IDENTITY_SHAPES,
   type ReactionInput,
   type ReactionOutput,
   type SmartReview,
 } from "@/lib/itc/coach";
+import { runAllAuditChecks } from "@/lib/itc/audit-rules";
 import {
   addAssumption,
   addBehavior as insertBehaviorRow,
@@ -2010,61 +2011,28 @@ export async function runHoneDiagnostic(
       listTestResults(loaded.map.id),
     ]);
 
-    // Assumption → commitment index map for the pair-drift check.
-    const commitmentIdToIndex = new Map<string, number>();
-    commitments.forEach((c, i) => commitmentIdToIndex.set(c.id, i + 1));
-    const assumptionsWithCoverage = assumptions.map((a) => ({
-      text: a.text,
-      commitmentIndices: assumptionLinks
-        .filter((l) => l.assumption_id === a.id)
-        .map((l) => commitmentIdToIndex.get(l.commitment_id))
-        .filter((i): i is number => typeof i === "number"),
-    }));
-
-    // Assumption text lookup for test payloads.
-    const assumptionTextById = new Map<string, string>();
-    assumptions.forEach((a) => assumptionTextById.set(a.id, a.text));
-    // Latest result per test (most recent by created_at).
-    const latestResultByTest = new Map<
-      string,
-      (typeof testResults)[number]
-    >();
-    for (const r of testResults) {
-      const prev = latestResultByTest.get(r.test_id);
-      if (!prev || new Date(r.created_at) > new Date(prev.created_at)) {
-        latestResultByTest.set(r.test_id, r);
-      }
-    }
-
-    const testsPayload = tests
-      .filter((t) => t.status !== "abandoned")
-      .map((t) => {
-        const r = latestResultByTest.get(t.id) ?? null;
-        return {
-          testType: t.test_type,
-          assumptionText:
-            assumptionTextById.get(t.assumption_id) ?? "(unknown)",
-          behaviorChange: t.behavior_change ?? "",
-          dataToCollect: t.data_to_collect ?? "",
-          inOrderToFindOut: t.in_order_to_find_out ?? "",
-          result: r
-            ? {
-                verdict: r.assumption_verdict,
-                whatIDid: r.what_i_did,
-                dataCollected: r.data_collected,
-                saysAboutAssumption: r.what_it_says_about_assumption,
-              }
-            : null,
-        };
-      });
-
-    const prose = await generateHoneDiagnostic({
+    // Deterministic pre-work: run all 12 audit checks in parallel to
+    // produce a typed AuditFinding[]. LLM-backed checks are inside the
+    // check functions themselves (utilityModel), fail-open per check.
+    const findings = await runAllAuditChecks({
+      mapId: loaded.map.id,
       goalText: loaded.map.improvement_goal ?? "",
-      behaviors: behaviors.filter((b) => b.selected).map((b) => b.text),
-      worries: worries.map((w) => w.text),
-      commitments: commitments.map((c) => c.text),
-      assumptionsWithCoverage,
-      tests: testsPayload,
+      behaviors: behaviors.filter((b) => b.selected),
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      tests,
+      testResults,
+    });
+
+    // Final synthesis: single mainModel call that narrates the findings
+    // as coach prose. LLM cannot invent findings — everything it
+    // quotes must come from a finding's actualText or relatedText.
+    const pillarLabel = PILLAR_BY_CODE[loaded.map.pillar_code].label;
+    const prose = await synthesizeAuditProse(findings, {
+      goalText: loaded.map.improvement_goal ?? "",
+      pillarLabel,
     });
     if (!prose) {
       return {
