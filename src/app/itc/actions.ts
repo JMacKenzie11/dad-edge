@@ -18,6 +18,7 @@ import {
   draftTestForAssumption,
   draftWorryForBehavior,
   generateCoachReaction,
+  generateColumnReview,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -61,7 +62,9 @@ import {
   clearAssumptionDraftsForMap,
   clearCommitmentDraftsForMap,
   clearWorryDraftsForMap,
+  deleteColumnReviewMessages,
   deleteStageNoteMessages,
+  hasColumnReviewMessage,
   markWalkthroughDelivered,
   markWalkthroughNotDelivered,
   recordTestResult,
@@ -324,6 +327,9 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
   const isEdit = Boolean(priorGoal && priorGoal.trim() !== withStem.trim());
   try {
     await saveImprovementGoal(loaded.map.id, withStem);
+    // Wipe any column_review persisted against the old goal text so the
+    // next page render regenerates against the sharpened version.
+    await deleteColumnReviewMessages({ mapId: loaded.map.id, stage: "goal" });
   } catch (err) {
     return {
       ok: false,
@@ -662,6 +668,11 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
     );
     row = result.row;
     isEdit = result.isEdit;
+    // Any add/edit invalidates the worries column_review.
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "worries",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -789,6 +800,11 @@ export async function saveCommitment(
     );
     row = result.row;
     isEdit = result.isEdit;
+    // Any add/edit invalidates the commitments column_review.
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "commitments",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -1770,6 +1786,107 @@ export async function ensureWalkthroughDelivered(
     return {
       ok: false,
       reason: err instanceof Error ? err.message : "Could not deliver.",
+    };
+  }
+}
+
+// -------------------------------------------------------------------------
+// Column-close reviews (build-time tightening)
+// -------------------------------------------------------------------------
+
+/**
+ * Min-viable set thresholds for triggering a column review. Below these
+ * counts, the coachee isn't done drafting yet and a review would fire
+ * prematurely. Kept small — the review is a nudge to reflect, not a
+ * gatekeeper — but non-zero so the very first empty entry doesn't get
+ * audited.
+ */
+const REVIEW_MIN_ENTRIES: Record<
+  "goal" | "worries" | "commitments",
+  number
+> = {
+  goal: 1, // any non-empty goal text
+  worries: 3, // three-worry minimum matches the existing depth advice
+  commitments: 3, // same shape
+};
+
+/**
+ * Idempotent server hook that ensures the coach's end-of-column audit
+ * has been drafted for the stage the coachee is currently on. Called
+ * from `/itc/[mapId]/page.tsx` alongside the other ensure-* hooks so
+ * the review is available on the same render as the column that
+ * generated it — no extra client round-trip.
+ *
+ * Fires when ALL of:
+ *   - Current stage is one of {goal, worries, commitments}. Other
+ *     stages don't carry a column_review in phase 1.
+ *   - The set has at least REVIEW_MIN_ENTRIES for the column.
+ *   - No column_review row exists yet for this stage. If the coachee
+ *     edits an entry, deleteColumnReviewMessages wipes the old review
+ *     and the next call regenerates against fresh state.
+ *
+ * Silently swallows LLM failures — the coachee can still Continue, the
+ * review just doesn't appear this turn. Next page load retries.
+ */
+export async function ensureColumnReviewDelivered(
+  mapId: string,
+): Promise<{ ok: true; delivered: boolean } | { ok: false; reason: string }> {
+  try {
+    const map = await getMapById(mapId);
+    if (!map) return { ok: false, reason: "Map not found." };
+
+    const stage = map.current_stage;
+    if (
+      stage !== "goal" &&
+      stage !== "worries" &&
+      stage !== "commitments"
+    ) {
+      return { ok: true, delivered: false };
+    }
+
+    // Skip if the coach's audit is already persisted for this state.
+    // Deleted by the staleness cleanup on entry save; that's the only
+    // signal we need to regenerate.
+    const already = await hasColumnReviewMessage({ mapId, stage });
+    if (already) return { ok: true, delivered: false };
+
+    const [behaviors, worries, commitments] = await Promise.all([
+      listBehaviors(mapId),
+      listWorries(mapId),
+      listCommitments(mapId),
+    ]);
+
+    const setCount =
+      stage === "goal"
+        ? map.improvement_goal && map.improvement_goal.trim().length > 0
+          ? 1
+          : 0
+        : stage === "worries"
+          ? worries.length
+          : commitments.length;
+    if (setCount < REVIEW_MIN_ENTRIES[stage]) {
+      return { ok: true, delivered: false };
+    }
+
+    const prose = await generateColumnReview({
+      column: stage,
+      goalText: map.improvement_goal ?? "",
+      behaviors: behaviors.map((b) => b.text),
+      worries: worries.map((w) => w.text),
+      commitments: commitments.map((c) => c.text),
+    });
+    if (!prose) return { ok: true, delivered: false };
+
+    await appendMessage(mapId, "assistant", prose, stage, {
+      surface: "column_review",
+      entryRefTable: "itc_maps",
+      entryRefId: mapId,
+    });
+    return { ok: true, delivered: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not deliver review.",
     };
   }
 }

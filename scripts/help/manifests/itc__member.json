@@ -38,9 +38,13 @@
     {
       "kind": "link",
       "label": "View →"
+    },
+    {
+      "kind": "link",
+      "label": "⚙ ADMIN"
     }
   ],
-  "source_hash": "d1eab55d6a736668",
+  "source_hash": "b047a22415361ffe",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/actions.ts",

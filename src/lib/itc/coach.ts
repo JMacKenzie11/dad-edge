@@ -26,7 +26,7 @@
 import { generateObject, generateText } from "ai";
 import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
-import { mainModel } from "@/lib/model-config";
+import { mainModel, utilityModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
@@ -2810,4 +2810,110 @@ export function ensureParagraphs(
     groups.push(sentences.slice(i, i + sentencesPerParagraph).join(" "));
   }
   return groups.join("\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// Column-close reviews
+// ---------------------------------------------------------------------------
+
+/**
+ * Stages that carry a column_review. "review" isn't a real ITC column
+ * stage — it's a downstream stage that leapfrogs. Same for immune_system
+ * onward (those aren't columns the coachee builds; they're derived
+ * surfaces). Reviews only fire on the four columns the coachee actually
+ * fills: goal, behaviors (future phase), worries, commitments,
+ * assumptions (future phase). Phase 1 ships goal + worries + commitments.
+ */
+export type ReviewableColumn = "goal" | "worries" | "commitments";
+
+/**
+ * Generate the coach's end-of-column audit for a given column. Input
+ * shape carries just enough context for the review: the column's own
+ * entries plus any upstream columns the audit needs to compare against
+ * (e.g., commitments review compares against worries). Returns the
+ * coach's prose or null on LLM failure (caller silently drops the
+ * review — the coachee's next Continue click isn't blocked).
+ */
+export async function generateColumnReview(input: {
+  column: ReviewableColumn;
+  goalText: string;
+  behaviors?: string[];
+  worries?: string[];
+  commitments?: string[];
+}): Promise<string | null> {
+  try {
+    let systemPrompt: string;
+    switch (input.column) {
+      case "goal": {
+        const mod = await import("./prompts/stages/goal-review");
+        systemPrompt = mod.GOAL_REVIEW_STAGE;
+        break;
+      }
+      case "worries": {
+        const mod = await import("./prompts/stages/worries-review");
+        systemPrompt = mod.WORRIES_REVIEW_STAGE;
+        break;
+      }
+      case "commitments": {
+        const mod = await import("./prompts/stages/commitments-review");
+        systemPrompt = mod.COMMITMENTS_REVIEW_STAGE;
+        break;
+      }
+    }
+
+    const promptBlocks: string[] = [
+      `Improvement goal: ${input.goalText || "(not set)"}`,
+    ];
+    if (input.column === "goal") {
+      promptBlocks.push("");
+      promptBlocks.push("Review the goal above.");
+    } else {
+      promptBlocks.push("");
+      promptBlocks.push("Behaviors (Column 2):");
+      promptBlocks.push(
+        (input.behaviors ?? []).map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
+          "  (none)",
+      );
+      if (input.column === "worries" || input.column === "commitments") {
+        promptBlocks.push("");
+        promptBlocks.push("Worries (Column 3):");
+        promptBlocks.push(
+          (input.worries ?? []).map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
+            "  (none)",
+        );
+      }
+      if (input.column === "commitments") {
+        promptBlocks.push("");
+        promptBlocks.push("Competing commitments (Column 4):");
+        promptBlocks.push(
+          (input.commitments ?? [])
+            .map((t, i) => `  ${i + 1}. ${t}`)
+            .join("\n") || "  (none)",
+        );
+      }
+      promptBlocks.push("");
+      promptBlocks.push(
+        `Review the ${input.column === "worries" ? "worry" : "competing-commitment"} set above.`,
+      );
+    }
+    promptBlocks.push(
+      "Return only the coach's review prose — no meta, no headings, no scaffolding.",
+    );
+
+    const { text } = await generateText({
+      model: utilityModel(),
+      system: withVoiceRules(systemPrompt),
+      prompt: promptBlocks.join("\n"),
+      maxOutputTokens: 400,
+    });
+    const cleaned = ensureParagraphs(scrubReplyLight(text));
+    return cleaned.length > 0 ? cleaned : null;
+  } catch (err) {
+    console.warn(
+      "[itc coach] generateColumnReview failed (column=%s): %s",
+      input.column,
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
 }

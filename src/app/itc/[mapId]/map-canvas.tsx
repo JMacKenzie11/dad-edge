@@ -153,6 +153,19 @@ export function MapCanvas({
       ),
     [messages],
   );
+  // End-of-column review messages, keyed by the stage they audit.
+  // Only ever one per stage (deleteColumnReviewMessages wipes prior
+  // rows on any entry save so the audit always reflects fresh state).
+  // Rendered inside the matching Section above the coachee's own
+  // Continue button.
+  const columnReviewByStage = useMemo(() => {
+    const byStage = new Map<ItcStage, ItcMessage>();
+    for (const m of messages) {
+      if (m.surface !== "column_review") continue;
+      byStage.set(m.stage_at_creation, m);
+    }
+    return byStage;
+  }, [messages]);
   // dockMessages removed with the CoachDock (2026-08-24). Historical
   // dock messages remain in the DB for audit / turn-event context but
   // no surface renders them anymore.
@@ -267,6 +280,7 @@ export function MapCanvas({
           liveIntro={liveIntroFor("goal")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "goal" ? stageNotes : []}
+          columnReview={columnReviewByStage.get("goal")}
           unattachedCoachNotes={
             map.current_stage === "goal" ? unattachedForCurrentStage : []
           }
@@ -330,6 +344,7 @@ export function MapCanvas({
           liveIntro={liveIntroFor("worries")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "worries" ? stageNotes : []}
+          columnReview={columnReviewByStage.get("worries")}
           unattachedCoachNotes={
             map.current_stage === "worries" ? unattachedForCurrentStage : []
           }
@@ -355,6 +370,7 @@ export function MapCanvas({
           liveIntro={liveIntroFor("commitments")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "commitments" ? stageNotes : []}
+          columnReview={columnReviewByStage.get("commitments")}
           unattachedCoachNotes={
             map.current_stage === "commitments" ? unattachedForCurrentStage : []
           }
@@ -629,6 +645,7 @@ function Section({
   liveIntro,
   beforeNotes,
   stageNotes,
+  columnReview,
   unattachedCoachNotes = [],
   chipTarget,
 }: {
@@ -652,6 +669,10 @@ function Section({
    *  visually before he reads the narrative. */
   beforeNotes?: React.ReactNode;
   stageNotes: ItcMessage[];
+  /** End-of-column coach audit rendered below the section's inputs,
+   *  above the Continue button. Only shown on the active section (the
+   *  audit is only useful in-context). */
+  columnReview?: ItcMessage;
   /** Fallback: assistant messages on this stage with no surface set.
    *  Rendered as stage-note-styled coach notes so the coach's reply
    *  is visible even when the migration adding surface/entry_ref
@@ -736,7 +757,33 @@ function Section({
         </div>
       ) : null}
       {children}
+      {active && columnReview ? (
+        <ColumnReviewNote content={columnReview.content} />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * Distinct visual treatment for the end-of-column coach audit. Sits
+ * below the coachee's own inputs (behaviors / worries / commitments /
+ * goal). Amber accent so it reads as "the coach checked your set
+ * before you move on" rather than another mid-flow reaction. Kept as
+ * a plain read: no chip target, no accept-tap, no state change. It's
+ * a nudge to reflect, not a state transition.
+ */
+function ColumnReviewNote({ content }: { content: string }) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-md border border-[color:var(--color-warning)]/40 border-l-[3px] border-l-[color:var(--color-warning)] bg-[color:var(--color-surface)] shadow-sm">
+      <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-warning)]/[0.05] px-4 py-2">
+        <div className="text-[11px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]">
+          Coach's take on this set
+        </div>
+      </div>
+      <div className="px-4 py-3 text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
+        {content}
+      </div>
+    </div>
   );
 }
 

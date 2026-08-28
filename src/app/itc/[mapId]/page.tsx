@@ -14,6 +14,7 @@ import {
 } from "@/lib/itc/maps";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import {
+  ensureColumnReviewDelivered,
   ensureMapCloseSummaryDelivered,
   ensurePrioritizeRecommendationDelivered,
   ensureTestDraftDelivered,
@@ -71,6 +72,18 @@ export default async function ItcMapPage({
   // a closing summary, deliver it before render.
   if (map.current_stage === "done") {
     await ensureMapCloseSummaryDelivered(map.id);
+  }
+  // End-of-column reviews (build-time tightening). Fires on goal /
+  // worries / commitments stages when the set has hit min-viable count
+  // and no review row exists. Silent no-op otherwise. Short-circuits
+  // quickly on the check, so the fast path adds a single DB hit; the
+  // slow path (first-time draft) adds one utility-model LLM call.
+  if (
+    map.current_stage === "goal" ||
+    map.current_stage === "worries" ||
+    map.current_stage === "commitments"
+  ) {
+    await ensureColumnReviewDelivered(map.id);
   }
 
   const [

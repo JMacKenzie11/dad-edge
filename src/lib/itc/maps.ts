@@ -117,7 +117,13 @@ export type ItcMessageSurface =
   | "stage_note"
   | "entry_thread"
   | "focus"
-  | "dock";
+  | "dock"
+  // End-of-column coach audit rendered at the bottom of a completed
+  // column above the Continue button. See ColumnReview in map-canvas
+  // + ensureColumnReviewDelivered in actions.ts. Deleted on any entry
+  // add/edit/delete inside that column so the next render regenerates
+  // against fresh state (migration 20260828000003).
+  | "column_review";
 
 export type ItcMessage = {
   id: string;
@@ -1423,6 +1429,47 @@ export async function deleteStageNoteMessages(input: {
     .eq("surface", "stage_note")
     .eq("stage_at_creation", input.stage);
   if (error) throw new Error(`deleteStageNoteMessages: ${error.message}`);
+}
+
+/**
+ * Wipe the column_review message for a given stage. Called after any
+ * entry add/edit/delete in that column so the next page render can
+ * regenerate the review against fresh state. Silent no-op when nothing
+ * exists (fresh map, or already deleted, or coach hasn't drafted yet).
+ */
+export async function deleteColumnReviewMessages(input: {
+  mapId: string;
+  stage: ItcStage;
+}): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_messages")
+    .delete()
+    .eq("map_id", input.mapId)
+    .eq("surface", "column_review")
+    .eq("stage_at_creation", input.stage);
+  if (error) throw new Error(`deleteColumnReviewMessages: ${error.message}`);
+}
+
+/**
+ * Does a column_review message already exist for the given stage? Used
+ * by ensureColumnReviewDelivered to skip when the coach's audit has
+ * already been persisted for this set state.
+ */
+export async function hasColumnReviewMessage(input: {
+  mapId: string;
+  stage: ItcStage;
+}): Promise<boolean> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("itc_messages")
+    .select("id", { head: false })
+    .eq("map_id", input.mapId)
+    .eq("surface", "column_review")
+    .eq("stage_at_creation", input.stage)
+    .limit(1);
+  if (error) throw new Error(`hasColumnReviewMessage: ${error.message}`);
+  return (data ?? []).length > 0;
 }
 
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {
