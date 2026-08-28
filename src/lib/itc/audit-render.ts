@@ -13,23 +13,26 @@
  * are also templated, varying based on severity distribution. Coach
  * voice is codified in the templates instead of requested from an LLM.
  *
- * Trade-off: stiffer prose than a good LLM synthesis. The templates
- * are the coach voice; if it needs to shift, edit the templates.
- * Invented content goes to zero.
+ * Grouping: findings on the same map entry share a single
+ * `Your X now: "quote"` opener. Subsequent findings against the same
+ * entry drop the opener and render just the critique body. Multiple
+ * `assumption_commitment_drift` findings on the same assumption merge
+ * into one paragraph that names all paired commitments. Action items
+ * are deduped by (entry, action-family) so depth-shortfall and
+ * interior-witness findings on the same commitment collapse to one
+ * action, not two near-identical ones.
  */
 
-import type { AuditFinding, AuditIssueType } from "./audit-rules";
+import type {
+  AuditEntryRef,
+  AuditFinding,
+  AuditIssueType,
+} from "./audit-rules";
 
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
-/**
- * Compose the full audit prose from a findings list. Returns a coach-
- * voice string with paragraph breaks between sections and a numbered
- * action list at the end. When findings is empty, returns a short
- * "map holds up" message without any per-finding paragraphs.
- */
 export function renderAudit(
   findings: AuditFinding[],
   context: { goalText: string; pillarLabel: string },
@@ -43,7 +46,8 @@ export function renderAudit(
   }
 
   const opening = renderOpening(findings, context);
-  const paragraphs = findings.map((f) => renderFindingParagraph(f));
+  const groups = groupFindingsByEntry(findings);
+  const paragraphs = groups.flatMap((g) => renderEntryGroup(g));
   const actions = renderActionList(findings);
 
   return [opening, ...paragraphs, actions].join("\n\n");
@@ -65,7 +69,8 @@ function renderOpening(
   const total = findings.length;
 
   if (criticals > 0) {
-    const critWord = criticals === 1 ? "one critical issue" : `${criticals} critical issues`;
+    const critWord =
+      criticals === 1 ? "one critical issue" : `${criticals} critical issues`;
     return `Your ${context.pillarLabel} map has ${critWord} to fix before this hone pass is worth much else. Working down from there.`;
   }
 
@@ -78,133 +83,284 @@ function renderOpening(
     return `Your ${context.pillarLabel} map holds up structurally, with ${moderates} moderate issue${moderates === 1 ? "" : "s"} to sharpen and ${observations} smaller observation${observations === 1 ? "" : "s"} to consider.`;
   }
 
-  // Only observations.
   const obsWord = total === 1 ? "one small thing" : `${total} small things`;
   return `Your ${context.pillarLabel} map is in good shape. ${obsWord} worth noting.`;
+}
+
+// ---------------------------------------------------------------------------
+// Entry grouping — findings on the same entry share one opener
+// ---------------------------------------------------------------------------
+
+interface EntryGroup {
+  key: string;
+  findings: AuditFinding[];
+}
+
+function entryKey(ref: AuditEntryRef): string {
+  return `${ref.table}:${ref.id}`;
+}
+
+function groupFindingsByEntry(findings: AuditFinding[]): EntryGroup[] {
+  const byKey = new Map<string, AuditFinding[]>();
+  const order: string[] = [];
+  for (const f of findings) {
+    const key = entryKey(f.entryRef);
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(f);
+  }
+  return order.map((key) => ({ key, findings: byKey.get(key)! }));
+}
+
+const SEVERITY_ORDER: Record<AuditFinding["severity"], number> = {
+  critical: 0,
+  moderate: 1,
+  observation: 2,
+};
+
+const ISSUE_TYPE_ORDER: Record<AuditIssueType, number> = {
+  bundled_goal: 0,
+  missing_commitment_stem: 1,
+  interior_witness_worry: 2,
+  depth_shortfall_worry: 3,
+  worry_commitment_redundancy: 4,
+  interior_witness_commitment: 5,
+  depth_shortfall_commitment: 6,
+  assumption_uncovered_commitment: 7,
+  vague_assumption_then_clause: 8,
+  depth_shortfall_assumption: 9,
+  test_coverage_gap: 10,
+  test_grip_through_data: 11,
+  assumption_commitment_drift: 12,
+  assumption_overload: 13,
+};
+
+function orderFindingsWithinGroup(findings: AuditFinding[]): AuditFinding[] {
+  return [...findings].sort((a, b) => {
+    const sev = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    if (sev !== 0) return sev;
+    return ISSUE_TYPE_ORDER[a.issueType] - ISSUE_TYPE_ORDER[b.issueType];
+  });
+}
+
+function renderEntryGroup(group: EntryGroup): string[] {
+  const ordered = orderFindingsWithinGroup(group.findings);
+  const drifts = ordered.filter(
+    (f) => f.issueType === "assumption_commitment_drift",
+  );
+  const others = ordered.filter(
+    (f) => f.issueType !== "assumption_commitment_drift",
+  );
+
+  const paragraphs: string[] = [];
+  let openerEmitted = false;
+
+  for (const f of others) {
+    paragraphs.push(renderFindingParagraph(f, openerEmitted));
+    openerEmitted = true;
+  }
+
+  if (drifts.length === 1) {
+    paragraphs.push(renderFindingParagraph(drifts[0], openerEmitted));
+    openerEmitted = true;
+  } else if (drifts.length >= 2) {
+    paragraphs.push(renderMergedDrift(drifts, openerEmitted));
+    openerEmitted = true;
+  }
+
+  return paragraphs;
 }
 
 // ---------------------------------------------------------------------------
 // Per-issueType paragraph renderers
 // ---------------------------------------------------------------------------
 
-function renderFindingParagraph(f: AuditFinding): string {
+function renderFindingParagraph(f: AuditFinding, skipOpener: boolean): string {
   switch (f.issueType) {
     case "bundled_goal":
-      return renderBundledGoal(f);
+      return renderBundledGoal(f, skipOpener);
     case "interior_witness_worry":
-      return renderInteriorWitnessWorry(f);
+      return renderInteriorWitnessWorry(f, skipOpener);
     case "interior_witness_commitment":
-      return renderInteriorWitnessCommitment(f);
+      return renderInteriorWitnessCommitment(f, skipOpener);
     case "missing_commitment_stem":
-      return renderMissingCommitmentStem(f);
+      return renderMissingCommitmentStem(f, skipOpener);
     case "vague_assumption_then_clause":
-      return renderVagueAssumptionThenClause(f);
+      return renderVagueAssumptionThenClause(f, skipOpener);
     case "depth_shortfall_worry":
-      return renderDepthShortfallWorry(f);
+      return renderDepthShortfallWorry(f, skipOpener);
     case "depth_shortfall_commitment":
-      return renderDepthShortfallCommitment(f);
+      return renderDepthShortfallCommitment(f, skipOpener);
     case "depth_shortfall_assumption":
-      return renderDepthShortfallAssumption(f);
+      return renderDepthShortfallAssumption(f, skipOpener);
     case "assumption_commitment_drift":
-      return renderAssumptionCommitmentDrift(f);
+      return renderAssumptionCommitmentDrift(f, skipOpener);
     case "assumption_overload":
-      return renderAssumptionOverload(f);
+      return renderAssumptionOverload(f, skipOpener);
     case "assumption_uncovered_commitment":
-      return renderAssumptionUncoveredCommitment(f);
+      return renderAssumptionUncoveredCommitment(f, skipOpener);
     case "test_coverage_gap":
-      return renderTestCoverageGap(f);
+      return renderTestCoverageGap(f, skipOpener);
     case "test_grip_through_data":
-      return renderTestGripThroughData(f);
+      return renderTestGripThroughData(f, skipOpener);
     case "worry_commitment_redundancy":
-      return renderWorryCommitmentRedundancy(f);
+      return renderWorryCommitmentRedundancy(f, skipOpener);
   }
+}
+
+function opener(subject: string, text: string, skip: boolean): string {
+  return skip ? "" : `Your ${subject} now: "${text}" `;
 }
 
 // ---------------------------------------------------------------------------
 // Individual template functions
 // ---------------------------------------------------------------------------
 
-function renderBundledGoal(f: AuditFinding): string {
+function renderBundledGoal(f: AuditFinding, skip: boolean): string {
   const consider = f.suggestedFix ? ` ${f.suggestedFix}` : "";
-  return `Your goal now: "${f.actualText}" This packs two distinct improvements pointed at different objects. Each half implies different behaviors and different tests, so running them as one map produces muddy data on both.${consider}`;
+  return `${opener("goal", f.actualText, skip)}This packs two distinct improvements pointed at different objects. Each half implies different behaviors and different tests, so running them as one map produces muddy data on both.${consider}`;
 }
 
-function renderInteriorWitnessWorry(f: AuditFinding): string {
-  return `Your worry now: "${f.actualText}" This uses an interior-witness verb ("I'd have to see", "I'd know", "I'd face") applied to a truth about you. The identity landing lives inside your head rather than in something the outside world would witness. The sharper form flips to external witness — instead of what you'd have to see, name what SHE would see, know, or say out loud. Let the outside world be the one who registers it.`;
+function renderInteriorWitnessWorry(f: AuditFinding, skip: boolean): string {
+  return `${opener("worry", f.actualText, skip)}This uses an interior-witness verb ("I'd have to see", "I'd know", "I'd face") applied to a truth about you. The identity landing lives inside your head rather than in something the outside world would witness. The sharper form flips to external witness. Instead of what you'd have to see, name what SHE would see, know, or say out loud. Let the outside world be the one who registers it.`;
 }
 
-function renderInteriorWitnessCommitment(f: AuditFinding): string {
-  return `Your commitment now: "${f.actualText}" This is framed around avoiding a feeling or an interior reckoning ("never seeing", "never knowing", "avoiding the feeling that"). The sharper form names the identity you're committed to never being, plus the observable action a friend on your shoulder would see you take to protect it. Not "never seeing X" — "never being the [specific role] who [specific action]."`;
+function renderInteriorWitnessCommitment(f: AuditFinding, skip: boolean): string {
+  return `${opener("commitment", f.actualText, skip)}This is framed around avoiding a feeling or an interior reckoning ("never seeing", "never knowing", "avoiding the feeling that"). The sharper form names the identity you're committed to never being, plus the observable action a friend on your shoulder would see you take to protect it. Not "never seeing X" but "never being the [specific role] who [specific action]."`;
 }
 
-function renderMissingCommitmentStem(f: AuditFinding): string {
+function renderMissingCommitmentStem(f: AuditFinding, skip: boolean): string {
   const consider = f.suggestedFix ? ` Consider: "${f.suggestedFix}"` : "";
-  return `Your commitment now: "${f.actualText}" This is missing the canonical stem "I'm also committed to". The "also" is load-bearing — it names this as the SECOND commitment sitting next to your improvement goal, so the coexistence with the primary commitment stays unmissable.${consider}`;
+  return `${opener("commitment", f.actualText, skip)}This is missing the canonical stem "I'm also committed to". The "also" is load-bearing. It names this as the SECOND commitment sitting next to your improvement goal, so the coexistence with the primary commitment stays unmissable.${consider}`;
 }
 
-function renderVagueAssumptionThenClause(f: AuditFinding): string {
-  return `Your assumption now: "${f.actualText}" The then-clause gestures at an identity ("the man I'm terrified of", "what I fear I am", "the guy I don't want to be") without naming it. Vague then-clauses don't test — reality can't disconfirm what isn't specified. Name the identity plainly: the guy who what? The husband whose what? Write out the concrete failure or flaw you're afraid arrives at you.`;
+function renderVagueAssumptionThenClause(f: AuditFinding, skip: boolean): string {
+  return `${opener("assumption", f.actualText, skip)}The then-clause gestures at an identity ("the man I'm terrified of", "what I fear I am", "the guy I don't want to be") without naming it. Vague then-clauses don't test. Reality can't disconfirm what isn't specified. Name the identity plainly: the guy who what? The husband whose what? Write out the concrete failure or flaw you're afraid arrives at you.`;
 }
 
-function renderDepthShortfallWorry(f: AuditFinding): string {
-  return `Your worry now: "${f.actualText}" This is still at the practical level — what would happen, what you'd have to do — rather than at the identity level. The fear needs to land on who you'd be if the opposite move happened, not on the immediate consequence of the move itself.`;
+function renderDepthShortfallWorry(f: AuditFinding, skip: boolean): string {
+  return `${opener("worry", f.actualText, skip)}This is still at the practical level. What would happen, what you'd have to do, rather than the identity level. The fear needs to land on who you'd be if the opposite move happened, not on the immediate consequence of the move itself.`;
 }
 
-function renderDepthShortfallCommitment(f: AuditFinding): string {
-  return `Your commitment now: "${f.actualText}" This is still at the practical level. The vow needs to name the identity being protected and what the outside world would see you take the hit on, not the feeling or the situation you're avoiding.`;
+function renderDepthShortfallCommitment(f: AuditFinding, skip: boolean): string {
+  return `${opener("commitment", f.actualText, skip)}This is still at the practical level. The vow needs to name the identity being protected and what the outside world would see you take the hit on, not the feeling or the situation you're avoiding.`;
 }
 
-function renderDepthShortfallAssumption(f: AuditFinding): string {
-  return `Your assumption now: "${f.actualText}" The then-clause hasn't reached identity depth yet. It needs to finish through to an identity landing or a Big Time Bad conclusion, not stop at a practical consequence.`;
+function renderDepthShortfallAssumption(f: AuditFinding, skip: boolean): string {
+  return `${opener("assumption", f.actualText, skip)}The then-clause hasn't reached identity depth yet. It needs to finish through to an identity landing or a Big Time Bad conclusion, not stop at a practical consequence.`;
 }
 
-function renderAssumptionCommitmentDrift(f: AuditFinding): string {
+function renderAssumptionCommitmentDrift(f: AuditFinding, skip: boolean): string {
+  const head = opener("assumption", f.actualText, skip);
   const relatedQuote = f.relatedText
-    ? ` The paired commitment says: "${f.relatedText}"`
-    : "";
-  // Detail carries the drift reason from the LLM check. Strip the
-  // machinery prefix if present.
-  const reason = stripDetailPrefix(f.detail);
-  return `Your assumption now: "${f.actualText}"${relatedQuote} These have drifted apart. ${reason} Either sharpen the assumption so its if-clause names the exact scenario this commitment is protecting against, or the pair may be pointing at a missing commitment that hasn't been named yet.`;
-}
-
-function renderAssumptionOverload(f: AuditFinding): string {
-  const reason = stripDetailPrefix(f.detail);
-  return `Your assumption now: "${f.actualText}" This is carrying more weight than one belief can hold. ${reason} Additional Big Assumptions may need to be named so each commitment has an assumption pointed at its own specific concern.`;
-}
-
-function renderAssumptionUncoveredCommitment(f: AuditFinding): string {
-  return `Your commitment now: "${f.actualText}" No Big Assumption is linked to this one. The commitment is protecting something you haven't yet named as a testable belief, so nothing about it can be challenged with evidence. Draft a Big Assumption whose if-clause names the exact scenario this commitment is protecting against, and whose then-clause names the identity or Big Time Bad conclusion the commitment fears.`;
-}
-
-function renderTestCoverageGap(f: AuditFinding): string {
-  return `Your assumption now: "${f.actualText}" This has no active test on it. Untested assumptions still shape your behavior, but no evidence is being gathered against them. A data-mining test (looking back at what's already happened) or a thought experiment can gather evidence cheaply without staging a whole new behavioral round.`;
-}
-
-function renderTestGripThroughData(f: AuditFinding): string {
-  return `Your test result now: "${f.actualText}" The "what it says about the assumption" reading looks like the assumption still running the show, not a conclusion drawn from the data. When the world doesn't produce the predicted consequence, that's evidence AGAINST the assumption, not permission to double down on the protective move. Re-read the data as data, not as a prescription.`;
-}
-
-function renderWorryCommitmentRedundancy(f: AuditFinding): string {
-  const relatedQuote = f.relatedText
-    ? ` The commitment that duplicates it: "${f.relatedText}"`
+    ? `The paired commitment says: "${f.relatedText}" `
     : "";
   const reason = stripDetailPrefix(f.detail);
-  return `Your worry now: "${f.actualText}"${relatedQuote} These duplicate the same identity concern in two forms. ${reason} Either push the worry into a distinct identity concern, or drop it so the map isn't doubled up.`;
+  return `${head}${relatedQuote}These have drifted apart. ${reason} Either sharpen the assumption so its if-clause names the exact scenario this commitment is protecting against, or the pair may be pointing at a missing commitment that hasn't been named yet.`;
+}
+
+function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
+  const first = findings[0];
+  const commitmentQuotes = findings
+    .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
+    .filter((s): s is string => s !== null);
+  const joinedQuotes = joinList(commitmentQuotes);
+  const reasons = findings
+    .map((f, i) => {
+      const label = ORDINALS[i] ?? `#${i + 1}`;
+      return `Against the ${label}: ${stripDetailPrefix(f.detail)}`;
+    })
+    .join(" ");
+  const head = opener("assumption", first.actualText, skip);
+  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from both. ${reasons} Either sharpen the assumption so its if-clause names the exact scenarios these commitments protect against, or the pair may be pointing at missing commitments that haven't been named yet.`;
+}
+
+function renderAssumptionOverload(f: AuditFinding, skip: boolean): string {
+  const reason = stripDetailPrefix(f.detail);
+  return `${opener("assumption", f.actualText, skip)}This is carrying more weight than one belief can hold. ${reason} Additional Big Assumptions may need to be named so each commitment has an assumption pointed at its own specific concern.`;
+}
+
+function renderAssumptionUncoveredCommitment(f: AuditFinding, skip: boolean): string {
+  return `${opener("commitment", f.actualText, skip)}No Big Assumption is linked to this one. The commitment is protecting something you haven't yet named as a testable belief, so nothing about it can be challenged with evidence. Draft a Big Assumption whose if-clause names the exact scenario this commitment is protecting against, and whose then-clause names the identity or Big Time Bad conclusion the commitment fears.`;
+}
+
+function renderTestCoverageGap(f: AuditFinding, skip: boolean): string {
+  return `${opener("assumption", f.actualText, skip)}This has no active test on it. Untested assumptions still shape your behavior, but no evidence is being gathered against them. A data-mining test (looking back at what's already happened) or a thought experiment can gather evidence cheaply without staging a whole new behavioral round.`;
+}
+
+function renderTestGripThroughData(f: AuditFinding, skip: boolean): string {
+  return `${opener("test result", f.actualText, skip)}The "what it says about the assumption" reading looks like the assumption still running the show, not a conclusion drawn from the data. When the world doesn't produce the predicted consequence, that's evidence AGAINST the assumption, not permission to double down on the protective move. Re-read the data as data, not as a prescription.`;
+}
+
+function renderWorryCommitmentRedundancy(f: AuditFinding, skip: boolean): string {
+  const head = opener("worry", f.actualText, skip);
+  const relatedQuote = f.relatedText
+    ? `The commitment that duplicates it: "${f.relatedText}" `
+    : "";
+  const reason = stripDetailPrefix(f.detail);
+  return `${head}${relatedQuote}These duplicate the same identity concern in two forms. ${reason} Either push the worry into a distinct identity concern, or drop it so the map isn't doubled up.`;
 }
 
 // ---------------------------------------------------------------------------
-// Numbered action list
+// Numbered action list — deduped by (entry, action-family)
 // ---------------------------------------------------------------------------
+
+function actionFamilyKey(f: AuditFinding): string {
+  const entry = `${f.entryRef.table}:${f.entryRef.id}`;
+  switch (f.issueType) {
+    case "depth_shortfall_commitment":
+    case "interior_witness_commitment":
+      return `${entry}:commitment_identity_rewrite`;
+    case "vague_assumption_then_clause":
+    case "depth_shortfall_assumption":
+      return `${entry}:assumption_identity_rewrite`;
+    case "interior_witness_worry":
+    case "depth_shortfall_worry":
+      return `${entry}:worry_identity_rewrite`;
+    case "assumption_commitment_drift":
+      return `${entry}:assumption_drift`;
+    default:
+      return `${entry}:${f.issueType}`;
+  }
+}
 
 function renderActionList(findings: AuditFinding[]): string {
-  // Cap at 5 — anything beyond that becomes a survey. Findings are
-  // already severity-sorted by runAllAuditChecks so we take the top 5.
-  const items = findings.slice(0, 5).map((f, i) => {
-    const action = renderActionItem(f);
-    return `${i + 1}. ${action}`;
+  const byFamily = new Map<string, AuditFinding[]>();
+  const order: string[] = [];
+  for (const f of findings) {
+    const key = actionFamilyKey(f);
+    if (!byFamily.has(key)) {
+      byFamily.set(key, []);
+      order.push(key);
+    }
+    byFamily.get(key)!.push(f);
+  }
+
+  const items = order.slice(0, 5).map((key, i) => {
+    const family = byFamily.get(key)!;
+    return `${i + 1}. ${renderMergedAction(key, family)}`;
   });
+
   return items.join("\n");
+}
+
+function renderMergedAction(family: string, findings: AuditFinding[]): string {
+  const uniqueTypes = new Set(findings.map((f) => f.issueType));
+  if (family.endsWith(":commitment_identity_rewrite") && uniqueTypes.size > 1) {
+    return 'Rewrite the commitment to name the identity you\'re never being AND the observable action a friend on your shoulder would see you take to protect it. Not "never seeing X" but "never being the [specific role] who [specific action]."';
+  }
+  if (family.endsWith(":assumption_identity_rewrite") && uniqueTypes.size > 1) {
+    return 'Push the assumption\'s then-clause to identity depth. Write out the specific identity plainly. Not "the guy I\'m terrified of" but what that guy actually is.';
+  }
+  if (family.endsWith(":worry_identity_rewrite") && uniqueTypes.size > 1) {
+    return "Rewrite the worry to land on the identity you'd have if the opposite move happened, and let the outside world be the one who registers it.";
+  }
+  if (family.endsWith(":assumption_drift") && findings.length > 1) {
+    return "Sharpen the assumption so its if-clause names the exact scenarios both paired commitments protect against, or name missing commitments that pair cleanly with the current assumption.";
+  }
+  return renderActionItem(findings[0]);
 }
 
 function renderActionItem(f: AuditFinding): string {
@@ -244,12 +400,19 @@ function renderActionItem(f: AuditFinding): string {
 // Utilities
 // ---------------------------------------------------------------------------
 
+const ORDINALS = ["first", "second", "third", "fourth", "fifth"] as const;
+
+function joinList(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 /**
  * Some check `detail` strings lead with a machinery-style summary
- * before the substantive reason ("Assumption is carrying multiple
- * distinct identity concerns. <reason>"). Strip the summary prefix
- * so the templated paragraph reads cleanly — the surrounding template
- * already establishes the finding type in coach voice.
+ * before the substantive reason. Strip the summary prefix so the
+ * templated paragraph reads cleanly.
  */
 function stripDetailPrefix(detail: string): string {
   const stripped = detail
@@ -280,5 +443,4 @@ const _EXHAUSTIVENESS: readonly AuditIssueType[] = [
   "test_grip_through_data",
   "worry_commitment_redundancy",
 ];
-// Silence unused-var lint by referencing the constant.
 void _EXHAUSTIVENESS;

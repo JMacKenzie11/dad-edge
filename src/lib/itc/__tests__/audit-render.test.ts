@@ -154,6 +154,110 @@ describe("renderAudit", () => {
     expect(prose).not.toContain("–");
   });
 
+  it("emits one entry opener when multiple findings target the same entry", () => {
+    const commitmentQuote =
+      "I'm also committed to never seeing that my defensive behaviour is the problem";
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: commitmentQuote,
+          detail: "Commitment sits at practical depth, not identity depth.",
+        }),
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: commitmentQuote,
+          detail:
+            "Commitment uses interior-witness verb 'never seeing' instead of naming the identity.",
+        }),
+      ],
+      CTX,
+    );
+    const openerCount = (prose.match(/Your commitment now: /g) ?? []).length;
+    expect(openerCount).toBe(1);
+    // Both critique bodies should be present.
+    expect(prose).toMatch(/still at the practical level/i);
+    expect(prose).toMatch(/framed around avoiding a feeling/i);
+    // Quote appears exactly once, in the shared opener.
+    const quoteCount = prose.split(`"${commitmentQuote}"`).length - 1;
+    expect(quoteCount).toBe(1);
+  });
+
+  it("merges multiple drift findings on the same assumption into one paragraph", () => {
+    const assumptionQuote =
+      "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.";
+    const c1 =
+      "I'm also committed to never seeing that my defensive behaviour is the problem";
+    const c2 =
+      "I'm also committed to never being the guy who isn't enough for her.";
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: assumptionQuote,
+          detail:
+            "Commitment protects against seeing defensive behavior as the problem. Assumption's if-clause is about revealing failures.",
+          relatedText: c1,
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: assumptionQuote,
+          detail:
+            "Commitment protects 'not enough for her'. Assumption's if-clause is about revealing failures.",
+          relatedText: c2,
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+        }),
+      ],
+      CTX,
+    );
+    const openerCount = (prose.match(/Your assumption now: /g) ?? []).length;
+    expect(openerCount).toBe(1);
+    // Both paired commitment quotes should appear.
+    expect(prose).toContain(c1);
+    expect(prose).toContain(c2);
+    // Merged framing.
+    expect(prose).toMatch(/drifted apart from both/i);
+    expect(prose).toMatch(/Against the first/i);
+    expect(prose).toMatch(/Against the second/i);
+  });
+
+  it("dedupes action items when multiple issue types collapse to the same fix", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "some commitment text",
+          detail: "commitment at practical depth",
+        }),
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "some commitment text",
+          detail: "commitment uses interior-witness verb",
+        }),
+      ],
+      CTX,
+    );
+    const actionMatches = prose.match(/^\d\. /gm) ?? [];
+    expect(actionMatches).toHaveLength(1);
+    // Merged action wording should surface.
+    expect(prose).toMatch(
+      /Rewrite the commitment to name the identity you're never being/i,
+    );
+  });
+
   it("does not include machinery words (rubric, depth score, criterion)", () => {
     const prose = renderAudit(
       [
