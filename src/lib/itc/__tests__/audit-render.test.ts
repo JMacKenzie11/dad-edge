@@ -1,0 +1,175 @@
+import { describe, expect, it } from "vitest";
+import { renderAudit } from "../audit-render";
+import type {
+  AuditFinding,
+  AuditIssueType,
+  AuditSeverity,
+} from "../audit-rules";
+
+// ---------------------------------------------------------------------------
+// Fixtures — one finding per issueType so the exhaustiveness test can
+// guarantee every kind renders without throwing.
+// ---------------------------------------------------------------------------
+
+function finding(overrides: Partial<AuditFinding>): AuditFinding {
+  return {
+    entryRef: { table: "map", id: "map-1" },
+    issueType: "bundled_goal",
+    severity: "moderate",
+    actualText: "sample text",
+    detail: "sample detail",
+    ...overrides,
+  };
+}
+
+const CTX = { goalText: "sample goal", pillarLabel: "Bond" };
+
+// ---------------------------------------------------------------------------
+// renderAudit — top-level composer
+// ---------------------------------------------------------------------------
+
+describe("renderAudit", () => {
+  it("returns a map-holds-up message when the findings list is empty", () => {
+    const prose = renderAudit([], CTX);
+    expect(prose).toMatch(/holds up/i);
+    expect(prose).toContain("Bond");
+    // No numbered action list on a clean map.
+    expect(prose).not.toMatch(/^\d\. /m);
+  });
+
+  it("adjusts the opening based on severity distribution", () => {
+    const critProse = renderAudit(
+      [finding({ severity: "critical", issueType: "bundled_goal" })],
+      CTX,
+    );
+    expect(critProse).toMatch(/critical/i);
+
+    const modProse = renderAudit(
+      [
+        finding({
+          severity: "moderate",
+          issueType: "interior_witness_worry",
+          entryRef: { table: "worries", id: "w-1" },
+        }),
+      ],
+      CTX,
+    );
+    expect(modProse).toMatch(/holds up/i);
+    expect(modProse).not.toMatch(/critical/i);
+  });
+
+  it("quotes actualText verbatim in the rendered paragraph", () => {
+    const source =
+      "I'm also committed to never seeing that my defensive behaviour is the problem.";
+    const prose = renderAudit(
+      [
+        finding({
+          severity: "moderate",
+          issueType: "interior_witness_commitment",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: source,
+          detail: "sample detail",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toContain(`"${source}"`);
+    // Would fail if the renderer paraphrased.
+    expect(prose).not.toContain(
+      `"I'm committed to never seeing that my defensive behaviour is the problem."`,
+    );
+  });
+
+  it("caps the numbered action list at 5 items", () => {
+    // Ten findings — action list should stop at 5.
+    const many: AuditFinding[] = Array.from({ length: 10 }, (_, i) =>
+      finding({
+        severity: "moderate",
+        issueType: "interior_witness_worry",
+        entryRef: { table: "worries", id: `w-${i}` },
+        actualText: `worry text ${i}`,
+      }),
+    );
+    const prose = renderAudit(many, CTX);
+    const actionMatches = prose.match(/^\d\. /gm) ?? [];
+    expect(actionMatches).toHaveLength(5);
+  });
+
+  it("renders each issueType without throwing", () => {
+    const allIssueTypes: AuditIssueType[] = [
+      "bundled_goal",
+      "interior_witness_worry",
+      "interior_witness_commitment",
+      "missing_commitment_stem",
+      "vague_assumption_then_clause",
+      "depth_shortfall_worry",
+      "depth_shortfall_commitment",
+      "depth_shortfall_assumption",
+      "assumption_commitment_drift",
+      "assumption_overload",
+      "assumption_uncovered_commitment",
+      "test_coverage_gap",
+      "test_grip_through_data",
+      "worry_commitment_redundancy",
+    ];
+    const severities: AuditSeverity[] = [
+      "critical",
+      "moderate",
+      "observation",
+    ];
+    for (const issueType of allIssueTypes) {
+      for (const severity of severities) {
+        const f = finding({
+          issueType,
+          severity,
+          actualText: "sample entry text for rendering",
+          detail: "sample explanatory detail for the issue",
+          suggestedFix: "sample suggested fix",
+          relatedText: "sample paired entry text",
+          relatedEntryRef: { table: "commitments", id: "c-related" },
+        });
+        expect(() => renderAudit([f], CTX)).not.toThrow();
+        const prose = renderAudit([f], CTX);
+        // Every rendered paragraph should include the actualText quote.
+        expect(prose).toContain(`"sample entry text for rendering"`);
+      }
+    }
+  });
+
+  it("does not use em-dashes", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          severity: "critical",
+          issueType: "bundled_goal",
+          entryRef: { table: "goal", id: "map-1" },
+          actualText: "getting better at X and better at Y",
+          suggestedFix:
+            'Pick one for this map. First half: "getting better at X". Second half: "getting better at Y".',
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).not.toContain("—");
+    expect(prose).not.toContain("–");
+  });
+
+  it("does not include machinery words (rubric, depth score, criterion)", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          severity: "critical",
+          issueType: "depth_shortfall_worry",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry I'd fall behind",
+          detail:
+            "Worry hasn't reached identity depth yet. The fear needs to land on who he'd be, not on the immediate consequence.",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).not.toMatch(/\brubric\b/i);
+    expect(prose).not.toMatch(/\bdepth score\b/i);
+    expect(prose).not.toMatch(/\bcriterion\b/i);
+  });
+});

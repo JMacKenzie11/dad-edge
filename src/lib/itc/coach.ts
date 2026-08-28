@@ -2917,105 +2917,33 @@ export function ensureParagraphs(
 // ---------------------------------------------------------------------------
 
 /**
- * Narrate a pre-computed list of audit findings as coach prose.
+ * Compose the whole-map audit prose from a typed findings list.
  *
- * The whole-map audit is now split into two halves. Twelve deterministic
- * checks in `audit-rules.ts` produce a typed `AuditFinding[]`. This
- * function is the second half: a single mainModel call that translates
- * those findings into Kegan-voice prose. The LLM is only permitted to
- * narrate what's on the list — it cannot invent findings, cannot quote
- * text that isn't in a finding's `actualText`, and cannot invent a
- * `suggestedFix` where none was provided.
+ * The audit is a pure function of the findings — there is no LLM in
+ * this path. Twelve deterministic checks in `audit-rules.ts` produce
+ * a typed `AuditFinding[]`; per-issueType templates in
+ * `audit-render.ts` compose those findings into coach-voice prose
+ * (opening + one paragraph per finding + numbered action list).
  *
- * Returns:
- *   - a short "the map holds up" prose without any LLM call when
- *     `findings.length === 0`.
- *   - the synthesized narration on success.
- *   - null on LLM failure. Caller shows an error state and the coachee
- *     can re-click to retry.
+ * Prior LLM-based synthesis kept inventing content that wasn't in the
+ * findings list — rewrites the check hadn't produced, editorial
+ * generalizations across findings, section-header decorations, etc.
+ * Multiple rounds of prompt sharpening and output scrubbing didn't
+ * converge; the drift was intrinsic to asking an LLM to write
+ * free-form prose about structured findings.
+ *
+ * The signature stays `Promise<string | null>` for backward compat
+ * with the `runHoneDiagnostic` server action. Never returns null under
+ * normal conditions — the templates always produce output — but the
+ * async wrapper is kept in case a future finding-type needs an LLM
+ * call for its rendering.
  */
 export async function synthesizeAuditProse(
   findings: import("./audit-rules").AuditFinding[],
   context: { goalText: string; pillarLabel: string },
 ): Promise<string | null> {
-  if (findings.length === 0) {
-    const goal = context.goalText.trim().length > 0
-      ? `your ${context.pillarLabel} map holds up`
-      : "the map holds up";
-    return `${goal.charAt(0).toUpperCase()}${goal.slice(1)}. Nothing on it needs sharpening right now. When something on the map changes, click hone again and I'll re-check.`;
-  }
-
-  try {
-    const { HONE_SYNTHESIS_STAGE } = await import(
-      "./prompts/stages/hone-synthesis"
-    );
-
-    const promptBlocks: string[] = [];
-    promptBlocks.push("====== Context ======");
-    promptBlocks.push(`Pillar: ${context.pillarLabel}`);
-    promptBlocks.push(`Improvement goal: ${context.goalText || "(not set)"}`);
-    promptBlocks.push("");
-    promptBlocks.push(`====== Findings (${findings.length}) ======`);
-    findings.forEach((f, i) => {
-      promptBlocks.push(`--- Finding ${i + 1} ---`);
-      promptBlocks.push(`severity: ${f.severity}`);
-      promptBlocks.push(`issueType: ${f.issueType}`);
-      promptBlocks.push(`entryRef: ${f.entryRef.table} (${f.entryRef.id})`);
-      promptBlocks.push(`actualText: ${JSON.stringify(f.actualText)}`);
-      promptBlocks.push(`detail: ${f.detail}`);
-      if (f.suggestedFix) {
-        promptBlocks.push(`suggestedFix: ${f.suggestedFix}`);
-      }
-      if (f.relatedEntryRef && f.relatedText) {
-        promptBlocks.push(
-          `relatedEntryRef: ${f.relatedEntryRef.table} (${f.relatedEntryRef.id})`,
-        );
-        promptBlocks.push(`relatedText: ${JSON.stringify(f.relatedText)}`);
-      }
-      promptBlocks.push("");
-    });
-    promptBlocks.push(
-      "Narrate the findings above as coach prose. Return only the prose — no meta, no headings, no markdown.",
-    );
-
-    const { text } = await generateText({
-      model: mainModel(),
-      system: withVoiceRules(HONE_SYNTHESIS_STAGE),
-      prompt: promptBlocks.join("\n"),
-      maxOutputTokens: 3000,
-    });
-    // Three-pass cleanup, in order:
-    //  1. scrubReplyLight — em-dashes + "I locked/added/saved" claims.
-    //  2. scrubBannedCoachWords — targeted rewrites for the words that
-    //     keep leaking despite prompt callouts (shape, land, notice,
-    //     read-as-noun, worth-[verb]ing, our-map, etc.).
-    //  3. validateQuotesAgainstFindings — closes the last hallucination
-    //     surface. If the LLM paraphrased a near-full quote of an
-    //     entry (e.g. dropped "also" from a commitment), the validator
-    //     normalizes it back to the finding's exact actualText. Any
-    //     violations are logged for debugging but don't fail the audit.
-    const { validateQuotesAgainstFindings } = await import(
-      "./audit-rules"
-    );
-    const { prose: validated, violations } = validateQuotesAgainstFindings(
-      scrubBannedCoachWords(scrubReplyLight(text)),
-      findings,
-    );
-    if (violations.length > 0) {
-      console.warn(
-        "[itc coach] hone synthesis paraphrased quotes normalized: %s",
-        violations.join(" | "),
-      );
-    }
-    const cleaned = ensureParagraphs(validated);
-    return cleaned.length > 0 ? cleaned : null;
-  } catch (err) {
-    console.warn(
-      "[itc coach] synthesizeAuditProse failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
-  }
+  const { renderAudit } = await import("./audit-render");
+  return renderAudit(findings, context);
 }
 
 // ---------------------------------------------------------------------------
