@@ -463,7 +463,11 @@ export async function checkTestCoverage(input: {
       issueType: "test_coverage_gap",
       severity: "moderate",
       actualText: assumption.text,
-      detail: `No active test on this assumption (map has ${totalAssumptions} assumption${totalAssumptions === 1 ? "" : "s"} total). Untested assumptions still shape the coachee's behavior but no evidence is being gathered.`,
+      // Phrased so the synthesis LLM can't aggregate multiple test-
+      // coverage findings into a generic "no assumption has a test."
+      // The finding is about THIS assumption specifically; the count
+      // of others is not part of the finding.
+      detail: `This assumption has no active test on it. Untested assumptions still shape the coachee's behavior but no evidence is being gathered against them.`,
       suggestedFix:
         "A data-mining test or a thought experiment can gather evidence cheaply without staging a new behavioral round. Either fits the untested assumption.",
     });
@@ -481,11 +485,38 @@ const DriftSchema = z.object({
 });
 
 const DRIFT_SYSTEM = `
-You judge whether a Big Assumption's if-clause names the exact scenario the linked competing commitment is protecting against.
+You judge whether a Big Assumption's if-clause names the exact scenario the linked competing commitment is protecting against. Both fields are quoted verbatim from the coachee's map.
 
-Return drifted=false when the if-clause and the commitment name the same identity concern (the commitment is trying to prevent the same scenario the assumption's "if" would trigger). Return drifted=true only when they clearly point at different concerns.
+Two things need to match for drifted=false:
+1. The commitment names an identity the coachee is protecting (a person, role, or self-perception).
+2. The assumption's if-clause names the specific SCENARIO that, if it happened, would expose that same identity as true / real / seen. If the assumption's if-clause is about a DIFFERENT scenario than what the commitment is protecting against, they've drifted.
 
-When in doubt, drifted=false. If drifted=true, give a short reason (under 40 words) naming what's different between the two.
+Don't require exact word-match. Semantic alignment is enough. But the scenario the assumption's if-clause names must be the one that would expose the specific identity the commitment protects.
+
+Return { drifted: false } when the pair is aligned. Return { drifted: true, reason: "<what's different, under 40 words>" } when they name different scenarios.
+
+=== WORKED EXAMPLES ===
+
+Example 1 (drifted=false — clean pair):
+  Commitment: "I'm also committed to never becoming the husband who hurts her."
+  Assumption: "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
+  Verdict: { drifted: false }
+  Reason: Commitment protects the "husband who hurts her" identity. Assumption's if-clause ("stay in the room while she's angry") names the scenario that would expose that identity ("lose control and become that husband"). Aligned.
+
+Example 2 (drifted=true — different scenarios):
+  Commitment: "I'm also committed to never being the guy who isn't enough for her."
+  Assumption: "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am."
+  Verdict: { drifted: true, reason: "Commitment protects the 'not enough for her' identity — insufficiency, inadequate as a partner. Assumption's if-clause is about stopping protection / revealing failures, which points at a DIFFERENT identity (the one whose failures ARE the problem). Two different scenarios." }
+
+Example 3 (drifted=false — semantic alignment despite different wording):
+  Commitment: "I'm also committed to never letting my team see I don't have the answer."
+  Assumption: "I assume that if I admit I don't know something in a meeting, then they'll stop trusting my judgment."
+  Verdict: { drifted: false }
+  Reason: Commitment protects "the leader who has answers." Assumption's if-clause ("admit I don't know") is the exact scenario that would expose that identity. Different wording, same scenario.
+
+=== DECISION RULE ===
+
+Bias for calling drift when the identity concern the commitment protects doesn't match the specific scenario the assumption's if-clause names. Don't default to "aligned" out of caution. False negatives on drift let real map problems slip through; false positives are cheap to review.
 `.trim();
 
 export async function checkAssumptionCommitmentDrift(input: {
@@ -550,11 +581,36 @@ const OverloadSchema = z.object({
 });
 
 const OVERLOAD_SYSTEM = `
-You judge whether a set of competing commitments name the same underlying identity concern, or different concerns.
+You judge whether a set of competing commitments (all linked to the same Big Assumption) name the same underlying identity concern, or distinct concerns.
 
-Return same_concern=true when every commitment in the set is protecting the same identity fear in different wording. Return same_concern=false when the commitments name distinct identity concerns that happen to be linked to the same Big Assumption.
+Return { same_concern: true } when every commitment in the set is protecting the same identity fear in different wording (e.g. "the guy who fails his family" and "the man who can't provide" — same identity, two phrasings).
 
-When in doubt, same_concern=true (the safer default — don't flag overload unless it's clear the assumption is carrying more weight than one belief can). If same_concern=false, give a short reason (under 40 words) naming the distinct concerns.
+Return { same_concern: false } when the commitments name distinct identities the coachee is protecting — even if the identities are related, if they're distinguishable (different nouns, different consequences, different scenes), they're distinct concerns and the assumption is carrying more than one belief.
+
+=== WORKED EXAMPLES ===
+
+Example 1 (same_concern=true — genuine synonyms):
+  Commitments:
+    1. "I'm also committed to never being seen as the guy who fails his family."
+    2. "I'm also committed to never being the man who couldn't provide when it mattered."
+  Verdict: { same_concern: true }
+  Reason: Both name the "father/provider who failed" identity. Same concern, two phrasings.
+
+Example 2 (same_concern=false — distinct identities):
+  Commitments:
+    1. "I'm also committed to never seeing that my defensive behaviour is the problem."
+    2. "I'm also committed to never being the guy who isn't enough for her."
+  Verdict: { same_concern: false, reason: "First protects the 'guy whose defensiveness IS the problem' identity — the source of the trouble. Second protects the 'insufficient partner' identity — inadequate as a husband. Different identities. Different scenarios expose each." }
+
+Example 3 (same_concern=false — related but distinguishable):
+  Commitments:
+    1. "I'm also committed to never being the boss who makes his team scared to speak up."
+    2. "I'm also committed to never being the boss who loses his temper at work."
+  Verdict: { same_concern: false, reason: "First protects the 'intimidating leader' identity — a systemic pattern others feel. Second protects the 'loses-control' identity — a single-moment failure. Related, but distinguishable identities the coachee could hold separately." }
+
+=== DECISION RULE ===
+
+Bias for same_concern=false when you can name distinct identities in the commitments. Overload findings surface real map problems (assumption carrying too much weight); missing them lets the coachee keep testing one thing when they're actually running multiple. False positives on overload are cheap — the coachee reviews and confirms or dismisses.
 `.trim();
 
 export async function checkAssumptionOverload(input: {

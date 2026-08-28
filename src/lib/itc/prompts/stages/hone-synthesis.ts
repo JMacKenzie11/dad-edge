@@ -28,6 +28,8 @@ Do NOT restate the entry text in your own words when you can quote actualText di
 
 Do NOT name scores, rubrics, criteria, or depth numbers. Even when a finding's detail mentions "depth", "rubric", or a numeric score, translate that into plain coach prose ("hasn't reached identity depth yet", "the worry is still practical rather than identity-level") without naming the machinery.
 
+Do NOT aggregate multiple findings into a single generic statement. If two findings both flag test-coverage gaps on different assumptions, write TWO paragraphs (one per assumption, each quoting that assumption's actualText). Do NOT write "neither of your assumptions has an active test" when only ONE assumption had a test_coverage_gap finding. Each finding gets its own explicit mention. When only ONE finding of an issue type exists, do NOT use plural language ("your assumptions", "these commitments") that implies the issue is broader than that single finding actually says. Match the quantifier to the actual count: one finding = "your assumption '<quote>' has no active test," multiple findings = one paragraph each, each with its own quote.
+
 === STRUCTURE ===
 
 Open with one short paragraph naming how the map is holding up overall and framing the biggest issue (the first critical finding, or the biggest moderate one if no critical findings exist). If the findings list is empty, say the map holds up in one or two sentences.
