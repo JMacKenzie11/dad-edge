@@ -421,6 +421,11 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
       };
     }
     behaviorId = result.row.id;
+    // Any add invalidates the behaviors column_review.
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "behaviors",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -513,6 +518,10 @@ export async function updateBehavior(
   let updated: Awaited<ReturnType<typeof updateBehaviorText>>;
   try {
     updated = await updateBehaviorText(target.id, loaded.map.id, parsed.data.text);
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "behaviors",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -602,6 +611,10 @@ export async function removeBehavior(
   if (!target) return { ok: false, reason: "Behavior not on this map." };
   try {
     await deleteBehavior(target.id, loaded.map.id);
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "behaviors",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -973,6 +986,13 @@ export async function saveAssumption(
     if (parsed.data.commitment_ids.length > 0) {
       await linkAssumptionToCommitments(row.id, parsed.data.commitment_ids);
     }
+    // Text add/edit OR link change invalidates the assumptions review
+    // (the pair-drift check reads assumption text AND its commitment
+    // coverage).
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "assumptions",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -1078,6 +1098,10 @@ export async function removeAssumption(
   try {
     // Links cascade via FK on itc_assumption_commitments.
     await deleteAssumption(parsed.data.assumption_id, loaded.map.id);
+    await deleteColumnReviewMessages({
+      mapId: loaded.map.id,
+      stage: "assumptions",
+    });
   } catch (err) {
     return {
       ok: false,
@@ -1801,14 +1825,30 @@ export async function ensureWalkthroughDelivered(
  * gatekeeper — but non-zero so the very first empty entry doesn't get
  * audited.
  */
-const REVIEW_MIN_ENTRIES: Record<
-  "goal" | "worries" | "commitments",
-  number
-> = {
+type ColumnReviewStage =
+  | "goal"
+  | "behaviors"
+  | "worries"
+  | "commitments"
+  | "assumptions";
+
+const REVIEW_MIN_ENTRIES: Record<ColumnReviewStage, number> = {
   goal: 1, // any non-empty goal text
+  behaviors: 3, // three selected behaviors is the standard minimum
   worries: 3, // three-worry minimum matches the existing depth advice
   commitments: 3, // same shape
+  assumptions: 2, // assumptions cluster; two paired assumptions is the floor
 };
+
+function isColumnReviewStage(stage: ItcStage): stage is ColumnReviewStage {
+  return (
+    stage === "goal" ||
+    stage === "behaviors" ||
+    stage === "worries" ||
+    stage === "commitments" ||
+    stage === "assumptions"
+  );
+}
 
 /**
  * Idempotent server hook that ensures the coach's end-of-column audit
@@ -1836,11 +1876,7 @@ export async function ensureColumnReviewDelivered(
     if (!map) return { ok: false, reason: "Map not found." };
 
     const stage = map.current_stage;
-    if (
-      stage !== "goal" &&
-      stage !== "worries" &&
-      stage !== "commitments"
-    ) {
+    if (!isColumnReviewStage(stage)) {
       return { ok: true, delivered: false };
     }
 
@@ -1850,30 +1886,55 @@ export async function ensureColumnReviewDelivered(
     const already = await hasColumnReviewMessage({ mapId, stage });
     if (already) return { ok: true, delivered: false };
 
-    const [behaviors, worries, commitments] = await Promise.all([
-      listBehaviors(mapId),
-      listWorries(mapId),
-      listCommitments(mapId),
-    ]);
+    const [behaviors, worries, commitments, assumptions, assumptionLinks] =
+      await Promise.all([
+        listBehaviors(mapId),
+        listWorries(mapId),
+        listCommitments(mapId),
+        listAssumptions(mapId),
+        listAssumptionLinks(mapId),
+      ]);
+    const selectedBehaviors = behaviors.filter((b) => b.selected);
 
     const setCount =
       stage === "goal"
         ? map.improvement_goal && map.improvement_goal.trim().length > 0
           ? 1
           : 0
-        : stage === "worries"
-          ? worries.length
-          : commitments.length;
+        : stage === "behaviors"
+          ? selectedBehaviors.length
+          : stage === "worries"
+            ? worries.length
+            : stage === "commitments"
+              ? commitments.length
+              : assumptions.length;
     if (setCount < REVIEW_MIN_ENTRIES[stage]) {
       return { ok: true, delivered: false };
     }
 
+    // Build the assumption→commitment index map for the pair-drift
+    // check in the assumptions review. Indices are 1-based to match
+    // how the prompt renders them.
+    const commitmentIdToIndex = new Map<string, number>();
+    commitments.forEach((c, i) => commitmentIdToIndex.set(c.id, i + 1));
+    const assumptionsWithCoverage = assumptions.map((a) => ({
+      text: a.text,
+      commitmentIndices: assumptionLinks
+        .filter((l) => l.assumption_id === a.id)
+        .map((l) => commitmentIdToIndex.get(l.commitment_id))
+        .filter((i): i is number => typeof i === "number"),
+    }));
+
     const prose = await generateColumnReview({
       column: stage,
       goalText: map.improvement_goal ?? "",
-      behaviors: behaviors.map((b) => b.text),
+      behaviors:
+        stage === "behaviors"
+          ? selectedBehaviors.map((b) => b.text)
+          : behaviors.map((b) => b.text),
       worries: worries.map((w) => w.text),
       commitments: commitments.map((c) => c.text),
+      assumptionsWithCoverage,
     });
     if (!prose) return { ok: true, delivered: false };
 

@@ -2142,19 +2142,30 @@ export async function draftTestForAssumption(input: {
       schema: TestDraftSchema,
       system: withVoiceRules(TEST_DESIGN_STAGE),
       prompt: [
-        `Draft one test of the specified type for the assumption below.${typeConstraint}`,
+        // Assumption-first ordering: the assumption leads the prompt
+        // and the drafter must derive behavior_change from its if-
+        // clause. Commitments and behaviors follow as CONTEXT for how
+        // the inversion shows up in his specific life, NOT as the
+        // source of the counter-move. See the ASSUMPTION-FIRST
+        // DRAFTING section in test-design.ts for the drift trap.
+        `Draft one test of the specified type for the Big Assumption below.${typeConstraint}`,
         ``,
         `Today's date (ISO): ${input.todayIso}`,
         `Target date must be in the future, on or within about a week from today.`,
         ``,
-        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        `====== Big Assumption being tested (Column 5) ======`,
+        input.assumptionText,
         ``,
-        `Big Assumption being tested (Column 5): ${input.assumptionText}`,
+        `Derive the behavior_change from THIS assumption's if-clause. Read the antecedent (what he "does" or "doesn't do" that the assumption predicts leads to the catastrophic then-clause), invert it into the smallest livable moment, and use THAT as the behavior_change. Before finalizing, run the drift check: if the test as drafted would give information about a DIFFERENT assumption than this one, redraft against this one's actual if-clause.`,
+        ``,
+        `====== Context (do NOT use as the source of the counter-move) ======`,
+        `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
         ``,
         `Competing commitments this assumption underwrites (Column 4):`,
         commitmentsBlock || "  (none)",
         ``,
-        `Fill all four fields and return the structured object.`,
+        `====== Instructions ======`,
+        `Fill all four fields and return the structured object. If the assumption's if-clause cannot be inverted into a livable near-term moment (identity-scale outcomes, other-person antecedents, past-evidence patterns), default the test_type to data_mining or thought_experiment rather than forcing behavioral.`,
       ].join("\n"),
       maxOutputTokens: 1200,
     });
@@ -2824,7 +2835,12 @@ export function ensureParagraphs(
  * fills: goal, behaviors (future phase), worries, commitments,
  * assumptions (future phase). Phase 1 ships goal + worries + commitments.
  */
-export type ReviewableColumn = "goal" | "worries" | "commitments";
+export type ReviewableColumn =
+  | "goal"
+  | "behaviors"
+  | "worries"
+  | "commitments"
+  | "assumptions";
 
 /**
  * Generate the coach's end-of-column audit for a given column. Input
@@ -2840,6 +2856,10 @@ export async function generateColumnReview(input: {
   behaviors?: string[];
   worries?: string[];
   commitments?: string[];
+  /** For assumptions review — the list of assumptions with the
+   *  commitment indices they underwrite (mirrors the immune-system
+   *  walkthrough's input). Enables the pair-drift check. */
+  assumptionsWithCoverage?: Array<{ text: string; commitmentIndices: number[] }>;
 }): Promise<string | null> {
   try {
     let systemPrompt: string;
@@ -2847,6 +2867,11 @@ export async function generateColumnReview(input: {
       case "goal": {
         const mod = await import("./prompts/stages/goal-review");
         systemPrompt = mod.GOAL_REVIEW_STAGE;
+        break;
+      }
+      case "behaviors": {
+        const mod = await import("./prompts/stages/behaviors-review");
+        systemPrompt = mod.BEHAVIORS_REVIEW_STAGE;
         break;
       }
       case "worries": {
@@ -2857,6 +2882,11 @@ export async function generateColumnReview(input: {
       case "commitments": {
         const mod = await import("./prompts/stages/commitments-review");
         systemPrompt = mod.COMMITMENTS_REVIEW_STAGE;
+        break;
+      }
+      case "assumptions": {
+        const mod = await import("./prompts/stages/assumptions-review");
+        systemPrompt = mod.ASSUMPTIONS_REVIEW_STAGE;
         break;
       }
     }
@@ -2874,7 +2904,11 @@ export async function generateColumnReview(input: {
         (input.behaviors ?? []).map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
           "  (none)",
       );
-      if (input.column === "worries" || input.column === "commitments") {
+      if (
+        input.column === "worries" ||
+        input.column === "commitments" ||
+        input.column === "assumptions"
+      ) {
         promptBlocks.push("");
         promptBlocks.push("Worries (Column 3):");
         promptBlocks.push(
@@ -2882,7 +2916,7 @@ export async function generateColumnReview(input: {
             "  (none)",
         );
       }
-      if (input.column === "commitments") {
+      if (input.column === "commitments" || input.column === "assumptions") {
         promptBlocks.push("");
         promptBlocks.push("Competing commitments (Column 4):");
         promptBlocks.push(
@@ -2891,10 +2925,32 @@ export async function generateColumnReview(input: {
             .join("\n") || "  (none)",
         );
       }
+      if (input.column === "assumptions") {
+        promptBlocks.push("");
+        promptBlocks.push(
+          "Big Assumptions (Column 5) with commitment coverage:",
+        );
+        promptBlocks.push(
+          (input.assumptionsWithCoverage ?? [])
+            .map(
+              (a, i) =>
+                `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments: ${
+                  a.commitmentIndices.join(", ") || "(none linked)"
+                }`,
+            )
+            .join("\n") || "  (none)",
+        );
+      }
       promptBlocks.push("");
-      promptBlocks.push(
-        `Review the ${input.column === "worries" ? "worry" : "competing-commitment"} set above.`,
-      );
+      const reviewNoun =
+        input.column === "behaviors"
+          ? "behavior"
+          : input.column === "worries"
+            ? "worry"
+            : input.column === "commitments"
+              ? "competing-commitment"
+              : "Big Assumption";
+      promptBlocks.push(`Review the ${reviewNoun} set above.`);
     }
     promptBlocks.push(
       "Return only the coach's review prose — no meta, no headings, no scaffolding.",

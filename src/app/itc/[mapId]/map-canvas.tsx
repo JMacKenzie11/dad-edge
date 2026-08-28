@@ -317,6 +317,7 @@ export function MapCanvas({
           liveIntro={liveIntroFor("behaviors")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "behaviors" ? stageNotes : []}
+          columnReview={columnReviewByStage.get("behaviors")}
           unattachedCoachNotes={
             map.current_stage === "behaviors" ? unattachedForCurrentStage : []
           }
@@ -397,6 +398,7 @@ export function MapCanvas({
           liveIntro={liveIntroFor("assumptions")}
           chipTarget={chipTargetForStage(map.current_stage)}
           stageNotes={map.current_stage === "assumptions" ? stageNotes : []}
+          columnReview={columnReviewByStage.get("assumptions")}
           unattachedCoachNotes={
             map.current_stage === "assumptions" ? unattachedForCurrentStage : []
           }

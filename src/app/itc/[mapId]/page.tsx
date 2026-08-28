@@ -73,15 +73,17 @@ export default async function ItcMapPage({
   if (map.current_stage === "done") {
     await ensureMapCloseSummaryDelivered(map.id);
   }
-  // End-of-column reviews (build-time tightening). Fires on goal /
-  // worries / commitments stages when the set has hit min-viable count
+  // End-of-column reviews (build-time tightening). Fires on any of
+  // the five reviewable columns when the set has hit min-viable count
   // and no review row exists. Silent no-op otherwise. Short-circuits
   // quickly on the check, so the fast path adds a single DB hit; the
   // slow path (first-time draft) adds one utility-model LLM call.
   if (
     map.current_stage === "goal" ||
+    map.current_stage === "behaviors" ||
     map.current_stage === "worries" ||
-    map.current_stage === "commitments"
+    map.current_stage === "commitments" ||
+    map.current_stage === "assumptions"
   ) {
     await ensureColumnReviewDelivered(map.id);
   }
