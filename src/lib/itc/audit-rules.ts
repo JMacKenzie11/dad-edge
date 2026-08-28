@@ -896,3 +896,108 @@ export async function runAllAuditChecks(
   );
   return flat;
 }
+
+// ---------------------------------------------------------------------------
+// Verbatim-quote validator
+// ---------------------------------------------------------------------------
+
+/**
+ * Post-synthesis pass that closes the last hallucination surface: the
+ * LLM has been observed to quote a map entry with small paraphrases
+ * (dropped words, altered punctuation). Structural fix: for each
+ * finding with an actualText or relatedText, find quoted strings in
+ * the synthesis prose that ATTEMPT to quote that source. If a
+ * near-full quote of the source appears in a paraphrased form, replace
+ * it with the exact source. Legitimate partial quotes (a fragment of a
+ * long actualText) are left alone.
+ *
+ * "Near-full attempt" heuristic: the candidate is at least 60% of the
+ * source's length AND shares 60%+ of the source's tokens. That's tight
+ * enough to catch the "dropped 'also'" case, loose enough to leave
+ * short scare-quotes and legitimate substrings untouched.
+ */
+export function validateQuotesAgainstFindings(
+  prose: string,
+  findings: AuditFinding[],
+): { prose: string; violations: string[] } {
+  const violations: string[] = [];
+  let corrected = prose;
+  // Collect every unique source string (actualText + relatedText).
+  const sources = new Set<string>();
+  for (const f of findings) {
+    sources.add(f.actualText);
+    if (f.relatedText) sources.add(f.relatedText);
+  }
+  // For each source, look for a paraphrased near-full quote in the
+  // prose and normalize it to the exact source. Iterate in
+  // descending source-length order so we replace long strings before
+  // short ones (avoids partial overlap corruption).
+  const orderedSources = [...sources].sort((a, b) => b.length - a.length);
+  for (const source of orderedSources) {
+    const sourceTokens = tokenize(source);
+    if (sourceTokens.length < 4) continue; // too short to safely disambiguate
+    // Match every quoted string in the prose. Quotes may use straight
+    // or smart quotation marks in either variant.
+    const quotedRe = /["\u201C]([^"\u201C\u201D]{6,})["\u201D]/g;
+    let match: RegExpExecArray | null;
+    const replacements: Array<{ start: number; end: number; replaceWith: string; original: string }> = [];
+    while ((match = quotedRe.exec(corrected)) !== null) {
+      const candidate = match[1];
+      // Skip if already an exact match — no rewrite needed.
+      if (candidate === source) continue;
+      const candidateTokens = tokenize(candidate);
+      if (candidateTokens.length < 3) continue;
+      // Reject the pair if the candidate is way shorter than the
+      // source: that's a legitimate partial quote, not an attempted
+      // full quote.
+      if (candidateTokens.length < sourceTokens.length * 0.6) continue;
+      // Reject if candidate is way LONGER than source: the quote
+      // isn't of THIS source.
+      if (candidateTokens.length > sourceTokens.length * 1.4) continue;
+      // Token overlap check: do at least 60% of source tokens appear
+      // in the candidate (in any order)?
+      const candidateSet = new Set(candidateTokens);
+      const overlap = sourceTokens.filter((t) => candidateSet.has(t)).length;
+      const overlapRatio = overlap / sourceTokens.length;
+      if (overlapRatio < 0.6) continue;
+      // Passed the gauntlet — treat as an attempted quote of THIS
+      // source and normalize. Include the surrounding quote chars in
+      // the replacement so the new quote uses straight quotes.
+      replacements.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        replaceWith: `"${source}"`,
+        original: candidate,
+      });
+    }
+    // Apply replacements right-to-left so earlier indexes stay valid.
+    replacements.sort((a, b) => b.start - a.start);
+    for (const r of replacements) {
+      corrected = corrected.slice(0, r.start) + r.replaceWith + corrected.slice(r.end);
+      violations.push(
+        `Paraphrased quote normalized: "${r.original}" → "${source}"`,
+      );
+    }
+  }
+  return { prose: corrected, violations };
+}
+
+/**
+ * Cheap tokenizer for the quote validator: lowercase, strip punctuation,
+ * collapse whitespace, split on runs of non-word characters. Good enough
+ * to compare "I'm also committed to..." with "I am also committed to..."
+ * without false-negativing on apostrophe variants.
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/i'?m\b/g, "im")
+    .replace(/i\s+am\b/g, "im")
+    .replace(/won'?t\b/g, "wont")
+    .replace(/don'?t\b/g, "dont")
+    .replace(/didn'?t\b/g, "didnt")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0);
+}

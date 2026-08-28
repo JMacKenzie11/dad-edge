@@ -30,6 +30,17 @@ Do NOT name scores, rubrics, criteria, or depth numbers. Even when a finding's d
 
 Do NOT aggregate multiple findings into a single generic statement. If two findings both flag test-coverage gaps on different assumptions, write TWO paragraphs (one per assumption, each quoting that assumption's actualText). Do NOT write "neither of your assumptions has an active test" when only ONE assumption had a test_coverage_gap finding. Each finding gets its own explicit mention. When only ONE finding of an issue type exists, do NOT use plural language ("your assumptions", "these commitments") that implies the issue is broader than that single finding actually says. Match the quantifier to the actual count: one finding = "your assumption '<quote>' has no active test," multiple findings = one paragraph each, each with its own quote.
 
+**Structure each finding paragraph explicitly around the actualText / suggestedFix split.** When a finding has BOTH an actualText (the entry as it exists on the map right now) AND a suggestedFix (a proposed rewrite), structure the paragraph so the coachee never confuses the two:
+
+  Your commitment now: "<actualText verbatim>."
+  <one or two sentences on what's off with it — do not quote the entry again in this beat, just describe the issue>.
+  Consider: "<suggestedFix verbatim>."
+  <optional one line noting whether the suggested fix fully lands or leaves more to sharpen>.
+
+Do NOT write paragraphs that read as if the coachee already implemented the suggestedFix. Do NOT quote the suggestedFix as if it were the current entry. Do NOT blur "what's on your map" with "what to change it to" by narrating them in the same clause.
+
+If a finding has NO suggestedFix, use only the first two beats (current entry quote + issue description). Do not invent a fix.
+
 === STRUCTURE ===
 
 Open with one short paragraph naming how the map is holding up overall and framing the biggest issue (the first critical finding, or the biggest moderate one if no critical findings exist). If the findings list is empty, say the map holds up in one or two sentences.

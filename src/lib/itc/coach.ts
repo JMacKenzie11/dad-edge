@@ -2780,11 +2780,29 @@ export function scrubBannedCoachWords(text: string): string {
     )
     // "lands different" / "lands right" — same family.
     .replace(/\blands?\s+(different|right|wrong|clean|hard)\b/gi, "reads $1")
+    // "lands on / at / against / in" — metaphor for "arrives at."
+    // Common phrasing: "that lands on the actual vow."
+    .replace(/\blands?\s+(on|at|against|in)\s+/gi, "arrives at ")
     // "one thing to notice" — therapy-speak intro.
     .replace(/\bone\s+thing\s+to\s+notice\b/gi, "one thing")
-    // "worth noting / mentioning / pausing on / etc." — banned family.
+    // "worth [any -ing verb]" — broader banned family. Catches
+    // "worth untangling," "worth fixing," "worth doing," etc. in
+    // addition to the specific ones we hand-rolled before.
+    .replace(/\b(it'?s\s+)?worth\s+\w+ing\b/gi, (match) =>
+      match.replace(/\b(it'?s\s+)?worth\s+/i, ""),
+    )
+    // "worth noting / mentioning / pausing on / etc." — original
+    // hand-rolled family, kept as a belt-and-suspenders.
     .replace(
       /\b(it'?s\s+)?worth\s+(noting|noticing|mentioning|pausing\s+on|remembering|pointing\s+out|flagging)\s+/gi,
+      "",
+    )
+    // "the rubric [says/shows/reason/etc]" — machinery leak.
+    // Applied to hone / column review surfaces only where "rubric"
+    // has no legitimate use — everywhere else in the codebase we
+    // keep the word for internal reasoning.
+    .replace(
+      /\bthe\s+rubric\s+(reason\s+is|says|shows|found|caught|flagged|reason)\s*/gi,
       "",
     )
     // "the shape of X" — pattern-speak. Rewrite to "the way X."
@@ -2798,6 +2816,12 @@ export function scrubBannedCoachWords(text: string): string {
     .replace(
       /\b(coach'?s|honest|my|your|his|her|the|our|first|initial|quick|another)\s+read\b/gi,
       "$1 take",
+    )
+    // Second-person only. The coach never says "our map" / "our
+    // worries" / etc. — the map belongs to the coachee.
+    .replace(
+      /\bour\s+(map|goal|worry|worries|commitment|commitments|assumption|assumptions|behavior|behaviors|test|tests|pattern|patterns)\b/gi,
+      "your $1",
     )
     // Collapse any double spaces the removals introduced.
     .replace(/  +/g, " ")
@@ -2946,9 +2970,30 @@ export async function synthesizeAuditProse(
       prompt: promptBlocks.join("\n"),
       maxOutputTokens: 3000,
     });
-    const cleaned = ensureParagraphs(
-      scrubBannedCoachWords(scrubReplyLight(text)),
+    // Three-pass cleanup, in order:
+    //  1. scrubReplyLight — em-dashes + "I locked/added/saved" claims.
+    //  2. scrubBannedCoachWords — targeted rewrites for the words that
+    //     keep leaking despite prompt callouts (shape, land, notice,
+    //     read-as-noun, worth-[verb]ing, our-map, etc.).
+    //  3. validateQuotesAgainstFindings — closes the last hallucination
+    //     surface. If the LLM paraphrased a near-full quote of an
+    //     entry (e.g. dropped "also" from a commitment), the validator
+    //     normalizes it back to the finding's exact actualText. Any
+    //     violations are logged for debugging but don't fail the audit.
+    const { validateQuotesAgainstFindings } = await import(
+      "./audit-rules"
     );
+    const { prose: validated, violations } = validateQuotesAgainstFindings(
+      scrubBannedCoachWords(scrubReplyLight(text)),
+      findings,
+    );
+    if (violations.length > 0) {
+      console.warn(
+        "[itc coach] hone synthesis paraphrased quotes normalized: %s",
+        violations.join(" | "),
+      );
+    }
+    const cleaned = ensureParagraphs(validated);
     return cleaned.length > 0 ? cleaned : null;
   } catch (err) {
     console.warn(

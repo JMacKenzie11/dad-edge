@@ -7,6 +7,8 @@ import {
   checkMissingCommitmentStem,
   checkTestCoverage,
   checkVagueAssumptionThenClause,
+  validateQuotesAgainstFindings,
+  type AuditFinding,
 } from "../audit-rules";
 import type {
   ItcAssumption,
@@ -351,5 +353,76 @@ describe("checkTestCoverage", () => {
       tests,
     });
     expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateQuotesAgainstFindings — verbatim-quote validator
+// ---------------------------------------------------------------------------
+
+describe("validateQuotesAgainstFindings", () => {
+  function findingFor(text: string): AuditFinding {
+    return {
+      entryRef: { table: "commitments", id: "c-1" },
+      issueType: "interior_witness_commitment",
+      severity: "moderate",
+      actualText: text,
+      detail: "sample detail",
+    };
+  }
+
+  it("normalizes a near-full paraphrase back to the exact actualText", () => {
+    const source =
+      "I'm also committed to never seeing that my defensive behaviour is the problem.";
+    // LLM dropped the "also" — the exact hallucination that keeps
+    // showing up in synthesis output.
+    const prose = `Your commitment now: "I'm committed to never seeing that my defensive behaviour is the problem." That's framed around a feeling.`;
+    const { prose: fixed, violations } = validateQuotesAgainstFindings(
+      prose,
+      [findingFor(source)],
+    );
+    expect(fixed).toContain(`"${source}"`);
+    expect(fixed).not.toContain(
+      `"I'm committed to never seeing that my defensive behaviour is the problem."`,
+    );
+    expect(violations).toHaveLength(1);
+  });
+
+  it("leaves an exact-match quote untouched", () => {
+    const source =
+      "I'm also committed to never being the guy who isn't enough for her.";
+    const prose = `Your commitment now: "${source}" That holds up.`;
+    const { prose: fixed, violations } = validateQuotesAgainstFindings(
+      prose,
+      [findingFor(source)],
+    );
+    expect(fixed).toBe(prose);
+    expect(violations).toHaveLength(0);
+  });
+
+  it("leaves a legitimate partial-substring quote alone", () => {
+    // Coach quotes a fragment from a long actualText — that's fine,
+    // not an attempted full quote, no rewrite.
+    const source =
+      "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.";
+    const prose = `The then-clause says "the husband I'm terrified I am" which is vague.`;
+    const { prose: fixed, violations } = validateQuotesAgainstFindings(
+      prose,
+      [findingFor(source)],
+    );
+    expect(fixed).toBe(prose);
+    expect(violations).toHaveLength(0);
+  });
+
+  it("does not touch quotes that don't near-match any source", () => {
+    const source =
+      "I'm also committed to never being the guy who isn't enough for her.";
+    const prose = `Try something like "she'd see the pattern is mine" as a rewrite.`;
+    const { prose: fixed, violations } = validateQuotesAgainstFindings(
+      prose,
+      [findingFor(source)],
+    );
+    expect(fixed).toBe(prose);
+    expect(violations).toHaveLength(0);
   });
 });
