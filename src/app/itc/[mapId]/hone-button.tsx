@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { runHoneDiagnostic } from "../actions";
 
 /**
@@ -23,32 +23,44 @@ export function HoneButton({
   hasDiagnostic: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   return (
-    <form
-      action={(fd: FormData) => {
-        fd.set("map_id", mapId);
-        startTransition(async () => {
-          await runHoneDiagnostic(fd);
-        });
-      }}
-    >
-      <button
-        type="submit"
-        disabled={pending}
-        aria-label="Run a whole-map audit"
-        title={
-          hasDiagnostic
-            ? "Re-run the audit against the current map"
-            : "Get the coach's take on the whole map"
-        }
-        className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-warning)] disabled:opacity-50 cursor-pointer"
+    <div className="flex flex-col items-end gap-1">
+      <form
+        action={(fd: FormData) => {
+          fd.set("map_id", mapId);
+          setError(null);
+          startTransition(async () => {
+            const result = await runHoneDiagnostic(fd);
+            if (result && !result.ok) {
+              setError(result.reason ?? "Audit failed. Try again.");
+            }
+          });
+        }}
       >
-        {pending
-          ? "AUDITING…"
-          : hasDiagnostic
-            ? "RE-RUN AUDIT"
-            : "HONE THIS MAP"}
-      </button>
-    </form>
+        <button
+          type="submit"
+          disabled={pending}
+          aria-label="Run a whole-map audit"
+          title={
+            hasDiagnostic
+              ? "Re-run the audit against the current map"
+              : "Get the coach's take on the whole map"
+          }
+          className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-warning)] disabled:opacity-50 cursor-pointer"
+        >
+          {pending
+            ? "AUDITING…"
+            : hasDiagnostic
+              ? "RE-RUN AUDIT"
+              : "HONE THIS MAP"}
+        </button>
+      </form>
+      {error ? (
+        <p className="text-[10px] text-[color:var(--color-danger)] max-w-[260px] text-right leading-snug">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
