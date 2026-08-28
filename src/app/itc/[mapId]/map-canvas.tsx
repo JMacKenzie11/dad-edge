@@ -30,6 +30,8 @@ import { PrioritizePicker } from "./prioritize-picker";
 import { ResultsForm } from "./results-form";
 import { TestDesignForm } from "./test-design-form";
 import { WorriesRow } from "./worries-row";
+import { HoneButton } from "./hone-button";
+import { HoneDiagnosticBanner } from "./hone-diagnostic-banner";
 
 const TEST_TYPE_LABELS: Record<ItcTest["test_type"], string> = {
   data_mining: "Data mining",
@@ -153,6 +155,18 @@ export function MapCanvas({
       ),
     [messages],
   );
+  // Whole-map hone audit — only ever one at a time. Rendered as a
+  // banner at the top of the canvas via HoneDiagnosticBanner. Deleted
+  // by any entry write (see invalidateReviewsForColumn) and by the
+  // banner's Dismiss button. Latest by created_at wins if a race
+  // somehow leaves two.
+  const honeDiagnostic = useMemo(() => {
+    const all = messages.filter((m) => m.surface === "hone_diagnostic");
+    if (all.length === 0) return null;
+    return all.reduce((latest, m) =>
+      new Date(m.created_at) > new Date(latest.created_at) ? m : latest,
+    );
+  }, [messages]);
   // End-of-column review messages, keyed by the stage they audit.
   // Only ever one per stage (deleteColumnReviewMessages wipes prior
   // rows on any entry save so the audit always reflects fresh state).
@@ -255,7 +269,7 @@ export function MapCanvas({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">
             Immunity Map
@@ -270,7 +284,24 @@ export function MapCanvas({
             </span>
           </div>
         </div>
+        {/* "HONE THIS MAP" trigger. Available past the goal stage
+            (nothing to audit until behaviors is at least started).
+            Regens the audit each click; label switches to
+            "RE-RUN AUDIT" when a diagnostic is already on-screen. */}
+        {stageIndex(map.current_stage) > stageIndex("goal") ? (
+          <HoneButton
+            mapId={map.id}
+            hasDiagnostic={honeDiagnostic !== null}
+          />
+        ) : null}
       </div>
+
+      {honeDiagnostic ? (
+        <HoneDiagnosticBanner
+          mapId={map.id}
+          content={honeDiagnostic.content}
+        />
+      ) : null}
 
       <div className="space-y-4">
         <Section

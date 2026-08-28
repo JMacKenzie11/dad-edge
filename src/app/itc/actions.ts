@@ -19,6 +19,7 @@ import {
   draftWorryForBehavior,
   generateCoachReaction,
   generateColumnReview,
+  generateHoneDiagnostic,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -63,6 +64,7 @@ import {
   clearCommitmentDraftsForMap,
   clearWorryDraftsForMap,
   deleteColumnReviewMessages,
+  deleteHoneDiagnosticMessages,
   deleteStageNoteMessages,
   hasColumnReviewMessage,
   markWalkthroughDelivered,
@@ -329,7 +331,7 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
     await saveImprovementGoal(loaded.map.id, withStem);
     // Wipe any column_review persisted against the old goal text so the
     // next page render regenerates against the sharpened version.
-    await deleteColumnReviewMessages({ mapId: loaded.map.id, stage: "goal" });
+    await invalidateReviewsForColumn(loaded.map.id, "goal");
   } catch (err) {
     return {
       ok: false,
@@ -422,10 +424,7 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
     }
     behaviorId = result.row.id;
     // Any add invalidates the behaviors column_review.
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "behaviors",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "behaviors");
   } catch (err) {
     return {
       ok: false,
@@ -518,10 +517,7 @@ export async function updateBehavior(
   let updated: Awaited<ReturnType<typeof updateBehaviorText>>;
   try {
     updated = await updateBehaviorText(target.id, loaded.map.id, parsed.data.text);
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "behaviors",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "behaviors");
   } catch (err) {
     return {
       ok: false,
@@ -611,10 +607,7 @@ export async function removeBehavior(
   if (!target) return { ok: false, reason: "Behavior not on this map." };
   try {
     await deleteBehavior(target.id, loaded.map.id);
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "behaviors",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "behaviors");
   } catch (err) {
     return {
       ok: false,
@@ -682,10 +675,7 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
     row = result.row;
     isEdit = result.isEdit;
     // Any add/edit invalidates the worries column_review.
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "worries",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "worries");
   } catch (err) {
     return {
       ok: false,
@@ -814,10 +804,7 @@ export async function saveCommitment(
     row = result.row;
     isEdit = result.isEdit;
     // Any add/edit invalidates the commitments column_review.
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "commitments",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "commitments");
   } catch (err) {
     return {
       ok: false,
@@ -989,10 +976,7 @@ export async function saveAssumption(
     // Text add/edit OR link change invalidates the assumptions review
     // (the pair-drift check reads assumption text AND its commitment
     // coverage).
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "assumptions",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "assumptions");
   } catch (err) {
     return {
       ok: false,
@@ -1098,10 +1082,7 @@ export async function removeAssumption(
   try {
     // Links cascade via FK on itc_assumption_commitments.
     await deleteAssumption(parsed.data.assumption_id, loaded.map.id);
-    await deleteColumnReviewMessages({
-      mapId: loaded.map.id,
-      stage: "assumptions",
-    });
+    await invalidateReviewsForColumn(loaded.map.id, "assumptions");
   } catch (err) {
     return {
       ok: false,
@@ -1832,6 +1813,20 @@ type ColumnReviewStage =
   | "commitments"
   | "assumptions";
 
+/**
+ * Any entry write invalidates BOTH the per-column review for that
+ * column AND the whole-map hone diagnostic. Call this instead of
+ * hitting both delete helpers directly at every write site — keeps
+ * the invalidation semantics consistent.
+ */
+async function invalidateReviewsForColumn(
+  mapId: string,
+  stage: ColumnReviewStage,
+): Promise<void> {
+  await deleteColumnReviewMessages({ mapId, stage });
+  await deleteHoneDiagnosticMessages({ mapId });
+}
+
 const REVIEW_MIN_ENTRIES: Record<ColumnReviewStage, number> = {
   goal: 1, // any non-empty goal text
   behaviors: 3, // three selected behaviors is the standard minimum
@@ -1950,6 +1945,170 @@ export async function ensureColumnReviewDelivered(
       reason: err instanceof Error ? err.message : "Could not deliver review.",
     };
   }
+}
+
+// -------------------------------------------------------------------------
+// Hone-diagnostic (on-demand whole-map audit)
+// -------------------------------------------------------------------------
+
+const honeDiagnosticSchema = z.object({
+  map_id: z.string().uuid(),
+});
+
+/**
+ * Coachee clicked "HONE THIS MAP". Deletes any prior diagnostic (only
+ * one at a time), assembles the entire map state, calls the audit
+ * LLM, and persists the response as itc_messages with
+ * surface=hone_diagnostic. Client renders it as a banner at the top
+ * of the map canvas.
+ *
+ * Re-clicking the button re-runs (overwrites the last audit). Any
+ * entry edit anywhere on the map also wipes the diagnostic via the
+ * staleness cleanup at every entry write point.
+ */
+export async function runHoneDiagnostic(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = honeDiagnosticSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  try {
+    // Wipe any prior diagnostic FIRST so a re-click always shows the
+    // fresh audit and never accidentally stacks two.
+    await deleteHoneDiagnosticMessages({ mapId: loaded.map.id });
+
+    const [
+      behaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      tests,
+      testResults,
+    ] = await Promise.all([
+      listBehaviors(loaded.map.id),
+      listWorries(loaded.map.id),
+      listCommitments(loaded.map.id),
+      listAssumptions(loaded.map.id),
+      listAssumptionLinks(loaded.map.id),
+      listTests(loaded.map.id),
+      listTestResults(loaded.map.id),
+    ]);
+
+    // Assumption → commitment index map for the pair-drift check.
+    const commitmentIdToIndex = new Map<string, number>();
+    commitments.forEach((c, i) => commitmentIdToIndex.set(c.id, i + 1));
+    const assumptionsWithCoverage = assumptions.map((a) => ({
+      text: a.text,
+      commitmentIndices: assumptionLinks
+        .filter((l) => l.assumption_id === a.id)
+        .map((l) => commitmentIdToIndex.get(l.commitment_id))
+        .filter((i): i is number => typeof i === "number"),
+    }));
+
+    // Assumption text lookup for test payloads.
+    const assumptionTextById = new Map<string, string>();
+    assumptions.forEach((a) => assumptionTextById.set(a.id, a.text));
+    // Latest result per test (most recent by created_at).
+    const latestResultByTest = new Map<
+      string,
+      (typeof testResults)[number]
+    >();
+    for (const r of testResults) {
+      const prev = latestResultByTest.get(r.test_id);
+      if (!prev || new Date(r.created_at) > new Date(prev.created_at)) {
+        latestResultByTest.set(r.test_id, r);
+      }
+    }
+
+    const testsPayload = tests
+      .filter((t) => t.status !== "abandoned")
+      .map((t) => {
+        const r = latestResultByTest.get(t.id) ?? null;
+        return {
+          testType: t.test_type,
+          assumptionText:
+            assumptionTextById.get(t.assumption_id) ?? "(unknown)",
+          behaviorChange: t.behavior_change ?? "",
+          dataToCollect: t.data_to_collect ?? "",
+          inOrderToFindOut: t.in_order_to_find_out ?? "",
+          result: r
+            ? {
+                verdict: r.assumption_verdict,
+                whatIDid: r.what_i_did,
+                dataCollected: r.data_collected,
+                saysAboutAssumption: r.what_it_says_about_assumption,
+              }
+            : null,
+        };
+      });
+
+    const prose = await generateHoneDiagnostic({
+      goalText: loaded.map.improvement_goal ?? "",
+      behaviors: behaviors.filter((b) => b.selected).map((b) => b.text),
+      worries: worries.map((w) => w.text),
+      commitments: commitments.map((c) => c.text),
+      assumptionsWithCoverage,
+      tests: testsPayload,
+    });
+    if (!prose) {
+      return {
+        ok: false,
+        reason: "The audit didn't come back. Try again in a moment.",
+      };
+    }
+
+    await appendMessage(
+      loaded.map.id,
+      "assistant",
+      prose,
+      loaded.map.current_stage,
+      {
+        surface: "hone_diagnostic",
+        entryRefTable: "itc_maps",
+        entryRefId: loaded.map.id,
+      },
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not run the audit.",
+    };
+  }
+
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+/**
+ * Dismiss the current hone diagnostic without editing anything.
+ * Deletes the persisted message so the banner disappears on next
+ * render. Used by the banner's X button; keeps the diagnostic
+ * ephemeral in feel even though it's persisted.
+ */
+export async function dismissHoneDiagnostic(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = honeDiagnosticSchema.safeParse({
+    map_id: formData.get("map_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await deleteHoneDiagnosticMessages({ mapId: loaded.map.id });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not dismiss.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
 }
 
 const regenerateWalkthroughSchema = z.object({

@@ -123,7 +123,14 @@ export type ItcMessageSurface =
   // + ensureColumnReviewDelivered in actions.ts. Deleted on any entry
   // add/edit/delete inside that column so the next render regenerates
   // against fresh state (migration 20260828000003).
-  | "column_review";
+  | "column_review"
+  // On-demand whole-map audit. Delivered when the coachee clicks
+  // "HONE THIS MAP" on the canvas; deleted by ANY entry write on
+  // the map so the next click regenerates against fresh state.
+  // Rendered as a banner at the top of the canvas, not inline in a
+  // section. Only one per map at a time. (Migration
+  // 20260828000004.)
+  | "hone_diagnostic";
 
 export type ItcMessage = {
   id: string;
@@ -1470,6 +1477,25 @@ export async function hasColumnReviewMessage(input: {
     .limit(1);
   if (error) throw new Error(`hasColumnReviewMessage: ${error.message}`);
   return (data ?? []).length > 0;
+}
+
+/**
+ * Wipe every hone_diagnostic message for a map. Called on any entry
+ * write anywhere on the map — the diagnostic reads the whole map
+ * so any change stales it. Also called before writing a fresh
+ * diagnostic in runHoneDiagnostic so re-clicking the button always
+ * replaces the last audit.
+ */
+export async function deleteHoneDiagnosticMessages(input: {
+  mapId: string;
+}): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_messages")
+    .delete()
+    .eq("map_id", input.mapId)
+    .eq("surface", "hone_diagnostic");
+  if (error) throw new Error(`deleteHoneDiagnosticMessages: ${error.message}`);
 }
 
 export async function listMessages(mapId: string): Promise<ItcMessage[]> {

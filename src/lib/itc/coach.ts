@@ -2824,6 +2824,129 @@ export function ensureParagraphs(
 }
 
 // ---------------------------------------------------------------------------
+// Hone diagnostic (on-demand whole-map audit)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate the coach's whole-map audit for the "HONE THIS MAP" flow.
+ * Reads the entire map — goal, behaviors, worries, commitments,
+ * assumptions with coverage, tests + results — and produces
+ * substantive prose naming what's off and what to change first.
+ * Uses mainModel (not utility) because the audit is composition-heavy
+ * across the whole map and needs the fuller model's judgment.
+ * Returns null on LLM failure; caller shows an error state and the
+ * coachee can re-click to retry.
+ */
+export async function generateHoneDiagnostic(input: {
+  goalText: string;
+  behaviors: string[];
+  worries: string[];
+  commitments: string[];
+  assumptionsWithCoverage: Array<{
+    text: string;
+    commitmentIndices: number[];
+  }>;
+  tests: Array<{
+    testType: string;
+    assumptionText: string;
+    behaviorChange: string;
+    dataToCollect: string;
+    inOrderToFindOut: string;
+    result: {
+      verdict: string | null;
+      whatIDid: string | null;
+      dataCollected: string | null;
+      saysAboutAssumption: string | null;
+    } | null;
+  }>;
+}): Promise<string | null> {
+  try {
+    const { HONE_DIAGNOSTIC_STAGE } = await import(
+      "./prompts/stages/hone-diagnostic"
+    );
+
+    const promptBlocks: string[] = [];
+    promptBlocks.push("====== Improvement goal (Column 1) ======");
+    promptBlocks.push(input.goalText || "(not set)");
+    promptBlocks.push("");
+    promptBlocks.push("====== Behaviors (Column 2) ======");
+    promptBlocks.push(
+      input.behaviors.map((t, i) => `${i + 1}. ${t}`).join("\n") || "(none)",
+    );
+    promptBlocks.push("");
+    promptBlocks.push("====== Worries (Column 3) ======");
+    promptBlocks.push(
+      input.worries.map((t, i) => `${i + 1}. ${t}`).join("\n") || "(none)",
+    );
+    promptBlocks.push("");
+    promptBlocks.push("====== Competing commitments (Column 4) ======");
+    promptBlocks.push(
+      input.commitments.map((t, i) => `${i + 1}. ${t}`).join("\n") ||
+        "(none)",
+    );
+    promptBlocks.push("");
+    promptBlocks.push(
+      "====== Big Assumptions (Column 5) with commitment coverage ======",
+    );
+    promptBlocks.push(
+      input.assumptionsWithCoverage
+        .map(
+          (a, i) =>
+            `${i + 1}. ${a.text}\n   underwrites commitments: ${
+              a.commitmentIndices.join(", ") || "(none linked)"
+            }`,
+        )
+        .join("\n") || "(none)",
+    );
+    if (input.tests.length > 0) {
+      promptBlocks.push("");
+      promptBlocks.push("====== Tests + results ======");
+      input.tests.forEach((t, i) => {
+        promptBlocks.push(`Test ${i + 1} (${t.testType})`);
+        promptBlocks.push(`  Testing assumption: ${t.assumptionText}`);
+        promptBlocks.push(`  So I will: ${t.behaviorChange}`);
+        promptBlocks.push(`  Collect: ${t.dataToCollect}`);
+        promptBlocks.push(`  Find out whether: ${t.inOrderToFindOut}`);
+        if (t.result) {
+          promptBlocks.push(`  Verdict: ${t.result.verdict ?? "(none)"}`);
+          promptBlocks.push(
+            `  What he did: ${t.result.whatIDid ?? "(none)"}`,
+          );
+          promptBlocks.push(
+            `  Data: ${t.result.dataCollected ?? "(none)"}`,
+          );
+          promptBlocks.push(
+            `  Says about assumption: ${t.result.saysAboutAssumption ?? "(none)"}`,
+          );
+        } else {
+          promptBlocks.push("  (no result yet)");
+        }
+        promptBlocks.push("");
+      });
+    }
+    promptBlocks.push("");
+    promptBlocks.push(
+      "Deliver the whole-map audit now. Return only the coach's prose — no meta, no headings, no markdown.",
+    );
+
+    const { text } = await generateText({
+      model: mainModel(),
+      system: withVoiceRules(HONE_DIAGNOSTIC_STAGE),
+      prompt: promptBlocks.join("\n"),
+      maxOutputTokens: 3000,
+    });
+    const cleaned = ensureParagraphs(scrubReplyLight(text));
+    return cleaned.length > 0 ? cleaned : null;
+  } catch (err) {
+    console.warn(
+      "[itc coach] generateHoneDiagnostic failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Column-close reviews
 // ---------------------------------------------------------------------------
 
