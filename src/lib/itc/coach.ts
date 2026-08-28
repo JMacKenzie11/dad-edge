@@ -2797,14 +2797,28 @@ export function scrubBannedCoachWords(text: string): string {
       /\b(it'?s\s+)?worth\s+(noting|noticing|mentioning|pausing\s+on|remembering|pointing\s+out|flagging)\s+/gi,
       "",
     )
-    // "the rubric [says/shows/reason/etc]" — machinery leak.
-    // Applied to hone / column review surfaces only where "rubric"
-    // has no legitimate use — everywhere else in the codebase we
-    // keep the word for internal reasoning.
-    .replace(
-      /\bthe\s+rubric\s+(reason\s+is|says|shows|found|caught|flagged|reason)\s*/gi,
-      "",
-    )
+    // "the rubric [any verb]" — machinery leak. Applied to hone /
+    // column review surfaces only. Broader than the original which
+    // enumerated specific verbs; this catches "the rubric wants to
+    // know", "the rubric asks", "the rubric needs", etc.
+    .replace(/\bthe\s+rubric\s+/gi, "")
+    // Bare "rubric" anywhere else in audit output — catches
+    // stragglers like "your rubric" or "rubric caught". Same
+    // reasoning: no legitimate use of the word in audit prose.
+    .replace(/\brubric\b/gi, "check")
+    // Markdown asterisks for italic / bold emphasis. The chat UI
+    // shows the literal asterisks — the LLM keeps producing `*seeing*`
+    // and `**strong**` despite prompt bans. Strip the syntax, keep
+    // the emphasized word.
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/\*([^*\s][^*\n]*[^*\s]|[^*\s])\*/g, "$1")
+    // "own up to" family — banned interior-witness verb per the
+    // voice doc's Column-4 section. When the coach uses it in audit
+    // prose reacting to the coachee's map, it's the same violation
+    // the check functions look for INSIDE map entries.
+    .replace(/\bhave\s+to\s+own\s+up\s+to\s+being\b/gi, "be seen as")
+    .replace(/\bown\s+up\s+to\s+being\b/gi, "be seen as")
+    .replace(/\bown\s+up\s+to\b/gi, "admit")
     // "the shape of X" — pattern-speak. Rewrite to "the way X."
     .replace(/\bthe\s+shape\s+of\b/gi, "the way")
     // "the shape in / that shape / this shape" — pattern-speak.

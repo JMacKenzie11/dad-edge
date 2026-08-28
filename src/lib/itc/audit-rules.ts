@@ -235,9 +235,12 @@ export async function checkInteriorWitnessInWorries(input: {
       issueType: "interior_witness_worry",
       severity: "moderate",
       actualText: worry.text,
-      detail:
-        "Worry uses an interior-witness verb applied to a self-truth. The identity landing lives inside the coachee's head rather than in something the outside world could witness.",
-      suggestedFix: `Flip to an external witness. Instead of "I'd have to see/know/face...", try "${pronoun} see..." or "${pronoun} say it out loud...". Let the outside world be the one who registers it.`,
+      // Guidance folded into detail rather than suggestedFix because
+      // the check can't produce a full rewrite of the specific worry
+      // (the identity content is coachee-specific). The synthesis LLM
+      // will describe the pattern from detail and not try to quote a
+      // template as if it were a concrete fix.
+      detail: `Worry uses an interior-witness verb applied to a self-truth. The identity landing lives inside the coachee's head rather than in something the outside world could witness. The sharper form flips to external witness — instead of "I'd have to see/know/face...", "${pronoun} see..." or "${pronoun} say it out loud..." — so the outside world is the one who registers it.`,
     });
   }
   return findings;
@@ -269,10 +272,13 @@ export async function checkInteriorWitnessInCommitments(input: {
       issueType: "interior_witness_commitment",
       severity: "moderate",
       actualText: commitment.text,
+      // Guidance folded into detail. suggestedFix intentionally omitted
+      // because the concrete rewrite requires knowing the specific
+      // identity being protected (coachee-specific), and a template
+      // with placeholder tokens would either quote literally in the
+      // output or confuse the synthesis LLM into re-quoting actualText.
       detail:
-        "Commitment is framed around avoiding a feeling or an interior reckoning. The sharper form names the identity being protected AND what the outside world would see the coachee take the hit on.",
-      suggestedFix:
-        "Name the identity itself, not the feeling around it. Something like \"I'm also committed to never being the [role] who [observable action a friend on his shoulder would see]\".",
+        "Commitment is framed around avoiding a feeling or an interior reckoning. The sharper form names the identity being protected AND what the outside world would see the coachee take the hit on — 'never being the [specific role] who [observable action]' rather than 'never seeing / knowing / feeling / facing X'.",
     });
   }
   return findings;

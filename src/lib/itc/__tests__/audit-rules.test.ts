@@ -107,7 +107,12 @@ describe("checkInteriorWitnessInWorries", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0].issueType).toBe("interior_witness_worry");
     expect(findings[0].actualText).toBe(worry.text);
-    expect(findings[0].suggestedFix).toBeDefined();
+    // Guidance lives in `detail` rather than `suggestedFix` — the
+    // check can't produce a full rewrite of the specific worry
+    // (identity content is coachee-specific), so the sharper-form
+    // guidance is folded into detail and no suggestedFix is emitted.
+    expect(findings[0].suggestedFix).toBeUndefined();
+    expect(findings[0].detail).toMatch(/external witness/i);
   });
 
   it("does not flag a worry that already uses external witness", async () => {
