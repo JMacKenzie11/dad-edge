@@ -29,6 +29,8 @@ _Change log since 2026-08-20 snapshot:_
 - **Nav reordered:** Today → My Braveman → Community → Coach Larry → Goals → Missions → Me → Messages → Admin. "Community" replaced "Leaderboard" as the label since the page now has both tabs.
 - **Admin polish:** `/admin/jobs` FORCE checkbox on daily reminders + mission-day nudges; new `goal-midpoint-check` + `mark-goals-for-review` jobs. `/admin/help-content` REGEN ALL STALE button. `/admin/disengagement` renamed "Silent" → "Inactive", split "Never activated" out, corrected ranges to 21+/14-20/7-13/3-6 days.
 - **Cron dedup fix:** `daily-reminders`, `week-lock`, `disengagement-scan` now dedupe email + notifications per user_id across communities via in-memory Set. Digest stays intentionally per-community.
+- **End-of-column reviews shipped (`column_review` surface):** on advance between columns (goal → behaviors → worries → commitments → assumptions), the coach runs a short structured review of the completed set and persists it as a `column_review` message that renders inline above the Continue button on the closed column. LLM-generated coach prose via `generateColumnReview` in `src/lib/itc/coach.ts` using per-column system prompts under `src/lib/itc/prompts/stages/*-review.ts`. Auto-invalidated when the coachee edits the underlying set.
+- **Hone diagnostic shipped (`hone_diagnostic` surface):** on-demand whole-map audit triggered by the "Hone this map" button on the canvas. Runs 14 typed checks over the map (`src/lib/itc/audit-rules.ts`), then renders the finding list as coach-voice prose deterministically via templates (`src/lib/itc/audit-render.ts`) — no LLM in the synthesis path. Findings on the same entry share one `Your X now: "quote"` opener; multiple drift findings on the same assumption merge into one paragraph naming both paired commitments; action items dedupe by (entry, action-family). Result persists as a dismissible amber banner at the top of the map (`hone-diagnostic-banner.tsx`).
 
 ---
 
@@ -184,7 +186,7 @@ Cron
 | Path | File | Purpose |
 |------|------|---------|
 | `/itc` | `src/app/itc/page.tsx` | Landing. In-page header carries (admin-only) "Admin" + "Sign out"; the "← Dad Edge OS" back-to-main-app affordance lives one layer up in the shared `ItcTopBar`. If the coachee has exactly one in-progress map, first-login silently redirects to `/itc/{mapId}`. Start-new-map section hidden when any in-progress map exists (one-active-map rule). |
-| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Sticky in-page header carries "← Maps", (admin) "Admin", Reset, Sign out. Above it, the layout-level `ItcTopBar` provides the "← Dad Edge OS" exit. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of four surfaces (stage note, entry thread, focus, dock). Above the immune-system walkthrough: side-by-side "Improvement Goal vs Competing Commitments" diagram with opposing arrows + "Working against each other" caption. A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
+| `/itc/[mapId]` | `src/app/itc/[mapId]/page.tsx` | Full-width single-column ITC canvas. Sticky in-page header carries "← Maps", (admin) "Admin", Reset, Sign out. Above it, the layout-level `ItcTopBar` provides the "← Dad Edge OS" exit. Stage-by-stage sections (goal → behaviors → worries → commitments → assumptions → immune-system walkthrough → prioritize → test-design → test-running → results → done). Each active section owns its own form; the coach's output renders inline in one of six surfaces (stage note, entry thread, column review, focus, dock, hone diagnostic). Above the immune-system walkthrough: side-by-side "Improvement Goal vs Competing Commitments" diagram with opposing arrows + "Working against each other" caption. A "Hone this map" button in the canvas triggers an on-demand whole-map audit that persists as a dismissible amber banner at the top. End-of-column reviews render inline above the Continue button once a column has enough entries. A floating "Ask the coach" dock in the bottom-right is a free-form back-channel. |
 | `/itc/no-access` | `src/app/itc/no-access/page.tsx` | Friendly deny page for signed-in main-app users without `itc_access`. "Not for you yet" copy + links back to `/today` and `/me`. Not a 404. |
 | `/itc/admin` | `src/app/itc/admin/page.tsx` | Coach-facing map index (admins only). Triage view sorted by health signal (stuck > overdue_test > idle > stalling > ok) with counts summary; display-only, no messaging. Lists in-progress maps only by default; completed maps hidden to keep the watchlist tight. |
 | `/itc/admin/[mapId]` | `src/app/itc/admin/[mapId]/page.tsx` | Per-map viewer with full transcript + turn events (`itc_turn_events`) for coach debugging. Includes a Tests (N) section under Big Assumptions with each test's assumption tag (A1/A2/A3), type, status, target date, verdict (if run), all four Kegan/Lahey fields, and result fields when a result exists. |
@@ -707,14 +709,16 @@ Defined in `src/lib/itc/stage.ts`. Forward transitions are gated (`canTransition
 
 A single **Continue to [next]** button lives at the bottom of the canvas and is server-computed from `computeAdvanceGate()` — enabled only when the current stage's invariants are met, with a plain-English reason ("Add at least one behavior first") when disabled. Exceptions: `test_design` hides the ContinueBar entirely (the form owns advance via the "Run the Test" button); `results` uses its own advance buttons routed by `next_step`.
 
-### Four coach surfaces
+### Six coach surfaces
 
-Coach output renders in one of four surfaces, distinguished by the `surface` column on `itc_messages`:
+Coach output renders in one of six surfaces, distinguished by the `surface` column on `itc_messages`:
 
 1. **`stage_note`** — persistent, pinned at the top of a stage section. Examples: the immune-system walkthrough, the prioritize recommendation, the done closing summary. Some (walkthrough / prioritize / done) stay visible on their section forever; most filter to the current stage.
 2. **`entry_thread`** — anchored to a specific map entry via `entry_ref_table` + `entry_ref_id`. Coach reactions to a saved worry / commitment / test land here, rendered inline beneath the entry.
-3. **`dock`** — messages in the floating "Ask the coach" drawer (bottom-right). Never render on the main canvas.
-4. **`focus`** — reserved for future set-piece flows.
+3. **`column_review`** — end-of-column set review. Renders inline above the Continue button on a completed column (goal / behaviors / worries / commitments / assumptions). Generated by `generateColumnReview`; auto-invalidated when the coachee edits an entry in that column so the next page render regenerates against fresh state. See "End-of-column reviews" below.
+4. **`hone_diagnostic`** — on-demand whole-map audit result. Renders as a dismissible amber banner at the top of the canvas (`HoneDiagnosticBanner`). One row max per map; re-running the audit replaces it. See "Hone diagnostic" below.
+5. **`dock`** — messages in the floating "Ask the coach" drawer (bottom-right). Never render on the main canvas.
+6. **`focus`** — reserved for future set-piece flows.
 
 ### Coach helpers (all metadata-only)
 
@@ -753,6 +757,11 @@ All checks are deterministic pattern matching; zero LLM cost per check. Same arc
 **Structured review:**
 - `reviewTestDesign` — SMART verdict as structured data: `{ verdict: "ready" | "needs_work", smart: { safe, modest, actionable, researches, counters_assumption: { pass, note } }, one_thing_to_tighten }`. LLM writes semantic content only; the client renders the visual card (icons, borders, layout). Never persisted — the review is a per-attempt UX affordance, not durable map state.
 - `reviewTestResult` — Kegan-voice interpretation of the coachee's post-test debrief. Persists as `entry_thread` on the result row.
+- `generateColumnReview` — end-of-column set review. See "End-of-column reviews" below.
+
+**Whole-map audit (no LLM in synthesis):**
+- `runAllAuditChecks` (`src/lib/itc/audit-rules.ts`) — 14 typed checks over the full map; returns `AuditFinding[]`.
+- `synthesizeAuditProse` (`coach.ts`) → `renderAudit` (`audit-render.ts`) — pure deterministic template rendering of the finding list. See "Hone diagnostic" below.
 
 ### Server-owned variation
 
@@ -779,6 +788,37 @@ The SMART card is client state only — never persisted. On successful advance, 
 
 On advance into `immune_system`, `deliverWalkthroughAfterAdvance` fires `generateImmuneSystemWalkthrough` and persists the result as a `stage_note` with `stage_at_creation=immune_system`. The walkthrough runs top-down: one loop per Big Assumption (assumption → underwritten commitments → paired behaviors → the goal it blocks), then a whole-system "gas and brake" summary, then the pivot to testing. Guide anchors: Vol 1 pp 4, 17 (top-down loop shape); Vol 1 pp vi, 3, 13 (gas/brake image); Vol 2 pp 250-252 (test-the-assumption pivot). Structure and prompt detail live in `src/lib/itc/prompts/stages/immune-system.ts`.
 
+### End-of-column reviews (`column_review` surface)
+
+Once a column has enough entries (`REVIEW_MIN_ENTRIES` per column) and no review row exists yet, the server fires `generateColumnReview` on next page render and persists the result as a `column_review` message on that column. The `ColumnReview` component in `map-canvas.tsx` renders it inline above the Continue button on the completed column.
+
+Fires for the columns that reward set-level review: `goal`, `behaviors`, `worries`, `commitments`, `assumptions`. Per-column system prompts live under `src/lib/itc/prompts/stages/*-review.ts` (`goal-review`, `behaviors-review`, `worries-review`, `commitments-review`, `assumptions-review`). Each prompt tells the coach what to look for in that column specifically (pair-drift for assumptions, interior-witness verbs for commitments, canonical stem for commitments, coverage gaps, redundancy against adjacent columns, etc.), caps output at 2–4 sentences, and ends with a single "want to sharpen any of these, or move on?" question.
+
+Any add / edit / delete on a reviewed column calls `invalidateReviewsForColumn(mapId, column)` in `actions.ts`, which wipes the old `column_review` row so the next page render regenerates against fresh state. This is why the coachee never sees a review that references text they've since changed.
+
+Column 4 (commitments) is the load-bearing column; a sharp end-of-column review here has outsized impact on the assumptions and tests that follow. Column 5 (assumptions) review has special attention on assumption-commitment pair drift, the single most common failure at that stage.
+
+### Hone diagnostic (`hone_diagnostic` surface)
+
+On-demand whole-map audit surfaced via the "Hone this map" button on the canvas (`hone-button.tsx` → `runHoneDiagnostic` in `actions.ts`). Delivers a single amber banner at the top of the canvas (`HoneDiagnosticBanner`) with a Dismiss action. One row per map max; re-running the audit replaces the existing row.
+
+Architecturally distinct from the LLM-generated column reviews: the audit synthesis path is **pure deterministic template rendering, no LLM**. The pipeline is:
+
+1. **`runAllAuditChecks`** (`src/lib/itc/audit-rules.ts`) runs 14 typed checks over the full map. Each check is a pure function of the map slice it needs and returns `AuditFinding[]`. Two flavors: deterministic (regex / heuristic / stored-score) and LLM-backed (narrow structured judgment calls for things a regex would misfire on — pair drift, overload, redundancy). Fail-open: if a per-check LLM call throws, that check returns `[]` and the audit continues.
+2. **`synthesizeAuditProse`** in `coach.ts` delegates to **`renderAudit`** in `audit-render.ts`. One template function per issue type. Openings vary by severity distribution (critical → "N critical issues to fix before this hone pass is worth much else"; moderate-only → "map holds up structurally, N things to sharpen"). Action list at the end caps at 5 items.
+
+Rendering rules that make multi-finding output read cleanly:
+
+- **Grouped by entry.** Findings on the same map entry share a single `Your X now: "quote"` opener. Subsequent findings on the same entry drop the opener and render just the critique body. Prevents the reader from seeing the same assumption quoted five times in a row when it has multiple issues.
+- **Merged same-assumption drift.** Multiple `assumption_commitment_drift` findings on the same assumption merge into one paragraph naming all paired commitments, with "Against the first: … Against the second: …" beats instead of near-identical stand-alone paragraphs.
+- **Deduped action items.** Grouped by `(entry, action-family)`. Depth-shortfall and interior-witness on the same commitment collapse to one merged action. Two drift findings on the same assumption collapse to one merged action.
+
+Issue types the checks emit: `bundled_goal`, `interior_witness_worry`, `interior_witness_commitment`, `missing_commitment_stem`, `vague_assumption_then_clause`, `depth_shortfall_worry` / `_commitment` / `_assumption`, `assumption_commitment_drift`, `assumption_overload`, `assumption_uncovered_commitment`, `test_coverage_gap`, `test_grip_through_data`, `worry_commitment_redundancy`.
+
+Why templates over LLM synthesis: earlier iterations wrapped the finding list in a synthesis LLM prompt. It kept inventing content (rewrites not present in any finding, aggregating single-A1 findings into "neither one has active tests", generalized "your worry hasn't reached depth" claims when no depth finding fired), even after multiple rounds of prompt sharpening and post-processing scrubs. Rewriting the synthesis as pure templates drove invented content to zero at the cost of stiffer prose. If a specific issue type ever needs a narrated beat templates can't produce, that single issue type can be selectively routed back through a narrow LLM call without reverting the whole architecture.
+
+Coverage: `src/lib/itc/__tests__/audit-render.test.ts` (10 tests: grouping single-opener, drift merge, action dedup, exhaustiveness across all issue types, opening variation, machinery-word ban) + `src/lib/itc/__tests__/audit-rules.test.ts` (17 rules + 4 validator).
+
 ### Coach Dock
 
 `src/app/itc/[mapId]/coach-dock.tsx` is the floating "Ask the coach" drawer. Free-form Q&A back-channel — never writes map state (Layout Amendment §4). Every dock message calls `loadCoachContext(mapId)` first, so the LLM sees the full map (stage, goal, all four columns, tests, results) and the entire transcript before answering. Context-aware Q&A, not a generic chatbot.
@@ -787,7 +827,7 @@ On advance into `immune_system`, `deliverWalkthroughAfterAdvance` fires `generat
 
 - `itc_participants` — separate identity table for Boardroom coachees. Email unique, normalized. See §17 for migration path to full auth.
 - `itc_maps` — one per (participant, pillar). `current_stage`, `improvement_goal`, `reveal_delivered`, `walkthrough_delivered`, `status`.
-- `itc_messages` — chat transcript. `surface` (`stage_note` | `entry_thread` | `dock` | `focus`), `stage_at_creation`, optional `entry_ref_table` + `entry_ref_id` for thread anchoring. System messages (e.g., `[coachee advanced map via Run the Test: test_design → test_running]`) never render to the coachee but stay in the coach's next-turn context.
+- `itc_messages` — chat transcript. `surface` (`stage_note` | `entry_thread` | `column_review` | `hone_diagnostic` | `dock` | `focus`), `stage_at_creation`, optional `entry_ref_table` + `entry_ref_id` for thread anchoring. System messages (e.g., `[coachee advanced map via Run the Test: test_design → test_running]`) never render to the coachee but stay in the coach's next-turn context.
 - `itc_behaviors`, `itc_worries`, `itc_worry_attempts`, `itc_commitments`, `itc_commitment_attempts`, `itc_assumptions`, `itc_assumption_commitments` — the four columns plus attempt logs plus the many-to-many link between assumptions and commitments.
 - `itc_commitment_drafts`, `itc_assumption_drafts` — server-generated draft metadata rows (from the on-advance draft hooks) that the coachee turns into real entries via save actions. Not first-class map content; wiped or filtered out once the coachee acts.
 - `itc_tests`, `itc_test_results` — designed and completed tests. Test status: `designed | run | abandoned`. Result verdict: three-way (`held | partially_challenged | challenged`).
