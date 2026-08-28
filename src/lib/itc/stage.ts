@@ -124,3 +124,30 @@ export function hasAssumptionStem(text: string): boolean {
     .toLowerCase();
   return normalized.startsWith(ASSUMPTION_STEM.toLowerCase());
 }
+
+/**
+ * Normalize commitment text to the canonical "I'm also committed to
+ * ..." form. The "also" is load-bearing — it names this as the
+ * SECOND commitment sitting next to the Column 1 improvement goal, so
+ * the coexistence with the primary commitment is unmissable.
+ *
+ * Strips common prefix variants the coachee might type ("I am
+ * committed to", "I'm committed to" without the "also", "I am also
+ * committed to") so the final text always leads with the exact
+ * canonical stem. Called from saveCommitment; the LLM-side
+ * assembleCommitment already produces canonical form so drafter
+ * output doesn't need this normalization.
+ */
+export function ensureCommitmentStem(text: string): string {
+  const stripped = text
+    .trim()
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/^i'?m\s+also\s+committed\s+to\s+/i, "")
+    .replace(/^i'?m\s+committed\s+to\s+/i, "")
+    .replace(/^i\s+am\s+also\s+committed\s+to\s+/i, "")
+    .replace(/^i\s+am\s+committed\s+to\s+/i, "")
+    .trim();
+  if (stripped.length === 0) return text.trim();
+  const rest = stripped.replace(/^./, (c) => c.toLowerCase());
+  return `${COMMITMENT_STEM} ${rest}`;
+}

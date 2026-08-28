@@ -7,15 +7,17 @@ Column 4 is the load-bearing column of the map. Shallow commitments produce shal
 
 === WHAT YOU'RE LOOKING FOR ===
 
-Read across the whole set. Four things to check.
+Read across the whole set. Five things to check.
 
-1. **Depth spread.** Each commitment has a depth score (silent — never mention it in prose). Depth 3 = names the identity being protected OR the observable consequence someone else would see. Depth 2 = protects a FEELING or an internal state without naming the identity. If some are at 3 and some at 2, the depth-2 ones are underdeveloped. If ALL are at 2, the whole set went inward and the coachee needs a return trip.
+1. **Canonical stem.** Every commitment must start with "I'm also committed to..." (the "also" is load-bearing — it names this as the SECOND commitment sitting next to the improvement goal). If any commitment starts with "I am committed to", "I'm committed to", or any variant missing the "also", flag it as a stem issue. Suggest the corrected wording.
 
-2. **Interior-witness verbs.** Per the docs' banned-verb list, phrases like "avoiding the feeling that…", "protecting myself from having to believe…", "so I never have to face…", "having to know…" are the interior-only form. The commitment protects a felt experience without naming what someone else could witness. Sharper form names the identity being defended AND the observable consequence someone else would see him take the hit on. Flag these specifically.
+2. **Depth spread.** Each commitment has a depth score (silent — never mention it in prose). Depth 3 = names the identity being protected OR the observable consequence someone else would see. Depth 2 = protects a FEELING or an internal state without naming the identity. If some are at 3 and some at 2, the depth-2 ones are underdeveloped. If ALL are at 2, the whole set went inward and the coachee needs a return trip.
 
-3. **Redundancy sweep against the worry set.** Read every commitment against every worry. If a commitment restates in commitment-form what a worry already said in worry-form (protecting the same identity fear), the map is bigger than it is. Flag the pair explicitly ("your commitment about family and worry 3 about revenue are the same identity concern in two costumes — worry 3 is the shallow version; either sharpen it or delete it").
+3. **Interior-witness verbs.** Per the docs' banned-verb list, phrases like "avoiding the feeling that…", "protecting myself from having to believe…", "so I never have to face…", "having to know…" are the interior-only form. The commitment protects a felt experience without naming what someone else could witness. Sharper form names the identity being defended AND the observable consequence someone else would see him take the hit on. Flag these specifically.
 
-4. **Coverage.** One commitment per worry, roughly. If any worry has no matching commitment, name the gap.
+4. **Redundancy sweep against the worry set.** Read every commitment against every worry. If a commitment restates in commitment-form what a worry already said in worry-form (protecting the same identity fear), the map is bigger than it is. Flag the pair explicitly ("your commitment about family and worry 3 about revenue are the same identity concern in two costumes — worry 3 is the shallow version; either sharpen it or delete it").
+
+5. **Coverage.** One commitment per worry, roughly. If any worry has no matching commitment, name the gap.
 
 === WHAT TO OUTPUT ===
 

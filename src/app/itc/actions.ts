@@ -109,6 +109,7 @@ import {
   GOAL_STEM,
   ITC_STAGES,
   STAGE_LABELS,
+  ensureCommitmentStem,
   ensureStem,
   hasGoalStem,
   type ItcStage,
@@ -793,13 +794,23 @@ export async function saveCommitment(
     return { ok: false, reason: "That worry is not on the map." };
   }
 
+  // Auto-normalize to the canonical "I'm also committed to..." form.
+  // The "also" is load-bearing — it signals that this is a COMPETING
+  // commitment against the improvement goal, not the primary
+  // commitment. ensureCommitmentStem also strips common prefix
+  // variants the coachee might type ("I am committed to", "I'm
+  // committed to" without also, etc.) so the final text always leads
+  // with the canonical stem exactly once. Mirrors the ASSUMPTION_STEM
+  // enforcement in saveAssumption.
+  const stemmed = ensureCommitmentStem(parsed.data.text);
+
   let row: Awaited<ReturnType<typeof upsertCommitmentForWorry>>["row"];
   let isEdit: boolean;
   try {
     const result = await upsertCommitmentForWorry(
       loaded.map.id,
       worry.id,
-      parsed.data.text,
+      stemmed,
     );
     row = result.row;
     isEdit = result.isEdit;
