@@ -2754,6 +2754,57 @@ export function scrubReply(text: string): string {
  * as blank space in the UI (the bug that made the walkthrough appear
  * to "generate nothing").
  */
+/**
+ * Deterministic scrub for the words that keep leaking into coach
+ * audits despite explicit prompt callouts: `land`/`lands` as a
+ * concreteness metaphor, `shape` as pattern-speak, `notice` as
+ * therapy-speak, `read` as a noun, and the `worth [verb]ing` filler
+ * family. Applied to hone-diagnostic + column-review output only —
+ * these words have legitimate uses in other coach turns (a real
+ * "notice" of a specific behavior, "landing the plane" as a plain
+ * verb, etc.) but the audit format is structured enough that we
+ * can safely rewrite them here.
+ *
+ * Patterns match phrasing seen in actual model output, not every
+ * possible use. Keeps the scrub conservative: only touches known-
+ * bad shapes, leaves anything ambiguous alone.
+ */
+export function scrubBannedCoachWords(text: string): string {
+  return text
+    // "behaviors land" / "the set lands" — metaphor for concreteness.
+    // Rewrite to a factual verb ("holds") since audit outputs use
+    // this shape a lot ("Behaviors land.").
+    .replace(
+      /\b(behaviors?|worries|commitments|assumptions|the set|the goal|the pairing|the point|the map)\s+lands?\b/gi,
+      "$1 holds",
+    )
+    // "lands different" / "lands right" — same family.
+    .replace(/\blands?\s+(different|right|wrong|clean|hard)\b/gi, "reads $1")
+    // "one thing to notice" — therapy-speak intro.
+    .replace(/\bone\s+thing\s+to\s+notice\b/gi, "one thing")
+    // "worth noting / mentioning / pausing on / etc." — banned family.
+    .replace(
+      /\b(it'?s\s+)?worth\s+(noting|noticing|mentioning|pausing\s+on|remembering|pointing\s+out|flagging)\s+/gi,
+      "",
+    )
+    // "the shape of X" — pattern-speak. Rewrite to "the way X."
+    .replace(/\bthe\s+shape\s+of\b/gi, "the way")
+    // "the shape in / that shape / this shape" — pattern-speak.
+    .replace(/\bthe\s+shape\s+in\b/gi, "the pattern in")
+    .replace(/\bin\s+(that|this)\s+shape\b/gi, "in $1 pattern")
+    .replace(/\bmatch\s+the\s+shape\b/gi, "match the pattern")
+    // "coach's read" / "honest read" / "my read" etc. — "read" as
+    // noun is banned. Rewrite to "take."
+    .replace(
+      /\b(coach'?s|honest|my|your|his|her|the|our|first|initial|quick|another)\s+read\b/gi,
+      "$1 take",
+    )
+    // Collapse any double spaces the removals introduced.
+    .replace(/  +/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim();
+}
+
 export function scrubReplyLight(text: string): string {
   const dashless = text
     .replace(/\s+[—–]\s+/g, ", ")
@@ -2935,7 +2986,9 @@ export async function generateHoneDiagnostic(input: {
       prompt: promptBlocks.join("\n"),
       maxOutputTokens: 3000,
     });
-    const cleaned = ensureParagraphs(scrubReplyLight(text));
+    const cleaned = ensureParagraphs(
+      scrubBannedCoachWords(scrubReplyLight(text)),
+    );
     return cleaned.length > 0 ? cleaned : null;
   } catch (err) {
     console.warn(
@@ -3085,7 +3138,9 @@ export async function generateColumnReview(input: {
       prompt: promptBlocks.join("\n"),
       maxOutputTokens: 400,
     });
-    const cleaned = ensureParagraphs(scrubReplyLight(text));
+    const cleaned = ensureParagraphs(
+      scrubBannedCoachWords(scrubReplyLight(text)),
+    );
     return cleaned.length > 0 ? cleaned : null;
   } catch (err) {
     console.warn(

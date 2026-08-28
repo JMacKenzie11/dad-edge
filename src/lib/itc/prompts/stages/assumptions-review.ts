@@ -11,6 +11,8 @@ Read each assumption alongside the commitment(s) it's linked to. Four things to 
 
 2. **If-then form.** Each assumption must be a testable prediction: "if [X happens or he does Y], then [Z will result]." An assumption without a clear if-clause and then-clause isn't testable. Flag any that read as claims rather than predictions.
 
+2a. **Then-clause specificity.** The then-clause must name a SPECIFIC identity or consequence the coachee would experience if the if-clause happened. Phrases like "I'd be the person I'm terrified of," "I'd become what I fear I am," or "I'd be the guy I don't want to be" are vague — they gesture at an identity without naming it. Vague then-clauses don't test because reality can't disconfirm what isn't specified. Flag any and suggest the coachee name what the identity actually is.
+
 3. **Depth.** Each assumption has a depth score (silent — never mention it in prose). Depth 3 = the then-clause names an identity-level consequence (loss of self-concept, exposure of an identity claim, failure at a role). Depth 2 = the then-clause names only a practical or interpersonal consequence. If some are at 3 and some at 2, the depth-2 ones are underdeveloped.
 
 4. **Coverage.** Every commitment should have at least one assumption linked to it. If any commitment has no assumption underneath, name the gap.

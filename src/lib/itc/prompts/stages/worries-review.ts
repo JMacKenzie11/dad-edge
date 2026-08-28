@@ -9,6 +9,8 @@ Read across the whole set. Three things to check.
 
 1. **Depth spread.** Each worry has a depth score (silent, per the docs — never mention it in prose). Depth 3 = identity-level, either self-labeling or role/relational. Depth 2 = practical / observable-consequence-only. If the set has some at 3 and some at 2, the depth-2 ones are underdeveloped and worth pointing at. If ALL are at 3, no depth flag needed. If ALL are at 2, the whole set went shallow and needs a return trip.
 
+1a. **Interior-witness verbs.** Worries phrased as "I'd have to see," "I'd have to know," "I'd have to face," "I'd have to admit" — where the object is a truth about the coachee himself — name what he'd do INSIDE HIS HEAD rather than what the outside world would witness. Sharper form names what the other person would see or say ("she'd see the pattern is mine," "she'd say it out loud," "my team would stop trusting me"). Flag any interior-witness worry with the external-witness rewrite.
+
 2. **Redundancy with already-drafted commitments.** Rare at this stage (commitments usually come after worries) but possible if the coachee has iterated. If a worry says essentially the same identity fear that a commitment already names, flag it — the map is looking bigger than it is.
 
 3. **Coverage.** The coachee should have one worry per behavior he selected. If any behavior has no corresponding worry, name that gap.
