@@ -487,7 +487,7 @@ export async function checkTestCoverage(input: {
 
 const DriftSchema = z.object({
   drifted: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(400).optional(),
 });
 
 const DRIFT_SYSTEM = `
@@ -499,7 +499,7 @@ Two things need to match for drifted=false:
 
 Don't require exact word-match. Semantic alignment is enough. But the scenario the assumption's if-clause names must be the one that would expose the specific identity the commitment protects.
 
-Return { drifted: false } when the pair is aligned. Return { drifted: true, reason: "<what's different, under 40 words>" } when they name different scenarios.
+Return { drifted: false } when the pair is aligned. Return { drifted: true, reason: "<what's different, MAX 25 WORDS>" } when they name different scenarios. Terseness matters — this reason renders inline in a coach audit and long reasons overwhelm the reader. Name the mismatch, don't elaborate.
 
 === WORKED EXAMPLES ===
 
@@ -507,18 +507,16 @@ Example 1 (drifted=false — clean pair):
   Commitment: "I'm also committed to never becoming the husband who hurts her."
   Assumption: "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
   Verdict: { drifted: false }
-  Reason: Commitment protects the "husband who hurts her" identity. Assumption's if-clause ("stay in the room while she's angry") names the scenario that would expose that identity ("lose control and become that husband"). Aligned.
 
 Example 2 (drifted=true — different scenarios):
   Commitment: "I'm also committed to never being the guy who isn't enough for her."
   Assumption: "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am."
-  Verdict: { drifted: true, reason: "Commitment protects the 'not enough for her' identity — insufficiency, inadequate as a partner. Assumption's if-clause is about stopping protection / revealing failures, which points at a DIFFERENT identity (the one whose failures ARE the problem). Two different scenarios." }
+  Verdict: { drifted: true, reason: "Commitment protects 'not enough for her'. Assumption's if-clause is about revealing failures — different scenario, different identity." }
 
 Example 3 (drifted=false — semantic alignment despite different wording):
   Commitment: "I'm also committed to never letting my team see I don't have the answer."
   Assumption: "I assume that if I admit I don't know something in a meeting, then they'll stop trusting my judgment."
   Verdict: { drifted: false }
-  Reason: Commitment protects "the leader who has answers." Assumption's if-clause ("admit I don't know") is the exact scenario that would expose that identity. Different wording, same scenario.
 
 === DECISION RULE ===
 
@@ -583,7 +581,7 @@ export async function checkAssumptionCommitmentDrift(input: {
 
 const OverloadSchema = z.object({
   same_concern: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(400).optional(),
 });
 
 const OVERLOAD_SYSTEM = `
@@ -593,6 +591,8 @@ Return { same_concern: true } when every commitment in the set is protecting the
 
 Return { same_concern: false } when the commitments name distinct identities the coachee is protecting — even if the identities are related, if they're distinguishable (different nouns, different consequences, different scenes), they're distinct concerns and the assumption is carrying more than one belief.
 
+For same_concern=false, give reason MAX 30 WORDS. Name the identities in short form and one line naming what distinguishes them. DO NOT enumerate "Commitment 1 protects X, Commitment 2 protects Y" — that's how the coachee's map is already structured; the reason should name the KEY distinction, not walk each pair. Terseness matters — this reason renders inline in an audit and long reasons overwhelm the reader.
+
 === WORKED EXAMPLES ===
 
 Example 1 (same_concern=true — genuine synonyms):
@@ -600,19 +600,25 @@ Example 1 (same_concern=true — genuine synonyms):
     1. "I'm also committed to never being seen as the guy who fails his family."
     2. "I'm also committed to never being the man who couldn't provide when it mattered."
   Verdict: { same_concern: true }
-  Reason: Both name the "father/provider who failed" identity. Same concern, two phrasings.
 
-Example 2 (same_concern=false — distinct identities):
+Example 2 (same_concern=false — distinct identities, 2 commitments):
   Commitments:
     1. "I'm also committed to never seeing that my defensive behaviour is the problem."
     2. "I'm also committed to never being the guy who isn't enough for her."
-  Verdict: { same_concern: false, reason: "First protects the 'guy whose defensiveness IS the problem' identity — the source of the trouble. Second protects the 'insufficient partner' identity — inadequate as a husband. Different identities. Different scenarios expose each." }
+  Verdict: { same_concern: false, reason: "Distinct identities: 'defensiveness IS the problem' vs 'insufficient partner'. Different scenarios expose each." }
 
 Example 3 (same_concern=false — related but distinguishable):
   Commitments:
     1. "I'm also committed to never being the boss who makes his team scared to speak up."
     2. "I'm also committed to never being the boss who loses his temper at work."
-  Verdict: { same_concern: false, reason: "First protects the 'intimidating leader' identity — a systemic pattern others feel. Second protects the 'loses-control' identity — a single-moment failure. Related, but distinguishable identities the coachee could hold separately." }
+  Verdict: { same_concern: false, reason: "Related but distinct: 'intimidating leader' (systemic pattern) vs 'loses-control' (single-moment failure)." }
+
+Example 4 (same_concern=false — 3+ commitments, don't enumerate):
+  Commitments:
+    1. "I'm also committed to never being the coach who can't help."
+    2. "I'm also committed to never being the professional whose work is questioned."
+    3. "I'm also committed to never being the provider who didn't work hard enough."
+  Verdict: { same_concern: false, reason: "Three distinct identities across three domains: helping (competence), reputation (quality), provision (effort). Different scenarios and consequences." }
 
 === DECISION RULE ===
 
@@ -683,7 +689,7 @@ export async function checkAssumptionOverload(input: {
 
 const GripSchema = z.object({
   grip_through_data: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(400).optional(),
 });
 
 const GRIP_SYSTEM = `
@@ -693,7 +699,7 @@ Return grip_through_data=true when the text is the assumption still gripping the
 
 Return grip_through_data=false when the text reads as a genuine conclusion from the data (the world didn't end AND the coachee is willing to update the belief).
 
-When in doubt, grip_through_data=false. If grip_through_data=true, give a short reason (under 40 words).
+When in doubt, grip_through_data=false. If grip_through_data=true, give a short reason MAX 25 WORDS. Terseness matters — this reason renders inline in an audit and long reasons overwhelm the reader.
 `.trim();
 
 export async function checkTestInterpretation(input: {
@@ -767,7 +773,7 @@ export async function checkTestInterpretation(input: {
 
 const RedundancySchema = z.object({
   redundant: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(400).optional(),
 });
 
 const REDUNDANCY_SYSTEM = `
@@ -775,7 +781,7 @@ You judge whether a worry and a competing commitment name the same identity fear
 
 Return redundant=true only when both entries clearly point at the same identity concern (the map is bigger than it is — one is the shallow version of the other). Return redundant=false when they name distinct concerns, even if the framing overlaps.
 
-When in doubt, redundant=false. If redundant=true, give a short reason (under 40 words).
+When in doubt, redundant=false. If redundant=true, give a short reason MAX 25 WORDS. Name the shared identity fear in one clause — don't enumerate "worry says X, commitment says Y" (the audit already quotes both). Terseness matters — this reason renders inline and long reasons overwhelm the reader.
 `.trim();
 
 export async function checkWorryCommitmentRedundancy(input: {
