@@ -80,9 +80,11 @@ describe("renderAudit", () => {
     );
   });
 
-  it("caps the numbered action list at 5 items", () => {
-    // Ten findings across distinct issue types (so post-dedup each
-    // still renders as a unique action) — action list should stop at 5.
+  it("caps the numbered action list at 10 items", () => {
+    // Twelve findings across distinct issue types — action list should
+    // stop at 10 (raised from 5 so drift / overload / test-coverage /
+    // redundancy fixes have room to surface alongside commitment /
+    // worry rewrites).
     const distinctTypes: AuditIssueType[] = [
       "bundled_goal",
       "interior_witness_worry",
@@ -94,6 +96,8 @@ describe("renderAudit", () => {
       "depth_shortfall_assumption",
       "test_coverage_gap",
       "test_grip_through_data",
+      "assumption_uncovered_commitment",
+      "worry_commitment_redundancy",
     ];
     const many: AuditFinding[] = distinctTypes.map((issueType, i) =>
       finding({
@@ -105,8 +109,8 @@ describe("renderAudit", () => {
       }),
     );
     const prose = renderAudit(many, CTX);
-    const actionMatches = prose.match(/^\d\. /gm) ?? [];
-    expect(actionMatches).toHaveLength(5);
+    const actionMatches = prose.match(/^\d+\. /gm) ?? [];
+    expect(actionMatches).toHaveLength(10);
   });
 
   it("renders each issueType without throwing", () => {
@@ -264,7 +268,7 @@ describe("renderAudit", () => {
       ],
       CTX,
     );
-    const actionMatches = prose.match(/^\d\. /gm) ?? [];
+    const actionMatches = prose.match(/^\d+\. /gm) ?? [];
     expect(actionMatches).toHaveLength(1);
     // Merged action wording should surface.
     expect(prose).toMatch(
@@ -409,7 +413,7 @@ describe("renderAudit", () => {
       CTX,
     );
     // Stem paragraph is still there.
-    expect(prose).toMatch(/canonical stem/i);
+    expect(prose).toMatch(/canonical .*stem/i);
     // But the Consider: rewrite is suppressed.
     expect(prose).not.toContain("Consider:");
     expect(prose).not.toContain(stemFix);

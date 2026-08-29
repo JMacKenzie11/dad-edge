@@ -247,7 +247,10 @@ function renderAggregatedParagraph(
   const spec = AGGREGATION_SPECS[issueType];
   const countWord = countWordCapitalized(findings.length);
   const quotes = findings.map((f) => `- "${f.actualText}"`).join("\n");
-  return `${countWord} of your ${spec.columnNoun} ${spec.linkVerb} ${spec.intro}:\n${quotes}\n\n${spec.body}`;
+  // Intro + bulleted quotes only. The fix belongs in the action list;
+  // repeating it here creates the "read the same fix three times"
+  // problem that made earlier versions feel long.
+  return `${countWord} of your ${spec.columnNoun} ${spec.linkVerb} ${spec.intro}:\n${quotes}`;
 }
 
 function countWordCapitalized(n: number): string {
@@ -432,38 +435,47 @@ function opener(subject: string, text: string, skip: boolean): string {
 // Individual template functions
 // ---------------------------------------------------------------------------
 
+// Per-entry templates are intentionally short. Each one names WHAT'S
+// wrong in one clause; the action list carries the fix rationale.
+// Duplicating the fix in every paragraph is what made earlier audits
+// feel long. Non-aggregatable templates (drift/overload/redundancy/
+// test-grip) still carry the LLM detail because that's the actual
+// per-pair analysis, but their trailing "Either sharpen…" /
+// "Additional Big Assumptions…" / "Re-read the data…" sentences are
+// dropped because those also duplicate the action list.
+
 function renderBundledGoal(f: AuditFinding, skip: boolean): string {
   const consider = f.suggestedFix ? ` ${f.suggestedFix}` : "";
-  return `${opener("goal", f.actualText, skip)}This packs two distinct improvements pointed at different objects. Each half implies different behaviors and different tests, so running them as one map produces muddy data on both.${consider}`;
+  return `${opener("goal", f.actualText, skip)}Packs two distinct improvements pointed at different objects.${consider}`;
 }
 
 function renderInteriorWitnessWorry(f: AuditFinding, skip: boolean): string {
-  return `${opener("worry", f.actualText, skip)}This uses an interior-witness verb ("I'd have to see", "I'd know", "I'd face") applied to a truth about you. The identity landing lives inside your head rather than in something the outside world would witness. The sharper form flips to external witness. Instead of what you'd have to see, name what SHE would see, know, or say out loud. Let the outside world be the one who registers it.`;
+  return `${opener("worry", f.actualText, skip)}Uses an interior-witness verb ("I'd have to see", "I'd know", "I'd face") applied to a truth about you, rather than something the outside world would witness.`;
 }
 
 function renderInteriorWitnessCommitment(f: AuditFinding, skip: boolean): string {
-  return `${opener("commitment", f.actualText, skip)}This is framed around avoiding a feeling or an interior reckoning ("never seeing", "never knowing", "avoiding the feeling that"). The sharper form names the identity you're committed to never being, plus the observable action a friend on your shoulder would see you take to protect it. Not "never seeing X" but "never being the [specific role] who [specific action]."`;
+  return `${opener("commitment", f.actualText, skip)}Framed around avoiding a feeling or an interior reckoning ("never seeing", "never knowing", "avoiding the feeling that").`;
 }
 
 function renderMissingCommitmentStem(f: AuditFinding, skip: boolean): string {
   const consider = f.suggestedFix ? ` Consider: "${f.suggestedFix}"` : "";
-  return `${opener("commitment", f.actualText, skip)}This is missing the canonical stem "I'm also committed to". The "also" is load-bearing. It names this as the SECOND commitment sitting next to your improvement goal, so the coexistence with the primary commitment stays unmissable.${consider}`;
+  return `${opener("commitment", f.actualText, skip)}Missing the canonical "I'm also committed to" stem.${consider}`;
 }
 
 function renderVagueAssumptionThenClause(f: AuditFinding, skip: boolean): string {
-  return `${opener("assumption", f.actualText, skip)}The then-clause gestures at an identity ("the man I'm terrified of", "what I fear I am", "the guy I don't want to be") without naming it. Vague then-clauses don't test. Reality can't disconfirm what isn't specified. Name the identity plainly: the guy who what? The husband whose what? Write out the concrete failure or flaw you're afraid arrives at you.`;
+  return `${opener("assumption", f.actualText, skip)}Then-clause gestures at an identity ("the man I'm terrified of", "what I fear I am", "the guy I don't want to be") without naming it.`;
 }
 
 function renderDepthShortfallWorry(f: AuditFinding, skip: boolean): string {
-  return `${opener("worry", f.actualText, skip)}This is still at the practical level. What would happen, what you'd have to do, rather than the identity level. The fear needs to land on who you'd be if the opposite move happened, not on the immediate consequence of the move itself.`;
+  return `${opener("worry", f.actualText, skip)}Still at the practical level — what would happen, what you'd have to do — rather than at the identity level.`;
 }
 
 function renderDepthShortfallCommitment(f: AuditFinding, skip: boolean): string {
-  return `${opener("commitment", f.actualText, skip)}This is still at the practical level. The vow needs to name the identity being protected and what the outside world would see you take the hit on, not the feeling or the situation you're avoiding.`;
+  return `${opener("commitment", f.actualText, skip)}Still at the practical level rather than naming the identity being protected.`;
 }
 
 function renderDepthShortfallAssumption(f: AuditFinding, skip: boolean): string {
-  return `${opener("assumption", f.actualText, skip)}The then-clause hasn't reached identity depth yet. It needs to finish through to an identity landing or a Big Time Bad conclusion, not stop at a practical consequence.`;
+  return `${opener("assumption", f.actualText, skip)}Then-clause hasn't reached identity depth — stops at a practical consequence.`;
 }
 
 function renderAssumptionCommitmentDrift(f: AuditFinding, skip: boolean): string {
@@ -472,7 +484,7 @@ function renderAssumptionCommitmentDrift(f: AuditFinding, skip: boolean): string
     ? `The paired commitment says: "${f.relatedText}" `
     : "";
   const reason = stripDetailPrefix(f.detail);
-  return `${head}${relatedQuote}These have drifted apart. ${reason} Either sharpen the assumption so its if-clause names the exact scenario this commitment is protecting against, or the pair may be pointing at a missing commitment that hasn't been named yet.`;
+  return `${head}${relatedQuote}These have drifted apart. ${reason}`;
 }
 
 function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
@@ -489,7 +501,7 @@ function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
     .join(" ");
   const head = opener("assumption", first.actualText, skip);
   const from = pluralCountPhrase(findings.length);
-  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from ${from}. ${reasons} Either sharpen the assumption so its if-clause names the exact scenarios these commitments protect against, or the pair may be pointing at missing commitments that haven't been named yet.`;
+  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from ${from}. ${reasons}`;
 }
 
 function renderMergedRedundancy(findings: AuditFinding[], skip: boolean): string {
@@ -505,24 +517,24 @@ function renderMergedRedundancy(findings: AuditFinding[], skip: boolean): string
     })
     .join(" ");
   const head = opener("worry", first.actualText, skip);
-  return `${head}The commitments that duplicate it: ${joinedQuotes}. These name the same identity concern the worry names, just in different forms. ${reasons} Either push the worry into a distinct identity concern, or drop it so the map isn't doubled up.`;
+  return `${head}The commitments that duplicate it: ${joinedQuotes}. These name the same identity concern the worry names, just in different forms. ${reasons}`;
 }
 
 function renderAssumptionOverload(f: AuditFinding, skip: boolean): string {
   const reason = stripDetailPrefix(f.detail);
-  return `${opener("assumption", f.actualText, skip)}This is carrying more weight than one belief can hold. ${reason} Additional Big Assumptions may need to be named so each commitment has an assumption pointed at its own specific concern.`;
+  return `${opener("assumption", f.actualText, skip)}Carrying more weight than one belief can hold. ${reason}`;
 }
 
 function renderAssumptionUncoveredCommitment(f: AuditFinding, skip: boolean): string {
-  return `${opener("commitment", f.actualText, skip)}No Big Assumption is linked to this one. The commitment is protecting something you haven't yet named as a testable belief, so nothing about it can be challenged with evidence. Draft a Big Assumption whose if-clause names the exact scenario this commitment is protecting against, and whose then-clause names the identity or Big Time Bad conclusion the commitment fears.`;
+  return `${opener("commitment", f.actualText, skip)}No Big Assumption linked to this one — protecting something not yet named as a testable belief.`;
 }
 
 function renderTestCoverageGap(f: AuditFinding, skip: boolean): string {
-  return `${opener("assumption", f.actualText, skip)}This has no active test on it. Untested assumptions still shape your behavior, but no evidence is being gathered against them. A data-mining test (looking back at what's already happened) or a thought experiment can gather evidence cheaply without staging a whole new behavioral round.`;
+  return `${opener("assumption", f.actualText, skip)}No active test on this one.`;
 }
 
 function renderTestGripThroughData(f: AuditFinding, skip: boolean): string {
-  return `${opener("test result", f.actualText, skip)}The "what it says about the assumption" reading looks like the assumption still running the show, not a conclusion drawn from the data. When the world doesn't produce the predicted consequence, that's evidence AGAINST the assumption, not permission to double down on the protective move. Re-read the data as data, not as a prescription.`;
+  return `${opener("test result", f.actualText, skip)}The "what it says about the assumption" reading has the assumption still running the show. When the world doesn't produce the predicted consequence, that's evidence AGAINST the assumption, not permission to double down.`;
 }
 
 function renderWorryCommitmentRedundancy(f: AuditFinding, skip: boolean): string {
@@ -531,7 +543,7 @@ function renderWorryCommitmentRedundancy(f: AuditFinding, skip: boolean): string
     ? `The commitment that duplicates it: "${f.relatedText}" `
     : "";
   const reason = stripDetailPrefix(f.detail);
-  return `${head}${relatedQuote}These duplicate the same identity concern in two forms. ${reason} Either push the worry into a distinct identity concern, or drop it so the map isn't doubled up.`;
+  return `${head}${relatedQuote}These duplicate the same identity concern in two forms. ${reason}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -584,8 +596,13 @@ function renderActionList(findings: AuditFinding[]): string {
     uniqueActions.push(action);
   }
 
+  // Cap higher than the paragraph section trimmed to — since paragraphs
+  // dropped their fix explanations, the action list is now the single
+  // source of truth for what to actually do. Cap at 10 so all typical
+  // issue types can surface (drift, overload, test-coverage, redundancy
+  // fixes were previously getting sliced off at 5).
   const items = uniqueActions
-    .slice(0, 5)
+    .slice(0, 10)
     .map((action, i) => `${i + 1}. ${action}`);
   return items.join("\n");
 }
