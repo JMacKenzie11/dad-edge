@@ -147,11 +147,36 @@ function orderFindingsWithinGroup(findings: AuditFinding[]): AuditFinding[] {
 
 function renderEntryGroup(group: EntryGroup): string[] {
   const ordered = orderFindingsWithinGroup(group.findings);
-  const drifts = ordered.filter(
+
+  // Gate off the missing-stem "Consider:" suggestion when a heavier
+  // commitment critique fires on the same entry. The suggestion just
+  // prepends "I'm also " to the existing text, which understates the
+  // fix a depth or interior-witness finding is prescribing. Reader
+  // still gets the stem paragraph — only the trailing rewrite is
+  // suppressed.
+  const hasHeavyCommitmentCritique = ordered.some(
+    (f) =>
+      f.issueType === "depth_shortfall_commitment" ||
+      f.issueType === "interior_witness_commitment",
+  );
+  const gated = hasHeavyCommitmentCritique
+    ? ordered.map((f) =>
+        f.issueType === "missing_commitment_stem"
+          ? { ...f, suggestedFix: undefined }
+          : f,
+      )
+    : ordered;
+
+  const drifts = gated.filter(
     (f) => f.issueType === "assumption_commitment_drift",
   );
-  const others = ordered.filter(
-    (f) => f.issueType !== "assumption_commitment_drift",
+  const redundancies = gated.filter(
+    (f) => f.issueType === "worry_commitment_redundancy",
+  );
+  const others = gated.filter(
+    (f) =>
+      f.issueType !== "assumption_commitment_drift" &&
+      f.issueType !== "worry_commitment_redundancy",
   );
 
   const paragraphs: string[] = [];
@@ -159,6 +184,14 @@ function renderEntryGroup(group: EntryGroup): string[] {
 
   for (const f of others) {
     paragraphs.push(renderFindingParagraph(f, openerEmitted));
+    openerEmitted = true;
+  }
+
+  if (redundancies.length === 1) {
+    paragraphs.push(renderFindingParagraph(redundancies[0], openerEmitted));
+    openerEmitted = true;
+  } else if (redundancies.length >= 2) {
+    paragraphs.push(renderMergedRedundancy(redundancies, openerEmitted));
     openerEmitted = true;
   }
 
@@ -274,7 +307,24 @@ function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
     })
     .join(" ");
   const head = opener("assumption", first.actualText, skip);
-  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from both. ${reasons} Either sharpen the assumption so its if-clause names the exact scenarios these commitments protect against, or the pair may be pointing at missing commitments that haven't been named yet.`;
+  const from = pluralCountPhrase(findings.length);
+  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from ${from}. ${reasons} Either sharpen the assumption so its if-clause names the exact scenarios these commitments protect against, or the pair may be pointing at missing commitments that haven't been named yet.`;
+}
+
+function renderMergedRedundancy(findings: AuditFinding[], skip: boolean): string {
+  const first = findings[0];
+  const commitmentQuotes = findings
+    .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
+    .filter((s): s is string => s !== null);
+  const joinedQuotes = joinList(commitmentQuotes);
+  const reasons = findings
+    .map((f, i) => {
+      const label = ORDINALS[i] ?? `#${i + 1}`;
+      return `Against the ${label}: ${stripDetailPrefix(f.detail)}`;
+    })
+    .join(" ");
+  const head = opener("worry", first.actualText, skip);
+  return `${head}The commitments that duplicate it: ${joinedQuotes}. These name the same identity concern the worry names, just in different forms. ${reasons} Either push the worry into a distinct identity concern, or drop it so the map isn't doubled up.`;
 }
 
 function renderAssumptionOverload(f: AuditFinding, skip: boolean): string {
@@ -338,11 +388,24 @@ function renderActionList(findings: AuditFinding[]): string {
     byFamily.get(key)!.push(f);
   }
 
-  const items = order.slice(0, 5).map((key, i) => {
-    const family = byFamily.get(key)!;
-    return `${i + 1}. ${renderMergedAction(key, family)}`;
-  });
+  // Render each family, then dedupe by rendered text. Two different
+  // families can produce the same action string (e.g., depth_shortfall
+  // on two different commitments both render "Push the commitment to
+  // identity depth…"). The paragraph section already quotes each
+  // affected entry; the action list is a prescription, so identical
+  // rendered items would just read as noise.
+  const seen = new Set<string>();
+  const uniqueActions: string[] = [];
+  for (const key of order) {
+    const action = renderMergedAction(key, byFamily.get(key)!);
+    if (seen.has(action)) continue;
+    seen.add(action);
+    uniqueActions.push(action);
+  }
 
+  const items = uniqueActions
+    .slice(0, 5)
+    .map((action, i) => `${i + 1}. ${action}`);
   return items.join("\n");
 }
 
@@ -401,6 +464,18 @@ function renderActionItem(f: AuditFinding): string {
 // ---------------------------------------------------------------------------
 
 const ORDINALS = ["first", "second", "third", "fourth", "fifth"] as const;
+const CARDINALS = ["one", "two", "three", "four", "five"] as const;
+
+/**
+ * "both" for N=2, "all three" / "all four" / … for N>=3. Used in
+ * merged-drift/redundancy templates so the count phrase reads
+ * naturally regardless of how many entries fired.
+ */
+function pluralCountPhrase(n: number): string {
+  if (n === 2) return "both";
+  const word = CARDINALS[n - 1];
+  return word ? `all ${word}` : `all ${n}`;
+}
 
 function joinList(items: string[]): string {
   if (items.length === 0) return "";
