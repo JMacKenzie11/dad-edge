@@ -435,6 +435,177 @@ describe("renderAudit", () => {
     expect(prose).toContain(stemFix);
   });
 
+  it("aggregates when 2+ entries fire the same generic-body critique", () => {
+    // Three commitments each fire depth_shortfall_commitment. Instead
+    // of three near-identical per-entry paragraphs, render one
+    // aggregated paragraph naming all three with a bulleted quote list.
+    const c1 = "I am committed to A";
+    const c2 = "I am committed to B";
+    const c3 = "I am committed to C";
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: c1,
+          detail: "practical depth",
+        }),
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-2" },
+          actualText: c2,
+          detail: "practical depth",
+        }),
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-3" },
+          actualText: c3,
+          detail: "practical depth",
+        }),
+      ],
+      CTX,
+    );
+    // Exactly one aggregated paragraph.
+    expect(prose).toMatch(
+      /Three of your commitments are still at the practical level/i,
+    );
+    // All three commitments appear in the bulleted list.
+    expect(prose).toContain(`- "${c1}"`);
+    expect(prose).toContain(`- "${c2}"`);
+    expect(prose).toContain(`- "${c3}"`);
+    // No per-entry "Your commitment now: X" openers for any of them —
+    // the aggregation covers all three.
+    const openerCount = (prose.match(/Your commitment now: /g) ?? []).length;
+    expect(openerCount).toBe(0);
+    // No per-entry practical-level paragraph either (since aggregation
+    // absorbed all three findings).
+    expect(prose).not.toMatch(/This is still at the practical level/i);
+  });
+
+  it("uses 'Two' for N=2 aggregation", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I am committed to avoiding X",
+          detail: "interior verb",
+        }),
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-2" },
+          actualText: "I am committed to never seeing Y",
+          detail: "interior verb",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toMatch(/Two of your commitments are framed around/i);
+  });
+
+  it("does not aggregate at N=1 — single finding still renders per-entry", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "the only commitment at practical depth",
+          detail: "practical depth",
+        }),
+      ],
+      CTX,
+    );
+    // Per-entry rendering with its opener.
+    expect(prose).toMatch(/Your commitment now: /);
+    // No aggregation phrasing.
+    expect(prose).not.toMatch(/One of your commitments/i);
+    // The per-entry critique body still appears.
+    expect(prose).toMatch(/still at the practical level/i);
+  });
+
+  it("does not aggregate drift, redundancy, or overload findings", () => {
+    // Two drift findings on different assumptions should NOT collapse
+    // into a cross-entry aggregation — drift is entry-specific
+    // (relatedText, per-pair reason). Each renders per-entry.
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption 1",
+          detail: "reason 1",
+          relatedText: "commitment 1",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-2" },
+          actualText: "assumption 2",
+          detail: "reason 2",
+          relatedText: "commitment 2",
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+        }),
+      ],
+      CTX,
+    );
+    // Each assumption gets its own opener — drift never aggregates.
+    const openerCount = (prose.match(/Your assumption now: /g) ?? []).length;
+    expect(openerCount).toBe(2);
+    // No cross-entry aggregation phrasing.
+    expect(prose).not.toMatch(/Two of your assumptions/i);
+  });
+
+  it("mixes aggregated + per-entry cleanly when an entry has aggregatable + non-aggregatable findings", () => {
+    // C1 has depth_shortfall (aggregatable, N=2 with C2) AND drift
+    // (non-aggregatable). C1 should NOT appear per-entry for the depth
+    // finding (absorbed into aggregation), but WILL appear per-entry
+    // for the drift finding.
+    // Actually: the drift finding is on an assumption, not on C1. Let
+    // me use a cleaner mix: two commitments with depth_shortfall (both
+    // aggregated) + one commitment with assumption_uncovered_commitment
+    // (also aggregatable but only 1 → per-entry).
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "commitment one",
+          detail: "practical depth",
+        }),
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-2" },
+          actualText: "commitment two",
+          detail: "practical depth",
+        }),
+        finding({
+          issueType: "assumption_uncovered_commitment",
+          severity: "moderate",
+          entryRef: { table: "commitments", id: "c-3" },
+          actualText: "commitment three uncovered",
+          detail: "no assumption linked",
+        }),
+      ],
+      CTX,
+    );
+    // Aggregated depth paragraph names c1 and c2.
+    expect(prose).toMatch(/Two of your commitments are still at the practical level/i);
+    expect(prose).toContain('- "commitment one"');
+    expect(prose).toContain('- "commitment two"');
+    // c3 renders per-entry with its own opener (only 1 uncovered → below threshold).
+    expect(prose).toContain('Your commitment now: "commitment three uncovered"');
+  });
+
   it("does not include machinery words (rubric, depth score, criterion)", () => {
     const prose = renderAudit(
       [

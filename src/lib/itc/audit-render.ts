@@ -46,11 +46,36 @@ export function renderAudit(
   }
 
   const opening = renderOpening(findings, context);
-  const groups = groupFindingsByEntry(findings);
-  const paragraphs = groups.flatMap((g) => renderEntryGroup(g));
+
+  // Cross-entry aggregation: when the same generic-body critique fires
+  // on 2+ entries, render ONE aggregated paragraph naming all affected
+  // entries instead of N repetitive per-entry paragraphs. Types with
+  // entry-specific bodies (drift, redundancy, overload, test-grip)
+  // never aggregate — they always render per-entry.
+  const aggregations = computeAggregations(findings);
+  const aggregatedFindings = new Set<AuditFinding>();
+  for (const arr of aggregations.values()) {
+    for (const f of arr) aggregatedFindings.add(f);
+  }
+
+  const aggregatedParagraphs: string[] = [];
+  for (const issueType of AGGREGATION_RENDER_ORDER) {
+    const arr = aggregations.get(issueType);
+    if (arr) aggregatedParagraphs.push(renderAggregatedParagraph(issueType, arr));
+  }
+
+  const remaining = findings.filter((f) => !aggregatedFindings.has(f));
+  const groups = groupFindingsByEntry(remaining);
+  const entryParagraphs = groups.flatMap((g) => renderEntryGroup(g));
+
   const actions = renderActionList(findings);
 
-  return [opening, ...paragraphs, actions].join("\n\n");
+  return [
+    opening,
+    ...aggregatedParagraphs,
+    ...entryParagraphs,
+    actions,
+  ].join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +110,162 @@ function renderOpening(
 
   const obsWord = total === 1 ? "one small thing" : `${total} small things`;
   return `Your ${context.pillarLabel} map is in good shape. ${obsWord} worth noting.`;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-entry aggregation
+// ---------------------------------------------------------------------------
+
+const AGGREGATION_THRESHOLD = 2;
+
+/**
+ * Issue types with entry-agnostic critique bodies. These can collapse
+ * across multiple entries into one aggregated paragraph. Types with
+ * entry-specific content (drift, redundancy, overload, test-grip,
+ * bundled-goal) are omitted — they always render per-entry.
+ */
+const AGGREGATABLE_TYPES: ReadonlySet<AuditIssueType> = new Set([
+  "depth_shortfall_worry",
+  "depth_shortfall_commitment",
+  "depth_shortfall_assumption",
+  "interior_witness_worry",
+  "interior_witness_commitment",
+  "missing_commitment_stem",
+  "vague_assumption_then_clause",
+  "test_coverage_gap",
+  "assumption_uncovered_commitment",
+]);
+
+/**
+ * Column-order for aggregated paragraphs so the reader walks the map
+ * top-down: worries → commitments → assumptions.
+ */
+const AGGREGATION_RENDER_ORDER: readonly AuditIssueType[] = [
+  "interior_witness_worry",
+  "depth_shortfall_worry",
+  "missing_commitment_stem",
+  "interior_witness_commitment",
+  "depth_shortfall_commitment",
+  "assumption_uncovered_commitment",
+  "vague_assumption_then_clause",
+  "depth_shortfall_assumption",
+  "test_coverage_gap",
+];
+
+type AggregationSpec = {
+  columnNoun: string;
+  linkVerb: string;
+  intro: string;
+  body: string;
+};
+
+const AGGREGATION_SPECS: Record<string, AggregationSpec> = {
+  depth_shortfall_worry: {
+    columnNoun: "worries",
+    linkVerb: "are",
+    intro: "still at the practical level",
+    body: "The fear needs to land on who you'd be if the opposite move happened, not on the immediate consequence of the move itself.",
+  },
+  depth_shortfall_commitment: {
+    columnNoun: "commitments",
+    linkVerb: "are",
+    intro: "still at the practical level",
+    body: "The vow needs to name the identity being protected and what the outside world would see you take the hit on, not the feeling or the situation you're avoiding.",
+  },
+  depth_shortfall_assumption: {
+    columnNoun: "assumptions",
+    linkVerb: "have",
+    intro: "then-clauses that haven't reached identity depth",
+    body: "Each needs to finish through to an identity landing or a Big Time Bad conclusion, not stop at a practical consequence.",
+  },
+  interior_witness_worry: {
+    columnNoun: "worries",
+    linkVerb: "use",
+    intro: 'an interior-witness verb applied to a truth about you ("I\'d have to see", "I\'d know", "I\'d face")',
+    body: "The sharper form flips to external witness. Instead of what you'd have to see, name what SHE would see, know, or say out loud. Let the outside world be the one who registers it.",
+  },
+  interior_witness_commitment: {
+    columnNoun: "commitments",
+    linkVerb: "are",
+    intro: 'framed around avoiding a feeling or an interior reckoning ("never seeing", "never knowing", "avoiding the feeling that")',
+    body: 'The sharper form names the identity you\'re committed to never being, plus the observable action a friend on your shoulder would see you take to protect it. Not "never seeing X" but "never being the [specific role] who [specific action]."',
+  },
+  missing_commitment_stem: {
+    columnNoun: "commitments",
+    linkVerb: "are",
+    intro: 'missing the canonical stem "I\'m also committed to"',
+    body: 'The "also" is load-bearing. It names each as the SECOND commitment sitting next to your improvement goal, so the coexistence with the primary commitment stays unmissable.',
+  },
+  vague_assumption_then_clause: {
+    columnNoun: "assumptions",
+    linkVerb: "have",
+    intro: "then-clauses that gesture at an identity without naming it",
+    body: "Vague then-clauses don't test. Reality can't disconfirm what isn't specified. Name each identity plainly: the guy who what? The husband whose what? Write out the concrete failure or flaw you're afraid arrives at you.",
+  },
+  test_coverage_gap: {
+    columnNoun: "assumptions",
+    linkVerb: "have",
+    intro: "no active test on them",
+    body: "Untested assumptions still shape your behavior, but no evidence is being gathered against them. A data-mining test (looking back at what's already happened) or a thought experiment can gather evidence cheaply without staging a whole new behavioral round.",
+  },
+  assumption_uncovered_commitment: {
+    columnNoun: "commitments",
+    linkVerb: "have",
+    intro: "no Big Assumption linked to them",
+    body: "Each is protecting something you haven't yet named as a testable belief, so nothing about them can be challenged with evidence. Draft a Big Assumption for each whose if-clause names the exact scenario the commitment is protecting against, and whose then-clause names the identity or Big Time Bad conclusion the commitment fears.",
+  },
+};
+
+function computeAggregations(
+  findings: AuditFinding[],
+): Map<AuditIssueType, AuditFinding[]> {
+  const byType = new Map<AuditIssueType, AuditFinding[]>();
+  for (const f of findings) {
+    if (!AGGREGATABLE_TYPES.has(f.issueType)) continue;
+    const arr = byType.get(f.issueType) ?? [];
+    arr.push(f);
+    byType.set(f.issueType, arr);
+  }
+  const result = new Map<AuditIssueType, AuditFinding[]>();
+  for (const [issueType, arr] of byType) {
+    const byEntry = new Map<string, AuditFinding>();
+    for (const f of arr) {
+      const key = entryKey(f.entryRef);
+      if (!byEntry.has(key)) byEntry.set(key, f);
+    }
+    if (byEntry.size >= AGGREGATION_THRESHOLD) {
+      result.set(issueType, Array.from(byEntry.values()));
+    }
+  }
+  return result;
+}
+
+function renderAggregatedParagraph(
+  issueType: AuditIssueType,
+  findings: AuditFinding[],
+): string {
+  const spec = AGGREGATION_SPECS[issueType];
+  const countWord = countWordCapitalized(findings.length);
+  const quotes = findings.map((f) => `- "${f.actualText}"`).join("\n");
+  return `${countWord} of your ${spec.columnNoun} ${spec.linkVerb} ${spec.intro}:\n${quotes}\n\n${spec.body}`;
+}
+
+function countWordCapitalized(n: number): string {
+  const CARDINALS = [
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+  ];
+  const word = CARDINALS[n - 1];
+  if (!word) return `${n}`;
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 // ---------------------------------------------------------------------------
