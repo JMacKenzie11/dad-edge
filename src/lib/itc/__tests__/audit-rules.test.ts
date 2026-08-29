@@ -281,6 +281,52 @@ describe("checkDepthShortfall", () => {
     });
     expect(findings).toHaveLength(0);
   });
+
+  it("suppresses commitment depth finding when the paired worry also has a depth shortfall", async () => {
+    // Commitments derive from worries; when the worry is pushed to
+    // identity depth the paired commitment naturally follows. Flagging
+    // both would tell the coachee to fix the same problem in two
+    // places.
+    const worry = makeWorry({
+      id: "worry-1",
+      depth_score: 2,
+      rubric_reason: "practical",
+    });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 1,
+      rubric_reason: "practical",
+    });
+    const findings = await checkDepthShortfall({
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [],
+    });
+    // Worry finding fires; commitment is suppressed.
+    expect(findings.map((f) => f.issueType)).toEqual(["depth_shortfall_worry"]);
+  });
+
+  it("still flags a commitment depth shortfall when its paired worry is at identity depth", async () => {
+    // If the worry is already at depth 3 (no worry-shortfall fires),
+    // the commitment's own depth issue is a real map problem, not a
+    // downstream signal of a worry that's about to change.
+    const worry = makeWorry({ id: "worry-1", depth_score: 3 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 2,
+      rubric_reason: "practical",
+    });
+    const findings = await checkDepthShortfall({
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [],
+    });
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_commitment",
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -483,8 +483,9 @@ function renderAssumptionCommitmentDrift(f: AuditFinding, skip: boolean): string
   const relatedQuote = f.relatedText
     ? `The paired commitment says: "${f.relatedText}" `
     : "";
-  const reason = stripDetailPrefix(f.detail);
-  return `${head}${relatedQuote}These have drifted apart. ${reason}`;
+  const scenario = f.assumptionScenario ?? "a different scenario";
+  const identity = f.commitmentIdentity ?? "a different identity";
+  return `${head}${relatedQuote}These have drifted apart. The assumption is about ${scenario}; the commitment protects ${identity}.`;
 }
 
 function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
@@ -493,15 +494,18 @@ function renderMergedDrift(findings: AuditFinding[], skip: boolean): string {
     .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
     .filter((s): s is string => s !== null);
   const joinedQuotes = joinList(commitmentQuotes);
-  const reasons = findings
-    .map((f, i) => {
-      const label = ORDINALS[i] ?? `#${i + 1}`;
-      return `Against the ${label}: ${stripDetailPrefix(f.detail)}`;
-    })
-    .join(" ");
+  // Factor out the shared assumption scenario — it's the same across
+  // all paired findings because it's derived from the same assumption
+  // text. Only the commitment identity varies per pair.
+  const scenario = first.assumptionScenario ?? "a different scenario";
+  const identities = findings
+    .map((f) => f.commitmentIdentity)
+    .filter((s): s is string => Boolean(s));
+  const identityList =
+    identities.length > 0 ? joinList(identities) : "different identities";
   const head = opener("assumption", first.actualText, skip);
   const from = pluralCountPhrase(findings.length);
-  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from ${from}. ${reasons}`;
+  return `${head}The paired commitments say: ${joinedQuotes}. These have drifted apart from ${from}. The assumption is about ${scenario}; the commitments protect ${identityList}.`;
 }
 
 function renderMergedRedundancy(findings: AuditFinding[], skip: boolean): string {
@@ -618,11 +622,17 @@ function renderMergedAction(family: string, findings: AuditFinding[]): string {
   if (family.endsWith(":worry_identity_rewrite") && uniqueTypes.size > 1) {
     return "Rewrite the worry to land on the identity you'd have if the opposite move happened, and let the outside world be the one who registers it.";
   }
-  if (family.endsWith(":assumption_drift") && findings.length > 1) {
-    return "Sharpen the assumption so its if-clause names the exact scenarios both paired commitments protect against, or name missing commitments that pair cleanly with the current assumption.";
+  // Single and merged drift collapse to the same action wording so
+  // the rendered-text dedup in renderActionList absorbs them into one
+  // item. Also matches the single-drift string in renderActionItem.
+  if (family.endsWith(":assumption_drift")) {
+    return DRIFT_ACTION;
   }
   return renderActionItem(findings[0]);
 }
+
+const DRIFT_ACTION =
+  "Sharpen the assumption's if-clause to name the exact scenario the paired commitment protects against, or name a missing commitment that pairs cleanly with the current assumption.";
 
 function renderActionItem(f: AuditFinding): string {
   switch (f.issueType) {
@@ -643,7 +653,7 @@ function renderActionItem(f: AuditFinding): string {
     case "depth_shortfall_assumption":
       return "Push the assumption's then-clause to identity depth. Land on who you'd be, not just what would happen next.";
     case "assumption_commitment_drift":
-      return "Sharpen the assumption so its if-clause names the exact scenario the linked commitment protects against, or name a missing commitment that pairs cleanly with the current assumption.";
+      return DRIFT_ACTION;
     case "assumption_overload":
       return "Draft an additional Big Assumption so each commitment has one pointed at its own specific concern.";
     case "assumption_uncovered_commitment":

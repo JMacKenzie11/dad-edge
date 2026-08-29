@@ -206,12 +206,18 @@ describe("renderAudit", () => {
   });
 
   it("merges multiple drift findings on the same assumption into one paragraph", () => {
+    // Merged-drift template factors out the shared assumption scenario
+    // (same across all pairs — it's the same assumption) and lists the
+    // per-commitment identities as a joined list. Cuts the "Against the
+    // first / Against the second" cadence that repeated the assumption's
+    // if-clause for every pair.
     const assumptionQuote =
       "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.";
     const c1 =
       "I'm also committed to never seeing that my defensive behaviour is the problem";
     const c2 =
       "I'm also committed to never being the guy who isn't enough for her.";
+    const sharedScenario = "revealing failures / stopping protection";
     const prose = renderAudit(
       [
         finding({
@@ -219,33 +225,39 @@ describe("renderAudit", () => {
           severity: "moderate",
           entryRef: { table: "assumptions", id: "a-1" },
           actualText: assumptionQuote,
-          detail:
-            "Commitment protects against seeing defensive behavior as the problem. Assumption's if-clause is about revealing failures.",
+          detail: "Different concerns.",
           relatedText: c1,
           relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: sharedScenario,
+          commitmentIdentity: "the guy whose defensiveness IS the problem",
         }),
         finding({
           issueType: "assumption_commitment_drift",
           severity: "moderate",
           entryRef: { table: "assumptions", id: "a-1" },
           actualText: assumptionQuote,
-          detail:
-            "Commitment protects 'not enough for her'. Assumption's if-clause is about revealing failures.",
+          detail: "Different concerns.",
           relatedText: c2,
           relatedEntryRef: { table: "commitments", id: "c-2" },
+          assumptionScenario: sharedScenario,
+          commitmentIdentity: "the insufficient partner",
         }),
       ],
       CTX,
     );
     const openerCount = (prose.match(/Your assumption now: /g) ?? []).length;
     expect(openerCount).toBe(1);
-    // Both paired commitment quotes should appear.
+    // Both paired commitment quotes appear once each.
     expect(prose).toContain(c1);
     expect(prose).toContain(c2);
     // Merged framing.
     expect(prose).toMatch(/drifted apart from both/i);
-    expect(prose).toMatch(/Against the first/i);
-    expect(prose).toMatch(/Against the second/i);
+    // Shared scenario is stated ONCE (not repeated per pair).
+    const scenarioMatches = prose.split(sharedScenario).length - 1;
+    expect(scenarioMatches).toBe(1);
+    // Both identities are named.
+    expect(prose).toContain("the guy whose defensiveness IS the problem");
+    expect(prose).toContain("the insufficient partner");
   });
 
   it("dedupes action items when multiple issue types collapse to the same fix", () => {
@@ -278,6 +290,7 @@ describe("renderAudit", () => {
 
   it("says 'all three' when three drift findings merge on one assumption", () => {
     const assumptionQuote = "I assume that if X, then Y.";
+    const sharedScenario = "scenario X";
     const prose = renderAudit(
       [
         finding({
@@ -285,36 +298,46 @@ describe("renderAudit", () => {
           severity: "moderate",
           entryRef: { table: "assumptions", id: "a-1" },
           actualText: assumptionQuote,
-          detail: "reason for c-1",
+          detail: "Different concerns.",
           relatedText: "commitment 1 text",
           relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: sharedScenario,
+          commitmentIdentity: "identity one",
         }),
         finding({
           issueType: "assumption_commitment_drift",
           severity: "moderate",
           entryRef: { table: "assumptions", id: "a-1" },
           actualText: assumptionQuote,
-          detail: "reason for c-2",
+          detail: "Different concerns.",
           relatedText: "commitment 2 text",
           relatedEntryRef: { table: "commitments", id: "c-2" },
+          assumptionScenario: sharedScenario,
+          commitmentIdentity: "identity two",
         }),
         finding({
           issueType: "assumption_commitment_drift",
           severity: "moderate",
           entryRef: { table: "assumptions", id: "a-1" },
           actualText: assumptionQuote,
-          detail: "reason for c-3",
+          detail: "Different concerns.",
           relatedText: "commitment 3 text",
           relatedEntryRef: { table: "commitments", id: "c-3" },
+          assumptionScenario: sharedScenario,
+          commitmentIdentity: "identity three",
         }),
       ],
       CTX,
     );
     expect(prose).toMatch(/drifted apart from all three/i);
     expect(prose).not.toMatch(/drifted apart from both/i);
-    expect(prose).toMatch(/Against the first/i);
-    expect(prose).toMatch(/Against the second/i);
-    expect(prose).toMatch(/Against the third/i);
+    // All three identities appear.
+    expect(prose).toContain("identity one");
+    expect(prose).toContain("identity two");
+    expect(prose).toContain("identity three");
+    // Shared scenario stated once.
+    const scenarioMatches = prose.split(sharedScenario).length - 1;
+    expect(scenarioMatches).toBe(1);
   });
 
   it("dedupes action items when the rendered text is identical across entries", () => {
@@ -608,6 +631,53 @@ describe("renderAudit", () => {
     expect(prose).toContain('- "commitment two"');
     // c3 renders per-entry with its own opener (only 1 uncovered → below threshold).
     expect(prose).toContain('Your commitment now: "commitment three uncovered"');
+  });
+
+  it("collapses single-drift and merged-drift action wording to one item", () => {
+    // One assumption has a single drift finding; a different assumption
+    // has two drift findings (merged). Both should collapse to ONE
+    // action item because the wording is now unified.
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 1",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: "scenario A",
+          commitmentIdentity: "identity 1",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-2" },
+          actualText: "assumption B",
+          detail: "Different concerns.",
+          relatedText: "commitment 2",
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+          assumptionScenario: "scenario B",
+          commitmentIdentity: "identity 2",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-2" },
+          actualText: "assumption B",
+          detail: "Different concerns.",
+          relatedText: "commitment 3",
+          relatedEntryRef: { table: "commitments", id: "c-3" },
+          assumptionScenario: "scenario B",
+          commitmentIdentity: "identity 3",
+        }),
+      ],
+      CTX,
+    );
+    const driftActions =
+      prose.match(/^\d+\. Sharpen the assumption's if-clause/gm) ?? [];
+    expect(driftActions).toHaveLength(1);
   });
 
   it("does not include machinery words (rubric, depth score, criterion)", () => {

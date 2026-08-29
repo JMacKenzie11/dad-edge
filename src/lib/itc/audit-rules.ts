@@ -83,6 +83,13 @@ export type AuditFinding = {
    *  drifted assumption). */
   relatedEntryRef?: AuditEntryRef;
   relatedText?: string;
+  /** Structured labels from the drift check LLM. Short noun phrases
+   *  the renderer synthesizes into "The assumption is about [scenario];
+   *  the commitment protects [identity]." Extracted from the free-form
+   *  reason so that merged-drift paragraphs can factor out the shared
+   *  scenario and list per-commitment identities compactly. */
+  assumptionScenario?: string;
+  commitmentIdentity?: string;
 };
 
 const SEVERITY_ORDER: Record<AuditSeverity, number> = {
@@ -368,9 +375,18 @@ export async function checkDepthShortfall(input: {
 }): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
 
+  // Track which worries fired a depth shortfall so we can suppress the
+  // depth finding on their paired commitments. Commitments derive from
+  // worries (competing commitment mirrors the identity fear the worry
+  // names); when the worry is pushed to identity depth, the paired
+  // commitment naturally follows. Flagging both would tell the coachee
+  // to fix the same problem in two places.
+  const worriesWithDepthShortfall = new Set<string>();
+
   for (const worry of input.worries) {
     if (worry.depth_score == null) continue;
     if (worry.depth_score >= DEPTH_THRESHOLD) continue;
+    worriesWithDepthShortfall.add(worry.id);
     const detail = worry.rubric_reason
       ? `Worry hasn't reached identity depth yet. Rubric reason: ${worry.rubric_reason}`
       : "Worry hasn't reached identity depth yet. The fear needs to land on who he'd be, not on the immediate consequence.";
@@ -386,6 +402,14 @@ export async function checkDepthShortfall(input: {
   for (const commitment of input.commitments) {
     if (commitment.depth_score == null) continue;
     if (commitment.depth_score >= DEPTH_THRESHOLD) continue;
+    // Suppress: paired worry is being resharpened; commitment will
+    // follow when worry is pushed to identity depth.
+    if (
+      commitment.worry_id &&
+      worriesWithDepthShortfall.has(commitment.worry_id)
+    ) {
+      continue;
+    }
     const detail = commitment.rubric_reason
       ? `Commitment hasn't reached identity depth yet. Rubric reason: ${commitment.rubric_reason}`
       : "Commitment hasn't reached identity depth yet. The vow needs to name the identity being protected and what the outside world would see.";
@@ -487,7 +511,12 @@ export async function checkTestCoverage(input: {
 
 const DriftSchema = z.object({
   drifted: z.boolean(),
-  reason: z.string().max(400).optional(),
+  /** Short noun phrase naming what identity the commitment is
+   *  protecting. Max ~10 words. Populated only when drifted=true. */
+  commitment_identity: z.string().max(120).optional(),
+  /** Short noun phrase naming what scenario the assumption's if-clause
+   *  is about. Max ~10 words. Populated only when drifted=true. */
+  assumption_scenario: z.string().max(120).optional(),
 });
 
 const DRIFT_SYSTEM = `
@@ -499,7 +528,9 @@ Two things need to match for drifted=false:
 
 Don't require exact word-match. Semantic alignment is enough. But the scenario the assumption's if-clause names must be the one that would expose the specific identity the commitment protects.
 
-Return { drifted: false } when the pair is aligned. Return { drifted: true, reason: "<what's different, MAX 25 WORDS>" } when they name different scenarios. Terseness matters — this reason renders inline in a coach audit and long reasons overwhelm the reader. Name the mismatch, don't elaborate.
+Return { drifted: false } when the pair is aligned.
+
+Return { drifted: true, commitment_identity: "<short noun phrase>", assumption_scenario: "<short noun phrase>" } when they name different scenarios. Each label MAX 10 WORDS. These are structured labels — the renderer synthesizes them into "The assumption is about [scenario]; the commitment protects [identity]." Do NOT write full sentences. Do NOT restate the commitment or assumption text. Just the two identifying phrases.
 
 === WORKED EXAMPLES ===
 
@@ -511,12 +542,20 @@ Example 1 (drifted=false — clean pair):
 Example 2 (drifted=true — different scenarios):
   Commitment: "I'm also committed to never being the guy who isn't enough for her."
   Assumption: "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am."
-  Verdict: { drifted: true, reason: "Commitment protects 'not enough for her'. Assumption's if-clause is about revealing failures — different scenario, different identity." }
+  Verdict: { drifted: true, commitment_identity: "the insufficient partner (not enough for her)", assumption_scenario: "revealing failures / stopping protection" }
 
 Example 3 (drifted=false — semantic alignment despite different wording):
   Commitment: "I'm also committed to never letting my team see I don't have the answer."
   Assumption: "I assume that if I admit I don't know something in a meeting, then they'll stop trusting my judgment."
   Verdict: { drifted: false }
+
+Example 4 (drifted=true — 3+ commitments case, one call at a time — same assumption_scenario returned each call):
+  Assumption: "I assume that if something important goes badly and I didn't do everything within my power to prevent it, then it proves I can't be trusted."
+  Commitment (call 1): "I'm also committed to avoiding the feeling that I could see the answer but was unable to help."
+    Verdict: { drifted: true, commitment_identity: "the helper who couldn't guide when needed", assumption_scenario: "failing to prevent bad outcomes" }
+  Commitment (call 2): "I'm also committed to protecting my identity as someone who consistently delivers at a high level."
+    Verdict: { drifted: true, commitment_identity: "the consistent high performer", assumption_scenario: "failing to prevent bad outcomes" }
+  (The scenario stays consistent across calls because it's derived from the same assumption. The identity varies because it's the commitment that differs.)
 
 === DECISION RULE ===
 
@@ -554,13 +593,14 @@ export async function checkAssumptionCommitmentDrift(input: {
           issueType: "assumption_commitment_drift",
           severity: "moderate",
           actualText: assumption.text,
-          detail: object.reason
-            ? `Assumption's if-clause and its linked commitment name different concerns. ${object.reason}`
-            : "Assumption's if-clause and its linked commitment name different concerns.",
+          detail:
+            "Assumption's if-clause and its linked commitment name different concerns.",
           suggestedFix:
             "Either sharpen the assumption so its if-clause names the exact scenario the commitment protects against, or the pair may be pointing at a missing commitment that hasn't been named yet.",
           relatedEntryRef: { table: "commitments", id: commitment.id },
           relatedText: commitment.text,
+          assumptionScenario: object.assumption_scenario,
+          commitmentIdentity: object.commitment_identity,
         });
       } catch (err) {
         console.warn(
@@ -859,6 +899,13 @@ export type FullAuditInput = {
 export async function runAllAuditChecks(
   input: FullAuditInput,
 ): Promise<AuditFinding[]> {
+  // Test-related checks (checkTestCoverage, checkTestInterpretation)
+  // are intentionally NOT wired here. Map honing is about the shape of
+  // the four columns (goal, behaviors, worries, commitments,
+  // assumptions), not about whether tests have been designed or run.
+  // Test execution health belongs to a different diagnostic surface.
+  // The check functions remain exported for reuse if a separate
+  // "test-health audit" ever ships.
   const results = await Promise.all([
     checkBundledGoal({ mapId: input.mapId, goalText: input.goalText }),
     checkInteriorWitnessInWorries({
@@ -878,10 +925,6 @@ export async function runAllAuditChecks(
       assumptions: input.assumptions,
       links: input.assumptionLinks,
     }),
-    checkTestCoverage({
-      assumptions: input.assumptions,
-      tests: input.tests,
-    }),
     checkAssumptionCommitmentDrift({
       assumptions: input.assumptions,
       commitments: input.commitments,
@@ -891,11 +934,6 @@ export async function runAllAuditChecks(
       assumptions: input.assumptions,
       commitments: input.commitments,
       links: input.assumptionLinks,
-    }),
-    checkTestInterpretation({
-      tests: input.tests,
-      testResults: input.testResults,
-      assumptions: input.assumptions,
     }),
     checkWorryCommitmentRedundancy({
       worries: input.worries,
