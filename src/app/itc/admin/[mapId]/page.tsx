@@ -17,6 +17,7 @@ import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { ITC_STAGES, STAGE_LABELS, type ItcStage } from "@/lib/itc/stage";
 import { getAdvanceGateAdmin } from "../../actions";
 import { StageProgress } from "../../[mapId]/stage-progress";
+import { AuditPreview } from "./audit-preview";
 
 export default async function ItcAdminMapPage({
   params,
@@ -164,6 +165,8 @@ export default async function ItcAdminMapPage({
               </div>
             )}
           </div>
+
+          <AuditPreview mapId={map.id} />
 
           <div>
             <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted)]">

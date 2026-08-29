@@ -34,6 +34,7 @@ import {
   type SmartReview,
 } from "@/lib/itc/coach";
 import { runAllAuditChecks } from "@/lib/itc/audit-rules";
+import { isItcAdmin } from "@/lib/itc/admin";
 import {
   addAssumption,
   addBehavior as insertBehaviorRow,
@@ -2088,6 +2089,74 @@ export async function dismissHoneDiagnostic(
   }
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
+}
+
+/**
+ * Admin-only preview: runs the whole-map audit against any map without
+ * persisting the result. Used by /itc/admin/[mapId] so the facilitator
+ * can inspect what the audit would say without pushing a banner at the
+ * coachee. Never writes to itc_messages; never wipes the coachee's own
+ * existing hone_diagnostic.
+ */
+export async function previewHoneDiagnosticAdmin(
+  mapId: string,
+): Promise<{ ok: true; prose: string } | { ok: false; reason: string }> {
+  const viewer = await requireItcParticipant();
+  if (!isItcAdmin(viewer.email)) {
+    return { ok: false, reason: "Not authorized." };
+  }
+  const map = await getMapById(mapId);
+  if (!map) return { ok: false, reason: "Map not found." };
+
+  try {
+    const [
+      behaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      tests,
+      testResults,
+    ] = await Promise.all([
+      listBehaviors(map.id),
+      listWorries(map.id),
+      listCommitments(map.id),
+      listAssumptions(map.id),
+      listAssumptionLinks(map.id),
+      listTests(map.id),
+      listTestResults(map.id),
+    ]);
+
+    const findings = await runAllAuditChecks({
+      mapId: map.id,
+      goalText: map.improvement_goal ?? "",
+      behaviors: behaviors.filter((b) => b.selected),
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      tests,
+      testResults,
+    });
+
+    const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
+    const prose = await synthesizeAuditProse(findings, {
+      goalText: map.improvement_goal ?? "",
+      pillarLabel,
+    });
+    if (!prose) {
+      return {
+        ok: false,
+        reason: "The audit produced no output. Try again in a moment.",
+      };
+    }
+    return { ok: true, prose };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not run the audit.",
+    };
+  }
 }
 
 const regenerateWalkthroughSchema = z.object({
