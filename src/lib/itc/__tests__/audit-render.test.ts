@@ -7,8 +7,7 @@ import type {
 } from "../audit-rules";
 
 // ---------------------------------------------------------------------------
-// Fixtures — one finding per issueType so the exhaustiveness test can
-// guarantee every kind renders without throwing.
+// Fixture helper
 // ---------------------------------------------------------------------------
 
 function finding(overrides: Partial<AuditFinding>): AuditFinding {
@@ -25,16 +24,17 @@ function finding(overrides: Partial<AuditFinding>): AuditFinding {
 const CTX = { goalText: "sample goal", pillarLabel: "Bond" };
 
 // ---------------------------------------------------------------------------
-// renderAudit — top-level composer
+// Opening + empty behavior
 // ---------------------------------------------------------------------------
 
-describe("renderAudit", () => {
+describe("renderAudit — opening and empty", () => {
   it("returns a map-holds-up message when the findings list is empty", () => {
     const prose = renderAudit([], CTX);
     expect(prose).toMatch(/holds up/i);
     expect(prose).toContain("Bond");
-    // No numbered action list on a clean map.
-    expect(prose).not.toMatch(/^\d\. /m);
+    // No column headers when nothing's wrong.
+    expect(prose).not.toMatch(/Your worries:/i);
+    expect(prose).not.toMatch(/Your competing commitments:/i);
   });
 
   it("adjusts the opening based on severity distribution", () => {
@@ -57,63 +57,401 @@ describe("renderAudit", () => {
     expect(modProse).toMatch(/holds up/i);
     expect(modProse).not.toMatch(/critical/i);
   });
+});
 
-  it("quotes actualText verbatim in the rendered paragraph", () => {
-    const source =
-      "I'm also committed to never seeing that my defensive behaviour is the problem.";
+// ---------------------------------------------------------------------------
+// Column structure
+// ---------------------------------------------------------------------------
+
+describe("renderAudit — column structure", () => {
+  it("groups findings under per-column headers, top-down (worries → commitments → assumptions)", () => {
     const prose = renderAudit(
       [
         finding({
+          issueType: "depth_shortfall_assumption",
           severity: "moderate",
-          issueType: "interior_witness_commitment",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+        }),
+        finding({
+          issueType: "depth_shortfall_worry",
+          severity: "critical",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "worry text",
+        }),
+        finding({
+          issueType: "missing_commitment_stem",
+          severity: "moderate",
           entryRef: { table: "commitments", id: "c-1" },
-          actualText: source,
-          detail: "sample detail",
+          actualText: "I am committed to X",
         }),
       ],
       CTX,
     );
-    expect(prose).toContain(`"${source}"`);
-    // Would fail if the renderer paraphrased.
-    expect(prose).not.toContain(
-      `"I'm committed to never seeing that my defensive behaviour is the problem."`,
-    );
+    const worriesIdx = prose.indexOf("Your worries:");
+    const commitmentsIdx = prose.indexOf("Your competing commitments:");
+    const assumptionsIdx = prose.indexOf("Your Big Assumptions:");
+    expect(worriesIdx).toBeGreaterThan(-1);
+    expect(commitmentsIdx).toBeGreaterThan(-1);
+    expect(assumptionsIdx).toBeGreaterThan(-1);
+    // Column order.
+    expect(worriesIdx).toBeLessThan(commitmentsIdx);
+    expect(commitmentsIdx).toBeLessThan(assumptionsIdx);
   });
 
-  it("caps the numbered action list at 10 items", () => {
-    // Twelve findings across distinct issue types — action list should
-    // stop at 10 (raised from 5 so drift / overload / test-coverage /
-    // redundancy fixes have room to surface alongside commitment /
-    // worry rewrites).
-    const distinctTypes: AuditIssueType[] = [
-      "bundled_goal",
-      "interior_witness_worry",
-      "interior_witness_commitment",
-      "missing_commitment_stem",
-      "vague_assumption_then_clause",
-      "depth_shortfall_worry",
-      "depth_shortfall_commitment",
-      "depth_shortfall_assumption",
-      "test_coverage_gap",
-      "test_grip_through_data",
-      "assumption_uncovered_commitment",
-      "worry_commitment_redundancy",
-    ];
-    const many: AuditFinding[] = distinctTypes.map((issueType, i) =>
-      finding({
-        severity: "moderate",
-        issueType,
-        entryRef: { table: "worries", id: `entry-${i}` },
-        actualText: `entry text ${i}`,
-        detail: `detail ${i}`,
-      }),
+  it("skips a column header entirely when the column has no findings", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_worry",
+          severity: "critical",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "worry text",
+        }),
+      ],
+      CTX,
     );
-    const prose = renderAudit(many, CTX);
-    const actionMatches = prose.match(/^\d+\. /gm) ?? [];
-    expect(actionMatches).toHaveLength(10);
+    expect(prose).toContain("Your worries:");
+    expect(prose).not.toContain("Your competing commitments:");
+    expect(prose).not.toContain("Your Big Assumptions:");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-entry paragraph shape
+// ---------------------------------------------------------------------------
+
+describe("renderAudit — per-entry paragraph shape", () => {
+  it("renders single-critique entries as quote + one plain-sentence fix", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "depth_shortfall_worry",
+          severity: "critical",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry X will happen",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toContain('"I worry X will happen"');
+    expect(prose).toMatch(/Push it to identity depth/i);
+    // No "N things to fix" enumeration for a single critique.
+    expect(prose).not.toMatch(/things to fix/i);
   });
 
-  it("renders each issueType without throwing", () => {
+  it("enumerates multi-critique entries as 'N things to fix. (a) … (b) … (c) …'", () => {
+    // Commitment with three structural critiques: stem + interior + depth.
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "missing_commitment_stem",
+          severity: "moderate",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I am committed to avoiding the feeling that Y",
+        }),
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I am committed to avoiding the feeling that Y",
+        }),
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I am committed to avoiding the feeling that Y",
+        }),
+      ],
+      CTX,
+    );
+    // Quote appears once.
+    const quoteCount =
+      prose.split('"I am committed to avoiding the feeling that Y"').length - 1;
+    expect(quoteCount).toBe(1);
+    // Enumerated as "Three things to fix. (a) … (b) … (c) …"
+    expect(prose).toMatch(/Three things to fix\./);
+    expect(prose).toContain("(a)");
+    expect(prose).toContain("(b)");
+    expect(prose).toContain("(c)");
+    // All three fix phrasings appear.
+    expect(prose).toMatch(/I'm also committed to/i);
+    expect(prose).toMatch(/never being the/i);
+    expect(prose).toMatch(/identity depth/i);
+  });
+
+  it("orders enumerated critiques stably (stem → interior → depth)", () => {
+    const prose = renderAudit(
+      [
+        // Deliberately reversed insertion order.
+        finding({
+          issueType: "depth_shortfall_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "commitment text",
+        }),
+        finding({
+          issueType: "interior_witness_commitment",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "commitment text",
+        }),
+        finding({
+          issueType: "missing_commitment_stem",
+          severity: "moderate",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "commitment text",
+        }),
+      ],
+      CTX,
+    );
+    const stemIdx = prose.indexOf("I'm also committed to");
+    const interiorIdx = prose.indexOf("never being the");
+    const depthIdx = prose.indexOf("identity depth");
+    expect(stemIdx).toBeGreaterThan(-1);
+    expect(interiorIdx).toBeGreaterThan(-1);
+    expect(depthIdx).toBeGreaterThan(-1);
+    expect(stemIdx).toBeLessThan(interiorIdx);
+    expect(interiorIdx).toBeLessThan(depthIdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drift / overload / redundancy clauses
+// ---------------------------------------------------------------------------
+
+describe("renderAudit — drift, overload, redundancy clauses", () => {
+  it("renders single drift as a per-entry clause with scenario + identity", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+          detail: "Different concerns.",
+          relatedText: "I'm also committed to X",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: "scenario A",
+          commitmentIdentity: "identity 1",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toMatch(/Sharpen the "if" half/i);
+    expect(prose).toContain("scenario A");
+    expect(prose).toContain("identity 1");
+    expect(prose).toContain('"I\'m also committed to X"');
+  });
+
+  it("merges multiple drift findings on the same assumption into one clause", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 1",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: "shared scenario",
+          commitmentIdentity: "identity 1",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 2",
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+          assumptionScenario: "shared scenario",
+          commitmentIdentity: "identity 2",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 3",
+          relatedEntryRef: { table: "commitments", id: "c-3" },
+          assumptionScenario: "shared scenario",
+          commitmentIdentity: "identity 3",
+        }),
+      ],
+      CTX,
+    );
+    // Assumption quote appears once (per-entry group).
+    const quoteCount = prose.split('"assumption A"').length - 1;
+    expect(quoteCount).toBe(1);
+    // Shared scenario stated once (factored out of per-pair beats).
+    const scenarioCount = prose.split("shared scenario").length - 1;
+    expect(scenarioCount).toBe(1);
+    // All three identities appear.
+    expect(prose).toContain("identity 1");
+    expect(prose).toContain("identity 2");
+    expect(prose).toContain("identity 3");
+    // Uses "all three" for N>=3.
+    expect(prose).toMatch(/all three paired commitments/i);
+  });
+
+  it("uses 'both' for N=2 merged drift", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 1",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+          assumptionScenario: "shared scenario",
+          commitmentIdentity: "identity 1",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption A",
+          detail: "Different concerns.",
+          relatedText: "commitment 2",
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+          assumptionScenario: "shared scenario",
+          commitmentIdentity: "identity 2",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toMatch(/both paired commitments/i);
+  });
+
+  it("renders overload as a clause carrying the LLM detail plus generic fix", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "assumption_overload",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+          detail:
+            "Assumption is carrying multiple distinct identity concerns. Distinct: helper vs provider.",
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toMatch(/Carrying more weight than one belief can hold/i);
+    // Machinery prefix stripped, substantive reason kept.
+    expect(prose).toContain("Distinct: helper vs provider.");
+    expect(prose).toMatch(/Draft additional Big Assumptions/i);
+  });
+
+  it("renders single redundancy as a per-worry clause", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "worry_commitment_redundancy",
+          severity: "observation",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry X",
+          detail: "Same identity concern in two forms.",
+          relatedText: "I am committed to Y",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+        }),
+      ],
+      CTX,
+    );
+    expect(prose).toMatch(/Duplicates the commitment "I am committed to Y"/i);
+    expect(prose).toMatch(/Push this worry into a distinct/i);
+  });
+
+  it("merges multiple redundancy findings on the same worry into one clause", () => {
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "worry_commitment_redundancy",
+          severity: "observation",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry X",
+          detail: "Same concern.",
+          relatedText: "commitment A",
+          relatedEntryRef: { table: "commitments", id: "c-1" },
+        }),
+        finding({
+          issueType: "worry_commitment_redundancy",
+          severity: "observation",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry X",
+          detail: "Same concern.",
+          relatedText: "commitment B",
+          relatedEntryRef: { table: "commitments", id: "c-2" },
+        }),
+      ],
+      CTX,
+    );
+    // Worry quote once.
+    const quoteCount = prose.split('"I worry X"').length - 1;
+    expect(quoteCount).toBe(1);
+    // Both commitments listed.
+    expect(prose).toContain('"commitment A"');
+    expect(prose).toContain('"commitment B"');
+    expect(prose).toMatch(/Duplicates both commitments/i);
+  });
+
+  it("combines generic critiques with drift/overload in one enumerated paragraph", () => {
+    // An assumption with vague-then + drift + overload should render as
+    // a single paragraph enumerating all three fixes.
+    const prose = renderAudit(
+      [
+        finding({
+          issueType: "vague_assumption_then_clause",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+          detail: "Vague then.",
+        }),
+        finding({
+          issueType: "assumption_commitment_drift",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+          detail: "Different concerns.",
+          relatedText: "commitment 1",
+          assumptionScenario: "scenario X",
+          commitmentIdentity: "identity 1",
+        }),
+        finding({
+          issueType: "assumption_overload",
+          severity: "moderate",
+          entryRef: { table: "assumptions", id: "a-1" },
+          actualText: "assumption text",
+          detail: "Distinct concerns.",
+        }),
+      ],
+      CTX,
+    );
+    // Quote once.
+    const quoteCount = prose.split('"assumption text"').length - 1;
+    expect(quoteCount).toBe(1);
+    // Enumerated with three clauses.
+    expect(prose).toMatch(/Three things to fix\./);
+    expect(prose).toContain("(a)");
+    expect(prose).toContain("(b)");
+    expect(prose).toContain("(c)");
+    expect(prose).toMatch(/Name the identity plainly/i); // vague-then
+    expect(prose).toMatch(/Sharpen the "if" half/i); // drift
+    expect(prose).toMatch(/Carrying more weight/i); // overload
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exhaustiveness + voice hygiene
+// ---------------------------------------------------------------------------
+
+describe("renderAudit — exhaustiveness and voice hygiene", () => {
+  it("renders every issue type without throwing", () => {
     const allIssueTypes: AuditIssueType[] = [
       "bundled_goal",
       "interior_witness_worry",
@@ -145,542 +483,15 @@ describe("renderAudit", () => {
           suggestedFix: "sample suggested fix",
           relatedText: "sample paired entry text",
           relatedEntryRef: { table: "commitments", id: "c-related" },
+          assumptionScenario: "sample scenario",
+          commitmentIdentity: "sample identity",
         });
         expect(() => renderAudit([f], CTX)).not.toThrow();
-        const prose = renderAudit([f], CTX);
-        // Every rendered paragraph should include the actualText quote.
-        expect(prose).toContain(`"sample entry text for rendering"`);
       }
     }
   });
 
-  it("does not use em-dashes", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          severity: "critical",
-          issueType: "bundled_goal",
-          entryRef: { table: "goal", id: "map-1" },
-          actualText: "getting better at X and better at Y",
-          suggestedFix:
-            'Pick one for this map. First half: "getting better at X". Second half: "getting better at Y".',
-        }),
-      ],
-      CTX,
-    );
-    expect(prose).not.toContain("—");
-    expect(prose).not.toContain("–");
-  });
-
-  it("emits one entry opener when multiple findings target the same entry", () => {
-    const commitmentQuote =
-      "I'm also committed to never seeing that my defensive behaviour is the problem";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: commitmentQuote,
-          detail: "Commitment sits at practical depth, not identity depth.",
-        }),
-        finding({
-          issueType: "interior_witness_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: commitmentQuote,
-          detail:
-            "Commitment uses interior-witness verb 'never seeing' instead of naming the identity.",
-        }),
-      ],
-      CTX,
-    );
-    const openerCount = (prose.match(/Your commitment now: /g) ?? []).length;
-    expect(openerCount).toBe(1);
-    // Both critique bodies should be present.
-    expect(prose).toMatch(/still at the practical level/i);
-    expect(prose).toMatch(/framed around avoiding a feeling/i);
-    // Quote appears exactly once, in the shared opener.
-    const quoteCount = prose.split(`"${commitmentQuote}"`).length - 1;
-    expect(quoteCount).toBe(1);
-  });
-
-  it("merges multiple drift findings on the same assumption into one paragraph", () => {
-    // Merged-drift template factors out the shared assumption scenario
-    // (same across all pairs — it's the same assumption) and lists the
-    // per-commitment identities as a joined list. Cuts the "Against the
-    // first / Against the second" cadence that repeated the assumption's
-    // if-clause for every pair.
-    const assumptionQuote =
-      "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am.";
-    const c1 =
-      "I'm also committed to never seeing that my defensive behaviour is the problem";
-    const c2 =
-      "I'm also committed to never being the guy who isn't enough for her.";
-    const sharedScenario = "revealing failures / stopping protection";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: assumptionQuote,
-          detail: "Different concerns.",
-          relatedText: c1,
-          relatedEntryRef: { table: "commitments", id: "c-1" },
-          assumptionScenario: sharedScenario,
-          commitmentIdentity: "the guy whose defensiveness IS the problem",
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: assumptionQuote,
-          detail: "Different concerns.",
-          relatedText: c2,
-          relatedEntryRef: { table: "commitments", id: "c-2" },
-          assumptionScenario: sharedScenario,
-          commitmentIdentity: "the insufficient partner",
-        }),
-      ],
-      CTX,
-    );
-    const openerCount = (prose.match(/Your assumption now: /g) ?? []).length;
-    expect(openerCount).toBe(1);
-    // Both paired commitment quotes appear once each.
-    expect(prose).toContain(c1);
-    expect(prose).toContain(c2);
-    // Merged framing.
-    expect(prose).toMatch(/drifted apart from both/i);
-    // Shared scenario is stated ONCE (not repeated per pair).
-    const scenarioMatches = prose.split(sharedScenario).length - 1;
-    expect(scenarioMatches).toBe(1);
-    // Both identities are named.
-    expect(prose).toContain("the guy whose defensiveness IS the problem");
-    expect(prose).toContain("the insufficient partner");
-  });
-
-  it("dedupes action items when multiple issue types collapse to the same fix", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "some commitment text",
-          detail: "commitment at practical depth",
-        }),
-        finding({
-          issueType: "interior_witness_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "some commitment text",
-          detail: "commitment uses interior-witness verb",
-        }),
-      ],
-      CTX,
-    );
-    const actionMatches = prose.match(/^\d+\. /gm) ?? [];
-    expect(actionMatches).toHaveLength(1);
-    // Merged action wording should surface.
-    expect(prose).toMatch(
-      /Rewrite the commitment to name the identity you're never being/i,
-    );
-  });
-
-  it("says 'all three' when three drift findings merge on one assumption", () => {
-    const assumptionQuote = "I assume that if X, then Y.";
-    const sharedScenario = "scenario X";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: assumptionQuote,
-          detail: "Different concerns.",
-          relatedText: "commitment 1 text",
-          relatedEntryRef: { table: "commitments", id: "c-1" },
-          assumptionScenario: sharedScenario,
-          commitmentIdentity: "identity one",
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: assumptionQuote,
-          detail: "Different concerns.",
-          relatedText: "commitment 2 text",
-          relatedEntryRef: { table: "commitments", id: "c-2" },
-          assumptionScenario: sharedScenario,
-          commitmentIdentity: "identity two",
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: assumptionQuote,
-          detail: "Different concerns.",
-          relatedText: "commitment 3 text",
-          relatedEntryRef: { table: "commitments", id: "c-3" },
-          assumptionScenario: sharedScenario,
-          commitmentIdentity: "identity three",
-        }),
-      ],
-      CTX,
-    );
-    expect(prose).toMatch(/drifted apart from all three/i);
-    expect(prose).not.toMatch(/drifted apart from both/i);
-    // All three identities appear.
-    expect(prose).toContain("identity one");
-    expect(prose).toContain("identity two");
-    expect(prose).toContain("identity three");
-    // Shared scenario stated once.
-    const scenarioMatches = prose.split(sharedScenario).length - 1;
-    expect(scenarioMatches).toBe(1);
-  });
-
-  it("dedupes action items when the rendered text is identical across entries", () => {
-    // Two depth_shortfall_commitment findings on different commitments
-    // — both render the same generic "Push the commitment to identity
-    // depth…" action. Dedup should collapse them to one action item.
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "commitment one text",
-          detail: "commitment 1 at practical depth",
-        }),
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-2" },
-          actualText: "commitment two text",
-          detail: "commitment 2 at practical depth",
-        }),
-      ],
-      CTX,
-    );
-    const pushActions =
-      prose.match(/^\d\. Push the commitment to identity depth/gm) ?? [];
-    expect(pushActions).toHaveLength(1);
-    // Both entry quotes still appear in the paragraph section.
-    expect(prose).toContain('"commitment one text"');
-    expect(prose).toContain('"commitment two text"');
-  });
-
-  it("merges multiple redundancy findings on the same worry into one paragraph", () => {
-    const worryQuote = "I worry I'll say the wrong thing.";
-    const c1 = "I am committed to A";
-    const c2 = "I am committed to B";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "worry_commitment_redundancy",
-          severity: "moderate",
-          entryRef: { table: "worries", id: "w-1" },
-          actualText: worryQuote,
-          detail: "c-1 duplicates the fear",
-          relatedText: c1,
-          relatedEntryRef: { table: "commitments", id: "c-1" },
-        }),
-        finding({
-          issueType: "worry_commitment_redundancy",
-          severity: "moderate",
-          entryRef: { table: "worries", id: "w-1" },
-          actualText: worryQuote,
-          detail: "c-2 duplicates the fear",
-          relatedText: c2,
-          relatedEntryRef: { table: "commitments", id: "c-2" },
-        }),
-      ],
-      CTX,
-    );
-    const openerCount = (prose.match(/Your worry now: /g) ?? []).length;
-    expect(openerCount).toBe(1);
-    expect(prose).toContain(c1);
-    expect(prose).toContain(c2);
-    expect(prose).toMatch(/commitments that duplicate it/i);
-    expect(prose).toMatch(/Against the first/i);
-    expect(prose).toMatch(/Against the second/i);
-  });
-
-  it("gates off the missing-stem 'Consider' rewrite when a heavier commitment critique fires", () => {
-    const commitmentQuote =
-      "I am committed to avoiding the feeling I might be inadequate";
-    const stemFix = `I'm also committed to ${commitmentQuote.replace(/^I am committed to /, "")}`;
-    // Both stem AND depth-shortfall fire on the same commitment. The
-    // stem paragraph should still render, but its "Consider:" rewrite
-    // is suppressed because the depth critique is prescribing a much
-    // deeper fix.
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: commitmentQuote,
-          detail: "at practical depth",
-        }),
-        finding({
-          issueType: "missing_commitment_stem",
-          severity: "moderate",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: commitmentQuote,
-          detail: "missing the 'also' stem",
-          suggestedFix: stemFix,
-        }),
-      ],
-      CTX,
-    );
-    // Stem paragraph is still there.
-    expect(prose).toMatch(/canonical .*stem/i);
-    // But the Consider: rewrite is suppressed.
-    expect(prose).not.toContain("Consider:");
-    expect(prose).not.toContain(stemFix);
-  });
-
-  it("keeps the missing-stem 'Consider' rewrite when only stem fires on the commitment", () => {
-    const commitmentQuote = "I am committed to being present with my kids";
-    const stemFix = "I'm also committed to being present with my kids";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "missing_commitment_stem",
-          severity: "moderate",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: commitmentQuote,
-          detail: "missing the 'also' stem",
-          suggestedFix: stemFix,
-        }),
-      ],
-      CTX,
-    );
-    expect(prose).toContain("Consider:");
-    expect(prose).toContain(stemFix);
-  });
-
-  it("aggregates when 2+ entries fire the same generic-body critique", () => {
-    // Three commitments each fire depth_shortfall_commitment. Instead
-    // of three near-identical per-entry paragraphs, render one
-    // aggregated paragraph naming all three with a bulleted quote list.
-    const c1 = "I am committed to A";
-    const c2 = "I am committed to B";
-    const c3 = "I am committed to C";
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: c1,
-          detail: "practical depth",
-        }),
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-2" },
-          actualText: c2,
-          detail: "practical depth",
-        }),
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-3" },
-          actualText: c3,
-          detail: "practical depth",
-        }),
-      ],
-      CTX,
-    );
-    // Exactly one aggregated paragraph.
-    expect(prose).toMatch(
-      /Three of your commitments are still at the practical level/i,
-    );
-    // All three commitments appear in the bulleted list.
-    expect(prose).toContain(`- "${c1}"`);
-    expect(prose).toContain(`- "${c2}"`);
-    expect(prose).toContain(`- "${c3}"`);
-    // No per-entry "Your commitment now: X" openers for any of them —
-    // the aggregation covers all three.
-    const openerCount = (prose.match(/Your commitment now: /g) ?? []).length;
-    expect(openerCount).toBe(0);
-    // No per-entry practical-level paragraph either (since aggregation
-    // absorbed all three findings).
-    expect(prose).not.toMatch(/This is still at the practical level/i);
-  });
-
-  it("uses 'Two' for N=2 aggregation", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "interior_witness_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "I am committed to avoiding X",
-          detail: "interior verb",
-        }),
-        finding({
-          issueType: "interior_witness_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-2" },
-          actualText: "I am committed to never seeing Y",
-          detail: "interior verb",
-        }),
-      ],
-      CTX,
-    );
-    expect(prose).toMatch(/Two of your commitments are framed around/i);
-  });
-
-  it("does not aggregate at N=1 — single finding still renders per-entry", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "the only commitment at practical depth",
-          detail: "practical depth",
-        }),
-      ],
-      CTX,
-    );
-    // Per-entry rendering with its opener.
-    expect(prose).toMatch(/Your commitment now: /);
-    // No aggregation phrasing.
-    expect(prose).not.toMatch(/One of your commitments/i);
-    // The per-entry critique body still appears.
-    expect(prose).toMatch(/still at the practical level/i);
-  });
-
-  it("does not aggregate drift, redundancy, or overload findings", () => {
-    // Two drift findings on different assumptions should NOT collapse
-    // into a cross-entry aggregation — drift is entry-specific
-    // (relatedText, per-pair reason). Each renders per-entry.
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: "assumption 1",
-          detail: "reason 1",
-          relatedText: "commitment 1",
-          relatedEntryRef: { table: "commitments", id: "c-1" },
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-2" },
-          actualText: "assumption 2",
-          detail: "reason 2",
-          relatedText: "commitment 2",
-          relatedEntryRef: { table: "commitments", id: "c-2" },
-        }),
-      ],
-      CTX,
-    );
-    // Each assumption gets its own opener — drift never aggregates.
-    const openerCount = (prose.match(/Your assumption now: /g) ?? []).length;
-    expect(openerCount).toBe(2);
-    // No cross-entry aggregation phrasing.
-    expect(prose).not.toMatch(/Two of your assumptions/i);
-  });
-
-  it("mixes aggregated + per-entry cleanly when an entry has aggregatable + non-aggregatable findings", () => {
-    // C1 has depth_shortfall (aggregatable, N=2 with C2) AND drift
-    // (non-aggregatable). C1 should NOT appear per-entry for the depth
-    // finding (absorbed into aggregation), but WILL appear per-entry
-    // for the drift finding.
-    // Actually: the drift finding is on an assumption, not on C1. Let
-    // me use a cleaner mix: two commitments with depth_shortfall (both
-    // aggregated) + one commitment with assumption_uncovered_commitment
-    // (also aggregatable but only 1 → per-entry).
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-1" },
-          actualText: "commitment one",
-          detail: "practical depth",
-        }),
-        finding({
-          issueType: "depth_shortfall_commitment",
-          severity: "critical",
-          entryRef: { table: "commitments", id: "c-2" },
-          actualText: "commitment two",
-          detail: "practical depth",
-        }),
-        finding({
-          issueType: "assumption_uncovered_commitment",
-          severity: "moderate",
-          entryRef: { table: "commitments", id: "c-3" },
-          actualText: "commitment three uncovered",
-          detail: "no assumption linked",
-        }),
-      ],
-      CTX,
-    );
-    // Aggregated depth paragraph names c1 and c2.
-    expect(prose).toMatch(/Two of your commitments are still at the practical level/i);
-    expect(prose).toContain('- "commitment one"');
-    expect(prose).toContain('- "commitment two"');
-    // c3 renders per-entry with its own opener (only 1 uncovered → below threshold).
-    expect(prose).toContain('Your commitment now: "commitment three uncovered"');
-  });
-
-  it("collapses single-drift and merged-drift action wording to one item", () => {
-    // One assumption has a single drift finding; a different assumption
-    // has two drift findings (merged). Both should collapse to ONE
-    // action item because the wording is now unified.
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-1" },
-          actualText: "assumption A",
-          detail: "Different concerns.",
-          relatedText: "commitment 1",
-          relatedEntryRef: { table: "commitments", id: "c-1" },
-          assumptionScenario: "scenario A",
-          commitmentIdentity: "identity 1",
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-2" },
-          actualText: "assumption B",
-          detail: "Different concerns.",
-          relatedText: "commitment 2",
-          relatedEntryRef: { table: "commitments", id: "c-2" },
-          assumptionScenario: "scenario B",
-          commitmentIdentity: "identity 2",
-        }),
-        finding({
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          entryRef: { table: "assumptions", id: "a-2" },
-          actualText: "assumption B",
-          detail: "Different concerns.",
-          relatedText: "commitment 3",
-          relatedEntryRef: { table: "commitments", id: "c-3" },
-          assumptionScenario: "scenario B",
-          commitmentIdentity: "identity 3",
-        }),
-      ],
-      CTX,
-    );
-    const driftActions =
-      prose.match(/^\d+\. Sharpen the assumption's if-clause/gm) ?? [];
-    expect(driftActions).toHaveLength(1);
-  });
-
-  it("does not include machinery words (rubric, depth score, criterion)", () => {
+  it("does not include machinery words (rubric, depth score, criterion, canonical stem, interior reckoning, if-clause, then-clause)", () => {
     const prose = renderAudit(
       [
         finding({
@@ -691,11 +502,22 @@ describe("renderAudit", () => {
           detail:
             "Worry hasn't reached identity depth yet. The fear needs to land on who he'd be, not on the immediate consequence.",
         }),
+        finding({
+          severity: "moderate",
+          issueType: "missing_commitment_stem",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I am committed to X",
+        }),
       ],
       CTX,
     );
     expect(prose).not.toMatch(/\brubric\b/i);
     expect(prose).not.toMatch(/\bdepth score\b/i);
     expect(prose).not.toMatch(/\bcriterion\b/i);
+    expect(prose).not.toMatch(/canonical stem/i);
+    expect(prose).not.toMatch(/interior reckoning/i);
+    // "if-clause" / "then-clause" replaced by "'if' half" / "'then' half".
+    expect(prose).not.toMatch(/if-clause/i);
+    expect(prose).not.toMatch(/then-clause/i);
   });
 });

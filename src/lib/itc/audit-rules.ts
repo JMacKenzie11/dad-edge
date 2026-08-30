@@ -375,18 +375,9 @@ export async function checkDepthShortfall(input: {
 }): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
 
-  // Track which worries fired a depth shortfall so we can suppress the
-  // depth finding on their paired commitments. Commitments derive from
-  // worries (competing commitment mirrors the identity fear the worry
-  // names); when the worry is pushed to identity depth, the paired
-  // commitment naturally follows. Flagging both would tell the coachee
-  // to fix the same problem in two places.
-  const worriesWithDepthShortfall = new Set<string>();
-
   for (const worry of input.worries) {
     if (worry.depth_score == null) continue;
     if (worry.depth_score >= DEPTH_THRESHOLD) continue;
-    worriesWithDepthShortfall.add(worry.id);
     const detail = worry.rubric_reason
       ? `Worry hasn't reached identity depth yet. Rubric reason: ${worry.rubric_reason}`
       : "Worry hasn't reached identity depth yet. The fear needs to land on who he'd be, not on the immediate consequence.";
@@ -402,14 +393,6 @@ export async function checkDepthShortfall(input: {
   for (const commitment of input.commitments) {
     if (commitment.depth_score == null) continue;
     if (commitment.depth_score >= DEPTH_THRESHOLD) continue;
-    // Suppress: paired worry is being resharpened; commitment will
-    // follow when worry is pushed to identity depth.
-    if (
-      commitment.worry_id &&
-      worriesWithDepthShortfall.has(commitment.worry_id)
-    ) {
-      continue;
-    }
     const detail = commitment.rubric_reason
       ? `Commitment hasn't reached identity depth yet. Rubric reason: ${commitment.rubric_reason}`
       : "Commitment hasn't reached identity depth yet. The vow needs to name the identity being protected and what the outside world would see.";
@@ -896,6 +879,38 @@ export type FullAuditInput = {
   testResults: ItcTestResult[];
 };
 
+/**
+ * Commitment critique types that are downstream of the worry they're
+ * paired to. When the paired worry fires a rewrite-triggering critique
+ * (depth-shortfall or interior-witness), the commitment gets rewritten
+ * from scratch during the worry-sharpening pass, so surfacing these
+ * commitment-structural critiques on top is redundant. The
+ * post-processing filter in runAllAuditChecks drops them.
+ *
+ * Cross-column commitment findings (assumption_uncovered_commitment,
+ * assumption_commitment_drift) are NOT in this set — they're about the
+ * assumption/commitment linking, not the commitment's own shape.
+ */
+const SUPPRESSIBLE_COMMITMENT_TYPES: ReadonlySet<AuditIssueType> = new Set([
+  "depth_shortfall_commitment",
+  "interior_witness_commitment",
+  "missing_commitment_stem",
+]);
+
+/**
+ * Worry critique types that trigger a full worry rewrite. When any of
+ * these fires on a worry, the commitment paired to that worry gets
+ * suppressed for its structural critiques.
+ *
+ * worry_commitment_redundancy is NOT in this set — the fix for
+ * redundancy is often to drop the worry entirely, which doesn't
+ * necessarily change the paired commitment's own shape.
+ */
+const WORRY_REWRITE_TYPES: ReadonlySet<AuditIssueType> = new Set([
+  "depth_shortfall_worry",
+  "interior_witness_worry",
+]);
+
 export async function runAllAuditChecks(
   input: FullAuditInput,
 ): Promise<AuditFinding[]> {
@@ -941,10 +956,36 @@ export async function runAllAuditChecks(
     }),
   ]);
   const flat = results.flat();
-  flat.sort(
+
+  // Post-processing: suppress commitment structural critiques when the
+  // paired worry has any rewrite-triggering critique. Commitments
+  // derive from worries; flagging both tells the coachee to fix the
+  // same problem twice.
+  const worriesNeedingRewrite = new Set<string>();
+  for (const f of flat) {
+    if (
+      f.entryRef.table === "worries" &&
+      WORRY_REWRITE_TYPES.has(f.issueType)
+    ) {
+      worriesNeedingRewrite.add(f.entryRef.id);
+    }
+  }
+  const commitmentToWorry = new Map<string, string>();
+  for (const c of input.commitments) {
+    if (c.worry_id) commitmentToWorry.set(c.id, c.worry_id);
+  }
+  const filtered = flat.filter((f) => {
+    if (!SUPPRESSIBLE_COMMITMENT_TYPES.has(f.issueType)) return true;
+    if (f.entryRef.table !== "commitments") return true;
+    const pairedWorryId = commitmentToWorry.get(f.entryRef.id);
+    if (!pairedWorryId) return true;
+    return !worriesNeedingRewrite.has(pairedWorryId);
+  });
+
+  filtered.sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   );
-  return flat;
+  return filtered;
 }
 
 // ---------------------------------------------------------------------------

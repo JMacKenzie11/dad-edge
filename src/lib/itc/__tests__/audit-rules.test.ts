@@ -7,6 +7,7 @@ import {
   checkMissingCommitmentStem,
   checkTestCoverage,
   checkVagueAssumptionThenClause,
+  runAllAuditChecks,
   validateQuotesAgainstFindings,
   type AuditFinding,
 } from "../audit-rules";
@@ -282,11 +283,19 @@ describe("checkDepthShortfall", () => {
     expect(findings).toHaveLength(0);
   });
 
-  it("suppresses commitment depth finding when the paired worry also has a depth shortfall", async () => {
+});
+
+// ---------------------------------------------------------------------------
+// runAllAuditChecks — orchestrator-level behavior (commitment suppression)
+// ---------------------------------------------------------------------------
+
+describe("runAllAuditChecks — commitment suppression", () => {
+  it("suppresses commitment structural findings when the paired worry has a depth-shortfall", async () => {
     // Commitments derive from worries; when the worry is pushed to
     // identity depth the paired commitment naturally follows. Flagging
     // both would tell the coachee to fix the same problem in two
-    // places.
+    // places. Suppression applies to depth-shortfall, interior-witness,
+    // and missing-stem findings on the paired commitment.
     const worry = makeWorry({
       id: "worry-1",
       depth_score: 2,
@@ -297,20 +306,63 @@ describe("checkDepthShortfall", () => {
       worry_id: "worry-1",
       depth_score: 1,
       rubric_reason: "practical",
+      text: "I am committed to avoiding the feeling I might fail",
     });
-    const findings = await checkDepthShortfall({
+    const findings = await runAllAuditChecks({
+      mapId: "map-1",
+      goalText: "goal",
+      behaviors: [],
       worries: [worry],
       commitments: [commitment],
       assumptions: [],
+      assumptionLinks: [],
+      tests: [],
+      testResults: [],
     });
-    // Worry finding fires; commitment is suppressed.
-    expect(findings.map((f) => f.issueType)).toEqual(["depth_shortfall_worry"]);
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_worry")).toBe(true);
+    expect(types.has("depth_shortfall_commitment")).toBe(false);
+    expect(types.has("interior_witness_commitment")).toBe(false);
+    expect(types.has("missing_commitment_stem")).toBe(false);
   });
 
-  it("still flags a commitment depth shortfall when its paired worry is at identity depth", async () => {
-    // If the worry is already at depth 3 (no worry-shortfall fires),
-    // the commitment's own depth issue is a real map problem, not a
-    // downstream signal of a worry that's about to change.
+  it("suppresses commitment structural findings when the paired worry has an interior-witness issue", async () => {
+    // Worry has interior-witness verb pointed at self-truth; that
+    // counts as "worry needing rewrite" and suppresses the paired
+    // commitment's structural critiques.
+    const worry = makeWorry({
+      id: "worry-1",
+      depth_score: 3, // fine on depth
+      text: "I fear I'd have to see that I've been avoiding this.",
+    });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 1,
+      rubric_reason: "practical",
+      text: "I am committed to X",
+    });
+    const findings = await runAllAuditChecks({
+      mapId: "map-1",
+      goalText: "goal",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [],
+      assumptionLinks: [],
+      tests: [],
+      testResults: [],
+    });
+    const types = new Set(findings.map((f) => f.issueType));
+    // Worry interior-witness fires; paired commitment findings suppressed.
+    expect(types.has("interior_witness_worry")).toBe(true);
+    expect(types.has("depth_shortfall_commitment")).toBe(false);
+    expect(types.has("missing_commitment_stem")).toBe(false);
+  });
+
+  it("still flags a commitment when its paired worry is sound", async () => {
+    // Worry at depth 3, no interior-witness → no suppression trigger.
+    // Commitment's own depth issue surfaces.
     const worry = makeWorry({ id: "worry-1", depth_score: 3 });
     const commitment = makeCommitment({
       id: "c-1",
@@ -318,14 +370,39 @@ describe("checkDepthShortfall", () => {
       depth_score: 2,
       rubric_reason: "practical",
     });
-    const findings = await checkDepthShortfall({
+    const findings = await runAllAuditChecks({
+      mapId: "map-1",
+      goalText: "goal",
+      behaviors: [],
       worries: [worry],
       commitments: [commitment],
       assumptions: [],
+      assumptionLinks: [],
+      tests: [],
+      testResults: [],
     });
-    expect(findings.map((f) => f.issueType)).toEqual([
-      "depth_shortfall_commitment",
-    ]);
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_commitment")).toBe(true);
+  });
+
+  it("does not wire test-related checks (test coverage, test grip)", async () => {
+    // Map with a test but no assumption coverage — checkTestCoverage
+    // would flag it, but the orchestrator no longer wires it.
+    const assumption = makeAssumption({ id: "a-1" });
+    const findings = await runAllAuditChecks({
+      mapId: "map-1",
+      goalText: "goal",
+      behaviors: [],
+      worries: [],
+      commitments: [],
+      assumptions: [assumption],
+      assumptionLinks: [],
+      tests: [],
+      testResults: [],
+    });
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("test_coverage_gap")).toBe(false);
+    expect(types.has("test_grip_through_data")).toBe(false);
   });
 });
 
