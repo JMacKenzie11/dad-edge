@@ -508,7 +508,7 @@ export function MapCanvas({
                 tests
                   .slice()
                   .reverse()
-                  .find((t) => t.status !== "abandoned") ?? null;
+                  .find((t) => t.status !== "abandoned" && t.status !== "superseded") ?? null;
               if (!activeAssumption) {
                 return (
                   <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
@@ -547,7 +547,7 @@ export function MapCanvas({
                 tests
                   .slice()
                   .reverse()
-                  .find((t) => t.status !== "abandoned") ?? null;
+                  .find((t) => t.status !== "abandoned" && t.status !== "superseded") ?? null;
               if (!activeTest) {
                 return (
                   <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
@@ -597,7 +597,7 @@ export function MapCanvas({
                 tests
                   .slice()
                   .reverse()
-                  .find((t) => t.status !== "abandoned") ?? null;
+                  .find((t) => t.status !== "abandoned" && t.status !== "superseded") ?? null;
               const activeAssumption = activeTest
                 ? assumptions.find((a) => a.id === activeTest.assumption_id) ??
                   null

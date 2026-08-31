@@ -9,7 +9,7 @@ import type {
   ItcTest,
   ItcTestResult,
 } from "@/lib/itc/maps";
-import { advanceAfterResults, saveTestResult } from "../actions";
+import { advanceAfterResults, saveTestResult, supersedeTest } from "../actions";
 import { EntryThread } from "./entry-thread";
 import { FormErrorSummary, FormField } from "./form-field";
 
@@ -76,9 +76,26 @@ export function ResultsForm({
 }) {
   const [pending, startTransition] = useTransition();
   const [advancing, startAdvance] = useTransition();
+  const [superseding, startSupersede] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saved, setSaved] = useState<boolean>(Boolean(result?.what_i_did));
+
+  const snapshot = test.assumption_text_at_design?.trim() ?? null;
+  const current = assumption.text.trim();
+  const assumptionDrifted =
+    snapshot !== null && snapshot.length > 0 && snapshot !== current;
+
+  function onSupersede() {
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("test_id", test.id);
+    startSupersede(async () => {
+      const res = await supersedeTest(fd);
+      if (!res.ok) setError(res.reason ?? "Could not supersede.");
+    });
+  }
 
   const [ranOn, setRanOn] = useState(
     result?.ran_on ?? new Date().toISOString().slice(0, 10),
@@ -161,14 +178,46 @@ export function ResultsForm({
         <EntryThread messages={thread} chipTarget="assumption" />
       ) : null}
 
-      <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm">
-        <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
-          Big Assumption you tested
+      {assumptionDrifted ? (
+        <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-4 py-3 space-y-3 text-sm">
+          <div className="text-xs uppercase tracking-widest text-[color:var(--color-warning)]">
+            The assumption has moved since you designed this test
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)] mb-1">
+              Assumption at test time
+            </div>
+            <div className="italic text-white/80 leading-relaxed">
+              {snapshot}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)] mb-1">
+              Current assumption
+            </div>
+            <div className="italic text-white/90 leading-relaxed">
+              {current}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onSupersede}
+            disabled={superseding || pending || advancing}
+            className="rounded-md border border-[color:var(--color-warning)]/60 px-3 py-1.5 text-xs font-semibold text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
+          >
+            {superseding ? "…" : "Mark superseded, design new test"}
+          </button>
         </div>
-        <div className="italic text-white/90 leading-relaxed">
-          {assumption.text}
+      ) : (
+        <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3 text-sm">
+          <div className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
+            Big Assumption you tested
+          </div>
+          <div className="italic text-white/90 leading-relaxed">
+            {assumption.text}
+          </div>
         </div>
-      </div>
+      )}
 
       <label className="block space-y-1">
         <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">

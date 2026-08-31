@@ -25,7 +25,9 @@ export async function checkTestCoverage(input: {
   assumptions: ItcAssumption[];
   tests: ItcTest[];
 }): Promise<Finding[]> {
-  const activeTests = input.tests.filter((t) => t.status !== "abandoned");
+  const activeTests = input.tests.filter(
+    (t) => t.status !== "abandoned" && t.status !== "superseded",
+  );
   const testCountByAssumption = new Map<string, number>();
   for (const t of activeTests) {
     testCountByAssumption.set(

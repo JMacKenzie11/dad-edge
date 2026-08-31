@@ -164,7 +164,7 @@ export type ItcTestType =
   | "thought_experiment"
   | "behavioral";
 
-export type ItcTestStatus = "designed" | "run" | "abandoned";
+export type ItcTestStatus = "designed" | "run" | "abandoned" | "superseded";
 
 export type ItcAssumptionVerdict =
   | "held"
@@ -184,6 +184,13 @@ export type ItcTest = {
   in_order_to_find_out: string | null;
   target_date: string | null;
   status: ItcTestStatus;
+  /** Snapshot of the assumption's text at the moment this test row was
+   *  created. Written once by saveTestDraft; never mutates after. If
+   *  the coachee later sharpens the assumption, the results view can
+   *  compare this snapshot against the live assumption text and offer
+   *  a "supersede this test" affordance. Null on legacy rows created
+   *  before this field existed. */
+  assumption_text_at_design: string | null;
   created_at: string;
 };
 
@@ -1149,6 +1156,7 @@ export async function getActiveTest(mapId: string): Promise<ItcTest | null> {
     .from("itc_tests")
     .select("*")
     .eq("map_id", mapId)
+    .not("status", "in", "(abandoned,superseded)")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -1201,6 +1209,14 @@ export async function saveTestDraft(input: {
     );
     return duplicate;
   }
+  const assumptionSnapshot = await supabase
+    .from("itc_assumptions")
+    .select("text")
+    .eq("id", input.assumptionId)
+    .maybeSingle();
+  const assumptionTextAtDesign =
+    (assumptionSnapshot.data as { text: string } | null)?.text ?? null;
+
   const { data, error } = await supabase
     .from("itc_tests")
     .insert({
@@ -1213,6 +1229,7 @@ export async function saveTestDraft(input: {
       in_order_to_find_out: input.inOrderToFindOut.trim(),
       target_date: input.targetDate,
       status: "designed",
+      assumption_text_at_design: assumptionTextAtDesign,
     })
     .select("*")
     .single();
@@ -1282,6 +1299,24 @@ export async function markTestAbandoned(
     .eq("id", testId)
     .eq("map_id", mapId);
   if (error) throw new Error(`markTestAbandoned: ${error.message}`);
+}
+
+/**
+ * Retire a test whose paired assumption has drifted since design. The
+ * coachee designs a fresh one against the current assumption text; the
+ * old row stays for history under status='superseded'.
+ */
+export async function markTestSuperseded(
+  testId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_tests")
+    .update({ status: "superseded" })
+    .eq("id", testId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`markTestSuperseded: ${error.message}`);
 }
 
 export async function listTestResults(

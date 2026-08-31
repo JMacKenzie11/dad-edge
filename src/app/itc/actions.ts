@@ -66,6 +66,7 @@ import {
   clearSelectedAssumption,
   listWorries,
   markTestAbandoned,
+  markTestSuperseded,
   clearAssumptionDraftsForMap,
   clearCommitmentDraftsForMap,
   clearWorryDraftsForMap,
@@ -2635,7 +2636,11 @@ export async function ensureTestDraftDelivered(
       return { ok: true, delivered: false };
     }
     const tests = await listTests(mapId);
-    if (tests.some((t) => t.status !== "abandoned")) {
+    if (
+      tests.some(
+        (t) => t.status !== "abandoned" && t.status !== "superseded",
+      )
+    ) {
       return { ok: true, delivered: false };
     }
     const events = new TurnEventLog(mapId, 0);
@@ -2644,7 +2649,9 @@ export async function ensureTestDraftDelivered(
     const afterTests = await listTests(mapId);
     return {
       ok: true,
-      delivered: afterTests.some((t) => t.status !== "abandoned"),
+      delivered: afterTests.some(
+        (t) => t.status !== "abandoned" && t.status !== "superseded",
+      ),
     };
   } catch (err) {
     return {
@@ -3243,6 +3250,55 @@ const abandonTestSchema = z.object({
   map_id: z.string().uuid(),
   test_id: z.string().uuid(),
 });
+
+const supersedeTestSchema = z.object({
+  map_id: z.string().uuid(),
+  test_id: z.string().uuid(),
+});
+
+/**
+ * Retire a test whose assumption has drifted since design. Sets the
+ * old test to superseded (keeps the row for history), then reverts
+ * the stage to test_design so the coachee can design a fresh test
+ * against the current assumption text. The paired mission is also
+ * abandoned in the tracker if it was still planned — same rationale
+ * as abandonInFlightTest.
+ */
+export async function supersedeTest(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = supersedeTestSchema.safeParse({
+    map_id: formData.get("map_id"),
+    test_id: formData.get("test_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  const events = new TurnEventLog(loaded.map.id, 0);
+  try {
+    await markTestSuperseded(parsed.data.test_id, loaded.map.id);
+    await abandonMissionForItcTest(parsed.data.test_id);
+    await advanceStage(loaded.map.id, loaded.map.current_stage, "test_design");
+    await deliverTestDraftAfterAdvance(loaded.map.id, events);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not supersede.",
+    };
+  }
+  events.record(
+    "entry_edited",
+    {
+      kind: "test",
+      entry_id: parsed.data.test_id,
+      superseded: true,
+    },
+    { stage: "test_design" },
+  );
+  await events.flush();
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
 
 /**
  * Escape hatch (C-ε.7). Called from the "Back to prioritize" affordance
