@@ -4,6 +4,10 @@
   "role": "member",
   "elements": [
     {
+      "kind": "header",
+      "label": "Log today"
+    },
+    {
       "kind": "toggle",
       "label": "Bond tile"
     },
@@ -48,7 +52,7 @@
       "label": "KEY LEARNINGS"
     }
   ],
-  "source_hash": "f1ac9ef478d454c5",
+  "source_hash": "095050a2e1c009be",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/actions.ts",

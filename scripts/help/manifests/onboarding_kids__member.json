@@ -22,9 +22,13 @@
     {
       "kind": "button",
       "label": "Add"
+    },
+    {
+      "kind": "button",
+      "label": "Skip"
     }
   ],
-  "source_hash": "b6590e4a0b871edd",
+  "source_hash": "99c1c6ef1322723a",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/kids/page.tsx"
   ]

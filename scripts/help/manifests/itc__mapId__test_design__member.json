@@ -25,10 +25,18 @@
     },
     {
       "kind": "button",
+      "label": "Run the Test"
+    },
+    {
+      "kind": "button",
       "label": "← Test a different assumption"
+    },
+    {
+      "kind": "button",
+      "label": "Have the coach revise this"
     }
   ],
-  "source_hash": "1d67c39ed7e080dd",
+  "source_hash": "a8df1a62376cc603",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

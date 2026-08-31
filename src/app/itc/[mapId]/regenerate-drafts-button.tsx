@@ -3,26 +3,28 @@
 import { useState, useTransition } from "react";
 import {
   regenerateAssumptionDrafts,
-  regenerateCommitmentDrafts,
   regenerateWorryDrafts,
 } from "../actions";
 import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
- * "Regenerate drafts" affordance on Column 4 (commitments) and
- * Column 5 (assumptions). Wipes the existing coach-authored drafts
- * and re-fires the drafter against current upstream content.
+ * "Regenerate drafts" affordance on Column 3 (worries) and Column 5
+ * (assumptions). Wipes the existing coach-authored drafts and re-fires
+ * the drafter against current upstream content.
  *
- * Why this exists: on advance into a column, the coach drafts
- * suggestions from the prior column's content. If the coachee later
- * goes back and sharpens a worry (Column 3) or commitment (Column 4),
- * the drafts one column downstream are still speaking to the pre-edit
- * text. Rather than auto-detect staleness, give the coachee an
- * explicit button — they know when they've edited enough to warrant
- * fresh drafts.
+ * Column 4 (commitments) is not on this list — competing commitments
+ * auto-derive from worries directly on save now, no draft/accept step,
+ * so there's nothing to regenerate as a batch.
  *
- * Real accepted rows (itc_commitments / itc_assumptions) are left
- * alone by both server actions. Only the pending drafts are wiped.
+ * Why this exists on the two remaining columns: on advance into a
+ * column, the coach drafts suggestions from the prior column's content.
+ * If the coachee later goes back and sharpens a behavior (Column 2)
+ * or commitment (Column 4), the drafts one column downstream are still
+ * speaking to the pre-edit text. Rather than auto-detect staleness,
+ * give the coachee an explicit button.
+ *
+ * Real accepted rows are left alone by both server actions. Only the
+ * pending drafts are wiped.
  */
 export function RegenerateDraftsButton({
   mapId,
@@ -31,24 +33,15 @@ export function RegenerateDraftsButton({
   mapId: string;
   /** Which drafts to regenerate. Determines the server action and
    *  the copy in the confirm dialog. */
-  kind: "worries" | "commitments" | "assumptions";
+  kind: "worries" | "assumptions";
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dialog, confirm] = useConfirm();
 
-  const labelKind =
-    kind === "worries"
-      ? "worry"
-      : kind === "commitments"
-        ? "commitment"
-        : "assumption";
+  const labelKind = kind === "worries" ? "worry" : "assumption";
   const columnLabel =
-    kind === "worries"
-      ? "Column 2 behaviors"
-      : kind === "commitments"
-        ? "Column 3 worries"
-        : "Column 4 commitments";
+    kind === "worries" ? "Column 2 behaviors" : "Column 4 commitments";
 
   async function onClick() {
     const ok = await confirm({
@@ -62,11 +55,7 @@ export function RegenerateDraftsButton({
     fd.set("map_id", mapId);
     startTransition(async () => {
       const action =
-        kind === "worries"
-          ? regenerateWorryDrafts
-          : kind === "commitments"
-            ? regenerateCommitmentDrafts
-            : regenerateAssumptionDrafts;
+        kind === "worries" ? regenerateWorryDrafts : regenerateAssumptionDrafts;
       const res = await action(fd);
       if (!res.ok) setError(res.reason ?? "Could not regenerate.");
     });

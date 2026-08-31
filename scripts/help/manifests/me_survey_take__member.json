@@ -14,9 +14,13 @@
     {
       "kind": "field",
       "label": "Her words. Verbatim."
+    },
+    {
+      "kind": "button",
+      "label": "Save survey"
     }
   ],
-  "source_hash": "8ff20efff0eedb78",
+  "source_hash": "6fec5f1ca54c38c9",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/survey/take/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/survey/take/take-survey-form.tsx"

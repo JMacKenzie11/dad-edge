@@ -2,8 +2,13 @@
   "route_pattern": "/itc/[mapId]",
   "view_key": "immune_system",
   "role": "member",
-  "elements": [],
-  "source_hash": "e3b0c44298fc1c14",
+  "elements": [
+    {
+      "kind": "button",
+      "label": "Rewrite the walkthrough"
+    }
+  ],
+  "source_hash": "315a952ae4c658d4",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

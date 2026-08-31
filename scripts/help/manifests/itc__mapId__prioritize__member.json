@@ -2,8 +2,13 @@
   "route_pattern": "/itc/[mapId]",
   "view_key": "prioritize",
   "role": "member",
-  "elements": [],
-  "source_hash": "e3b0c44298fc1c14",
+  "elements": [
+    {
+      "kind": "button",
+      "label": "✓"
+    }
+  ],
+  "source_hash": "439c613edeae23b6",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

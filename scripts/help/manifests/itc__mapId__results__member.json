@@ -4,6 +4,10 @@
   "role": "member",
   "elements": [
     {
+      "kind": "button",
+      "label": "Mark superseded, design new test"
+    },
+    {
       "kind": "field",
       "label": "So in Order to Test it I Changed my Behavior This Way"
     },
@@ -14,9 +18,17 @@
     {
       "kind": "field",
       "label": "And This is What it Tells me About my Big Assumption"
+    },
+    {
+      "kind": "button",
+      "label": "Save debrief"
+    },
+    {
+      "kind": "button",
+      "label": "Advancing…"
     }
   ],
-  "source_hash": "b8ca58c8715f4d49",
+  "source_hash": "1a3007873b72c318",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

@@ -1879,29 +1879,17 @@ describe("Form-First regression", () => {
   );
 
   it(
-    "regression m: advance to commitments populates a non-noble coach draft per worry",
+    "regression m: advance to commitments auto-derives a non-noble competing commitment per worry",
     async () => {
       // On advance into the commitments stage, the server pipeline
-      // generates a coach-drafted commitment for each worry that
-      // doesn't have a commitment yet. Assertion: every worry gets
-      // a draft, and each draft passes the commitment rubric at
-      // 2/3 or better (i.e., the coach's own drafts clear the same
-      // non-noble bar the user has to clear).
+      // AUTO-DERIVES a competing commitment for each worry that
+      // doesn't already have one, writing straight to
+      // itc_commitments.text (no draft/accept step). Assertion: every
+      // worry gets a real commitment, and each commitment passes the
+      // commitment rubric at 2/3 or better (i.e., the coach's own
+      // auto-derivations clear the same non-noble bar the user has to
+      // clear when editing).
       const supabase = createSupabaseServiceClient();
-
-      // Schema probe — coach_commitment_draft column added in
-      // migration 20260819000001. Skip cleanly if not applied.
-      const probe = await supabase
-        .from("itc_worries")
-        .select("coach_commitment_draft")
-        .limit(1);
-      if (probe.error) {
-        console.warn(
-          "[regression m] skipping: schema missing — apply migration 20260819000001. Probe error: %s",
-          probe.error.message,
-        );
-        return;
-      }
 
       const goal =
         "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
@@ -1960,39 +1948,50 @@ describe("Form-First regression", () => {
         `advance to commitments: ${advCRes.ok ? "" : advCRes.reason}`,
       ).toBe(true);
 
-      // Every worry must now carry a coach_commitment_draft.
+      // Every worry must now have a paired REAL commitment (not a
+      // draft) written straight to itc_commitments.
       const { data: worries } = await supabase
         .from("itc_worries")
-        .select("id, text, coach_commitment_draft")
+        .select("id, text")
         .eq("map_id", ctx.mapId);
       expect(worries?.length).toBe(3);
+      const { data: commitments } = await supabase
+        .from("itc_commitments")
+        .select("id, worry_id, text")
+        .eq("map_id", ctx.mapId);
+      expect(commitments?.length).toBe(3);
+      const commitmentByWorryId = new Map(
+        (commitments ?? []).map((c) => [c.worry_id as string, c]),
+      );
       for (const w of worries ?? []) {
+        const c = commitmentByWorryId.get(w.id);
         expect(
-          w.coach_commitment_draft,
-          `worry "${w.text}" must have a coach draft after advance to commitments`,
+          c,
+          `worry "${w.text}" must have a paired commitment after advance to commitments`,
         ).toBeTruthy();
-        // Draft must start with "I'm committed to" (per the drafter
-        // prompt's non-noble shape rule).
+        // Commitment text must start with "I'm (also) committed to"
+        // (per ensureCommitmentStem + the drafter's non-noble shape).
         expect(
-          /^i\s*(?:'|\u2019)?m\s+committed\s+to/i.test(
-            (w.coach_commitment_draft ?? "").trim(),
+          /^i\s*(?:'|\u2019)?m\s+(?:also\s+)?committed\s+to/i.test(
+            (c?.text ?? "").trim(),
           ),
-          `draft must start with "I'm committed to": "${w.coach_commitment_draft}"`,
+          `commitment must start with "I'm committed to": "${c?.text}"`,
         ).toBe(true);
       }
 
-      // Score each draft against the commitment rubric — the coach's
-      // own drafts must clear at 2/3 or better.
+      // Score each auto-derived commitment against the depth rubric —
+      // the coach's own derivations must clear at 2/3 or better.
       const { scoreCommitmentDepth } = await import("@/lib/itc/rubric");
       for (const w of worries ?? []) {
+        const c = commitmentByWorryId.get(w.id);
         const scored = await scoreCommitmentDepth({
           goalText: goal,
           worryText: w.text,
-          commitmentText: w.coach_commitment_draft as string,
+          commitmentText: c?.text as string,
         });
         expect(
           scored.score >= 2,
-          `coach's own draft for worry "${w.text}" scored ${scored.score}/3 — must be ≥ 2. Draft: "${w.coach_commitment_draft}". Rubric reason: ${scored.reason}`,
+          `auto-derived commitment for worry "${w.text}" scored ${scored.score}/3 — must be ≥ 2. Commitment: "${c?.text}". Rubric reason: ${scored.reason}`,
         ).toBe(true);
       }
     },
@@ -2362,46 +2361,60 @@ describe("Form-First regression", () => {
   );
 
   it(
-    "regression r: 'Use this draft' auto-saves — no extra Enter step needed",
+    "regression r: commitments are auto-derived, no draft/accept UI",
     async () => {
-      // Prior UX: clicking "Use this draft" on the commitments coach-
-      // draft card only filled the textarea and focused it — the user
-      // then had to press Enter or blur to save. That's a lie of an
-      // affordance: clicking the button IS the accept action, so an
-      // extra keystroke is friction with zero upside. The assumption-
-      // drafts flow (C-β) already auto-saves; this locks the parity
-      // for C-α so a future refactor can't accidentally re-introduce
-      // the fill-and-wait pattern.
+      // Prior UX (retired 2026-08-31): commitments landed as "coach's
+      // drafts" and required a "Use this draft" click before becoming
+      // real commitment.text. That was structurally the same pattern
+      // as worries and assumptions but it read as an extra step
+      // coachees didn't need — per ITC methodology, competing
+      // commitments are a mechanical non-noble transformation of the
+      // worry, so the coach can just do it.
+      //
+      // New model:
+      //   1. On advance to commitments, the server derives each one
+      //      straight to itc_commitments.text.
+      //   2. On any worry edit, saveWorry re-derives the paired
+      //      commitment automatically.
+      //
+      // This test structurally locks BOTH properties so a future
+      // refactor can't quietly re-introduce a drafts path.
       const { readFileSync } = await import("node:fs");
       const { fileURLToPath } = await import("node:url");
       const { dirname, resolve } = await import("node:path");
       const here = dirname(fileURLToPath(import.meta.url));
       const repoRoot = resolve(here, "..", "..");
-      const src = readFileSync(
+      const rowSrc = readFileSync(
         resolve(repoRoot, "src/app/itc/[mapId]/commitments-row.tsx"),
         "utf8",
       );
-      // The "Use this draft" button must invoke saveText (which fires
-      // the server action) — not just setDraft + focus.
-      const useThisDraftBlock = src.match(
-        /Use this draft[\s\S]{0,600}?<\/button>/,
+      // (a) No "Use this draft" button anywhere in commitments-row.
+      expect(
+        /Use this draft/i.test(rowSrc),
+        "commitments-row must not render a 'Use this draft' button — commitments are auto-derived, not drafts",
+      ).toBe(false);
+      // (b) No reference to a coach_commitment_draft field either.
+      expect(
+        /coach_commitment_draft/.test(rowSrc),
+        "commitments-row must not read coach_commitment_draft — the column is dropped",
+      ).toBe(false);
+
+      // (c) saveWorry must fire the auto-derive helper on edits.
+      const actionsSrc = readFileSync(
+        resolve(repoRoot, "src/app/itc/actions.ts"),
+        "utf8",
+      );
+      const saveWorryBlock = actionsSrc.match(
+        /export async function saveWorry[\s\S]*?\n\}/,
       );
       expect(
-        useThisDraftBlock,
-        "commitments-row must contain a 'Use this draft' button",
+        saveWorryBlock,
+        "saveWorry action must exist",
       ).toBeTruthy();
-      const block = useThisDraftBlock![0];
       expect(
-        /saveText\s*\(/.test(block) ||
-          /commit\s*\(\s*worry\.coach_commitment_draft/.test(block),
-        `"Use this draft" onClick must call saveText(...) (auto-save), not just setDraft + focus. Block was: ${block}`,
+        /autoDeriveCommitmentForWorry\s*\(/.test(saveWorryBlock![0]),
+        "saveWorry must call autoDeriveCommitmentForWorry so a worry edit re-syncs its paired commitment",
       ).toBe(true);
-      // Anti-pattern: the button MUST NOT simply setDraft + focus and
-      // wait for a manual save.
-      expect(
-        /onClick=\{[^}]*setDraft[^}]*inputRef\.current\?\.focus/.test(block),
-        `"Use this draft" onClick must not be a fill-and-focus without save. Block was: ${block}`,
-      ).toBe(false);
     },
     5_000,
   );

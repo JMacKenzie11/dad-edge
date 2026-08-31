@@ -34,9 +34,13 @@
     {
       "kind": "header",
       "label": "Mission timeline"
+    },
+    {
+      "kind": "button",
+      "label": "Save changes"
     }
   ],
-  "source_hash": "9384427fabdbb249",
+  "source_hash": "2768fb5d9ca82b6d",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/[id]/edit-goal-form.tsx"

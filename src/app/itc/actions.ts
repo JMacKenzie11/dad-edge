@@ -71,7 +71,6 @@ import {
   markTestAbandoned,
   markTestSuperseded,
   clearAssumptionDraftsForMap,
-  clearCommitmentDraftsForMap,
   clearWorryDraftsForMap,
   deleteColumnReviewMessages,
   deleteHoneDiagnosticMessages,
@@ -87,7 +86,6 @@ import {
   setBehaviorWorryDraft,
   updateTest,
   updateTestResult,
-  setWorryCommitmentDraft,
   updateAssumptionDepth,
   updateAssumptionText,
   updateBehaviorDepth,
@@ -96,6 +94,7 @@ import {
   updateWorryDepth,
   upsertCommitmentForWorry,
   upsertWorryForBehavior,
+  type ItcWorry,
 } from "@/lib/itc/maps";
 import {
   scoreAssumptionDepth,
@@ -662,6 +661,39 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
       { stage: loaded.map.current_stage },
     );
   }
+
+  // Auto-re-derive the paired competing commitment whenever the worry
+  // text changed. Runs on every save-that-actually-edited (isEdit=true
+  // and the row's attempts got bumped by upsertWorryForBehavior); on
+  // the initial worry insert there's no paired commitment yet, so the
+  // lookup returns null and this is a no-op. The advance-to-commitments
+  // pipeline is the other entry point that creates commitments.
+  //
+  // We overwrite unconditionally (no "was manually edited?" check) —
+  // per the coaching guides, the competing commitment is a mechanical
+  // non-noble transformation of the worry, not user-authored map
+  // content. Coachees can still edit it inline via saveCommitment;
+  // this just keeps the map coherent after a worry sharpen.
+  if (isEdit) {
+    try {
+      const existing = await listCommitments(loaded.map.id);
+      const paired = existing.find((c) => c.worry_id === row.id);
+      if (paired) {
+        await autoDeriveCommitmentForWorry({
+          mapId: loaded.map.id,
+          goalText: loaded.map.improvement_goal ?? "",
+          worry: row,
+          behavior: { text: behavior.text },
+        });
+      }
+    } catch (err) {
+      console.warn(
+        "[itc] saveWorry auto-derive commitment failed: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   await events.flush();
 
   safeRevalidate(`/itc/${loaded.map.id}`);
@@ -1212,14 +1244,15 @@ export async function advanceToStage(
   if (target === "worries") {
     await draftMissingWorriesAfterAdvance(loaded.map.id, events);
   }
-  // On entry to the commitments stage, generate a coach draft for
-  // each worry that doesn't already have one AND has no commitment
-  // yet. Per ITC methodology, Column 4 derivation is coach work —
-  // the coachee has already done the deep excavation at Column 3.
-  // Drafts are metadata, not map content: they only become real
-  // commitment.text when the user accepts via saveCommitment.
+  // On entry to the commitments stage, AUTO-DERIVE a competing
+  // commitment for every worry that doesn't already have one. Per
+  // ITC methodology, Column 4 is coach work — the coachee has
+  // already done the deep excavation at Column 3. The derived text
+  // writes straight to itc_commitments.text (no draft, no accept
+  // step). Coachees edit inline via saveCommitment if they want,
+  // otherwise the derived version stands.
   if (target === "commitments") {
-    await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
+    await autoDeriveCommitmentsAfterAdvance(loaded.map.id, events);
   }
   // On entry to the assumptions stage, cluster the commitments and
   // draft a small set of Big Assumptions with commitment coverage.
@@ -1329,13 +1362,88 @@ async function draftMissingWorriesAfterAdvance(
 }
 
 /**
- * Populate itc_worries.coach_commitment_draft for every worry on the
- * map that (a) has no commitment yet and (b) has no draft yet. Runs
- * on advance to the commitments stage. Each draft is one LLM call;
- * the whole set fires in parallel so the "Continue to Commitments"
- * click doesn't block on N sequential round-trips.
+ * Auto-derive a competing commitment from a single worry and persist
+ * it as real commitment.text (upsert + score + sharpen). Used by both
+ * (a) the advance-to-commitments pipeline (`autoDeriveCommitmentsAfterAdvance`)
+ * to fill every worry on entry to Column 4, and (b) the worry-save
+ * path (`saveWorry`) to keep the paired commitment coherent whenever
+ * the coachee sharpens a worry.
+ *
+ * Contract: writes straight to itc_commitments.text — no draft, no
+ * accept step. Coachees still edit the text inline via saveCommitment;
+ * the auto-derive here is the starting point, not a lock. If the
+ * drafter LLM call fails, the caller can proceed — the commitment
+ * just doesn't get created (advance) or doesn't get refreshed (edit),
+ * and the coachee can type their own or retry via the RE-DERIVE
+ * escape hatch.
+ *
+ * Idempotent: called with the same inputs, produces a fresh
+ * commitment.text (LLM temperature is > 0, so text may vary slightly
+ * across calls — that's fine because upsertCommitmentForWorry updates
+ * the existing row rather than duplicating).
  */
-async function draftMissingCommitmentsAfterAdvance(
+async function autoDeriveCommitmentForWorry(input: {
+  mapId: string;
+  goalText: string;
+  worry: ItcWorry;
+  behavior: { text: string };
+}): Promise<{ commitmentId: string; ok: true } | { ok: false; reason: string }> {
+  try {
+    const drafted = await draftCommitmentForWorry({
+      goalText: input.goalText,
+      behaviorText: input.behavior.text,
+      worryText: input.worry.text,
+    });
+    if (!drafted) return { ok: false, reason: "drafter returned no text" };
+    const stemmed = ensureCommitmentStem(drafted);
+    const { row } = await upsertCommitmentForWorry(
+      input.mapId,
+      input.worry.id,
+      stemmed,
+    );
+    // Score + sharpen the freshly-derived commitment on the same
+    // pipeline saveCommitment uses. Keeps the depth pill + sharpen
+    // box populated from the start rather than after the coachee
+    // touches the row.
+    const scored = await scoreCommitmentDepth({
+      goalText: input.goalText,
+      worryText: input.worry.text,
+      commitmentText: row.text,
+    });
+    const withFreshMirror = {
+      ...row,
+      depth_score: scored.score,
+      mirrors_worry_identity: scored.mirrors_worry_identity,
+    };
+    const sharpen = await composeCommitmentSharpen({
+      commitment: withFreshMirror,
+      worry: input.worry,
+      depthReason: scored.reason,
+    });
+    await updateCommitmentDepth(
+      row.id,
+      scored.score,
+      sharpen,
+      scored.mirrors_worry_identity,
+    );
+    await invalidateReviewsForColumn(input.mapId, "commitments");
+    return { ok: true, commitmentId: row.id };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "auto-derive failed",
+    };
+  }
+}
+
+/**
+ * Fill every worry on the map with a derived competing commitment on
+ * entry to Column 4. Skips worries that already have a commitment
+ * (idempotent — resumed maps don't duplicate). Runs in parallel so
+ * the "Continue to Commitments" click doesn't block on N sequential
+ * LLM round-trips.
+ */
+async function autoDeriveCommitmentsAfterAdvance(
   mapId: string,
   events: TurnEventLog,
 ): Promise<void> {
@@ -1350,35 +1458,31 @@ async function draftMissingCommitmentsAfterAdvance(
     (await listBehaviors(mapId)).map((b) => [b.id, b]),
   );
 
-  const needsDraft = worries.filter(
-    (w) => !worriesWithCommitments.has(w.id) && !w.coach_commitment_draft,
+  const needsDerive = worries.filter(
+    (w) => !worriesWithCommitments.has(w.id),
   );
-  if (needsDraft.length === 0) return;
+  if (needsDerive.length === 0) return;
 
-  const drafted = await Promise.all(
-    needsDraft.map(async (w) => {
+  const results = await Promise.all(
+    needsDerive.map(async (w) => {
       const behavior = behaviorsById.get(w.behavior_id);
-      if (!behavior) return { worryId: w.id, draft: null as string | null };
-      const draft = await draftCommitmentForWorry({
+      if (!behavior) return { worryId: w.id, ok: false as const };
+      const res = await autoDeriveCommitmentForWorry({
+        mapId,
         goalText: map.improvement_goal ?? "",
-        behaviorText: behavior.text,
-        worryText: w.text,
+        worry: w,
+        behavior: { text: behavior.text },
       });
-      return { worryId: w.id, draft };
+      return { worryId: w.id, ok: res.ok };
     }),
   );
 
-  await Promise.all(
-    drafted
-      .filter((d): d is { worryId: string; draft: string } => Boolean(d.draft))
-      .map((d) => setWorryCommitmentDraft(d.worryId, d.draft)),
-  );
   events.record(
     "coach_reaction_sent",
     {
-      kind: "commitment_drafts",
-      worry_count: needsDraft.length,
-      drafted_count: drafted.filter((d) => d.draft).length,
+      kind: "commitment_auto_derived",
+      worry_count: needsDerive.length,
+      derived_count: results.filter((r) => r.ok).length,
     },
     { stage: "commitments" },
   );
@@ -1448,63 +1552,10 @@ const regenerateDraftsSchema = z.object({
   map_id: z.string().uuid(),
 });
 
-const redriveCommitmentSchema = z.object({
-  map_id: z.string().uuid(),
-  commitment_id: z.string().uuid(),
-});
-
 const redriveAssumptionSchema = z.object({
   map_id: z.string().uuid(),
   assumption_id: z.string().uuid(),
 });
-
-/**
- * When a coachee edits a worry after the paired commitment already
- * exists, the commitment sits on stale reasoning. This action wipes
- * the existing commitment text (via draft) so the coachee can accept
- * a fresh coach draft mirroring the current worry — same shape as the
- * commit-drafter path used on advance into Column 4.
- */
-export async function redriveCommitmentFromWorry(
-  formData: FormData,
-): Promise<ActionResult> {
-  const parsed = redriveCommitmentSchema.safeParse({
-    map_id: formData.get("map_id"),
-    commitment_id: formData.get("commitment_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  try {
-    const [map, commitments, worries, behaviors] = await Promise.all([
-      getMapById(loaded.map.id),
-      listCommitments(loaded.map.id),
-      listWorries(loaded.map.id),
-      listBehaviors(loaded.map.id),
-    ]);
-    if (!map) return { ok: false, reason: "Map not found." };
-    const commitment = commitments.find((c) => c.id === parsed.data.commitment_id);
-    if (!commitment) return { ok: false, reason: "Commitment not found." };
-    const worry = worries.find((w) => w.id === commitment.worry_id);
-    if (!worry) return { ok: false, reason: "Paired worry not found." };
-    const behavior = behaviors.find((b) => b.id === worry.behavior_id);
-    if (!behavior) return { ok: false, reason: "Paired behavior not found." };
-    const draft = await draftCommitmentForWorry({
-      goalText: map.improvement_goal ?? "",
-      behaviorText: behavior.text,
-      worryText: worry.text,
-    });
-    if (!draft) return { ok: false, reason: "Could not draft a fresh commitment." };
-    await setWorryCommitmentDraft(worry.id, draft);
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not re-derive.",
-    };
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
-}
 
 /**
  * When a coachee edits a commitment after linked assumptions already
@@ -1563,41 +1614,6 @@ export async function redriveAssumptionFromCommitment(
     return {
       ok: false,
       reason: err instanceof Error ? err.message : "Could not re-derive.",
-    };
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
-}
-
-/**
- * Client-triggered regenerate for the coach's Column 4 commitment
- * drafts. Wipes every draft on worries that don't have a real
- * commitment yet, then re-fires the drafter against the current
- * worry text. Real commitments (already accepted) are untouched.
- *
- * Why this exists: coachee lands on Column 4, sees the drafts,
- * goes back to Column 3 and sharpens a worry. The corresponding
- * draft is still based on the old worry text. This lets them
- * regenerate without hand-editing.
- */
-export async function regenerateCommitmentDrafts(
-  formData: FormData,
-): Promise<ActionResult> {
-  const parsed = regenerateDraftsSchema.safeParse({
-    map_id: formData.get("map_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  try {
-    await clearCommitmentDraftsForMap(loaded.map.id);
-    const events = new TurnEventLog(loaded.map.id, 0);
-    await draftMissingCommitmentsAfterAdvance(loaded.map.id, events);
-    await events.flush();
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not regenerate.",
     };
   }
   safeRevalidate(`/itc/${loaded.map.id}`);

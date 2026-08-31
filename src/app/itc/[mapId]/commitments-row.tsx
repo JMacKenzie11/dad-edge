@@ -8,11 +8,10 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { worryPassesDepth } from "@/lib/itc/rules";
-import { redriveCommitmentFromWorry, saveCommitment } from "../actions";
+import { saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
-import { InlineSpinner, SavingIndicator } from "./form-field";
-import { RegenerateDraftsButton } from "./regenerate-drafts-button";
+import { SavingIndicator } from "./form-field";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -23,11 +22,16 @@ function isFresh(iso: string | null | undefined, nowMs: number): boolean {
 
 /**
  * Column 4 rows — one commitment input per worry (1:1 pairing).
- * Excavation-loop mirror of worries-row: every save re-runs the
- * server rubric, increments attempts, and triggers a fresh coach
- * reaction. The rubric here pushes back on noble-sounding
- * productivity-blog commitments and requires the self-protective
- * form ("I'm committed to never having to find out...").
+ *
+ * Auto-derived: on advance into Column 4 the server drafts the
+ * non-noble competing commitment for each worry and writes it
+ * straight to commitment.text. Any worry edit thereafter re-derives
+ * the paired commitment automatically (see saveWorry in actions.ts).
+ * So by the time this component renders, every row already has real
+ * text — no draft-and-accept step, no "Use this draft" button.
+ *
+ * The coachee still edits inline; every save re-runs the depth
+ * rubric so the "one thing to sharpen" box reflects current text.
  */
 export function CommitmentsRow({
   mapId,
@@ -70,17 +74,6 @@ export function CommitmentsRow({
     );
   }
 
-  // Show the regenerate-drafts button when there's at least one
-  // worry with a coach draft AND no accepted commitment on it yet.
-  // If every worry has a real commitment, the drafts are done work
-  // and there's nothing to regenerate. If no worries have drafts,
-  // the drafter never ran (rare — LLM failure on advance).
-  const hasRegeneratableDrafts = worries.some(
-    (w) =>
-      Boolean(w.coach_commitment_draft) &&
-      !commitmentByWorryId.has(w.id),
-  );
-
   return (
     <div className="space-y-3">
       <ul className="space-y-3 text-base">
@@ -100,11 +93,6 @@ export function CommitmentsRow({
           );
         })}
       </ul>
-      {hasRegeneratableDrafts ? (
-        <div className="pt-1">
-          <RegenerateDraftsButton mapId={mapId} kind="commitments" />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -166,12 +154,6 @@ function CommitmentItem({
     saveText(draft);
   }
 
-  /**
-   * Save a specific text value directly, bypassing the draft state.
-   * Used by the "Use this draft" button so a click on the coach's
-   * draft card auto-saves — clicking is already the user's explicit
-   * intent, an extra Enter step is friction with no upside.
-   */
   function saveText(nextText: string) {
     setError(null);
     if (inflightRef.current) return;
@@ -210,11 +192,6 @@ function CommitmentItem({
   const needsMoreDepth =
     commitment !== null &&
     !worryPassesDepth(commitment.depth_score, commitment.attempts);
-
-  const worryMovedAfterCommitment =
-    commitment !== null &&
-    new Date(worry.updated_at).getTime() >
-      new Date(commitment.updated_at).getTime() + 1_000;
 
   return (
     <li
@@ -270,33 +247,6 @@ function CommitmentItem({
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>
         </div>
-        {worryMovedAfterCommitment && commitment ? (
-          <StaleUpstreamBanner
-            mapId={mapId}
-            commitmentId={commitment.id}
-            upstreamLabel="worry"
-          />
-        ) : null}
-        {!commitment && worry.coach_commitment_draft ? (
-          <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
-            <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
-              Coach's draft
-            </div>
-            <div className="text-sm italic text-white/90 leading-relaxed">
-              {worry.coach_commitment_draft}
-            </div>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => saveText(worry.coach_commitment_draft ?? "")}
-              aria-busy={pending ? "true" : undefined}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-            >
-              {pending ? <InlineSpinner className="h-3 w-3" /> : null}
-              Use this draft
-            </button>
-          </div>
-        ) : null}
         <AutoTextarea
           ref={inputRef}
           value={draft}
@@ -344,44 +294,3 @@ function CommitmentItem({
   );
 }
 
-function StaleUpstreamBanner({
-  mapId,
-  commitmentId,
-  upstreamLabel,
-}: {
-  mapId: string;
-  commitmentId: string;
-  upstreamLabel: string;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-xs">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[color:var(--color-warning)]">
-          The {upstreamLabel} changed since you wrote this. Re-derive?
-        </span>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            setError(null);
-            const fd = new FormData();
-            fd.set("map_id", mapId);
-            fd.set("commitment_id", commitmentId);
-            startTransition(async () => {
-              const res = await redriveCommitmentFromWorry(fd);
-              if (!res.ok) setError(res.reason ?? "Could not re-derive.");
-            });
-          }}
-          className="shrink-0 rounded-md border border-[color:var(--color-warning)]/60 px-2 py-1 text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
-        >
-          {pending ? "…" : "RE-DERIVE"}
-        </button>
-      </div>
-      {error ? (
-        <p className="mt-1 text-[color:var(--color-danger)]">{error}</p>
-      ) : null}
-    </div>
-  );
-}

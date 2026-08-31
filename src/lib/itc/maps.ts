@@ -106,8 +106,7 @@ export type ItcBehavior = {
   /** Coach-drafted worry text for this behavior — populated by the
    *  server pipeline on advance to Column 3. Metadata, not map
    *  content: converts to real worry.text only when the user
-   *  explicitly accepts (Use this draft) or types their own. Mirrors
-   *  ItcWorry.coach_commitment_draft one column downstream. */
+   *  explicitly accepts (Use this draft) or types their own. */
   coach_worry_draft: string | null;
   created_at: string;
 };
@@ -123,11 +122,6 @@ export type ItcWorry = {
   /** See ItcCommitment.rubric_reason. */
   rubric_reason: string | null;
   attempts: number;
-  /** Coach-drafted commitment text for this worry — populated by
-   *  the server pipeline on advance to Column 4. Metadata, not map
-   *  content: converts to real commitment.text only when the user
-   *  explicitly accepts (Use this draft) or types their own. */
-  coach_commitment_draft: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -637,49 +631,11 @@ export async function updateWorryDepth(
 /**
  * Store the coach's drafted commitment text on the worry row. Called
  * by the advance pipeline when moving into the commitments stage —
- * one draft per worry, run in parallel. The draft is metadata; it
- * only becomes real commitment.text when the user accepts it via
- * saveCommitment (either by tapping "Use this draft" in the UI or
- * by typing their own version on top).
+ * one derivation per worry, run in parallel. Unlike worries and
+ * assumptions, commitments are NOT drafts: the derived text writes
+ * straight to itc_commitments.text via the standard save pipeline.
+ * See autoDeriveCommitmentForWorry in src/app/itc/actions.ts.
  */
-/**
- * Clear coach_commitment_draft on every worry for a given map that
- * doesn't have a real commitment yet. Used by regenerateCommitmentDrafts
- * — coachee wants a fresh set of drafts against the current worry
- * text after editing worries upstream. Worries with real commitments
- * are untouched.
- */
-export async function clearCommitmentDraftsForMap(mapId: string): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const { data: commitments, error: cErr } = await supabase
-    .from("itc_commitments")
-    .select("worry_id")
-    .eq("map_id", mapId);
-  if (cErr) throw new Error(`clearCommitmentDraftsForMap: ${cErr.message}`);
-  const worriesWithCommitments = new Set(
-    (commitments ?? []).map((c) => c.worry_id as string),
-  );
-  // Update: null out coach_commitment_draft on worries without a
-  // real commitment. Skip worries that already have one — those
-  // drafts have already been acted on (or discarded) and shouldn't
-  // regenerate.
-  const { data: worries, error: wErr } = await supabase
-    .from("itc_worries")
-    .select("id")
-    .eq("map_id", mapId)
-    .not("coach_commitment_draft", "is", null);
-  if (wErr) throw new Error(`clearCommitmentDraftsForMap worries: ${wErr.message}`);
-  const clearIds = (worries ?? [])
-    .map((w) => w.id as string)
-    .filter((id) => !worriesWithCommitments.has(id));
-  if (clearIds.length === 0) return;
-  const { error: upErr } = await supabase
-    .from("itc_worries")
-    .update({ coach_commitment_draft: null })
-    .in("id", clearIds);
-  if (upErr) throw new Error(`clearCommitmentDraftsForMap update: ${upErr.message}`);
-}
-
 /**
  * Delete every itc_assumption_drafts row for a map. Used by
  * regenerateAssumptionDrafts. Real itc_assumptions rows (already
@@ -692,18 +648,6 @@ export async function clearAssumptionDraftsForMap(mapId: string): Promise<void> 
     .delete()
     .eq("map_id", mapId);
   if (error) throw new Error(`clearAssumptionDraftsForMap: ${error.message}`);
-}
-
-export async function setWorryCommitmentDraft(
-  worryId: string,
-  draftText: string,
-): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const { error } = await supabase
-    .from("itc_worries")
-    .update({ coach_commitment_draft: draftText.trim() })
-    .eq("id", worryId);
-  if (error) throw new Error(`setWorryCommitmentDraft: ${error.message}`);
 }
 
 export async function setBehaviorWorryDraft(

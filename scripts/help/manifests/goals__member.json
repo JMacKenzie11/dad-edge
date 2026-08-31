@@ -25,7 +25,7 @@
     },
     {
       "kind": "link",
-      "label": "· IMPROVEMENT MAP behavior mapped · test designed Open the map →"
+      "label": "· IMPROVEMENT MAP behaviors mapped · tests designed Open the map →"
     },
     {
       "kind": "link",
@@ -46,6 +46,10 @@
     {
       "kind": "button",
       "label": "Not now"
+    },
+    {
+      "kind": "button",
+      "label": "Save check-in"
     },
     {
       "kind": "link",
@@ -72,15 +76,23 @@
       "label": "No"
     },
     {
+      "kind": "button",
+      "label": "Save wrap-up"
+    },
+    {
       "kind": "field",
       "label": "Where you are now"
     },
     {
       "kind": "field",
       "label": "Where you want to be"
+    },
+    {
+      "kind": "button",
+      "label": "Set the goal"
     }
   ],
-  "source_hash": "ee89f8ec60655e58",
+  "source_hash": "3aa077886b8a3983",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/actions.ts",

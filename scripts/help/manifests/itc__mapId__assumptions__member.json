@@ -17,6 +17,10 @@
     },
     {
       "kind": "button",
+      "label": "Add"
+    },
+    {
+      "kind": "button",
       "label": "Use this draft"
     },
     {
@@ -30,9 +34,13 @@
     {
       "kind": "button",
       "label": "Remove"
+    },
+    {
+      "kind": "button",
+      "label": "RE-DERIVE"
     }
   ],
-  "source_hash": "2ae1453bd29e954e",
+  "source_hash": "4249717657c8da09",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

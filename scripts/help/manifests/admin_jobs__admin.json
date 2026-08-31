@@ -6,9 +6,13 @@
     {
       "kind": "header",
       "label": "Jobs"
+    },
+    {
+      "kind": "button",
+      "label": "RUN"
     }
   ],
-  "source_hash": "59a69577fd8e513e",
+  "source_hash": "82d848d5638ddd3a",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/jobs/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/jobs/run-panel.tsx"

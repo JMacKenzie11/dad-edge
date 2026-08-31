@@ -55,7 +55,6 @@ function makeWorry(overrides: Partial<ItcWorry>): ItcWorry {
     depth_score: 3,
     rubric_reason: null,
     attempts: 1,
-    coach_commitment_draft: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
