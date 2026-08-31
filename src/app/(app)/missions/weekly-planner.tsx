@@ -46,7 +46,7 @@ export function WeeklyPlanner({
     }),
     {
       key: "unattached",
-      headerLabel: "UNATTACHED",
+      headerLabel: "BRAVE MAN MISSIONS",
       subtitle: "Missions not tied to a quarterly goal.",
       pillarCode: "B" as PillarCode,
       goalId: null,
