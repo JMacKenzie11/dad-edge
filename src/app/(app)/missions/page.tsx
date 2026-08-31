@@ -26,6 +26,10 @@ export type WeekMission = {
    *  minimum length for scoring. Displayed on completed missions as
    *  a static read-only pill. */
   quality_score: number | null;
+  /** Set on carry-forward / rollover children — points at the source
+   *  mission ID. Loaded so the source row can detect it's already been
+   *  carried forward and disable the → NEXT WEEK button. */
+  rolled_over_from_mission_id: string | null;
 };
 
 export type ActiveGoal = {
@@ -53,13 +57,16 @@ export default async function MissionsPage() {
   const week = weekDates(monday);
   const weekEnd = week[6];
 
-  // Sunday planning: once it's Sunday (last day of this week), also load next
-  // week so guys can front-load Monday.
+  // Sunday planning: once it's Sunday (last day of this week), also render
+  // next week so guys can front-load Monday. Independent of that: we
+  // always LOAD through next week — the extra rows let us detect
+  // carry-forward children of this-week missions and disable the
+  // → NEXT WEEK button on a mission that's already been carried.
   const todayISO = localDate(new Date(), user.timezone);
   const isSunday = todayISO === weekEnd;
   const nextMonday = format(addDays(new Date(`${monday}T00:00:00`), 7), "yyyy-MM-dd");
   const nextWeek = weekDates(nextMonday);
-  const rangeEnd = isSunday ? nextWeek[6] : weekEnd;
+  const rangeEnd = nextWeek[6];
 
   const q = getCurrentQuarter();
 
@@ -74,7 +81,7 @@ export default async function MissionsPage() {
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id",
       )
       .eq("user_id", user.id)
       .gte("target_date", monday)
@@ -91,6 +98,11 @@ export default async function MissionsPage() {
   const allMissions = (missions ?? []) as WeekMission[];
   const thisWeekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
   const nextWeekMissions = allMissions.filter((m) => m.target_date >= nextMonday);
+  const carriedForwardIds = new Set(
+    allMissions
+      .map((m) => m.rolled_over_from_mission_id)
+      .filter((id): id is string => id != null),
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -139,6 +151,7 @@ export default async function MissionsPage() {
           weekDates={week}
           activeGoals={activeGoals}
           missions={thisWeekMissions}
+          carriedForwardIds={carriedForwardIds}
           readOnly={readOnly}
         />
       </section>
@@ -158,6 +171,7 @@ export default async function MissionsPage() {
             weekDates={nextWeek}
             activeGoals={activeGoals}
             missions={nextWeekMissions}
+            carriedForwardIds={carriedForwardIds}
             readOnly={readOnly}
           />
         </section>

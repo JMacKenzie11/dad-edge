@@ -22,6 +22,7 @@ export function WeeklyPlanner({
   weekDates,
   activeGoals,
   missions,
+  carriedForwardIds,
   readOnly,
 }: {
   communityId: string | null;
@@ -29,6 +30,10 @@ export function WeeklyPlanner({
   weekDates: string[];
   activeGoals: ActiveGoal[];
   missions: WeekMission[];
+  /** Set of mission IDs that already have a carry-forward child loaded
+   *  in the wider load window. Used to disable → NEXT WEEK on rows
+   *  that have already been carried, so guys don't spawn duplicates. */
+  carriedForwardIds: Set<string>;
   readOnly: boolean;
 }) {
   const buckets: Bucket[] = [
@@ -66,6 +71,7 @@ export function WeeklyPlanner({
             key={b.key}
             bucket={b}
             missions={bucketMissions}
+            carriedForwardIds={carriedForwardIds}
             readOnly={readOnly}
             weekDates={weekDates}
             communityId={communityId}
@@ -79,12 +85,14 @@ export function WeeklyPlanner({
 function BucketSection({
   bucket,
   missions,
+  carriedForwardIds,
   readOnly,
   weekDates,
   communityId,
 }: {
   bucket: Bucket;
   missions: WeekMission[];
+  carriedForwardIds: Set<string>;
   readOnly: boolean;
   weekDates: string[];
   communityId: string | null;
@@ -128,6 +136,7 @@ function BucketSection({
             goalId={bucket.goalId}
             goalDescription={bucket.goalDescription}
             pillarCode={slotPillar}
+            carriedForward={slot ? carriedForwardIds.has(slot.id) : false}
             readOnly={readOnly}
           />
         ))}

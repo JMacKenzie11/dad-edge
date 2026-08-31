@@ -55,6 +55,9 @@ type SlotProps = {
   goalId: string | null;
   goalDescription: string | null;
   pillarCode: PillarCode;
+  /** True when this mission already has a carry-forward child in next
+   *  week's data. Disables → NEXT WEEK so guys don't spawn duplicates. */
+  carriedForward: boolean;
   readOnly: boolean;
 };
 
@@ -249,6 +252,7 @@ function FilledSlot({
   mission,
   weekDates,
   goalDescription,
+  carriedForward,
   readOnly,
 }: SlotProps & { mission: WeekMission }) {
   const [description, setDescription] = useState(mission.description);
@@ -264,7 +268,9 @@ function FilledSlot({
   const [completePending, startComplete] = useTransition();
   const [deletePending, startDelete] = useTransition();
   const [carryPending, startCarry] = useTransition();
-  const [carryConfirmation, setCarryConfirmation] = useState<string | null>(null);
+  const [justCarried, setJustCarried] = useState(false);
+  // Optimistic local flag OR server-derived — either disables the button.
+  const carriedAlready = carriedForward || justCarried;
   const [confirmDialog, confirm] = useConfirm();
   const scoreSeq = useRef(0);
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -514,21 +520,18 @@ function FilledSlot({
                 onClick={() =>
                   startCarry(async () => {
                     const res = await carryMissionToNextWeek({ mission_id: mission.id });
-                    if (res.ok) {
-                      const label = format(
-                        new Date(`${res.new_deadline}T00:00:00`),
-                        "EEE MMM d",
-                      ).toUpperCase();
-                      setCarryConfirmation(`CARRIED TO ${label}`);
-                      setTimeout(() => setCarryConfirmation(null), 2500);
-                    }
+                    if (res.ok) setJustCarried(true);
                   })
                 }
-                disabled={carryPending}
-                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
-                title="Duplicate this mission for next week"
+                disabled={carryPending || carriedAlready}
+                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40 disabled:hover:text-[color:var(--color-text-muted)] disabled:hover:border-[color:var(--color-border)] disabled:cursor-not-allowed"
+                title={
+                  carriedAlready
+                    ? "Already carried to next week"
+                    : "Duplicate this mission for next week (same days)"
+                }
               >
-                → NEXT WEEK
+                {carriedAlready ? "✓ CARRIED" : "→ NEXT WEEK"}
               </button>
             ) : null}
           </div>
@@ -560,11 +563,6 @@ function FilledSlot({
       {savePending ? (
         <p className="text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           SAVING…
-        </p>
-      ) : null}
-      {carryConfirmation ? (
-        <p className="text-[9px] font-heading tracking-widest text-[color:var(--color-primary)]">
-          {carryConfirmation}
         </p>
       ) : null}
       {showFeedback && score ? (
