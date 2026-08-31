@@ -80,7 +80,11 @@ export default async function MissionsPage() {
       .gte("target_date", monday)
       .lte("target_date", rangeEnd)
       .neq("status", "rolled_over")
-      .order("target_date", { ascending: true }),
+      // Insertion order — newest at the bottom. Ordering by
+      // target_date reshuffled the grid every time a coachee added a
+      // mission or changed a day; scanning "what did I just enter?"
+      // became a hunt.
+      .order("created_at", { ascending: true }),
   ]);
 
   const activeGoals = ((goals ?? []) as ActiveGoal[]).slice(0, 2);
