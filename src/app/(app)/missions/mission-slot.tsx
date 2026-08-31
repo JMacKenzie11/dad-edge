@@ -14,6 +14,14 @@ import type { MissionScore } from "@/lib/coach/mission-quality";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
+// Fixed pixel widths so header, empty, and filled rows line up in every
+// state (with or without coach pill, with or without action buttons,
+// completed with just a "TUE" span vs. editable with a full day picker).
+// Kept in sync with the column-header widths in weekly-planner.tsx.
+const COL_DAY_WIDTH = "w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
+const COL_COACH_WIDTH = "w-[92px]"; // fits "SHARPEN 10/10"
+const COL_ACTIONS_WIDTH = "w-[104px]"; // COMPLETE + × + gap
+
 type SlotProps = {
   mission: WeekMission | null;
   weekDates: string[];
@@ -121,7 +129,11 @@ function EmptySlot({
           placeholder="Behavior + how you'll know it's done."
           className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
         />
-        <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
+        <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
+          <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
+        </div>
+        <div className={`shrink-0 ${COL_COACH_WIDTH}`} aria-hidden="true" />
+        <div className={`shrink-0 ${COL_ACTIONS_WIDTH}`} aria-hidden="true" />
       </div>
       {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
       {pending ? (
@@ -289,67 +301,73 @@ function FilledSlot({
             </p>
           ) : null}
         </div>
-        {readOnly || isDone ? (
-          <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] shrink-0">
-            {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
-          </span>
-        ) : (
-          <DayPicker
-            weekDates={weekDates}
-            value={dayIndex}
-            onChange={(idx) => {
-              setDayIndex(idx);
-              persistIfChanged(description, idx);
-            }}
-          />
-        )}
-        {qualityLabel ? (
-          <button
-            type="button"
-            onClick={() => setShowFeedback((v) => !v)}
-            onMouseEnter={() => {
-              if (score) setShowFeedback(true);
-            }}
-            className="shrink-0 h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
-            style={{ color: qualityColor, borderColor: qualityColor }}
-            aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
-            title="Coach's take on this mission. Doesn't block saving."
-            disabled={!score && !scoring}
-          >
-            {qualityLabel}
-            {score ? ` ${score.total}/10` : ""}
-          </button>
-        ) : null}
-        {!readOnly && !isDone ? (
-          <div className="shrink-0 flex items-center gap-1">
+        <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
+          {readOnly || isDone ? (
+            <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+              {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
+            </span>
+          ) : (
+            <DayPicker
+              weekDates={weekDates}
+              value={dayIndex}
+              onChange={(idx) => {
+                setDayIndex(idx);
+                persistIfChanged(description, idx);
+              }}
+            />
+          )}
+        </div>
+        <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
+          {qualityLabel ? (
             <button
               type="button"
-              onClick={() =>
-                startComplete(async () => {
-                  await completeMission(mission.id);
-                })
-              }
-              disabled={completePending}
-              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+              onClick={() => setShowFeedback((v) => !v)}
+              onMouseEnter={() => {
+                if (score) setShowFeedback(true);
+              }}
+              className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
+              style={{ color: qualityColor, borderColor: qualityColor }}
+              aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
+              title="Coach's take on this mission. Doesn't block saving."
+              disabled={!score && !scoring}
             >
-              COMPLETE
+              {qualityLabel}
+              {score ? ` ${score.total}/10` : ""}
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                startDelete(async () => {
-                  await deleteMission({ mission_id: mission.id });
-                })
-              }
-              disabled={deletePending}
-              className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
-              aria-label="Delete mission"
-              title="Delete"
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+        <div className={`shrink-0 flex items-center justify-end gap-1 ${COL_ACTIONS_WIDTH}`}>
+          {!readOnly && !isDone ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  startComplete(async () => {
+                    await completeMission(mission.id);
+                  })
+                }
+                disabled={completePending}
+                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+              >
+                COMPLETE
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  startDelete(async () => {
+                    await deleteMission({ mission_id: mission.id });
+                  })
+                }
+                disabled={deletePending}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
+                aria-label="Delete mission"
+                title="Delete"
+              >
+                ×
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
       {saveError ? (
         <p className="text-[11px] text-[color:var(--color-danger)] pl-[calc(theme(spacing.3)+1.5rem)]">

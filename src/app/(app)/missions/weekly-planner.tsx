@@ -113,11 +113,9 @@ function BucketSection({
       </header>
       <div className="px-4 py-2 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)] flex items-center gap-3 text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
         <span className="flex-1">MISSION</span>
-        <span className="shrink-0 w-[calc(7*1.25rem+6*0.125rem)] text-center">
-          DAY YOU&rsquo;LL DO IT
-        </span>
-        <span className="shrink-0 w-14 text-center">COACH</span>
-        <span className="shrink-0 w-[6.5rem]" aria-hidden="true" />
+        <span className="shrink-0 w-[152px] text-center">DAY YOU&rsquo;LL DO IT</span>
+        <span className="shrink-0 w-[92px] text-center">COACH</span>
+        <span className="shrink-0 w-[104px]" aria-hidden="true" />
       </div>
       <ul className="divide-y divide-[color:var(--color-border)]">
         {slots.map((slot, i) => (
