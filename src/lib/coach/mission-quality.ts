@@ -48,7 +48,10 @@ Rubric (each 0, 1, or 2):
 - binary      (0=fuzzy verb, 1=binary but ambiguous, 2=clearly done-or-not)
 - leverage    (0=busywork, 1=useful, 2=moves the needle in the pillar)
 - aligned     (0=off-theme, 1=fine, 2=directly serves the man's goal + pillar)
-- time_bound  (0=no day, 1=fuzzy timing, 2=specific day / time / count is baked in)
+- time_bound  Missions are always done within a specific week and the target_date field captures the exact day. Score based on the target_date input line, NOT the description:
+              * target_date is set → time_bound=2 (the picker has already answered "when"; the description doesn't need to repeat the date)
+              * target_date is missing → time_bound=0
+              Do NOT dock time_bound because the description says "on Wednesday" without a date — the date field handles that. Do NOT ask "which Wednesday?" in feedback when target_date is set.
 
 Also return:
 - feedback: one short sentence of coaching (blue-collar, direct, no fluff)
