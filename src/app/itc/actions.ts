@@ -33,7 +33,8 @@ import {
   type ReactionOutput,
   type SmartReview,
 } from "@/lib/itc/coach";
-import { runAllAuditChecks } from "@/lib/itc/audit-rules";
+import { runHoneWaterfall } from "@/lib/itc/criteria/orchestrator";
+import { renderFindings } from "@/lib/itc/criteria/render";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   addAssumption,
@@ -2007,22 +2008,23 @@ export async function runHoneDiagnostic(
       commitments,
       assumptions,
       assumptionLinks,
-      tests,
-      testResults,
     ] = await Promise.all([
       listBehaviors(loaded.map.id),
       listWorries(loaded.map.id),
       listCommitments(loaded.map.id),
       listAssumptions(loaded.map.id),
       listAssumptionLinks(loaded.map.id),
-      listTests(loaded.map.id),
-      listTestResults(loaded.map.id),
     ]);
 
-    // Deterministic pre-work: run all 12 audit checks in parallel to
-    // produce a typed AuditFinding[]. LLM-backed checks are inside the
-    // check functions themselves (utilityModel), fail-open per check.
-    const findings = await runAllAuditChecks({
+    // Waterfall: walks goal → worries → commitments → assumptions,
+    // stops at the first column with any finding. Everything
+    // downstream of a broken column gets re-derived once the coachee
+    // fixes it, so critiquing them now is asking to fix something
+    // about to change. Matches the derivation chain the guide
+    // describes (Vol 1 p 4: "do the fears stay present in the Column
+    // 3 commitments? do the Big Assumptions follow from key Column 3
+    // commitments?").
+    const { findings } = await runHoneWaterfall({
       mapId: loaded.map.id,
       goalText: loaded.map.improvement_goal ?? "",
       behaviors: behaviors.filter((b) => b.selected),
@@ -2030,24 +2032,14 @@ export async function runHoneDiagnostic(
       commitments,
       assumptions,
       assumptionLinks,
-      tests,
-      testResults,
     });
 
-    // Final synthesis: single mainModel call that narrates the findings
-    // as coach prose. LLM cannot invent findings — everything it
-    // quotes must come from a finding's actualText or relatedText.
     const pillarLabel = PILLAR_BY_CODE[loaded.map.pillar_code].label;
-    const prose = await synthesizeAuditProse(findings, {
+    const prose = renderFindings(findings, {
       goalText: loaded.map.improvement_goal ?? "",
       pillarLabel,
+      mode: "hone",
     });
-    if (!prose) {
-      return {
-        ok: false,
-        reason: "The audit didn't come back. Try again in a moment.",
-      };
-    }
 
     await appendMessage(
       loaded.map.id,
@@ -2122,19 +2114,15 @@ export async function previewHoneDiagnosticAdmin(
       commitments,
       assumptions,
       assumptionLinks,
-      tests,
-      testResults,
     ] = await Promise.all([
       listBehaviors(map.id),
       listWorries(map.id),
       listCommitments(map.id),
       listAssumptions(map.id),
       listAssumptionLinks(map.id),
-      listTests(map.id),
-      listTestResults(map.id),
     ]);
 
-    const findings = await runAllAuditChecks({
+    const { findings } = await runHoneWaterfall({
       mapId: map.id,
       goalText: map.improvement_goal ?? "",
       behaviors: behaviors.filter((b) => b.selected),
@@ -2142,21 +2130,14 @@ export async function previewHoneDiagnosticAdmin(
       commitments,
       assumptions,
       assumptionLinks,
-      tests,
-      testResults,
     });
 
     const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
-    const prose = await synthesizeAuditProse(findings, {
+    const prose = renderFindings(findings, {
       goalText: map.improvement_goal ?? "",
       pillarLabel,
+      mode: "hone",
     });
-    if (!prose) {
-      return {
-        ok: false,
-        reason: "The audit produced no output. Try again in a moment.",
-      };
-    }
     return { ok: true, prose };
   } catch (err) {
     return {
