@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { resetMap } from "../actions";
-import { useConfirm } from "./use-confirm";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
  * Clear-map button. Wrapping the reset in a native <form action={fn}>

@@ -115,7 +115,7 @@ function BucketSection({
         <span className="flex-1">MISSION</span>
         <span className="shrink-0 w-[152px] text-center">DAY YOU&rsquo;LL DO IT</span>
         <span className="shrink-0 w-[92px] text-center">COACH</span>
-        <span className="shrink-0 w-[104px]" aria-hidden="true" />
+        <span className="shrink-0 w-[192px]" aria-hidden="true" />
       </div>
       <ul className="divide-y divide-[color:var(--color-border)]">
         {slots.map((slot, i) => (

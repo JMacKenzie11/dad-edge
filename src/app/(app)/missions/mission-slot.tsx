@@ -8,9 +8,11 @@ import {
   updateMission,
   deleteMission,
   completeMission,
+  carryMissionToNextWeek,
 } from "./actions";
 import type { WeekMission } from "./page";
 import type { MissionScore } from "@/lib/coach/mission-quality";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -20,7 +22,7 @@ const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 // Kept in sync with the column-header widths in weekly-planner.tsx.
 const COL_DAY_WIDTH = "w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
 const COL_COACH_WIDTH = "w-[92px]"; // fits "SHARPEN 10/10"
-const COL_ACTIONS_WIDTH = "w-[104px]"; // COMPLETE + × + gap
+const COL_ACTIONS_WIDTH = "w-[192px]"; // COMPLETE + → NEXT WEEK + × + gaps
 
 /**
  * Grow the textarea's height to fit its content whenever it changes.
@@ -255,6 +257,9 @@ function FilledSlot({
   const [savePending, startSave] = useTransition();
   const [completePending, startComplete] = useTransition();
   const [deletePending, startDelete] = useTransition();
+  const [carryPending, startCarry] = useTransition();
+  const [carryConfirmation, setCarryConfirmation] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
   const scoreSeq = useRef(0);
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialDescRef = useRef(mission.description);
@@ -389,6 +394,7 @@ function FilledSlot({
 
   return (
     <li className="group bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
+      {confirmDialog}
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           {readOnly || isDone ? (
@@ -473,34 +479,64 @@ function FilledSlot({
         </div>
         <div className={`shrink-0 flex items-center justify-end gap-1 ${COL_ACTIONS_WIDTH}`}>
           {!readOnly && !isDone ? (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  startComplete(async () => {
-                    await completeMission(mission.id);
-                  })
-                }
-                disabled={completePending}
-                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
-              >
-                COMPLETE
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  startDelete(async () => {
-                    await deleteMission({ mission_id: mission.id });
-                  })
-                }
-                disabled={deletePending}
-                className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
-                aria-label="Delete mission"
-                title="Delete"
-              >
-                ×
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Mark mission complete?",
+                  body: "Completing locks this mission — you won't be able to edit the description or day after. Only do this when it's actually done.",
+                  confirmLabel: "COMPLETE",
+                  cancelLabel: "Not yet",
+                });
+                if (!ok) return;
+                startComplete(async () => {
+                  await completeMission(mission.id);
+                });
+              }}
+              disabled={completePending}
+              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+            >
+              COMPLETE
+            </button>
+          ) : null}
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() =>
+                startCarry(async () => {
+                  const res = await carryMissionToNextWeek({ mission_id: mission.id });
+                  if (res.ok) {
+                    const label = format(
+                      new Date(`${res.new_deadline}T00:00:00`),
+                      "EEE MMM d",
+                    ).toUpperCase();
+                    setCarryConfirmation(`CARRIED TO ${label}`);
+                    setTimeout(() => setCarryConfirmation(null), 2500);
+                  }
+                })
+              }
+              disabled={carryPending}
+              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+              title="Duplicate this mission for next week"
+            >
+              → NEXT WEEK
+            </button>
+          ) : null}
+          {!readOnly && !isDone ? (
+            <button
+              type="button"
+              onClick={() =>
+                startDelete(async () => {
+                  await deleteMission({ mission_id: mission.id });
+                })
+              }
+              disabled={deletePending}
+              className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
+              aria-label="Delete mission"
+              title="Delete"
+            >
+              ×
+            </button>
           ) : null}
         </div>
       </div>
@@ -512,6 +548,11 @@ function FilledSlot({
       {savePending ? (
         <p className="text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           SAVING…
+        </p>
+      ) : null}
+      {carryConfirmation ? (
+        <p className="text-[9px] font-heading tracking-widest text-[color:var(--color-primary)]">
+          {carryConfirmation}
         </p>
       ) : null}
       {showFeedback && score ? (

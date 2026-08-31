@@ -16,7 +16,7 @@ import {
 } from "../actions";
 import { EntryThread } from "./entry-thread";
 import { FormErrorSummary, FormField } from "./form-field";
-import { useConfirm } from "./use-confirm";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
  * Feature flag. The "Give me a safer version" toolbar button is hidden

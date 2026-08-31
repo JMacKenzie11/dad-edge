@@ -6,7 +6,7 @@ import {
   regenerateCommitmentDrafts,
   regenerateWorryDrafts,
 } from "../actions";
-import { useConfirm } from "./use-confirm";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
  * "Regenerate drafts" affordance on Column 4 (commitments) and

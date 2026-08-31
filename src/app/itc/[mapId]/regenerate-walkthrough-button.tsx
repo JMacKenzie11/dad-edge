@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { regenerateWalkthrough } from "../actions";
-import { useConfirm } from "./use-confirm";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
  * "Regenerate walkthrough" affordance on the immune-system section.

@@ -267,6 +267,76 @@ const RolloverSchema = z.object({
   new_target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const CarryForwardSchema = z.object({ mission_id: z.string().uuid() });
+
+/**
+ * Duplicate a mission +7 days out — same description, same pillar, same
+ * goal link, same day(s)-of-week. Source row is left intact (unlike
+ * rolloverMission, which flips the source to "rolled_over"). Works on
+ * completed and active missions — the two moments a coachee reaches for
+ * this are "this is my weekly staple" and "I want another crack next week".
+ *
+ * Returns the new target dates so the caller can echo a confirmation.
+ */
+export async function carryMissionToNextWeek(
+  input: unknown,
+): Promise<
+  | { ok: true; new_target_dates: string[]; new_deadline: string }
+  | { ok: false; error: string }
+> {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+  const parsed = CarryForwardSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: prev, error: fetchErr } = await supabase
+    .from("missions")
+    .select(
+      "id, description, pillar_code, community_id, quarterly_goal_id, target_date, target_dates",
+    )
+    .eq("id", parsed.data.mission_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (fetchErr || !prev) return { ok: false, error: "Not found." };
+  const p = prev as {
+    id: string;
+    description: string;
+    pillar_code: string;
+    community_id: string;
+    quarterly_goal_id: string | null;
+    target_date: string;
+    target_dates: string[] | null;
+  };
+
+  const sourceDates =
+    p.target_dates && p.target_dates.length > 0 ? p.target_dates : [p.target_date];
+  const nextDates = sourceDates.map(addSevenDays).sort();
+  const deadline = nextDates[nextDates.length - 1];
+
+  const { error: insErr } = await supabase.from("missions").insert({
+    user_id: user.id,
+    community_id: p.community_id,
+    pillar_code: p.pillar_code,
+    description: p.description,
+    target_date: deadline,
+    target_dates: nextDates,
+    quarterly_goal_id: p.quarterly_goal_id,
+    created_by: "user",
+    rolled_over_from_mission_id: p.id,
+  });
+  if (insErr) return { ok: false, error: insErr.message };
+  revalidatePath("/missions");
+  revalidatePath("/today");
+  return { ok: true, new_target_dates: nextDates, new_deadline: deadline };
+}
+
+function addSevenDays(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function rolloverMission(input: unknown) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };

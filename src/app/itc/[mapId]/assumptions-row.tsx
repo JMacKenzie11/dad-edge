@@ -19,7 +19,7 @@ import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { InlineSpinner, SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
-import { useConfirm } from "./use-confirm";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string, nowMs: number): boolean {
