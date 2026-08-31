@@ -15,6 +15,9 @@ export type WeekMission = {
   description: string;
   pillar_code: PillarCode;
   target_date: string;
+  /** All days this mission is scheduled for. Always ≥ 1. Sorted
+   *  ascending. target_date is the last entry (deadline). */
+  target_dates: string[];
   status: "planned" | "completed" | "missed" | "rolled_over";
   completed_late: boolean;
   quarterly_goal_id: string | null;
@@ -66,7 +69,7 @@ export default async function MissionsPage() {
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, status, completed_late, quarterly_goal_id",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id",
       )
       .eq("user_id", user.id)
       .gte("target_date", monday)

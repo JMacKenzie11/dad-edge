@@ -6,11 +6,11 @@ import type { JobResult } from "@/lib/jobs/utils";
 
 /**
  * "Date night is tonight. Report back." (§8).
- * Fires once per mission on the target_date. We send when the local hour hits
- * the community's morning (8:00 default) so the man sees it before the day
- * starts. Idempotency is enforced by the daily reminder marker: we skip if we
- * already emailed for this mission today. Since we don't persist a marker,
- * we send only when localHour is 8, giving a single hourly window.
+ * Fires once per mission on EACH scheduled day. Multi-day missions
+ * (target_dates = [Mon, Wed, Fri]) nudge on each of those days. We
+ * send when the local hour hits the community's morning (8:00 default)
+ * so the man sees it before the day starts. Idempotency by hourly
+ * window: we send only when localHour is 8.
  */
 export async function runMissionDayNudges(
   now: Date = new Date(),
@@ -32,12 +32,14 @@ export async function runMissionDayNudges(
     if (!options?.force && localHour(now, c.timezone) !== 8) continue;
     const today = localDate(now, c.timezone);
 
+    // Match missions where today is any of the scheduled days —
+    // multi-day missions nudge on each of their scheduled days.
     const { data: missions } = await svc
       .from("missions")
       .select("id, description, user_id, users:user_id(email, first_name)")
       .eq("community_id", c.id)
       .eq("status", "planned")
-      .eq("target_date", today);
+      .contains("target_dates", [today]);
 
     for (const m of (missions ?? []) as {
       id: string;

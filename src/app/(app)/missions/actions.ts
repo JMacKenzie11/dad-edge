@@ -9,25 +9,54 @@ import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
+const DateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 const CreateSchema = z.object({
   community_id: z.string().uuid(),
   pillar_code: PillarCodeSchema,
   description: z.string().min(1).max(280),
-  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Multi-day missions: array of dates, at least one. Callers that
+  // still pass a single target_date get it wrapped into a 1-element
+  // array. target_date is written as the max (deadline) of the set
+  // for backwards compat with downstream jobs and views.
+  target_dates: z.array(DateStringSchema).min(1).max(7).optional(),
+  target_date: DateStringSchema.optional(),
   quarterly_goal_id: z.string().uuid().nullable(),
   quality_score: z.number().int().min(0).max(10).nullable().optional(),
-});
+}).refine(
+  (v) => v.target_dates !== undefined || v.target_date !== undefined,
+  { message: "target_dates or target_date required." },
+);
 
 const UpdateSchema = z.object({
   mission_id: z.string().uuid(),
   patch: z
     .object({
       description: z.string().min(1).max(280).optional(),
-      target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      target_dates: z.array(DateStringSchema).min(1).max(7).optional(),
+      target_date: DateStringSchema.optional(),
       quality_score: z.number().int().min(0).max(10).nullable().optional(),
     })
     .refine((p) => Object.keys(p).length > 0, { message: "Empty patch." }),
 });
+
+/**
+ * Normalize a caller's target_dates + target_date input into a sorted,
+ * deduplicated array and the corresponding deadline (max) date.
+ */
+function resolveTargetDates(input: {
+  target_dates?: string[];
+  target_date?: string;
+}): { dates: string[]; deadline: string } | null {
+  const raw = input.target_dates?.length
+    ? input.target_dates
+    : input.target_date
+      ? [input.target_date]
+      : [];
+  if (raw.length === 0) return null;
+  const dates = Array.from(new Set(raw)).sort();
+  return { dates, deadline: dates[dates.length - 1] };
+}
 
 export async function createMission(
   input: unknown,
@@ -39,9 +68,12 @@ export async function createMission(
   if (!parsed.success) return { ok: false, error: "Bad input." };
   const data = parsed.data;
 
+  const resolved = resolveTargetDates(data);
+  if (!resolved) return { ok: false, error: "Pick at least one day." };
+
   const gate = validateMissionConcreteness({
     description: data.description,
-    target_date: data.target_date,
+    target_date: resolved.deadline,
   });
   if (!gate.ok) return { ok: false, error: gate.reason };
 
@@ -53,7 +85,8 @@ export async function createMission(
       community_id: data.community_id,
       pillar_code: data.pillar_code,
       description: data.description.trim(),
-      target_date: data.target_date,
+      target_date: resolved.deadline,
+      target_dates: resolved.dates,
       quarterly_goal_id: data.quarterly_goal_id,
       created_by: "user",
       quality_score: data.quality_score ?? null,
@@ -81,21 +114,44 @@ export async function updateMission(
   if (!parsed.success) return { ok: false, error: "Bad input." };
   const { mission_id, patch } = parsed.data;
 
-  if (patch.description !== undefined || patch.target_date !== undefined) {
+  const wantsDateChange =
+    patch.target_dates !== undefined || patch.target_date !== undefined;
+
+  let resolvedNext: { dates: string[]; deadline: string } | null = null;
+  if (patch.description !== undefined || wantsDateChange) {
     const supabase = await createSupabaseServerClient();
     const { data: existing } = await supabase
       .from("missions")
-      .select("description, target_date")
+      .select("description, target_date, target_dates")
       .eq("id", mission_id)
       .eq("user_id", user.id)
       .maybeSingle();
     if (!existing) return { ok: false, error: "Not found." };
-    const row = existing as { description: string; target_date: string };
+    const row = existing as {
+      description: string;
+      target_date: string;
+      target_dates: string[] | null;
+    };
     const nextDescription = patch.description ?? row.description;
-    const nextDate = patch.target_date ?? row.target_date;
+    if (wantsDateChange) {
+      resolvedNext = resolveTargetDates({
+        target_dates: patch.target_dates,
+        target_date: patch.target_date,
+      });
+      if (!resolvedNext) return { ok: false, error: "Pick at least one day." };
+    } else {
+      const currentDates =
+        row.target_dates && row.target_dates.length > 0
+          ? row.target_dates
+          : [row.target_date];
+      resolvedNext = {
+        dates: currentDates,
+        deadline: currentDates[currentDates.length - 1],
+      };
+    }
     const gate = validateMissionConcreteness({
       description: nextDescription,
-      target_date: nextDate,
+      target_date: resolvedNext.deadline,
     });
     if (!gate.ok) return { ok: false, error: gate.reason };
   }
@@ -103,7 +159,10 @@ export async function updateMission(
   const supabase = await createSupabaseServerClient();
   const update: Record<string, unknown> = {};
   if (patch.description !== undefined) update.description = patch.description.trim();
-  if (patch.target_date !== undefined) update.target_date = patch.target_date;
+  if (wantsDateChange && resolvedNext) {
+    update.target_date = resolvedNext.deadline;
+    update.target_dates = resolvedNext.dates;
+  }
   if (patch.quality_score !== undefined) update.quality_score = patch.quality_score;
 
   const { error } = await supabase

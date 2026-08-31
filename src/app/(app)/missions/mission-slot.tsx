@@ -65,7 +65,9 @@ function EmptySlot({
 }: SlotProps) {
   const [expanded, setExpanded] = useState(false);
   const [description, setDescription] = useState("");
-  const [dayIndex, setDayIndex] = useState<number>(defaultDayIndex(weekDates));
+  const [dayIndexes, setDayIndexes] = useState<number[]>(() => [
+    defaultDayIndex(weekDates),
+  ]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [score, setScore] = useState<MissionScore | null>(null);
@@ -97,7 +99,7 @@ function EmptySlot({
           body: JSON.stringify({
             description,
             pillar_code: pillarCode,
-            target_date: weekDates[dayIndex],
+            target_date: weekDates[dayIndexes[dayIndexes.length - 1]],
             goal_description: goalDescription,
           }),
         });
@@ -111,7 +113,7 @@ function EmptySlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndex, weekDates, pillarCode, goalDescription]);
+  }, [description, dayIndexes, weekDates, pillarCode, goalDescription]);
 
   if (readOnly) {
     return (
@@ -141,14 +143,14 @@ function EmptySlot({
       setError("Join a community first.");
       return;
     }
-    const targetDate = weekDates[dayIndex];
+    const targetDates = dayIndexes.map((i) => weekDates[i]);
     setError(null);
     startTransition(async () => {
       const res = await createMission({
         community_id: communityId,
         pillar_code: pillarCode,
         description: description.trim(),
-        target_date: targetDate,
+        target_dates: targetDates,
         quarterly_goal_id: goalId,
       });
       if (!res.ok) {
@@ -204,7 +206,11 @@ function EmptySlot({
           className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
         />
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
-          <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
+          <DayPicker
+            weekDates={weekDates}
+            value={dayIndexes}
+            onChange={setDayIndexes}
+          />
         </div>
         <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
           {qualityLabel ? (
@@ -251,7 +257,9 @@ function FilledSlot({
   readOnly,
 }: SlotProps & { mission: WeekMission }) {
   const [description, setDescription] = useState(mission.description);
-  const [dayIndex, setDayIndex] = useState(dayIndexFor(mission.target_date, weekDates));
+  const [dayIndexes, setDayIndexes] = useState<number[]>(() =>
+    dayIndexesFor(mission.target_dates, mission.target_date, weekDates),
+  );
   const [score, setScore] = useState<MissionScore | null>(null);
   const [scoring, setScoring] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -263,17 +271,27 @@ function FilledSlot({
   const scoreSeq = useRef(0);
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialDescRef = useRef(mission.description);
-  const initialDayRef = useRef(dayIndex);
+  const initialDaysRef = useRef(dayIndexes);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   useAutoResize(textareaRef, description);
 
   useEffect(() => {
     setDescription(mission.description);
     initialDescRef.current = mission.description;
-    const nextDayIndex = dayIndexFor(mission.target_date, weekDates);
-    setDayIndex(nextDayIndex);
-    initialDayRef.current = nextDayIndex;
-  }, [mission.id, mission.description, mission.target_date, weekDates]);
+    const nextDayIndexes = dayIndexesFor(
+      mission.target_dates,
+      mission.target_date,
+      weekDates,
+    );
+    setDayIndexes(nextDayIndexes);
+    initialDaysRef.current = nextDayIndexes;
+  }, [
+    mission.id,
+    mission.description,
+    mission.target_date,
+    mission.target_dates,
+    weekDates,
+  ]);
 
   useEffect(() => {
     if (scoreTimer.current) clearTimeout(scoreTimer.current);
@@ -298,7 +316,8 @@ function FilledSlot({
           body: JSON.stringify({
             description,
             pillar_code: mission.pillar_code,
-            target_date: weekDates[dayIndex] ?? mission.target_date,
+            target_date:
+              weekDates[dayIndexes[dayIndexes.length - 1]] ?? mission.target_date,
             goal_description: goalDescription,
           }),
         });
@@ -312,24 +331,30 @@ function FilledSlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndex, weekDates, mission.pillar_code, mission.target_date, mission.status, goalDescription]);
+  }, [description, dayIndexes, weekDates, mission.pillar_code, mission.target_date, mission.status, goalDescription]);
 
   const isDone = mission.status === "completed";
   const isMissed = mission.status === "missed";
-  const targetDate = weekDates[dayIndex] ?? mission.target_date;
+  const displayDates =
+    mission.target_dates && mission.target_dates.length > 0
+      ? mission.target_dates
+      : [mission.target_date];
 
-  const persistIfChanged = (nextDescription: string, nextDayIndex: number) => {
+  const persistIfChanged = (
+    nextDescription: string,
+    nextDayIndexes: number[],
+  ) => {
     const patch: {
       description?: string;
-      target_date?: string;
+      target_dates?: string[];
       quality_score?: number | null;
     } = {};
     const trimmed = nextDescription.trim();
     if (trimmed !== initialDescRef.current.trim() && trimmed.length >= 8) {
       patch.description = trimmed;
     }
-    if (nextDayIndex !== initialDayRef.current) {
-      patch.target_date = weekDates[nextDayIndex];
+    if (!sameDayIndexes(nextDayIndexes, initialDaysRef.current)) {
+      patch.target_dates = nextDayIndexes.map((i) => weekDates[i]);
     }
     if (score) patch.quality_score = score.total;
     if (Object.keys(patch).length === 0) return;
@@ -340,14 +365,14 @@ function FilledSlot({
         setSaveError(res.error);
       } else {
         if (patch.description) initialDescRef.current = patch.description;
-        if (patch.target_date) initialDayRef.current = nextDayIndex;
+        if (patch.target_dates) initialDaysRef.current = nextDayIndexes;
       }
     });
   };
 
   const applyRewrite = (text: string) => {
     setDescription(text);
-    persistIfChanged(text, dayIndex);
+    persistIfChanged(text, dayIndexes);
   };
 
   const qualityLabel = score
@@ -393,7 +418,7 @@ function FilledSlot({
               onFocus={() => setExpanded(true)}
               onBlur={() => {
                 setExpanded(false);
-                persistIfChanged(description, dayIndex);
+                persistIfChanged(description, dayIndexes);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -413,15 +438,17 @@ function FilledSlot({
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
           {readOnly || isDone ? (
             <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-              {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
+              {displayDates
+                .map((d) => format(new Date(`${d}T00:00:00`), "EEE").toUpperCase())
+                .join(" ")}
             </span>
           ) : (
             <DayPicker
               weekDates={weekDates}
-              value={dayIndex}
-              onChange={(idx) => {
-                setDayIndex(idx);
-                persistIfChanged(description, idx);
+              value={dayIndexes}
+              onChange={(next) => {
+                setDayIndexes(next);
+                persistIfChanged(description, next);
               }}
             />
           )}
@@ -499,27 +526,54 @@ function FilledSlot({
   );
 }
 
+/**
+ * Multi-select day-of-week picker. `value` is the set of selected day
+ * indexes (0=Mon .. 6=Sun). onChange gets the next set.
+ *
+ * Design details:
+ *  - Always requires ≥1 selected day. Tapping the last-selected day
+ *    is a no-op (would leave the mission with no date).
+ *  - Uses onMouseDown+preventDefault so clicking a button doesn't
+ *    steal focus from a sibling textarea. Prevents the blur-triggered
+ *    save from racing the click and dropping the day change.
+ */
 function DayPicker({
   weekDates,
   value,
   onChange,
 }: {
   weekDates: string[];
-  value: number;
-  onChange: (idx: number) => void;
+  value: number[];
+  onChange: (indexes: number[]) => void;
 }) {
+  const selected = new Set(value);
+  const toggle = (i: number) => {
+    const next = new Set(selected);
+    if (next.has(i)) {
+      if (next.size === 1) return;
+      next.delete(i);
+    } else {
+      next.add(i);
+    }
+    onChange(Array.from(next).sort((a, b) => a - b));
+  };
   return (
-    <div className="shrink-0 flex gap-0.5" role="radiogroup" aria-label="Day of week">
+    <div
+      className="shrink-0 flex gap-0.5"
+      role="group"
+      aria-label="Days of week"
+    >
       {DOW_LABELS.map((label, i) => {
-        const active = i === value;
+        const active = selected.has(i);
         const iso = weekDates[i];
         return (
           <button
             key={i}
             type="button"
-            role="radio"
+            role="checkbox"
             aria-checked={active}
-            onClick={() => onChange(i)}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => toggle(i)}
             className={`h-6 w-5 rounded text-[10px] font-heading tracking-widest ${
               active
                 ? "bg-[color:var(--color-primary)] text-white"
@@ -593,7 +647,29 @@ function defaultDayIndex(weekDates: string[]): number {
   return 2;
 }
 
-function dayIndexFor(iso: string, weekDates: string[]): number {
-  const i = weekDates.indexOf(iso);
-  return i >= 0 ? i : 0;
+/**
+ * Resolve the day-of-week indexes for a mission's scheduled days.
+ * Prefer target_dates when present; fall back to a single target_date
+ * for legacy rows that predate the array column.
+ */
+function dayIndexesFor(
+  targetDates: string[] | null | undefined,
+  targetDate: string,
+  weekDates: string[],
+): number[] {
+  const source =
+    targetDates && targetDates.length > 0 ? targetDates : [targetDate];
+  const indexes = source
+    .map((d) => weekDates.indexOf(d))
+    .filter((i) => i >= 0);
+  if (indexes.length === 0) return [0];
+  return indexes.sort((a, b) => a - b);
+}
+
+function sameDayIndexes(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
