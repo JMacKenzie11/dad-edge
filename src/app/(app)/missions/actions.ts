@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
+import { resolveTargetDates } from "./target-dates";
 import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
@@ -40,27 +41,8 @@ const UpdateSchema = z.object({
     .refine((p) => Object.keys(p).length > 0, { message: "Empty patch." }),
 });
 
-/**
- * Normalize a caller's target_dates + target_date input into a sorted,
- * deduplicated array and the corresponding deadline (max) date.
- * Exported so the multi-day normalization contract can be unit-tested
- * without touching the DB — target_date must stay the deadline
- * (max(target_dates)) so downstream jobs and views that still read the
- * scalar keep working after the array column shipped.
- */
-export function resolveTargetDates(input: {
-  target_dates?: string[];
-  target_date?: string;
-}): { dates: string[]; deadline: string } | null {
-  const raw = input.target_dates?.length
-    ? input.target_dates
-    : input.target_date
-      ? [input.target_date]
-      : [];
-  if (raw.length === 0) return null;
-  const dates = Array.from(new Set(raw)).sort();
-  return { dates, deadline: dates[dates.length - 1] };
-}
+// resolveTargetDates moved to ./target-dates.ts — this file is
+// "use server", which forbids exporting non-async helpers.
 
 export async function createMission(
   input: unknown,

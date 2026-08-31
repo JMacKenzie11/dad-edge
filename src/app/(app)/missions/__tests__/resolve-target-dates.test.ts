@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { resolveTargetDates } from "../actions";
+import { resolveTargetDates } from "../target-dates";
 
 describe("resolveTargetDates", () => {
   it("returns null when neither target_dates nor target_date is provided", () => {
