@@ -22,7 +22,13 @@ const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 // Kept in sync with the column-header widths in weekly-planner.tsx.
 const COL_DAY_WIDTH = "w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
 const COL_COACH_WIDTH = "w-[92px]"; // fits "SHARPEN 10/10"
-const COL_ACTIONS_WIDTH = "w-[192px]"; // COMPLETE + → NEXT WEEK + × + gaps
+// Actions column = fixed sub-slots so each button holds its x-position
+// even when siblings are hidden (e.g. COMPLETE + × are gone on completed
+// rows — without fixed slots, → NEXT WEEK would slide right).
+const COL_ACTIONS_WIDTH = "w-[192px]"; // COMPLETE(68) + NEXT WEEK(92) + ×(24) + 2×gap(4)
+const COL_COMPLETE_SLOT = "w-[68px]";
+const COL_NEXT_WEEK_SLOT = "w-[92px]";
+const COL_DELETE_SLOT = "w-[24px]";
 
 /**
  * Grow the textarea's height to fit its content whenever it changes.
@@ -478,66 +484,72 @@ function FilledSlot({
           ) : null}
         </div>
         <div className={`shrink-0 flex items-center justify-end gap-1 ${COL_ACTIONS_WIDTH}`}>
-          {!readOnly && !isDone ? (
-            <button
-              type="button"
-              onClick={async () => {
-                const ok = await confirm({
-                  title: "Mark mission complete?",
-                  body: "Completing locks this mission — you won't be able to edit the description or day after. Only do this when it's actually done.",
-                  confirmLabel: "COMPLETE",
-                  cancelLabel: "Not yet",
-                });
-                if (!ok) return;
-                startComplete(async () => {
-                  await completeMission(mission.id);
-                });
-              }}
-              disabled={completePending}
-              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
-            >
-              COMPLETE
-            </button>
-          ) : null}
-          {!readOnly ? (
-            <button
-              type="button"
-              onClick={() =>
-                startCarry(async () => {
-                  const res = await carryMissionToNextWeek({ mission_id: mission.id });
-                  if (res.ok) {
-                    const label = format(
-                      new Date(`${res.new_deadline}T00:00:00`),
-                      "EEE MMM d",
-                    ).toUpperCase();
-                    setCarryConfirmation(`CARRIED TO ${label}`);
-                    setTimeout(() => setCarryConfirmation(null), 2500);
-                  }
-                })
-              }
-              disabled={carryPending}
-              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
-              title="Duplicate this mission for next week"
-            >
-              → NEXT WEEK
-            </button>
-          ) : null}
-          {!readOnly && !isDone ? (
-            <button
-              type="button"
-              onClick={() =>
-                startDelete(async () => {
-                  await deleteMission({ mission_id: mission.id });
-                })
-              }
-              disabled={deletePending}
-              className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
-              aria-label="Delete mission"
-              title="Delete"
-            >
-              ×
-            </button>
-          ) : null}
+          <div className={`shrink-0 flex justify-end ${COL_COMPLETE_SLOT}`}>
+            {!readOnly && !isDone ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Mark mission complete?",
+                    body: "Completing locks this mission — you won't be able to edit the description or day after. Only do this when it's actually done.",
+                    confirmLabel: "COMPLETE",
+                    cancelLabel: "Not yet",
+                  });
+                  if (!ok) return;
+                  startComplete(async () => {
+                    await completeMission(mission.id);
+                  });
+                }}
+                disabled={completePending}
+                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+              >
+                COMPLETE
+              </button>
+            ) : null}
+          </div>
+          <div className={`shrink-0 flex justify-end ${COL_NEXT_WEEK_SLOT}`}>
+            {!readOnly ? (
+              <button
+                type="button"
+                onClick={() =>
+                  startCarry(async () => {
+                    const res = await carryMissionToNextWeek({ mission_id: mission.id });
+                    if (res.ok) {
+                      const label = format(
+                        new Date(`${res.new_deadline}T00:00:00`),
+                        "EEE MMM d",
+                      ).toUpperCase();
+                      setCarryConfirmation(`CARRIED TO ${label}`);
+                      setTimeout(() => setCarryConfirmation(null), 2500);
+                    }
+                  })
+                }
+                disabled={carryPending}
+                className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+                title="Duplicate this mission for next week"
+              >
+                → NEXT WEEK
+              </button>
+            ) : null}
+          </div>
+          <div className={`shrink-0 flex justify-end ${COL_DELETE_SLOT}`}>
+            {!readOnly && !isDone ? (
+              <button
+                type="button"
+                onClick={() =>
+                  startDelete(async () => {
+                    await deleteMission({ mission_id: mission.id });
+                  })
+                }
+                disabled={deletePending}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
+                aria-label="Delete mission"
+                title="Delete"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
       {saveError ? (
