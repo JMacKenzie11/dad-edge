@@ -24,7 +24,7 @@ export type IssueType =
   | "assumption_uncovered_commitment"
   | "test_coverage_gap"
   | "test_grip_through_data"
-  | "worry_commitment_redundancy";
+  | "worry_redundancy";
 
 export type EntryRef =
   | { table: "goal"; id: string }

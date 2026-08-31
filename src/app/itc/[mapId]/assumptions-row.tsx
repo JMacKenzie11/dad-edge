@@ -77,28 +77,14 @@ export function AssumptionsRow({
     );
   }
   const commitmentIndexById = new Map(commitments.map((c, i) => [c.id, i + 1]));
-  // When the coachee is on the assumptions stage with no accepted
-  // assumptions AND no coach drafts, the rubric filter probably
-  // rejected all drafts from the on-advance run (silent-drop for
-  // identity-landing failure — see draftAssumptionsFromCommitments).
-  // Without an explicit affordance, the coachee has no way to ask
-  // the coach to try again short of refreshing or writing their own.
-  // Show the regenerate button here too so the retry path is visible.
-  const canAskForDrafts =
-    commitments.length > 0 &&
-    drafts.length === 0 &&
-    assumptions.length === 0;
 
   return (
     <div className="space-y-3">
       {drafts.length > 0 ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
-              Coach's drafts
-            </p>
-            <RegenerateDraftsButton mapId={mapId} kind="assumptions" />
-          </div>
+          <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
+            Coach's drafts
+          </p>
           {drafts.map((d) => (
             <DraftCard
               key={d.id}
@@ -110,16 +96,11 @@ export function AssumptionsRow({
         </div>
       ) : null}
       {assumptions.length === 0 ? (
-        <div className="space-y-2">
-          <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
-            {drafts.length > 0
-              ? "Review the drafts above, or write your own below."
-              : "None yet."}
-          </p>
-          {canAskForDrafts ? (
-            <RegenerateDraftsButton mapId={mapId} kind="assumptions" />
-          ) : null}
-        </div>
+        <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
+          {drafts.length > 0
+            ? "Review the drafts above, or write your own below."
+            : "None yet."}
+        </p>
       ) : (
         <ul className="space-y-3 text-base">
           {assumptions.map((a, i) => (
@@ -141,13 +122,28 @@ export function AssumptionsRow({
           Add competing commitments first.
         </p>
       ) : (
-        <AddAssumptionForm
-          mapId={mapId}
-          commitments={commitments}
-          initiallyExpanded={
-            assumptions.length === 0 && drafts.length === 0
-          }
-        />
+        <>
+          <AddAssumptionForm
+            mapId={mapId}
+            commitments={commitments}
+            initiallyExpanded={
+              assumptions.length === 0 && drafts.length === 0
+            }
+          />
+          {/*
+            Single persistent regenerate affordance for the column.
+            Renders in the same place regardless of whether drafts or
+            accepted assumptions exist — during honing (after
+            behaviors / worries / commitments have shifted) the
+            coachee needs to be able to ask for fresh drafts against
+            the new map state. Backing action bypasses the "existing
+            assumptions" guard, so accepted assumption rows stay
+            untouched while a new draft set gets written.
+          */}
+          <div className="pt-1">
+            <RegenerateDraftsButton mapId={mapId} kind="assumptions" />
+          </div>
+        </>
       )}
     </div>
   );

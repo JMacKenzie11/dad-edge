@@ -234,7 +234,7 @@ function collectClauses(findings: Finding[]): string[] {
   if (overload) clauses.push(renderOverloadClause(overload));
 
   const redundancies = findings.filter(
-    (f) => f.issueType === "worry_commitment_redundancy",
+    (f) => f.issueType === "worry_redundancy",
   );
   if (redundancies.length === 1)
     clauses.push(renderRedundancyClause(redundancies[0]));
@@ -318,19 +318,19 @@ function renderOverloadClause(f: Finding): string {
 }
 
 function renderRedundancyClause(f: Finding): string {
-  const related = f.relatedText ? `"${f.relatedText}"` : "another commitment";
+  const related = f.relatedText ? `"${f.relatedText}"` : "another worry";
   const reason = stripDetailPrefix(f.detail);
-  return `Duplicates the commitment ${related} — ${reason} Push this worry into a distinct identity concern or drop it so the map isn't carrying the same fear twice.`;
+  return `Duplicates the worry ${related} — ${reason} Push this worry into a distinct identity concern or drop it so the map isn't carrying the same fear twice.`;
 }
 
 function renderMergedRedundancyClause(findings: Finding[]): string {
-  const commitmentQuotes = findings
+  const worryQuotes = findings
     .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
     .filter((s): s is string => s !== null);
   const quotesList =
-    commitmentQuotes.length > 0 ? ` (${joinList(commitmentQuotes)})` : "";
+    worryQuotes.length > 0 ? ` (${joinList(worryQuotes)})` : "";
   const count = pluralCountPhrase(findings.length);
-  return `Duplicates ${count} commitments${quotesList} — same identity concern in different forms. Push this worry into a distinct identity concern or drop it.`;
+  return `Duplicates ${count} worries${quotesList} — same identity concern in different forms. Push this worry into a distinct identity concern or drop it.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +411,6 @@ const _EXHAUSTIVENESS: readonly IssueType[] = [
   "assumption_uncovered_commitment",
   "test_coverage_gap",
   "test_grip_through_data",
-  "worry_commitment_redundancy",
+  "worry_redundancy",
 ];
 void _EXHAUSTIVENESS;

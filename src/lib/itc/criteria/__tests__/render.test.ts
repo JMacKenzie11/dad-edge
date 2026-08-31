@@ -366,18 +366,18 @@ describe("renderAudit — drift, overload, redundancy clauses", () => {
     const prose = renderAudit(
       [
         finding({
-          issueType: "worry_commitment_redundancy",
+          issueType: "worry_redundancy",
           severity: "observation",
-          entryRef: { table: "worries", id: "w-1" },
+          entryRef: { table: "worries", id: "w-2" },
           actualText: "I worry X",
           detail: "Same identity concern in two forms.",
-          relatedText: "I am committed to Y",
-          relatedEntryRef: { table: "commitments", id: "c-1" },
+          relatedText: "I worry that Y",
+          relatedEntryRef: { table: "worries", id: "w-1" },
         }),
       ],
       CTX,
     );
-    expect(prose).toMatch(/Duplicates the commitment "I am committed to Y"/i);
+    expect(prose).toMatch(/Duplicates the worry "I worry that Y"/i);
     expect(prose).toMatch(/Push this worry into a distinct/i);
   });
 
@@ -385,22 +385,22 @@ describe("renderAudit — drift, overload, redundancy clauses", () => {
     const prose = renderAudit(
       [
         finding({
-          issueType: "worry_commitment_redundancy",
+          issueType: "worry_redundancy",
           severity: "observation",
-          entryRef: { table: "worries", id: "w-1" },
+          entryRef: { table: "worries", id: "w-3" },
           actualText: "I worry X",
           detail: "Same concern.",
-          relatedText: "commitment A",
-          relatedEntryRef: { table: "commitments", id: "c-1" },
+          relatedText: "worry A",
+          relatedEntryRef: { table: "worries", id: "w-1" },
         }),
         finding({
-          issueType: "worry_commitment_redundancy",
+          issueType: "worry_redundancy",
           severity: "observation",
-          entryRef: { table: "worries", id: "w-1" },
+          entryRef: { table: "worries", id: "w-3" },
           actualText: "I worry X",
           detail: "Same concern.",
-          relatedText: "commitment B",
-          relatedEntryRef: { table: "commitments", id: "c-2" },
+          relatedText: "worry B",
+          relatedEntryRef: { table: "worries", id: "w-2" },
         }),
       ],
       CTX,
@@ -408,10 +408,10 @@ describe("renderAudit — drift, overload, redundancy clauses", () => {
     // Worry quote once.
     const quoteCount = prose.split('"I worry X"').length - 1;
     expect(quoteCount).toBe(1);
-    // Both commitments listed.
-    expect(prose).toContain('"commitment A"');
-    expect(prose).toContain('"commitment B"');
-    expect(prose).toMatch(/Duplicates both commitments/i);
+    // Both related worries listed.
+    expect(prose).toContain('"worry A"');
+    expect(prose).toContain('"worry B"');
+    expect(prose).toMatch(/Duplicates both worries/i);
   });
 
   it("combines generic critiques with drift/overload in one enumerated paragraph", () => {
@@ -480,7 +480,7 @@ describe("renderAudit — exhaustiveness and voice hygiene", () => {
       "assumption_uncovered_commitment",
       "test_coverage_gap",
       "test_grip_through_data",
-      "worry_commitment_redundancy",
+      "worry_redundancy",
     ];
     const severities: AuditSeverity[] = [
       "critical",
