@@ -18,6 +18,17 @@ const CreateSchema = z.object({
   quality_score: z.number().int().min(0).max(10).nullable().optional(),
 });
 
+const UpdateSchema = z.object({
+  mission_id: z.string().uuid(),
+  patch: z
+    .object({
+      description: z.string().min(1).max(280).optional(),
+      target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      quality_score: z.number().int().min(0).max(10).nullable().optional(),
+    })
+    .refine((p) => Object.keys(p).length > 0, { message: "Empty patch." }),
+});
+
 export async function createMission(
   input: unknown,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -58,6 +69,73 @@ export async function createMission(
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true, id: inserted!.id };
+}
+
+export async function updateMission(
+  input: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+
+  const parsed = UpdateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const { mission_id, patch } = parsed.data;
+
+  if (patch.description !== undefined || patch.target_date !== undefined) {
+    const supabase = await createSupabaseServerClient();
+    const { data: existing } = await supabase
+      .from("missions")
+      .select("description, target_date")
+      .eq("id", mission_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!existing) return { ok: false, error: "Not found." };
+    const row = existing as { description: string; target_date: string };
+    const nextDescription = patch.description ?? row.description;
+    const nextDate = patch.target_date ?? row.target_date;
+    const gate = validateMissionConcreteness({
+      description: nextDescription,
+      target_date: nextDate,
+    });
+    if (!gate.ok) return { ok: false, error: gate.reason };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const update: Record<string, unknown> = {};
+  if (patch.description !== undefined) update.description = patch.description.trim();
+  if (patch.target_date !== undefined) update.target_date = patch.target_date;
+  if (patch.quality_score !== undefined) update.quality_score = patch.quality_score;
+
+  const { error } = await supabase
+    .from("missions")
+    .update(update)
+    .eq("id", mission_id)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/missions");
+  revalidatePath("/today");
+  return { ok: true };
+}
+
+const DeleteSchema = z.object({ mission_id: z.string().uuid() });
+
+export async function deleteMission(
+  input: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+  const parsed = DeleteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("missions")
+    .delete()
+    .eq("id", parsed.data.mission_id)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/missions");
+  revalidatePath("/today");
+  return { ok: true };
 }
 
 export async function completeMission(

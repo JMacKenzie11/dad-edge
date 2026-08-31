@@ -1,0 +1,446 @@
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
+import { format } from "date-fns";
+import {
+  createMission,
+  updateMission,
+  deleteMission,
+  completeMission,
+} from "./actions";
+import type { WeekMission } from "./page";
+import type { MissionScore } from "@/lib/coach/mission-quality";
+
+const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
+
+type SlotProps = {
+  mission: WeekMission | null;
+  weekDates: string[];
+  slotIndex: number;
+  communityId: string | null;
+  goalId: string | null;
+  goalDescription: string | null;
+  pillarCode: PillarCode;
+  readOnly: boolean;
+};
+
+export function MissionSlot(props: SlotProps) {
+  return props.mission ? <FilledSlot {...props} mission={props.mission} /> : <EmptySlot {...props} />;
+}
+
+function EmptySlot({
+  weekDates,
+  slotIndex,
+  communityId,
+  goalId,
+  pillarCode,
+  readOnly,
+}: SlotProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [description, setDescription] = useState("");
+  const [dayIndex, setDayIndex] = useState<number>(defaultDayIndex(weekDates));
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  if (readOnly) {
+    return (
+      <li className="px-4 py-3 text-[11px] text-[color:var(--color-text-muted)] bg-[color:var(--color-bg)]">
+        Read-only account.
+      </li>
+    );
+  }
+
+  if (!expanded) {
+    return (
+      <li className="bg-[color:var(--color-bg)]">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="w-full text-left px-4 py-3 text-[11px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+          aria-label={`Add mission to slot ${slotIndex + 1}`}
+        >
+          + ADD MISSION
+        </button>
+      </li>
+    );
+  }
+
+  const save = () => {
+    if (!communityId) {
+      setError("Join a community first.");
+      return;
+    }
+    const targetDate = weekDates[dayIndex];
+    setError(null);
+    startTransition(async () => {
+      const res = await createMission({
+        community_id: communityId,
+        pillar_code: pillarCode,
+        description: description.trim(),
+        target_date: targetDate,
+        quarterly_goal_id: goalId,
+      });
+      if (!res.ok) {
+        setError(res.error);
+      }
+    });
+  };
+
+  const canSave = description.trim().length >= 8;
+
+  return (
+    <li className="bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
+      <div className="flex items-center gap-3">
+        <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
+        <textarea
+          ref={inputRef}
+          rows={1}
+          maxLength={280}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={() => {
+            if (canSave) save();
+            else if (description.trim().length === 0) setExpanded(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setExpanded(false);
+              setDescription("");
+            }
+          }}
+          placeholder="Behavior + how you'll know it's done."
+          className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
+        />
+      </div>
+      {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
+      {pending ? (
+        <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+          SAVING…
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function FilledSlot({
+  mission,
+  weekDates,
+  goalDescription,
+  readOnly,
+}: SlotProps & { mission: WeekMission }) {
+  const [description, setDescription] = useState(mission.description);
+  const [dayIndex, setDayIndex] = useState(dayIndexFor(mission.target_date, weekDates));
+  const [score, setScore] = useState<MissionScore | null>(null);
+  const [scoring, setScoring] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savePending, startSave] = useTransition();
+  const [completePending, startComplete] = useTransition();
+  const [deletePending, startDelete] = useTransition();
+  const scoreSeq = useRef(0);
+  const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialDescRef = useRef(mission.description);
+  const initialDayRef = useRef(dayIndex);
+
+  useEffect(() => {
+    setDescription(mission.description);
+    initialDescRef.current = mission.description;
+    const nextDayIndex = dayIndexFor(mission.target_date, weekDates);
+    setDayIndex(nextDayIndex);
+    initialDayRef.current = nextDayIndex;
+  }, [mission.id, mission.description, mission.target_date, weekDates]);
+
+  useEffect(() => {
+    if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    if (description.trim().length < 8) {
+      setScore(null);
+      return;
+    }
+    setScoring(true);
+    scoreTimer.current = setTimeout(async () => {
+      const seq = ++scoreSeq.current;
+      try {
+        const res = await fetch("/api/missions/quality", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            description,
+            pillar_code: mission.pillar_code,
+            target_date: weekDates[dayIndex] ?? mission.target_date,
+            goal_description: goalDescription,
+          }),
+        });
+        if (seq !== scoreSeq.current) return;
+        if (!res.ok) setScore(null);
+        else setScore((await res.json()) as MissionScore);
+      } finally {
+        if (seq === scoreSeq.current) setScoring(false);
+      }
+    }, 800);
+    return () => {
+      if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    };
+  }, [description, dayIndex, weekDates, mission.pillar_code, mission.target_date, goalDescription]);
+
+  const isDone = mission.status === "completed";
+  const isMissed = mission.status === "missed";
+  const targetDate = weekDates[dayIndex] ?? mission.target_date;
+
+  const persistIfChanged = (nextDescription: string, nextDayIndex: number) => {
+    const patch: {
+      description?: string;
+      target_date?: string;
+      quality_score?: number | null;
+    } = {};
+    const trimmed = nextDescription.trim();
+    if (trimmed !== initialDescRef.current.trim() && trimmed.length >= 8) {
+      patch.description = trimmed;
+    }
+    if (nextDayIndex !== initialDayRef.current) {
+      patch.target_date = weekDates[nextDayIndex];
+    }
+    if (score) patch.quality_score = score.total;
+    if (Object.keys(patch).length === 0) return;
+    setSaveError(null);
+    startSave(async () => {
+      const res = await updateMission({ mission_id: mission.id, patch });
+      if (!res.ok) {
+        setSaveError(res.error);
+      } else {
+        if (patch.description) initialDescRef.current = patch.description;
+        if (patch.target_date) initialDayRef.current = nextDayIndex;
+      }
+    });
+  };
+
+  const applyRewrite = (text: string) => {
+    setDescription(text);
+    persistIfChanged(text, dayIndex);
+  };
+
+  const dotColor = isDone
+    ? "var(--color-text-muted)"
+    : score
+      ? score.ready
+        ? "var(--color-primary)"
+        : "var(--color-warning)"
+      : scoring
+        ? "var(--color-text-muted)"
+        : "var(--color-border)";
+
+  return (
+    <li className="group bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
+      <div className="flex items-center gap-3">
+        {readOnly || isDone ? (
+          <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] shrink-0">
+            {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
+          </span>
+        ) : (
+          <DayPicker
+            weekDates={weekDates}
+            value={dayIndex}
+            onChange={(idx) => {
+              setDayIndex(idx);
+              persistIfChanged(description, idx);
+            }}
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          {readOnly || isDone ? (
+            <p
+              className={
+                isDone
+                  ? "text-sm line-through text-[color:var(--color-text-muted)]"
+                  : "text-sm"
+              }
+            >
+              {description}
+            </p>
+          ) : (
+            <textarea
+              rows={expanded ? 3 : 1}
+              maxLength={280}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onFocus={() => setExpanded(true)}
+              onBlur={() => {
+                setExpanded(false);
+                persistIfChanged(description, dayIndex);
+              }}
+              className="w-full p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
+            />
+          )}
+          {isMissed && !isDone ? (
+            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] mt-1">
+              MISSED
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowFeedback((v) => !v)}
+          onMouseEnter={() => {
+            if (score) setShowFeedback(true);
+          }}
+          className="shrink-0 h-2.5 w-2.5 rounded-full"
+          style={{ background: dotColor }}
+          aria-label="Quality readout"
+          disabled={!score && !scoring}
+        />
+        {!readOnly && !isDone ? (
+          <div className="shrink-0 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                startComplete(async () => {
+                  await completeMission(mission.id);
+                })
+              }
+              disabled={completePending}
+              className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
+            >
+              DONE
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                startDelete(async () => {
+                  await deleteMission({ mission_id: mission.id });
+                })
+              }
+              disabled={deletePending}
+              className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
+              aria-label="Delete mission"
+              title="Delete"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {saveError ? (
+        <p className="text-[11px] text-[color:var(--color-danger)] pl-[calc(theme(spacing.3)+1.5rem)]">
+          {saveError}
+        </p>
+      ) : null}
+      {savePending ? (
+        <p className="text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+          SAVING…
+        </p>
+      ) : null}
+      {showFeedback && score ? (
+        <FeedbackPanel
+          score={score}
+          onApplyRewrite={applyRewrite}
+          onDismiss={() => setShowFeedback(false)}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+function DayPicker({
+  weekDates,
+  value,
+  onChange,
+}: {
+  weekDates: string[];
+  value: number;
+  onChange: (idx: number) => void;
+}) {
+  return (
+    <div className="shrink-0 flex gap-0.5" role="radiogroup" aria-label="Day of week">
+      {DOW_LABELS.map((label, i) => {
+        const active = i === value;
+        const iso = weekDates[i];
+        return (
+          <button
+            key={i}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(i)}
+            className={`h-6 w-5 rounded text-[10px] font-heading tracking-widest ${
+              active
+                ? "bg-[color:var(--color-primary)] text-white"
+                : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+            }`}
+            title={iso}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FeedbackPanel({
+  score,
+  onApplyRewrite,
+  onDismiss,
+}: {
+  score: MissionScore;
+  onApplyRewrite: (text: string) => void;
+  onDismiss: () => void;
+}) {
+  const color = score.ready
+    ? "var(--color-primary)"
+    : score.total >= 6
+      ? "var(--color-warning)"
+      : "var(--color-danger)";
+  return (
+    <div
+      className="ml-8 p-2 rounded-md bg-[color:var(--color-surface)] border text-xs"
+      style={{ borderColor: color }}
+    >
+      <div className="flex items-baseline justify-between mb-1">
+        <p className="text-[10px] font-heading tracking-widest" style={{ color }}>
+          {score.ready ? "READY" : score.total >= 6 ? "SHARPEN" : "NOT READY"} · {score.total}/10
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] text-[10px] font-heading tracking-widest"
+        >
+          HIDE
+        </button>
+      </div>
+      <p className="text-[color:var(--color-text-muted)]">{score.feedback}</p>
+      {score.rewrite ? (
+        <div className="mt-1.5 flex items-start gap-2">
+          <p className="flex-1">
+            <span className="text-[color:var(--color-text-muted)]">Try: </span>
+            {score.rewrite}
+          </p>
+          <button
+            type="button"
+            onClick={() => onApplyRewrite(score.rewrite!)}
+            className="shrink-0 text-[10px] font-heading tracking-widest text-[color:var(--color-primary)] hover:underline"
+          >
+            USE
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function defaultDayIndex(weekDates: string[]): number {
+  const today = new Date().toISOString().slice(0, 10);
+  const idx = weekDates.indexOf(today);
+  if (idx >= 0) return Math.min(6, idx + 1);
+  return 2;
+}
+
+function dayIndexFor(iso: string, weekDates: string[]): number {
+  const i = weekDates.indexOf(iso);
+  return i >= 0 ? i : 0;
+}
