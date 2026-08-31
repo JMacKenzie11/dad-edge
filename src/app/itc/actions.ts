@@ -33,7 +33,11 @@ import {
   type ReactionOutput,
   type SmartReview,
 } from "@/lib/itc/coach";
-import { runHoneWaterfall } from "@/lib/itc/criteria/orchestrator";
+import {
+  runColumnCriteria,
+  runHoneWaterfall,
+  type ColumnName,
+} from "@/lib/itc/criteria/orchestrator";
 import { renderFindings } from "@/lib/itc/criteria/render";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
@@ -123,6 +127,17 @@ import { TurnEventLog } from "@/lib/itc/turn-events";
 // `@/app/itc/actions` don't break. The type moved to action-helpers.ts
 // as part of extracting shared helpers out of this file.
 export type { ActionResult };
+
+/**
+ * Human labels for the four criteria columns, used in construction
+ * column-review openings ("Two things worth sharpening on your worries").
+ */
+const COLUMN_LABELS: Record<ColumnName, string> = {
+  goal: "Your goal",
+  worries: "Your worries",
+  commitments: "Your competing commitments",
+  assumptions: "Your Big Assumptions",
+};
 
 // -------------------------------------------------------------------------
 // Map lifecycle
@@ -1928,30 +1943,42 @@ export async function ensureColumnReviewDelivered(
       return { ok: true, delivered: false };
     }
 
-    // Build the assumption→commitment index map for the pair-drift
-    // check in the assumptions review. Indices are 1-based to match
-    // how the prompt renders them.
-    const commitmentIdToIndex = new Map<string, number>();
-    commitments.forEach((c, i) => commitmentIdToIndex.set(c.id, i + 1));
-    const assumptionsWithCoverage = assumptions.map((a) => ({
-      text: a.text,
-      commitmentIndices: assumptionLinks
-        .filter((l) => l.assumption_id === a.id)
-        .map((l) => commitmentIdToIndex.get(l.commitment_id))
-        .filter((i): i is number => typeof i === "number"),
-    }));
-
-    const prose = await generateColumnReview({
-      column: stage,
-      goalText: map.improvement_goal ?? "",
-      behaviors:
-        stage === "behaviors"
-          ? selectedBehaviors.map((b) => b.text)
-          : behaviors.map((b) => b.text),
-      worries: worries.map((w) => w.text),
-      commitments: commitments.map((c) => c.text),
-      assumptionsWithCoverage,
-    });
+    // Goal / worries / commitments / assumptions run the shared
+    // criteria and render deterministically — same source of truth as
+    // the hone waterfall, so a coachee never sees a criterion approve
+    // an entry during construction and flag it on hone. Behaviors
+    // stays on the LLM prompt path (no behavior criteria exist and
+    // the Kegan/Lahey guides don't hone behaviors — they're the "gas
+    // pedal" identified in Column 2, not honed content).
+    let prose: string | null = null;
+    if (stage === "behaviors") {
+      prose = await generateColumnReview({
+        column: stage,
+        goalText: map.improvement_goal ?? "",
+        behaviors: selectedBehaviors.map((b) => b.text),
+        worries: worries.map((w) => w.text),
+        commitments: commitments.map((c) => c.text),
+      });
+    } else {
+      const column: ColumnName = stage;
+      const findings = await runColumnCriteria(column, {
+        mapId,
+        goalText: map.improvement_goal ?? "",
+        behaviors: selectedBehaviors,
+        worries,
+        commitments,
+        assumptions,
+        assumptionLinks,
+      });
+      const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
+      const columnLabel = COLUMN_LABELS[column];
+      prose = renderFindings(findings, {
+        goalText: map.improvement_goal ?? "",
+        pillarLabel,
+        mode: "column_review",
+        columnLabel,
+      });
+    }
     if (!prose) return { ok: true, delivered: false };
 
     await appendMessage(mapId, "assistant", prose, stage, {
