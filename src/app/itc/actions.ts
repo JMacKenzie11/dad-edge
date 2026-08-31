@@ -1115,6 +1115,19 @@ export async function removeAssumption(
   if (!parsed.success) return { ok: false, reason: "Invalid remove input." };
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  const tests = await listTests(loaded.map.id);
+  const attached = tests.filter(
+    (t) => t.assumption_id === parsed.data.assumption_id,
+  );
+  if (attached.length > 0) {
+    const n = attached.length;
+    return {
+      ok: false,
+      reason: `This assumption has ${n} test${n === 1 ? "" : "s"} attached. Abandon or supersede them first, or edit the assumption instead of deleting it.`,
+    };
+  }
+
   try {
     // Links cascade via FK on itc_assumption_commitments.
     await deleteAssumption(parsed.data.assumption_id, loaded.map.id);
