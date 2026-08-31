@@ -292,6 +292,7 @@ export function MapCanvas({
           <HoneButton
             mapId={map.id}
             hasDiagnostic={honeDiagnostic !== null}
+            stale={honeDiagnostic !== null && map.hone_diagnostic_stale}
           />
         ) : null}
       </div>
@@ -300,6 +301,7 @@ export function MapCanvas({
         <HoneDiagnosticBanner
           mapId={map.id}
           content={honeDiagnostic.content}
+          stale={map.hone_diagnostic_stale}
         />
       ) : null}
 

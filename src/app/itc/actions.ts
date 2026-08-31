@@ -1870,8 +1870,13 @@ async function invalidateReviewsForColumn(
   mapId: string,
   stage: ColumnReviewStage,
 ): Promise<void> {
+  // Only wipe the column_review here. hone_diagnostic messages
+  // stay put — the DB trigger sets itc_maps.hone_diagnostic_stale
+  // to true on any content write, and the banner UI renders in a
+  // "map has moved" state so the coachee sees the last audit's
+  // findings with an emphasized RE-RUN AUDIT affordance instead of
+  // the banner silently disappearing.
   await deleteColumnReviewMessages({ mapId, stage });
-  await deleteHoneDiagnosticMessages({ mapId });
 }
 
 const REVIEW_MIN_ENTRIES: Record<ColumnReviewStage, number> = {
@@ -2076,6 +2081,13 @@ export async function runHoneDiagnostic(
         entryRefId: loaded.map.id,
       },
     );
+    // Fresh audit — clear the staleness flag the child-row triggers
+    // set when the map was edited between hones.
+    const supabase = createSupabaseServiceClient();
+    await supabase
+      .from("itc_maps")
+      .update({ hone_diagnostic_stale: false })
+      .eq("id", loaded.map.id);
   } catch (err) {
     return {
       ok: false,

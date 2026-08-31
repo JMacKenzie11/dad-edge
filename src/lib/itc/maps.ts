@@ -16,6 +16,11 @@ export type ItcMap = {
    *  / assumptions / links). DB triggers flip this on any child-row
    *  change while walkthrough_delivered=true. Cleared on regenerate. */
   walkthrough_stale: boolean;
+  /** True when the persisted hone_diagnostic banner is quoting a map
+   *  version the coachee has since edited. Same trigger pattern as
+   *  walkthrough_stale. Cleared when runHoneDiagnostic writes a new
+   *  audit. */
+  hone_diagnostic_stale: boolean;
   created_at: string;
   updated_at: string;
 };

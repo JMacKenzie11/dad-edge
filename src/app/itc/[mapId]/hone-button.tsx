@@ -18,12 +18,18 @@ import { runHoneDiagnostic } from "../actions";
 export function HoneButton({
   mapId,
   hasDiagnostic,
+  stale = false,
 }: {
   mapId: string;
   hasDiagnostic: boolean;
+  /** True when a hone_diagnostic exists AND the map has been edited
+   *  since it was written. Button gets promoted from muted → amber
+   *  so the coachee sees "refresh" as the next action. */
+  stale?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const emphasized = stale;
   return (
     <div className="flex flex-col items-end gap-1">
       <form
@@ -43,11 +49,17 @@ export function HoneButton({
           disabled={pending}
           aria-label="Run a whole-map audit"
           title={
-            hasDiagnostic
-              ? "Re-run the audit against the current map"
-              : "Get the coach's take on the whole map"
+            stale
+              ? "The map has changed since the last audit. Re-run to refresh."
+              : hasDiagnostic
+                ? "Re-run the audit against the current map"
+                : "Get the coach's take on the whole map"
           }
-          className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-warning)] disabled:opacity-50 cursor-pointer"
+          className={`text-xs font-heading tracking-widest disabled:opacity-50 cursor-pointer ${
+            emphasized
+              ? "text-[color:var(--color-warning)] hover:text-white"
+              : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-warning)]"
+          }`}
         >
           {pending
             ? "AUDITING…"
