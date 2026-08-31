@@ -43,8 +43,12 @@ const UpdateSchema = z.object({
 /**
  * Normalize a caller's target_dates + target_date input into a sorted,
  * deduplicated array and the corresponding deadline (max) date.
+ * Exported so the multi-day normalization contract can be unit-tested
+ * without touching the DB — target_date must stay the deadline
+ * (max(target_dates)) so downstream jobs and views that still read the
+ * scalar keep working after the array column shipped.
  */
-function resolveTargetDates(input: {
+export function resolveTargetDates(input: {
   target_dates?: string[];
   target_date?: string;
 }): { dates: string[]; deadline: string } | null {
