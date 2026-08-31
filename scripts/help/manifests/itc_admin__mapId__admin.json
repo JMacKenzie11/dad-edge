@@ -10,6 +10,7 @@
   ],
   "source_hash": "70e83518f84c496d",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/admin/[mapId]/page.tsx"
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/admin/[mapId]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/admin/[mapId]/audit-preview.tsx"
   ]
 }

@@ -373,18 +373,35 @@ function collectJsxText(node: ts.JsxElement): string {
   for (const child of node.children) {
     if (ts.isJsxText(child)) {
       out += child.text;
-    } else if (
-      ts.isJsxExpression(child) &&
-      child.expression &&
-      ts.isStringLiteral(child.expression)
-    ) {
-      out += child.expression.text;
+    } else if (ts.isJsxExpression(child) && child.expression) {
+      const literal = stringLiteralFromExpression(child.expression);
+      if (literal !== null) out += literal;
     } else if (ts.isJsxElement(child)) {
       out += " " + collectJsxText(child);
     }
-    // JsxSelfClosingElement, dynamic {expr}: skipped
+    // JsxSelfClosingElement, non-literal {expr}: skipped
   }
   return normalize(out);
+}
+
+/**
+ * Resolve a JSX expression down to a string literal when we can.
+ * Handles the ternary-labeled-button pattern:
+ *   {cond ? "ACTIVE" : "DEFAULT"} → prefer whenFalse (the default state),
+ *   because that's what the user sees before any toggle fires. Falls
+ *   back to whenTrue when whenFalse isn't a literal, so labels don't
+ *   silently vanish from the manifest.
+ */
+function stringLiteralFromExpression(expr: ts.Expression): string | null {
+  if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+    return expr.text;
+  }
+  if (ts.isConditionalExpression(expr)) {
+    const whenFalse = stringLiteralFromExpression(expr.whenFalse);
+    if (whenFalse !== null) return whenFalse;
+    return stringLiteralFromExpression(expr.whenTrue);
+  }
+  return null;
 }
 
 function normalize(s: string | null | undefined): string {

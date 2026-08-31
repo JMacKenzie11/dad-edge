@@ -21,7 +21,7 @@
     },
     {
       "kind": "link",
-      "label": "START"
+      "label": "START AN IMPROVEMENT MAP"
     },
     {
       "kind": "link",
@@ -80,7 +80,7 @@
       "label": "Where you want to be"
     }
   ],
-  "source_hash": "7f89c585f4058bf7",
+  "source_hash": "ee89f8ec60655e58",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/goals/actions.ts",

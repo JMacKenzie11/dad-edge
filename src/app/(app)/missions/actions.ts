@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
-import { resolveTargetDates } from "./target-dates";
+import { resolveTargetDates, shiftDatesByOneWeek } from "./target-dates";
 import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
@@ -311,7 +311,7 @@ export async function carryMissionToNextWeek(
 
   const sourceDates =
     p.target_dates && p.target_dates.length > 0 ? p.target_dates : [p.target_date];
-  const nextDates = sourceDates.map(addSevenDays).sort();
+  const nextDates = shiftDatesByOneWeek(sourceDates).sort();
   const deadline = nextDates[nextDates.length - 1];
 
   const { error: insErr } = await supabase.from("missions").insert({
@@ -329,12 +329,6 @@ export async function carryMissionToNextWeek(
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true, new_target_dates: nextDates, new_deadline: deadline };
-}
-
-function addSevenDays(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 7);
-  return d.toISOString().slice(0, 10);
 }
 
 export async function rolloverMission(input: unknown) {
