@@ -115,11 +115,11 @@ export const LEGACY_INTRO_PREFIXES: readonly string[] = [
   "Test is designed",
   "You ran the test",
   "Your map stays here",
-  // The goal-stage intro used to be persisted with the pillar label
-  // baked in at map creation. After switchMapPillar, the persisted
-  // copy would say "Your goal for Bond starts…" while the actual
-  // pillar was Movement. Filtered so the live-interpolated version
-  // (STAGE_INTROS.goal) is the only copy the user sees.
+  // Legacy: the goal-stage intro used to be persisted with the
+  // pillar label baked in at map creation. Filtered so the
+  // live-interpolated version (STAGE_INTROS.goal) is the only copy
+  // the user sees. Kept in the legacy list so old persisted messages
+  // still get suppressed.
   "Your goal for ",
 ];
 

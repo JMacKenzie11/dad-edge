@@ -180,18 +180,17 @@ export async function loadCoachContext(mapId: string) {
 
 /**
  * Store a coach reaction as an assistant message. Refinement +
- * suggestions + suggested_pillar land in the message content as an
- * inline JSON footer the client parses out. Format:
+ * suggestions land in the message content as an inline JSON footer
+ * the client parses out. Format:
  *
  *   <prose>
  *   ```coach-chips
- *   {"refinement":"...","suggestions":["..","..",".."],"suggested_pillar":"B"}
+ *   {"refinement":"...","suggestions":["..","..",".."]}
  *   ```
  *
  * The chat renderer splits on the fenced block and renders the prose
- * as text + chips as tap-to-fill buttons + a distinct "Switch to
- * [Pillar]" action button when suggested_pillar is present. Falls
- * back cleanly when the footer is absent.
+ * as text + chips as tap-to-fill buttons. Falls back cleanly when
+ * the footer is absent.
  */
 export async function persistReaction(
   mapId: string,
@@ -203,13 +202,11 @@ export async function persistReaction(
   const parts: string[] = [reaction.reply];
   const hasChips =
     reaction.refinement ||
-    (reaction.suggestions && reaction.suggestions.length > 0) ||
-    reaction.suggested_pillar;
+    (reaction.suggestions && reaction.suggestions.length > 0);
   if (hasChips) {
     const chipPayload = {
       refinement: reaction.refinement,
       suggestions: reaction.suggestions,
-      suggested_pillar: reaction.suggested_pillar,
     };
     parts.push("```coach-chips", JSON.stringify(chipPayload), "```");
   }

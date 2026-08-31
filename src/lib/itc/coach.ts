@@ -204,16 +204,6 @@ const ReactionSchema = z.object({
    *  can consider. Chips. Same "tap to fill input" affordance.
    *  Omit unless the entry could use several angles. */
   suggestions: z.array(z.string().min(1).max(300)).min(2).max(5).optional(),
-  /** When the coach detects a cross-pillar goal leak (the goal
-   *  clearly belongs on a different BRAVEMAN pillar than the one
-   *  the coachee picked), populate this with the correct pillar
-   *  code. The client renders a "Switch this map to [Pillar]"
-   *  action button. Omit for anything else — this is NOT a place
-   *  to suggest exploring a different pillar generally; only when
-   *  the specific goal reads as unambiguously belonging on a
-   *  different domain. Excludes A2 (derived pillar, not
-   *  user-choose-able). */
-  suggested_pillar: z.enum(["B", "R", "A", "V", "E", "M", "N"]).optional(),
 });
 
 export type ReactionOutput = z.infer<typeof ReactionSchema> & {
@@ -497,54 +487,9 @@ function buildReactionPrompt(input: ReactionInput): string {
     parts.push(
       "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
     );
-    if (kind === "goal") {
-      // Explicit pillar-fit guard. The generic Case-1 rule about
-      // "wrong pillar" is too easy for the model to skip when the
-      // goal is otherwise well-formed. This makes the check
-      // mandatory and gives concrete cross-pillar leak examples.
-      parts.push(
-        `GOAL-SPECIFIC PILLAR CHECK (do not skip): the goal MUST be about the domain of the pillar the coachee picked (${pillar.label} = ${pillar.domain}). If the goal is about someone or something outside that domain, it is CASE 1 — push back plainly and ask him to either switch the pillar or reword the goal.\n` +
-          `  Common cross-pillar leaks to catch:\n` +
-          `    - Raise pillar (kids) + goal about wife/spouse → wrong pillar (that's Bond).\n` +
-          `    - Bond pillar (marriage/partner) + goal about kids → wrong pillar (that's Raise).\n` +
-          `    - Amplify pillar (business/wealth) + goal about family → wrong pillar (that's Bond or Raise).\n` +
-          `    - Vitality/Movement pillar + goal about relationships → wrong pillar.\n` +
-          `  IMPORTANT — how a coachee shows up IN his work/business/practice is Amplify, not Vitality. Internal-state language ("staying grounded", "trusting myself", "not shrinking", "keeping my nerve", "handling the pressure") pointed at business context (client work, revenue, decisions, high-stakes performance, service delivery, leading his team) is a LEGITIMATE Amplify goal — do NOT redirect these to Vitality. Vitality is about how he fuels his mind and body (sleep, food, meditation, screen time, energy). Only kick a goal from Amplify to Vitality if the goal is actually about self-care habits with no business anchor. Concrete examples that STAY on Amplify:\n` +
-          `    - "staying grounded in service and trusting myself, especially when the stakes feel high" (service = his work; stakes = business performance).\n` +
-          `    - "not shrinking on client calls when I feel the pressure" (client work + performance).\n` +
-          `    - "keeping my nerve when I'm about to lose a deal" (business outcome).\n` +
-          `    - "trusting my own judgment in high-stakes decisions at work".\n` +
-          `  Concrete examples that DO belong on Vitality (not Amplify):\n` +
-          `    - "sleeping seven hours consistently".\n` +
-          `    - "cutting sugar so my energy holds through the afternoon".\n` +
-          `    - "meditating before the day starts".\n` +
-          `  Test: after this goal is achieved, would his day-to-day change WITHIN the ${pillar.label} domain (${pillar.domain})? For Amplify, "his day-to-day at work" counts — the change can be internal (how he handles pressure, holds his nerve, shows up for clients) as long as the CONTEXT is business/work. If not, it's the wrong pillar for this goal.\n` +
-          `  When you catch a cross-pillar leak: name it plainly ("that reads as a [correct-pillar-name] goal, but you picked ${pillar.label}. Do you want to switch the map to [correct-pillar-name], or reword the goal to focus on ${pillar.domain}?"). Do NOT approve as Case 3. Do NOT offer a refinement chip that just tweaks wording — the fix is either a different pillar or a different goal.\n` +
-          `  ALSO populate the "suggested_pillar" field with the pillar code the goal actually belongs on (B/R/A/V/E/M/N — never A2). The client renders a "Switch this map to [Pillar]" action button from that field. Only set suggested_pillar when the leak is unambiguous; leave it unset for anything else — and specifically leave it unset when the goal is internal-state language about business context (that's still Amplify). Pillar codes: B=Bond (marriage/partner), R=Raise (kids), A=Amplify (business/wealth), V=Vitality (mind/body fuel), E=Enjoyment (fun), M=Movement (body), N=Network (relationships with the Boardroom group and others).`,
-      );
-      // Explicit specificity guard for goals. Repeated failure mode:
-      // the model approves role-identity goals ("being a husband",
-      // "being a good father") as Case 3 because they're technically
-      // on the right pillar. They fail Kegan/Lahey's specificity bar
-      // — if the goal is a ROLE, not a PATTERN within that role, it
-      // can't generate observable Column 2 behaviors.
-      parts.push(
-        "GOAL-SPECIFIC HARD RULE (do not skip): if the goal names a ROLE rather than a PATTERN within that role, it is CASE 2, not Case 3. Test in your head: 'if he achieved this goal, what would he be DOING differently?' If the honest answer is 'everything' or 'I don't know', the goal is a role and fails the specificity bar.\n" +
-          "  BANNED as Case 3 (must go to Case 2 with a refinement chip):\n" +
-          "    - \"being a husband\" / \"being a good husband\" / \"being a better husband\"\n" +
-          "    - \"being a father\" / \"being a good father\" / \"being a dad\"\n" +
-          "    - \"being a leader\" / \"being a boss\" / \"being a partner\"\n" +
-          "    - any \"being a [role]\" or \"being a good [role]\" phrasing\n" +
-          "    - \"being present\" (too abstract — present when? during what?)\n" +
-          "    - \"being better\" / \"doing better\" (no content)\n" +
-          "  PASSES as Case 3 (specific behavioral patterns within a role):\n" +
-          "    - \"staying present when my wife is upset with me\"\n" +
-          "    - \"listening without planning my response\"\n" +
-          "    - \"not going defensive when she brings something up\"\n" +
-          "    - \"asking my kids what they need instead of telling them what to do\"\n" +
-          "  If the goal is a banned role-identity phrasing, react as CASE 2: name that it's a role not a change (\"'being a husband' is the whole role — what's the specific pattern inside that role you want to work on?\") and put a specific behavioral version in the `refinement` field.",
-      );
-    }
+    // No goal-specific reaction rules — goal coaching lives entirely
+    // in the shared criteria module (src/lib/itc/criteria/goal.ts).
+    // fireCoachReaction is never called with kind="goal" anymore.
     if (kind === "behavior") {
       // Explicit specificity + goal-connection guard for behaviors.
       // Same failure family as goal: identity claims, aspirational

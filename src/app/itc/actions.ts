@@ -171,97 +171,6 @@ export async function startMap(formData: FormData): Promise<void> {
 
 const resetMapSchema = z.object({ map_id: z.string().uuid() });
 
-const switchMapPillarSchema = z.object({
-  map_id: z.string().uuid(),
-  pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "N"]),
-});
-
-/**
- * Swap the current map's pillar in place. Triggered from the coach's
- * pillar-mismatch reaction when it populates suggested_pillar and the
- * client renders the "Switch to [Pillar]" action button.
- *
- * All child rows (behaviors, worries, commitments, assumptions, tests,
- * messages) keep their FKs to this map — nothing else changes. The
- * coachee still needs to reword the goal to fit the new pillar (the
- * coach will react to the next save).
- *
- * Conflict guard: if the coachee already has an in-progress map on
- * the target pillar, block with a friendly reason. Multiple in-
- * progress maps per (participant, pillar) would confuse the /itc
- * landing page's "resume this pillar's map" logic.
- */
-export async function switchMapPillar(
-  formData: FormData,
-): Promise<ActionResult> {
-  const parsed = switchMapPillarSchema.safeParse({
-    map_id: formData.get("map_id"),
-    pillar_code: formData.get("pillar_code"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  if (loaded.map.pillar_code === parsed.data.pillar_code) {
-    return { ok: true }; // no-op
-  }
-  const target = PILLAR_BY_CODE[parsed.data.pillar_code as PillarCode];
-  // Conflict check.
-  const allMaps = await listMapsForParticipant(loaded.participant.id);
-  const conflict = allMaps.find(
-    (m) =>
-      m.id !== loaded.map.id &&
-      m.status === "in_progress" &&
-      m.pillar_code === parsed.data.pillar_code,
-  );
-  if (conflict) {
-    return {
-      ok: false,
-      reason: `You already have a ${target.label} map in progress. Finish or clear that one first, or reword this goal to fit ${PILLAR_BY_CODE[loaded.map.pillar_code].label}.`,
-    };
-  }
-  try {
-    const supabase = createSupabaseServiceClient();
-    const { error } = await supabase
-      .from("itc_maps")
-      .update({ pillar_code: parsed.data.pillar_code })
-      .eq("id", loaded.map.id);
-    if (error) throw new Error(error.message);
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not switch pillar.",
-    };
-  }
-  // System message so the coach's next turn sees the switch in
-  // context and reacts appropriately to the newly-mismatched goal.
-  await appendMessage(
-    loaded.map.id,
-    "system",
-    `[coachee switched map pillar: ${loaded.map.pillar_code} → ${parsed.data.pillar_code}. Goal still needs to be reworded to fit the new pillar.]`,
-    loaded.map.current_stage,
-  );
-  // Re-run the coach against the existing goal in the new pillar
-  // context. Without this, the goal text is unchanged so saveGoal
-  // won't fire (client-side dedup on unchanged text), and the coach
-  // never gets a chance to say "still not an ITC-shaped goal for
-  // [new pillar]". Only fires if there's a goal to react to.
-  if (loaded.map.improvement_goal) {
-    // Re-read the map so context reflects the new pillar_code.
-    const refreshed = await getMapById(loaded.map.id);
-    if (refreshed) {
-      await awaitReactionOrSwallow(() =>
-        fireCoachReaction(
-          refreshed.id,
-          { kind: "goal", text: refreshed.improvement_goal ?? "" },
-          { table: "itc_maps", id: refreshed.id },
-        ),
-      );
-    }
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
-}
-
 export async function resetMap(formData: FormData): Promise<void> {
   const participant = await requireItcParticipant();
   const parsed = resetMapSchema.safeParse({ map_id: formData.get("map_id") });
@@ -387,16 +296,11 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
     );
   }
   await events.flush();
-  // Goal has no separate entry row — it's a column on itc_maps.
-  // Anchor the coach reaction to the map itself so the entry thread
-  // renders in the goal section.
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      { kind: "goal", text: withStem },
-      { table: "itc_maps", id: loaded.map.id },
-    ),
-  );
+  // No LLM entry_thread reaction for goals — the shared criteria
+  // module (checkBundledGoal, wired via ensureColumnReviewDelivered)
+  // owns all goal coaching now. Deterministic renderer, single voice
+  // across construction and hone. Anything the LLM used to say about
+  // goals (pillar mismatch, refinement chips) has been retired.
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
