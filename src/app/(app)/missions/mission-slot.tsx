@@ -161,16 +161,8 @@ function EmptySlot({
 
   const canSave = description.trim().length >= 8;
 
-  const qualityLabel = score
-    ? score.ready
-      ? "READY"
-      : score.total >= 6
-        ? "SHARPEN"
-        : "SOFT"
-    : scoring
-      ? "…"
-      : null;
-  const qualityColor = score
+  const pillText = score ? `${score.total}/10` : scoring ? "…" : null;
+  const pillColor = score
     ? score.ready
       ? "var(--color-primary)"
       : score.total >= 6
@@ -213,7 +205,7 @@ function EmptySlot({
           />
         </div>
         <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
-          {qualityLabel ? (
+          {pillText ? (
             <button
               type="button"
               onClick={() => setShowFeedback((v) => !v)}
@@ -221,13 +213,12 @@ function EmptySlot({
                 if (score) setShowFeedback(true);
               }}
               className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
-              style={{ color: qualityColor, borderColor: qualityColor }}
-              aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
+              style={{ color: pillColor, borderColor: pillColor }}
+              aria-label={`Coach quality score: ${pillText}. Click for details.`}
               title="Coach's take on this mission. Doesn't block saving."
               disabled={!score && !scoring}
             >
-              {qualityLabel}
-              {score ? ` ${score.total}/10` : ""}
+              {pillText}
             </button>
           ) : null}
         </div>
@@ -275,6 +266,11 @@ function FilledSlot({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   useAutoResize(textareaRef, description);
 
+  // Stable string key from target_dates so the reset-effect fires on
+  // actual value change, not on every render (mission.target_dates is
+  // a fresh array reference every parent re-render, which caused local
+  // day-picker state to race with server round-trips and get clobbered).
+  const targetDatesKey = (mission.target_dates ?? [mission.target_date]).join(",");
   useEffect(() => {
     setDescription(mission.description);
     initialDescRef.current = mission.description;
@@ -285,11 +281,14 @@ function FilledSlot({
     );
     setDayIndexes(nextDayIndexes);
     initialDaysRef.current = nextDayIndexes;
+    // targetDatesKey encodes mission.target_dates value; deliberately
+    // not listed above but referenced here so lint doesn't strip it.
+    void targetDatesKey;
   }, [
     mission.id,
     mission.description,
     mission.target_date,
-    mission.target_dates,
+    targetDatesKey,
     weekDates,
   ]);
 
@@ -375,24 +374,27 @@ function FilledSlot({
     persistIfChanged(text, dayIndexes);
   };
 
-  const qualityLabel = score
-    ? score.ready
-      ? "READY"
-      : score.total >= 6
-        ? "SHARPEN"
-        : "SOFT"
+  // Score displayed in the pill. For active missions, use the live
+  // debounced score. For completed missions, fall back to the score
+  // persisted on the row — coach doesn't re-score finished work.
+  const displayScore =
+    isDone && mission.quality_score !== null
+      ? { total: mission.quality_score, ready: mission.quality_score >= 8 }
+      : score
+        ? { total: score.total, ready: score.ready }
+        : null;
+  const pillText = displayScore
+    ? `${displayScore.total}/10`
     : scoring
       ? "…"
       : null;
-  const qualityColor = isDone
-    ? "var(--color-text-muted)"
-    : score
-      ? score.ready
-        ? "var(--color-primary)"
-        : score.total >= 6
-          ? "var(--color-warning)"
-          : "var(--color-danger)"
-      : "var(--color-text-muted)";
+  const pillColor = displayScore
+    ? displayScore.ready
+      ? "var(--color-primary)"
+      : displayScore.total >= 6
+        ? "var(--color-warning)"
+        : "var(--color-danger)"
+    : "var(--color-text-muted)";
 
   return (
     <li className="group bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
@@ -454,22 +456,31 @@ function FilledSlot({
           )}
         </div>
         <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
-          {!isDone && qualityLabel ? (
-            <button
-              type="button"
-              onClick={() => setShowFeedback((v) => !v)}
-              onMouseEnter={() => {
-                if (score) setShowFeedback(true);
-              }}
-              className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
-              style={{ color: qualityColor, borderColor: qualityColor }}
-              aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
-              title="Coach's take on this mission. Doesn't block saving."
-              disabled={!score && !scoring}
-            >
-              {qualityLabel}
-              {score ? ` ${score.total}/10` : ""}
-            </button>
+          {pillText ? (
+            isDone ? (
+              <span
+                className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest inline-flex items-center"
+                style={{ color: pillColor, borderColor: pillColor }}
+                aria-label={`Coach quality score: ${pillText}`}
+              >
+                {pillText}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowFeedback((v) => !v)}
+                onMouseEnter={() => {
+                  if (score) setShowFeedback(true);
+                }}
+                className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
+                style={{ color: pillColor, borderColor: pillColor }}
+                aria-label={`Coach quality score: ${pillText}. Click for details.`}
+                title="Coach's take on this mission. Doesn't block saving."
+                disabled={!score && !scoring}
+              >
+                {pillText}
+              </button>
+            )
           ) : null}
         </div>
         <div className={`shrink-0 flex items-center justify-end gap-1 ${COL_ACTIONS_WIDTH}`}>

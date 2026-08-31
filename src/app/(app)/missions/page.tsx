@@ -21,6 +21,11 @@ export type WeekMission = {
   status: "planned" | "completed" | "missed" | "rolled_over";
   completed_late: boolean;
   quarterly_goal_id: string | null;
+  /** Last coach-quality score persisted on save (0-10). Null on legacy
+   *  rows that predate the field or on rows that never reached the
+   *  minimum length for scoring. Displayed on completed missions as
+   *  a static read-only pill. */
+  quality_score: number | null;
 };
 
 export type ActiveGoal = {
@@ -69,7 +74,7 @@ export default async function MissionsPage() {
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score",
       )
       .eq("user_id", user.id)
       .gte("target_date", monday)
