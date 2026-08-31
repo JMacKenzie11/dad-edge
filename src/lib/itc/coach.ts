@@ -2913,50 +2913,17 @@ export function ensureParagraphs(
 }
 
 // ---------------------------------------------------------------------------
-// Hone diagnostic (on-demand whole-map audit) — synthesis
-// ---------------------------------------------------------------------------
-
-/**
- * Compose the whole-map audit prose from a typed findings list.
- *
- * The audit is a pure function of the findings — there is no LLM in
- * this path. Twelve deterministic checks in `audit-rules.ts` produce
- * a typed `AuditFinding[]`; per-issueType templates in
- * `audit-render.ts` compose those findings into coach-voice prose
- * (opening + one paragraph per finding + numbered action list).
- *
- * Prior LLM-based synthesis kept inventing content that wasn't in the
- * findings list — rewrites the check hadn't produced, editorial
- * generalizations across findings, section-header decorations, etc.
- * Multiple rounds of prompt sharpening and output scrubbing didn't
- * converge; the drift was intrinsic to asking an LLM to write
- * free-form prose about structured findings.
- *
- * The signature stays `Promise<string | null>` for backward compat
- * with the `runHoneDiagnostic` server action. Never returns null under
- * normal conditions — the templates always produce output — but the
- * async wrapper is kept in case a future finding-type needs an LLM
- * call for its rendering.
- */
-export async function synthesizeAuditProse(
-  findings: import("./audit-rules").AuditFinding[],
-  context: { goalText: string; pillarLabel: string },
-): Promise<string | null> {
-  const { renderAudit } = await import("./audit-render");
-  return renderAudit(findings, context);
-}
-
-// ---------------------------------------------------------------------------
 // Column-close reviews
 // ---------------------------------------------------------------------------
 
 /**
- * Stages that carry a column_review. "review" isn't a real ITC column
- * stage — it's a downstream stage that leapfrogs. Same for immune_system
- * onward (those aren't columns the coachee builds; they're derived
- * surfaces). Reviews only fire on the four columns the coachee actually
- * fills: goal, behaviors (future phase), worries, commitments,
- * assumptions (future phase). Phase 1 ships goal + worries + commitments.
+ * Stages that carry a column_review. Goal / worries / commitments /
+ * assumptions run the shared criteria module (deterministic templates,
+ * no LLM). Behaviors is the exception: no criteria exist and the
+ * Kegan/Lahey guides don't hone behaviors — they're the "gas pedal"
+ * identified in Column 2, not honed content. This function only
+ * covers the behaviors path; the other columns render via
+ * renderFindings + runColumnCriteria directly in actions.ts.
  */
 export type ReviewableColumn =
   | "goal"
@@ -2966,118 +2933,33 @@ export type ReviewableColumn =
   | "assumptions";
 
 /**
- * Generate the coach's end-of-column audit for a given column. Input
- * shape carries just enough context for the review: the column's own
- * entries plus any upstream columns the audit needs to compare against
- * (e.g., commitments review compares against worries). Returns the
+ * LLM-based end-of-column review — behaviors only. Returns the
  * coach's prose or null on LLM failure (caller silently drops the
- * review — the coachee's next Continue click isn't blocked).
+ * review — the coachee's next Continue click isn't blocked). Kept
+ * out of the shared criteria module because behaviors don't have
+ * structured criteria the way the four honed columns do.
  */
 export async function generateColumnReview(input: {
-  column: ReviewableColumn;
+  column: "behaviors";
   goalText: string;
-  behaviors?: string[];
+  behaviors: string[];
   worries?: string[];
   commitments?: string[];
-  /** For assumptions review — the list of assumptions with the
-   *  commitment indices they underwrite (mirrors the immune-system
-   *  walkthrough's input). Enables the pair-drift check. */
-  assumptionsWithCoverage?: Array<{ text: string; commitmentIndices: number[] }>;
 }): Promise<string | null> {
   try {
-    let systemPrompt: string;
-    switch (input.column) {
-      case "goal": {
-        const mod = await import("./prompts/stages/goal-review");
-        systemPrompt = mod.GOAL_REVIEW_STAGE;
-        break;
-      }
-      case "behaviors": {
-        const mod = await import("./prompts/stages/behaviors-review");
-        systemPrompt = mod.BEHAVIORS_REVIEW_STAGE;
-        break;
-      }
-      case "worries": {
-        const mod = await import("./prompts/stages/worries-review");
-        systemPrompt = mod.WORRIES_REVIEW_STAGE;
-        break;
-      }
-      case "commitments": {
-        const mod = await import("./prompts/stages/commitments-review");
-        systemPrompt = mod.COMMITMENTS_REVIEW_STAGE;
-        break;
-      }
-      case "assumptions": {
-        const mod = await import("./prompts/stages/assumptions-review");
-        systemPrompt = mod.ASSUMPTIONS_REVIEW_STAGE;
-        break;
-      }
-    }
+    const mod = await import("./prompts/stages/behaviors-review");
+    const systemPrompt = mod.BEHAVIORS_REVIEW_STAGE;
 
     const promptBlocks: string[] = [
       `Improvement goal: ${input.goalText || "(not set)"}`,
-    ];
-    if (input.column === "goal") {
-      promptBlocks.push("");
-      promptBlocks.push("Review the goal above.");
-    } else {
-      promptBlocks.push("");
-      promptBlocks.push("Behaviors (Column 2):");
-      promptBlocks.push(
-        (input.behaviors ?? []).map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
-          "  (none)",
-      );
-      if (
-        input.column === "worries" ||
-        input.column === "commitments" ||
-        input.column === "assumptions"
-      ) {
-        promptBlocks.push("");
-        promptBlocks.push("Worries (Column 3):");
-        promptBlocks.push(
-          (input.worries ?? []).map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
-            "  (none)",
-        );
-      }
-      if (input.column === "commitments" || input.column === "assumptions") {
-        promptBlocks.push("");
-        promptBlocks.push("Competing commitments (Column 4):");
-        promptBlocks.push(
-          (input.commitments ?? [])
-            .map((t, i) => `  ${i + 1}. ${t}`)
-            .join("\n") || "  (none)",
-        );
-      }
-      if (input.column === "assumptions") {
-        promptBlocks.push("");
-        promptBlocks.push(
-          "Big Assumptions (Column 5) with commitment coverage:",
-        );
-        promptBlocks.push(
-          (input.assumptionsWithCoverage ?? [])
-            .map(
-              (a, i) =>
-                `  ${i + 1}. assumption: ${a.text}\n     underwrites commitments: ${
-                  a.commitmentIndices.join(", ") || "(none linked)"
-                }`,
-            )
-            .join("\n") || "  (none)",
-        );
-      }
-      promptBlocks.push("");
-      const reviewNoun =
-        input.column === "behaviors"
-          ? "behavior"
-          : input.column === "worries"
-            ? "worry"
-            : input.column === "commitments"
-              ? "competing-commitment"
-              : "Big Assumption";
-      promptBlocks.push(`Review the ${reviewNoun} set above.`);
-    }
-    promptBlocks.push(
+      "",
+      "Behaviors (Column 2):",
+      input.behaviors.map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
+        "  (none)",
+      "",
+      "Review the behavior set above.",
       "Return only the coach's review prose — no meta, no headings, no scaffolding.",
-    );
+    ];
 
     const { text } = await generateText({
       model: utilityModel(),
@@ -3091,8 +2973,7 @@ export async function generateColumnReview(input: {
     return cleaned.length > 0 ? cleaned : null;
   } catch (err) {
     console.warn(
-      "[itc coach] generateColumnReview failed (column=%s): %s",
-      input.column,
+      "[itc coach] generateColumnReview failed: %s",
       err instanceof Error ? err.message : String(err),
     );
     return null;

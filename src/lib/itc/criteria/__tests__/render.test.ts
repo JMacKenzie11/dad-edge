@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { renderAudit } from "../audit-render";
-import type {
-  AuditFinding,
-  AuditIssueType,
-  AuditSeverity,
-} from "../audit-rules";
+import { renderFindings } from "../render";
+import type { Finding, IssueType, Severity } from "../types";
+
+type AuditFinding = Finding;
+type AuditIssueType = IssueType;
+type AuditSeverity = Severity;
+
+/** Shim: pre-refactor tests called renderAudit(findings, context)
+ *  which was hone mode by default. Preserve that here so this large
+ *  test file didn't need per-call edits. */
+function renderAudit(
+  findings: AuditFinding[],
+  context: { goalText: string; pillarLabel: string },
+): string {
+  return renderFindings(findings, {
+    goalText: context.goalText,
+    pillarLabel: context.pillarLabel,
+    mode: "hone",
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Fixture helper
@@ -80,7 +94,7 @@ describe("renderAudit — column structure", () => {
           actualText: "worry text",
         }),
         finding({
-          issueType: "missing_commitment_stem",
+          issueType: "commitment_doesnt_mirror_worry",
           severity: "moderate",
           entryRef: { table: "commitments", id: "c-1" },
           actualText: "I am committed to X",
@@ -145,7 +159,7 @@ describe("renderAudit — per-entry paragraph shape", () => {
     const prose = renderAudit(
       [
         finding({
-          issueType: "missing_commitment_stem",
+          issueType: "commitment_doesnt_mirror_worry",
           severity: "moderate",
           entryRef: { table: "commitments", id: "c-1" },
           actualText: "I am committed to avoiding the feeling that Y",
@@ -197,7 +211,7 @@ describe("renderAudit — per-entry paragraph shape", () => {
           actualText: "commitment text",
         }),
         finding({
-          issueType: "missing_commitment_stem",
+          issueType: "commitment_doesnt_mirror_worry",
           severity: "moderate",
           entryRef: { table: "commitments", id: "c-1" },
           actualText: "commitment text",
@@ -456,7 +470,7 @@ describe("renderAudit — exhaustiveness and voice hygiene", () => {
       "bundled_goal",
       "interior_witness_worry",
       "interior_witness_commitment",
-      "missing_commitment_stem",
+      "commitment_doesnt_mirror_worry",
       "vague_assumption_then_clause",
       "depth_shortfall_worry",
       "depth_shortfall_commitment",
@@ -504,7 +518,7 @@ describe("renderAudit — exhaustiveness and voice hygiene", () => {
         }),
         finding({
           severity: "moderate",
-          issueType: "missing_commitment_stem",
+          issueType: "commitment_doesnt_mirror_worry",
           entryRef: { table: "commitments", id: "c-1" },
           actualText: "I am committed to X",
         }),

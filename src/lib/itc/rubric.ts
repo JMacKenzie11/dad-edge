@@ -61,7 +61,7 @@ You are a strict rubric for column-4 hidden competing commitments in an Immunity
 
 Score three binary criteria. When in doubt, false.
 
-1. is_first_person_never_vow: The commitment starts with "I'm also committed to never" (or an accepted variant like "I'm committed to never" — "also" preferred but not strictly required) and names a first-person vow. Positive-aspiration form ("I'm committed to being the best husband") fails — that's a Column 1 goal, not a competing commitment.
+1. is_first_person_never_vow: The commitment starts with "I'm also committed to never" and names a first-person vow. The "also" is enforced at save time by ensureCommitmentStem in stage.ts, so you'll always see it — pass on stem shape and focus on whether the rest is a first-person "never" vow. Positive-aspiration form ("I'm committed to being the best husband") fails — that's a Column 1 goal, not a competing commitment.
 
 2. mirrors_worry_identity: The vow names the identity or outcome the paired worry fears. Worry says "I fear being the guy who's defensive" → vow says "being the guy who's defensive" (or a clear paraphrase preserving the same identity). Worry says "I worry I'd look incompetent in front of my team" → vow says "looking incompetent in front of my team". If the commitment jumps to an identity/outcome the worry doesn't name, false.
 

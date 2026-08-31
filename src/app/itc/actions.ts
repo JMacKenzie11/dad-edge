@@ -27,7 +27,6 @@ import {
   reviewTestResult,
   reviseTestFromReview,
   scrubReply,
-  synthesizeAuditProse,
   WORRY_IDENTITY_SHAPES,
   type ReactionInput,
   type ReactionOutput,

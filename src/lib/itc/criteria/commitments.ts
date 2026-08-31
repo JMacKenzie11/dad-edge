@@ -4,18 +4,15 @@
  * Three checks:
  *  - depth_shortfall_commitment: commitment hasn't reached identity
  *    depth (reads stored rubric score set at save time).
+ *  - commitment_doesnt_mirror_worry: commitment doesn't carry the
+ *    identity/outcome its paired worry fears (reads stored rubric
+ *    boolean set at save time).
  *  - interior_witness_commitment: commitment is framed around avoiding
  *    a feeling / interior reckoning instead of naming the identity
  *    plus observable action.
- *  - missing_commitment_stem: commitment doesn't start with the
- *    canonical "I'm also committed to" stem. NOTE: this check is
- *    currently unreachable because `ensureCommitmentStem` normalizes
- *    at save time. Kept here for behavior-preserving refactor; task 6
- *    deletes it.
  */
 
 import type { ItcCommitment, ItcWorry } from "../maps";
-import { COMMITMENT_STEM, ensureCommitmentStem } from "../stage";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -117,26 +114,3 @@ export async function checkCommitmentMirrorsWorry(input: {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// missing_commitment_stem (unreachable — see file-level comment)
-// ---------------------------------------------------------------------------
-
-const COMMITMENT_STEM_RE = /^\s*i\s?['\u2019]?m\s+also\s+committed\s+to\b/i;
-
-export async function checkMissingCommitmentStem(input: {
-  commitments: ItcCommitment[];
-}): Promise<Finding[]> {
-  const findings: Finding[] = [];
-  for (const commitment of input.commitments) {
-    if (COMMITMENT_STEM_RE.test(commitment.text)) continue;
-    findings.push({
-      entryRef: { table: "commitments", id: commitment.id },
-      issueType: "missing_commitment_stem",
-      severity: "moderate",
-      actualText: commitment.text,
-      detail: `Commitment does not start with the canonical stem "${COMMITMENT_STEM}...". The "also" is load-bearing because it names this as the SECOND commitment sitting next to the improvement goal.`,
-      suggestedFix: ensureCommitmentStem(commitment.text),
-    });
-  }
-  return findings;
-}

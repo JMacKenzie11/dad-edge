@@ -13,7 +13,6 @@ export type IssueType =
   | "bundled_goal"
   | "interior_witness_worry"
   | "interior_witness_commitment"
-  | "missing_commitment_stem"
   | "commitment_doesnt_mirror_worry"
   | "vague_assumption_then_clause"
   | "depth_shortfall_worry"
@@ -72,13 +71,3 @@ export const SEVERITY_ORDER: Record<Severity, number> = {
  *  assumptions. */
 export const DEPTH_THRESHOLD = 3;
 
-// ---------------------------------------------------------------------------
-// Backwards-compat aliases — audit-rules.ts consumers imported these names.
-// Task 1 keeps them so existing imports don't break; task 6 will delete the
-// audit-rules.ts shim entirely and consumers move to the new names.
-// ---------------------------------------------------------------------------
-
-export type AuditIssueType = IssueType;
-export type AuditEntryRef = EntryRef;
-export type AuditSeverity = Severity;
-export type AuditFinding = Finding;

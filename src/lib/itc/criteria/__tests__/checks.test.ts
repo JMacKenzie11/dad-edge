@@ -1,0 +1,375 @@
+import { describe, expect, it } from "vitest";
+import type {
+  ItcAssumption,
+  ItcAssumptionCommitment,
+  ItcCommitment,
+  ItcWorry,
+} from "../../maps";
+import {
+  checkCommitmentDepth,
+  checkCommitmentMirrorsWorry,
+  checkInteriorWitnessInCommitments,
+} from "../commitments";
+import { checkAssumptionCoverage, checkAssumptionDepth, checkVagueAssumptionThenClause } from "../assumptions";
+import { checkInteriorWitnessInWorries, checkWorryDepth } from "../worries";
+import { runHoneWaterfall } from "../orchestrator";
+
+// ---------------------------------------------------------------------------
+// Fixture builders
+// ---------------------------------------------------------------------------
+
+function makeWorry(overrides: Partial<ItcWorry>): ItcWorry {
+  return {
+    id: "worry-1",
+    map_id: "map-1",
+    behavior_id: "behavior-1",
+    text: "I worry that I would let my team down.",
+    depth_score: 3,
+    rubric_reason: null,
+    attempts: 1,
+    coach_commitment_draft: null,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeCommitment(overrides: Partial<ItcCommitment>): ItcCommitment {
+  return {
+    id: "commitment-1",
+    map_id: "map-1",
+    worry_id: "worry-1",
+    text: "I'm also committed to never being the coach who watched someone fail.",
+    depth_score: 3,
+    rubric_reason: null,
+    mirrors_worry_identity: null,
+    attempts: 1,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeAssumption(overrides: Partial<ItcAssumption>): ItcAssumption {
+  return {
+    id: "assumption-1",
+    map_id: "map-1",
+    sort_order: 0,
+    text: "I assume that if I let someone struggle without stepping in, then I've been the coach who abandoned them.",
+    depth_score: 3,
+    rubric_reason: null,
+    attempts: 1,
+    selected_for_testing: false,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeLink(
+  assumption_id: string,
+  commitment_id: string,
+): ItcAssumptionCommitment {
+  return { assumption_id, commitment_id };
+}
+
+// ---------------------------------------------------------------------------
+// checkInteriorWitnessInWorries
+// ---------------------------------------------------------------------------
+
+describe("checkInteriorWitnessInWorries", () => {
+  it("flags a worry with interior-witness verb pointed at a self-truth", async () => {
+    const worry = makeWorry({
+      text: "I worry that I'd have to see I've been faking it the whole time.",
+    });
+    const findings = await checkInteriorWitnessInWorries({
+      worries: [worry],
+      behaviors: [],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("interior_witness_worry");
+    expect(findings[0].actualText).toBe(worry.text);
+    expect(findings[0].suggestedFix).toBeUndefined();
+    expect(findings[0].detail).toMatch(/external witness/i);
+  });
+
+  it("does not flag a worry that already uses external witness", async () => {
+    const worry = makeWorry({
+      text: "I worry that she'd see the pattern is mine and stop trusting me.",
+    });
+    const findings = await checkInteriorWitnessInWorries({
+      worries: [worry],
+      behaviors: [],
+    });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkInteriorWitnessInCommitments
+// ---------------------------------------------------------------------------
+
+describe("checkInteriorWitnessInCommitments", () => {
+  it("flags a commitment framed around avoiding a feeling", async () => {
+    const commitment = makeCommitment({
+      text: "I'm also committed to avoiding the feeling that I picked myself over her.",
+    });
+    const findings = await checkInteriorWitnessInCommitments({
+      commitments: [commitment],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("interior_witness_commitment");
+    expect(findings[0].actualText).toBe(commitment.text);
+  });
+
+  it("flags a commitment that names a 'never seeing / never knowing' shape", async () => {
+    const commitment = makeCommitment({
+      text: "I'm also committed to never having to know I let the family down.",
+    });
+    const findings = await checkInteriorWitnessInCommitments({
+      commitments: [commitment],
+    });
+    expect(findings).toHaveLength(1);
+  });
+
+  it("does not flag a commitment that names an observable identity move", async () => {
+    const commitment = makeCommitment({
+      text: "I'm also committed to never being the husband who lets his wife carry the load alone.",
+    });
+    const findings = await checkInteriorWitnessInCommitments({
+      commitments: [commitment],
+    });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkCommitmentMirrorsWorry
+// ---------------------------------------------------------------------------
+
+describe("checkCommitmentMirrorsWorry", () => {
+  it("flags a commitment whose stored mirrors_worry_identity is false", async () => {
+    const worry = makeWorry({ id: "worry-1" });
+    const commitment = makeCommitment({
+      id: "commitment-1",
+      worry_id: "worry-1",
+      mirrors_worry_identity: false,
+    });
+    const findings = await checkCommitmentMirrorsWorry({
+      commitments: [commitment],
+      worries: [worry],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("commitment_doesnt_mirror_worry");
+    expect(findings[0].severity).toBe("critical");
+    expect(findings[0].relatedText).toBe(worry.text);
+  });
+
+  it("does not flag when mirrors_worry_identity is true", async () => {
+    const commitment = makeCommitment({ mirrors_worry_identity: true });
+    const findings = await checkCommitmentMirrorsWorry({
+      commitments: [commitment],
+      worries: [makeWorry({})],
+    });
+    expect(findings).toHaveLength(0);
+  });
+
+  it("does not flag legacy rows where mirrors_worry_identity is null", async () => {
+    const commitment = makeCommitment({ mirrors_worry_identity: null });
+    const findings = await checkCommitmentMirrorsWorry({
+      commitments: [commitment],
+      worries: [makeWorry({})],
+    });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkVagueAssumptionThenClause
+// ---------------------------------------------------------------------------
+
+describe("checkVagueAssumptionThenClause", () => {
+  it("flags a then-clause that gestures at 'the man I'm terrified of'", async () => {
+    const assumption = makeAssumption({
+      text: "I assume that if I let this go, then I'd be the man I'm terrified of becoming.",
+    });
+    const findings = await checkVagueAssumptionThenClause({
+      assumptions: [assumption],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("vague_assumption_then_clause");
+  });
+
+  it("does not flag a then-clause that names a specific identity", async () => {
+    const assumption = makeAssumption({
+      text: "I assume that if I stop covering for the team, then I've been the coach who never let them try things.",
+    });
+    const findings = await checkVagueAssumptionThenClause({
+      assumptions: [assumption],
+    });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// depth checks (per column)
+// ---------------------------------------------------------------------------
+
+describe("depth checks", () => {
+  it("flags a worry below depth 3", async () => {
+    const worry = makeWorry({
+      depth_score: 2,
+      rubric_reason: "no identity landing",
+    });
+    const findings = await checkWorryDepth({ worries: [worry] });
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_worry",
+    ]);
+    expect(findings[0].detail).toContain("no identity landing");
+  });
+
+  it("flags a commitment below depth 3", async () => {
+    const commitment = makeCommitment({ depth_score: 1 });
+    const findings = await checkCommitmentDepth({ commitments: [commitment] });
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_commitment",
+    ]);
+  });
+
+  it("flags an assumption below depth 3", async () => {
+    const assumption = makeAssumption({
+      depth_score: 2,
+      rubric_reason: "then-clause not finished",
+    });
+    const findings = await checkAssumptionDepth({ assumptions: [assumption] });
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_assumption",
+    ]);
+  });
+
+  it("skips entries with null score, and does not flag at depth 3", async () => {
+    const worry = makeWorry({ depth_score: 3 });
+    const assumption = makeAssumption({ depth_score: null });
+    const wf = await checkWorryDepth({ worries: [worry] });
+    const af = await checkAssumptionDepth({ assumptions: [assumption] });
+    expect(wf).toHaveLength(0);
+    expect(af).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAssumptionCoverage
+// ---------------------------------------------------------------------------
+
+describe("checkAssumptionCoverage", () => {
+  it("flags each commitment with no linked Big Assumption", async () => {
+    const commitmentA = makeCommitment({ id: "c-1" });
+    const commitmentB = makeCommitment({ id: "c-2" });
+    const assumption = makeAssumption({ id: "a-1" });
+    const links: ItcAssumptionCommitment[] = [makeLink("a-1", "c-1")];
+    const findings = await checkAssumptionCoverage({
+      commitments: [commitmentA, commitmentB],
+      assumptions: [assumption],
+      links,
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("assumption_uncovered_commitment");
+    expect(findings[0].entryRef).toEqual({ table: "commitments", id: "c-2" });
+  });
+
+  it("does not flag when every commitment has a linked assumption", async () => {
+    const commitmentA = makeCommitment({ id: "c-1" });
+    const commitmentB = makeCommitment({ id: "c-2" });
+    const links: ItcAssumptionCommitment[] = [
+      makeLink("a-1", "c-1"),
+      makeLink("a-2", "c-2"),
+    ];
+    const findings = await checkAssumptionCoverage({
+      commitments: [commitmentA, commitmentB],
+      assumptions: [makeAssumption({ id: "a-1" }), makeAssumption({ id: "a-2" })],
+      links,
+    });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runHoneWaterfall — stops at first broken column
+// ---------------------------------------------------------------------------
+
+describe("runHoneWaterfall", () => {
+  it("returns worries findings when a worry is at depth < 3, without proceeding to commitments/assumptions", async () => {
+    // Broken worry AND broken commitment AND broken assumption — waterfall
+    // should stop at worries because that's the first broken layer.
+    // Everything downstream will be re-derived when the worry is fixed.
+    const worry = makeWorry({ id: "worry-1", depth_score: 2 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 1, // also broken
+    });
+    const assumption = makeAssumption({
+      id: "a-1",
+      depth_score: 2, // also broken
+    });
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [assumption],
+      assumptionLinks: [makeLink("a-1", "c-1")],
+    });
+    expect(column).toBe("worries");
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_worry")).toBe(true);
+    expect(types.has("depth_shortfall_commitment")).toBe(false);
+    expect(types.has("depth_shortfall_assumption")).toBe(false);
+  });
+
+  it("proceeds past clean columns and stops at the first broken one", async () => {
+    // Worries clean, commitments broken, assumptions broken. Should stop at
+    // commitments.
+    const worry = makeWorry({ id: "worry-1", depth_score: 3 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 2,
+      mirrors_worry_identity: true,
+    });
+    const assumption = makeAssumption({ id: "a-1", depth_score: 2 });
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [assumption],
+      assumptionLinks: [makeLink("a-1", "c-1")],
+    });
+    expect(column).toBe("commitments");
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_commitment")).toBe(true);
+    expect(types.has("depth_shortfall_assumption")).toBe(false);
+  });
+
+  it("returns column=null when every column holds up", async () => {
+    const worry = makeWorry({ id: "worry-1", depth_score: 3 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 3,
+      mirrors_worry_identity: true,
+    });
+    const assumption = makeAssumption({ id: "a-1", depth_score: 3 });
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [assumption],
+      assumptionLinks: [makeLink("a-1", "c-1")],
+    });
+    expect(column).toBe(null);
+    expect(findings).toHaveLength(0);
+  });
+});
