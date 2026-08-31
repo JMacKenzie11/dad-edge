@@ -3,8 +3,6 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
-  awaitReactionOrSwallow,
-  fireCoachReaction,
   loadCoachContext,
   persistReaction,
   requireParticipantAndMap,
@@ -404,14 +402,6 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
     );
   }
   await events.flush();
-
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      { kind: "behavior", text: parsed.data.text.trim() },
-      { table: "itc_behaviors", id: behaviorId },
-    ),
-  );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
@@ -498,14 +488,6 @@ export async function updateBehavior(
     );
   }
   await events.flush();
-
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      { kind: "behavior", text: parsed.data.text.trim() },
-      { table: "itc_behaviors", id: target.id },
-    ),
-  );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
@@ -663,19 +645,6 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
   }
   await events.flush();
 
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      {
-        kind: "worry",
-        text: row.text,
-        pairedText: behavior.text,
-        depthScore: score,
-        attempts: row.attempts,
-      },
-      { table: "itc_worries", id: row.id },
-    ),
-  );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
@@ -805,20 +774,6 @@ export async function saveCommitment(
     );
   }
   await events.flush();
-
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      {
-        kind: "commitment",
-        text: row.text,
-        pairedText: worry.text,
-        depthScore: score,
-        attempts: row.attempts,
-      },
-      { table: "itc_commitments", id: row.id },
-    ),
-  );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
@@ -982,24 +937,6 @@ export async function saveAssumption(
   // so the coach can excavate against them in prose.
   const linkedTexts = parsed.data.commitment_ids
     .map((cid) => commitmentsById.get(cid)?.text)
-    .filter((t): t is string => Boolean(t));
-  const pairedText = linkedTexts.length
-    ? linkedTexts.map((t, i) => `${i + 1}. ${t}`).join(" / ")
-    : undefined;
-
-  await awaitReactionOrSwallow(() =>
-    fireCoachReaction(
-      loaded.map.id,
-      {
-        kind: "assumption",
-        text: row.text,
-        pairedText,
-        depthScore: score,
-        attempts: row.attempts,
-      },
-      { table: "itc_assumptions", id: row.id },
-    ),
-  );
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
 }
