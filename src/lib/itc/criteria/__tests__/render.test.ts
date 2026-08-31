@@ -535,3 +535,149 @@ describe("renderAudit — exhaustiveness and voice hygiene", () => {
     expect(prose).not.toMatch(/then-clause/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// column_review mode — end-of-column construction feedback
+// ---------------------------------------------------------------------------
+
+/** Shim for column_review mode so each test can add findings without
+ *  re-typing the full RenderContext every time. */
+function renderColumnReview(
+  findings: AuditFinding[],
+  columnLabel: string,
+): string {
+  return renderFindings(findings, {
+    goalText: "sample goal",
+    pillarLabel: "Bond",
+    mode: "column_review",
+    columnLabel,
+  });
+}
+
+describe("renderFindings — column_review mode", () => {
+  it("returns a column-holds-up empty state that names the column", () => {
+    const prose = renderColumnReview([], "Your worries");
+    expect(prose).toMatch(/your worries holds up/i);
+    expect(prose).toMatch(/carry on/i);
+    // Does not fall back to the hone-mode "map holds up" phrasing.
+    expect(prose).not.toMatch(/Bond map holds up/i);
+    // No column headers, no findings.
+    expect(prose).not.toContain("Your competing commitments:");
+    expect(prose).not.toContain("Your Big Assumptions:");
+  });
+
+  it("falls back to a generic label when columnLabel is not provided", () => {
+    const prose = renderFindings([], {
+      goalText: "sample goal",
+      pillarLabel: "Bond",
+      mode: "column_review",
+    });
+    expect(prose).toMatch(/this column holds up/i);
+  });
+
+  it("opens with the column label + severity count on a single-critical finding", () => {
+    const prose = renderColumnReview(
+      [
+        finding({
+          issueType: "depth_shortfall_worry",
+          severity: "critical",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry X will happen",
+        }),
+      ],
+      "Your worries",
+    );
+    // Column-review opening — mentions the column, not the whole map.
+    expect(prose).toMatch(/one critical thing to sharpen on your worries/i);
+    // Hone-mode phrasing should be absent — this is a column-scoped
+    // review, not a whole-map audit.
+    expect(prose).not.toMatch(/Bond map/i);
+    expect(prose).not.toMatch(/hone pass/i);
+    // Column section still renders under its header.
+    expect(prose).toContain("Your worries:");
+    // Per-entry paragraph still renders quote + fix inline.
+    expect(prose).toContain('"I worry X will happen"');
+    expect(prose).toMatch(/Push it to identity depth/i);
+  });
+
+  it("uses the moderate-only phrasing when there are no criticals or observations", () => {
+    const prose = renderColumnReview(
+      [
+        finding({
+          issueType: "interior_witness_worry",
+          severity: "moderate",
+          entryRef: { table: "worries", id: "w-1" },
+          actualText: "I worry I'd have to see the truth about myself",
+        }),
+        finding({
+          issueType: "interior_witness_worry",
+          severity: "moderate",
+          entryRef: { table: "worries", id: "w-2" },
+          actualText: "I worry I'd have to face who I am",
+        }),
+      ],
+      "Your worries",
+    );
+    expect(prose).toMatch(/2 things worth sharpening on your worries/i);
+    expect(prose).not.toMatch(/critical/i);
+    // Both worry entries appear with their own quoted openers.
+    expect(prose).toContain('"I worry I\'d have to see the truth about myself"');
+    expect(prose).toContain('"I worry I\'d have to face who I am"');
+  });
+
+  it("renders only the section for the column being reviewed even when finding data straddles tables", () => {
+    // Column reviews are scoped: the caller only ever passes findings
+    // for one column via runColumnCriteria, but the renderer is
+    // section-driven, so verify it still lands correctly with a
+    // single-column payload.
+    const prose = renderColumnReview(
+      [
+        finding({
+          issueType: "commitment_doesnt_mirror_worry",
+          severity: "critical",
+          entryRef: { table: "commitments", id: "c-1" },
+          actualText: "I'm also committed to being present",
+          relatedText: "I worry that I'd let my team down",
+        }),
+      ],
+      "Your competing commitments",
+    );
+    expect(prose).toMatch(
+      /one critical thing to sharpen on your competing commitments/i,
+    );
+    // Only the commitments section header appears.
+    expect(prose).toContain("Your competing commitments:");
+    expect(prose).not.toContain("Your worries:");
+    expect(prose).not.toContain("Your Big Assumptions:");
+    // Fix clause references the "rewrite as vow" template line.
+    expect(prose).toMatch(/I'm also committed to never/i);
+  });
+
+  it("shares the same per-entry rendering as hone mode (same voice, same quote-plus-fix shape)", () => {
+    const sharedFinding = finding({
+      issueType: "depth_shortfall_commitment",
+      severity: "critical",
+      entryRef: { table: "commitments", id: "c-1" },
+      actualText: "I am committed to trying harder",
+    });
+    const columnProse = renderFindings([sharedFinding], {
+      goalText: "sample goal",
+      pillarLabel: "Bond",
+      mode: "column_review",
+      columnLabel: "Your competing commitments",
+    });
+    const honeProse = renderFindings([sharedFinding], {
+      goalText: "sample goal",
+      pillarLabel: "Bond",
+      mode: "hone",
+    });
+    // Opening lines diverge (mode-tuned) — grab everything after the
+    // first blank line so we can compare the entry body itself.
+    const columnBody = columnProse.split("\n\n").slice(1).join("\n\n");
+    const honeBody = honeProse.split("\n\n").slice(1).join("\n\n");
+    expect(columnBody).toBe(honeBody);
+    // Both include the same quote + fix.
+    expect(columnBody).toContain('"I am committed to trying harder"');
+    expect(columnBody).toMatch(/identity depth/i);
+  });
+});

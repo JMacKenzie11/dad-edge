@@ -1,10 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
   ItcCommitment,
   ItcWorry,
 } from "../../maps";
+import type { Finding } from "../types";
+
+// Mock the goal check so waterfall tests can drive the goal layer
+// deterministically without hitting the LLM in checkBundledGoal.
+vi.mock("../goal", () => ({
+  checkBundledGoal: vi.fn(async () => [] as Finding[]),
+}));
+
 import {
   checkCommitmentDepth,
   checkCommitmentMirrorsWorry,
@@ -12,6 +20,7 @@ import {
 } from "../commitments";
 import { checkAssumptionCoverage, checkAssumptionDepth, checkVagueAssumptionThenClause } from "../assumptions";
 import { checkInteriorWitnessInWorries, checkWorryDepth } from "../worries";
+import { checkBundledGoal } from "../goal";
 import { runHoneWaterfall } from "../orchestrator";
 
 // ---------------------------------------------------------------------------
@@ -374,5 +383,76 @@ describe("runHoneWaterfall", () => {
     });
     expect(column).toBe(null);
     expect(findings).toHaveLength(0);
+  });
+
+  it("stops at goal when the goal is broken, even if downstream columns are also broken", async () => {
+    // Force a bundled-goal finding via the mock. Also stack broken
+    // entries downstream to prove the waterfall doesn't look past
+    // the goal when it fires.
+    vi.mocked(checkBundledGoal).mockResolvedValueOnce([
+      {
+        entryRef: { table: "goal", id: "map-1" },
+        issueType: "bundled_goal",
+        severity: "critical",
+        actualText: "getting better at coaching my team and building my business",
+        detail: "Two distinct improvements.",
+      },
+    ]);
+    const worry = makeWorry({ id: "worry-1", depth_score: 2 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 1,
+      mirrors_worry_identity: false,
+    });
+    const assumption = makeAssumption({ id: "a-1", depth_score: 2 });
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team and building my business",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [assumption],
+      assumptionLinks: [makeLink("a-1", "c-1")],
+    });
+    expect(column).toBe("goal");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("bundled_goal");
+    // Downstream columns weren't checked — waterfall stopped at goal.
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_worry")).toBe(false);
+    expect(types.has("depth_shortfall_commitment")).toBe(false);
+    expect(types.has("depth_shortfall_assumption")).toBe(false);
+  });
+
+  it("stops at assumptions when only the assumption layer is broken (coverage gap)", async () => {
+    // Goal / worries / commitments all clean; commitment has NO linked
+    // assumption, so checkAssumptionCoverage should fire an
+    // assumption_uncovered_commitment finding and the waterfall should
+    // land on the assumptions column.
+    const worry = makeWorry({ id: "worry-1", depth_score: 3 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 3,
+      mirrors_worry_identity: true,
+    });
+    // No assumption links — commitment is uncovered.
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team",
+      behaviors: [],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [],
+      assumptionLinks: [],
+    });
+    expect(column).toBe("assumptions");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].issueType).toBe("assumption_uncovered_commitment");
+    // The finding's entryRef points at the uncovered commitment (that's
+    // where the fix lands), even though the waterfall column is
+    // "assumptions".
+    expect(findings[0].entryRef).toEqual({ table: "commitments", id: "c-1" });
   });
 });
