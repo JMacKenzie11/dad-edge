@@ -295,15 +295,15 @@ function NoImprovementMapCard() {
     <div className="p-5 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
       <p className="font-heading text-base">Start an improvement map</p>
       <p className="text-sm text-[color:var(--color-text-muted)] mt-1 leading-relaxed">
-        A 4-column ITC map — the change you want, the behaviors in the
+        A 4-column ITC map. The change you want, the behaviors in the
         way, the hidden commitments underneath, and a test to run this
         week. Coach-guided; ~20 minutes to draft.
       </p>
       <Link
         href="/itc"
-        className="inline-block mt-4 h-9 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest hover:bg-[color:var(--color-primary)]/90 cursor-pointer"
+        className="inline-flex items-center mt-4 h-10 px-4 rounded-md border border-[color:var(--color-warning)] bg-transparent text-[color:var(--color-warning)] font-heading text-xs tracking-widest uppercase hover:bg-[color:var(--color-warning)]/10 cursor-pointer transition"
       >
-        START
+        START AN IMPROVEMENT MAP
       </Link>
     </div>
   );

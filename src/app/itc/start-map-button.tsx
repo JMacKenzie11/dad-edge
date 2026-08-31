@@ -10,21 +10,22 @@ export function StartMapButton() {
       disabled={pending}
       aria-busy={pending}
       className={
-        "group w-full rounded-md px-4 py-2.5 text-sm font-semibold transition " +
-        "bg-[color:var(--color-primary)] " +
-        "hover:brightness-110 " +
-        "active:scale-[0.98] active:brightness-95 " +
-        "disabled:opacity-70 disabled:cursor-not-allowed"
+        "w-full h-10 rounded-md border border-[color:var(--color-warning)] " +
+        "bg-transparent text-[color:var(--color-warning)] " +
+        "font-heading text-xs tracking-widest uppercase " +
+        "hover:bg-[color:var(--color-warning)]/10 " +
+        "active:scale-[0.98] transition " +
+        "disabled:opacity-50 disabled:cursor-not-allowed"
       }
     >
       <span className="inline-flex items-center justify-center gap-2">
         {pending ? (
           <>
-            <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-            Starting…
+            <span className="inline-block w-3 h-3 rounded-full border-2 border-[color:var(--color-warning)]/40 border-t-[color:var(--color-warning)] animate-spin" />
+            STARTING…
           </>
         ) : (
-          "Start map"
+          "START AN IMPROVEMENT MAP"
         )}
       </span>
     </button>
