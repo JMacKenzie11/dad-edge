@@ -176,6 +176,13 @@ function FilledSlot({
 
   useEffect(() => {
     if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    // Skip scoring on completed missions — the coach's take on a
+    // finished mission is noise and the pill is hidden anyway.
+    if (mission.status === "completed") {
+      setScore(null);
+      setScoring(false);
+      return;
+    }
     if (description.trim().length < 8) {
       setScore(null);
       return;
@@ -204,7 +211,7 @@ function FilledSlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndex, weekDates, mission.pillar_code, mission.target_date, goalDescription]);
+  }, [description, dayIndex, weekDates, mission.pillar_code, mission.target_date, mission.status, goalDescription]);
 
   const isDone = mission.status === "completed";
   const isMissed = mission.status === "missed";
@@ -318,7 +325,7 @@ function FilledSlot({
           )}
         </div>
         <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
-          {qualityLabel ? (
+          {!isDone && qualityLabel ? (
             <button
               type="button"
               onClick={() => setShowFeedback((v) => !v)}
