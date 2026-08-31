@@ -22,6 +22,23 @@ const COL_DAY_WIDTH = "w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
 const COL_COACH_WIDTH = "w-[92px]"; // fits "SHARPEN 10/10"
 const COL_ACTIONS_WIDTH = "w-[104px]"; // COMPLETE + × + gap
 
+/**
+ * Grow the textarea's height to fit its content whenever it changes.
+ * Prevents mission text from getting clipped on long descriptions
+ * without needing a fixed rows count.
+ */
+function useAutoResize(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  value: string,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [ref, value]);
+}
+
 type SlotProps = {
   mission: WeekMission | null;
   weekDates: string[];
@@ -57,6 +74,7 @@ function EmptySlot({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const scoreSeq = useRef(0);
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useAutoResize(inputRef, description);
 
   useEffect(() => {
     if (expanded) inputRef.current?.focus();
@@ -183,7 +201,7 @@ function EmptySlot({
             }
           }}
           placeholder="Behavior + how you'll know it's done."
-          className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
+          className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
         />
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
           <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
@@ -246,6 +264,8 @@ function FilledSlot({
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialDescRef = useRef(mission.description);
   const initialDayRef = useRef(dayIndex);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutoResize(textareaRef, description);
 
   useEffect(() => {
     setDescription(mission.description);
@@ -365,7 +385,8 @@ function FilledSlot({
             </p>
           ) : (
             <textarea
-              rows={expanded ? 3 : 1}
+              ref={textareaRef}
+              rows={1}
               maxLength={280}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -380,7 +401,7 @@ function FilledSlot({
                   e.currentTarget.blur();
                 }
               }}
-              className="w-full p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
+              className="w-full p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
             />
           )}
           {isMissed && !isDone ? (
