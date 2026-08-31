@@ -16,7 +16,6 @@ import {
   draftTestForAssumption,
   draftWorryForBehavior,
   generateCoachReaction,
-  generateColumnReview,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -127,11 +126,12 @@ import { TurnEventLog } from "@/lib/itc/turn-events";
 export type { ActionResult };
 
 /**
- * Human labels for the four criteria columns, used in construction
- * column-review openings ("Two things worth sharpening on your worries").
+ * Human labels for the criteria columns, used in construction
+ * column-review openings ("Two things worth sharpening on your behaviors").
  */
 const COLUMN_LABELS: Record<ColumnName, string> = {
   goal: "Your goal",
+  behaviors: "Your behaviors",
   worries: "Your worries",
   commitments: "Your competing commitments",
   assumptions: "Your Big Assumptions",
@@ -1918,42 +1918,28 @@ export async function ensureColumnReviewDelivered(
       return { ok: true, delivered: false };
     }
 
-    // Goal / worries / commitments / assumptions run the shared
-    // criteria and render deterministically — same source of truth as
-    // the hone waterfall, so a coachee never sees a criterion approve
-    // an entry during construction and flag it on hone. Behaviors
-    // stays on the LLM prompt path (no behavior criteria exist and
-    // the Kegan/Lahey guides don't hone behaviors — they're the "gas
-    // pedal" identified in Column 2, not honed content).
-    let prose: string | null = null;
-    if (stage === "behaviors") {
-      prose = await generateColumnReview({
-        column: stage,
-        goalText: map.improvement_goal ?? "",
-        behaviors: selectedBehaviors.map((b) => b.text),
-        worries: worries.map((w) => w.text),
-        commitments: commitments.map((c) => c.text),
-      });
-    } else {
-      const column: ColumnName = stage;
-      const findings = await runColumnCriteria(column, {
-        mapId,
-        goalText: map.improvement_goal ?? "",
-        behaviors: selectedBehaviors,
-        worries,
-        commitments,
-        assumptions,
-        assumptionLinks,
-      });
-      const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
-      const columnLabel = COLUMN_LABELS[column];
-      prose = renderFindings(findings, {
-        goalText: map.improvement_goal ?? "",
-        pillarLabel,
-        mode: "column_review",
-        columnLabel,
-      });
-    }
+    // All five columns run the shared criteria module and render
+    // deterministically. Same source of truth as the hone waterfall,
+    // so a coachee never sees a criterion approve an entry during
+    // construction and flag it on hone.
+    const column: ColumnName = stage;
+    const findings = await runColumnCriteria(column, {
+      mapId,
+      goalText: map.improvement_goal ?? "",
+      behaviors: selectedBehaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+    });
+    const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
+    const columnLabel = COLUMN_LABELS[column];
+    const prose: string | null = renderFindings(findings, {
+      goalText: map.improvement_goal ?? "",
+      pillarLabel,
+      mode: "column_review",
+      columnLabel,
+    });
     if (!prose) return { ok: true, delivered: false };
 
     await appendMessage(mapId, "assistant", prose, stage, {

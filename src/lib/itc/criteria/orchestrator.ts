@@ -25,6 +25,7 @@ import type {
   ItcCommitment,
   ItcWorry,
 } from "../maps";
+import { checkBehaviorDepth } from "./behaviors";
 import { checkBundledGoal } from "./goal";
 import {
   checkInteriorWitnessInWorries,
@@ -45,10 +46,16 @@ import {
 } from "./assumptions";
 import { SEVERITY_ORDER, type Finding } from "./types";
 
-export type ColumnName = "goal" | "worries" | "commitments" | "assumptions";
+export type ColumnName =
+  | "goal"
+  | "behaviors"
+  | "worries"
+  | "commitments"
+  | "assumptions";
 
 export const COLUMN_ORDER: readonly ColumnName[] = [
   "goal",
+  "behaviors",
   "worries",
   "commitments",
   "assumptions",
@@ -70,6 +77,12 @@ export type CriteriaInput = {
 
 async function runGoalCriteria(input: CriteriaInput): Promise<Finding[]> {
   return checkBundledGoal({ mapId: input.mapId, goalText: input.goalText });
+}
+
+async function runBehaviorsCriteria(
+  input: CriteriaInput,
+): Promise<Finding[]> {
+  return checkBehaviorDepth({ behaviors: input.behaviors });
 }
 
 async function runWorriesCriteria(input: CriteriaInput): Promise<Finding[]> {
@@ -137,6 +150,8 @@ export async function runColumnCriteria(
   switch (column) {
     case "goal":
       return runGoalCriteria(input);
+    case "behaviors":
+      return runBehaviorsCriteria(input);
     case "worries":
       return runWorriesCriteria(input);
     case "commitments":

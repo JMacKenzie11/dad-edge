@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
+  ItcBehavior,
   ItcCommitment,
   ItcWorry,
 } from "../../maps";
@@ -13,6 +14,7 @@ vi.mock("../goal", () => ({
   checkBundledGoal: vi.fn(async () => [] as Finding[]),
 }));
 
+import { checkBehaviorDepth } from "../behaviors";
 import {
   checkCommitmentDepth,
   checkCommitmentMirrorsWorry,
@@ -26,6 +28,23 @@ import { runHoneWaterfall } from "../orchestrator";
 // ---------------------------------------------------------------------------
 // Fixture builders
 // ---------------------------------------------------------------------------
+
+function makeBehavior(overrides: Partial<ItcBehavior>): ItcBehavior {
+  return {
+    id: "behavior-1",
+    map_id: "map-1",
+    sort_order: 0,
+    text: "I check my phone during dinner",
+    source: "user",
+    selected: true,
+    depth_score: 3,
+    rubric_reason: null,
+    attempts: 1,
+    coach_worry_draft: null,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
 
 function makeWorry(overrides: Partial<ItcWorry>): ItcWorry {
   return {
@@ -225,6 +244,33 @@ describe("checkVagueAssumptionThenClause", () => {
 // ---------------------------------------------------------------------------
 
 describe("depth checks", () => {
+  it("flags a selected behavior below depth 3", async () => {
+    const behavior = makeBehavior({
+      depth_score: 2,
+      rubric_reason: "not observable enough",
+    });
+    const findings = await checkBehaviorDepth({ behaviors: [behavior] });
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_behavior",
+    ]);
+    expect(findings[0].detail).toContain("not observable enough");
+    expect(findings[0].severity).toBe("critical");
+  });
+
+  it("does not flag unselected behaviors even if they're at depth < 3", async () => {
+    // Suggested-but-unselected behaviors aren't on the map, so they
+    // shouldn't count against the honing pass.
+    const behavior = makeBehavior({ selected: false, depth_score: 1 });
+    const findings = await checkBehaviorDepth({ behaviors: [behavior] });
+    expect(findings).toHaveLength(0);
+  });
+
+  it("does not flag behaviors with null depth_score (pre-scored legacy rows)", async () => {
+    const behavior = makeBehavior({ depth_score: null });
+    const findings = await checkBehaviorDepth({ behaviors: [behavior] });
+    expect(findings).toHaveLength(0);
+  });
+
   it("flags a worry below depth 3", async () => {
     const worry = makeWorry({
       depth_score: 2,
@@ -383,6 +429,41 @@ describe("runHoneWaterfall", () => {
     });
     expect(column).toBe(null);
     expect(findings).toHaveLength(0);
+  });
+
+  it("stops at behaviors when the goal is clean but a behavior is shallow", async () => {
+    // Goal clean via mock default. Broken behavior + broken downstream
+    // entries. Waterfall should land on behaviors and not check further.
+    const behavior = makeBehavior({
+      id: "b-1",
+      depth_score: 2,
+      rubric_reason: "too vague",
+    });
+    const worry = makeWorry({ id: "worry-1", depth_score: 2 });
+    const commitment = makeCommitment({
+      id: "c-1",
+      worry_id: "worry-1",
+      depth_score: 1,
+    });
+    const assumption = makeAssumption({ id: "a-1", depth_score: 2 });
+    const { column, findings } = await runHoneWaterfall({
+      mapId: "map-1",
+      goalText: "getting better at coaching my team",
+      behaviors: [behavior],
+      worries: [worry],
+      commitments: [commitment],
+      assumptions: [assumption],
+      assumptionLinks: [makeLink("a-1", "c-1")],
+    });
+    expect(column).toBe("behaviors");
+    expect(findings.map((f) => f.issueType)).toEqual([
+      "depth_shortfall_behavior",
+    ]);
+    // Nothing downstream fired.
+    const types = new Set(findings.map((f) => f.issueType));
+    expect(types.has("depth_shortfall_worry")).toBe(false);
+    expect(types.has("depth_shortfall_commitment")).toBe(false);
+    expect(types.has("depth_shortfall_assumption")).toBe(false);
   });
 
   it("stops at goal when the goal is broken, even if downstream columns are also broken", async () => {

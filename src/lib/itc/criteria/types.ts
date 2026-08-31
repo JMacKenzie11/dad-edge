@@ -11,6 +11,7 @@
 
 export type IssueType =
   | "bundled_goal"
+  | "depth_shortfall_behavior"
   | "interior_witness_worry"
   | "interior_witness_commitment"
   | "commitment_doesnt_mirror_worry"
@@ -27,6 +28,7 @@ export type IssueType =
 
 export type EntryRef =
   | { table: "goal"; id: string }
+  | { table: "behaviors"; id: string }
   | { table: "worries"; id: string }
   | { table: "commitments"; id: string }
   | { table: "assumptions"; id: string }

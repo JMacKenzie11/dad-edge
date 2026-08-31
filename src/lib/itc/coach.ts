@@ -2867,69 +2867,7 @@ export function ensureParagraphs(
 }
 
 // ---------------------------------------------------------------------------
-// Column-close reviews
+// Column-close reviews — all five columns now run the shared criteria
+// module and render via renderFindings in actions.ts. The old
+// generateColumnReview + per-column LLM prompts have been retired.
 // ---------------------------------------------------------------------------
-
-/**
- * Stages that carry a column_review. Goal / worries / commitments /
- * assumptions run the shared criteria module (deterministic templates,
- * no LLM). Behaviors is the exception: no criteria exist and the
- * Kegan/Lahey guides don't hone behaviors — they're the "gas pedal"
- * identified in Column 2, not honed content. This function only
- * covers the behaviors path; the other columns render via
- * renderFindings + runColumnCriteria directly in actions.ts.
- */
-export type ReviewableColumn =
-  | "goal"
-  | "behaviors"
-  | "worries"
-  | "commitments"
-  | "assumptions";
-
-/**
- * LLM-based end-of-column review — behaviors only. Returns the
- * coach's prose or null on LLM failure (caller silently drops the
- * review — the coachee's next Continue click isn't blocked). Kept
- * out of the shared criteria module because behaviors don't have
- * structured criteria the way the four honed columns do.
- */
-export async function generateColumnReview(input: {
-  column: "behaviors";
-  goalText: string;
-  behaviors: string[];
-  worries?: string[];
-  commitments?: string[];
-}): Promise<string | null> {
-  try {
-    const mod = await import("./prompts/stages/behaviors-review");
-    const systemPrompt = mod.BEHAVIORS_REVIEW_STAGE;
-
-    const promptBlocks: string[] = [
-      `Improvement goal: ${input.goalText || "(not set)"}`,
-      "",
-      "Behaviors (Column 2):",
-      input.behaviors.map((t, i) => `  ${i + 1}. ${t}`).join("\n") ||
-        "  (none)",
-      "",
-      "Review the behavior set above.",
-      "Return only the coach's review prose — no meta, no headings, no scaffolding.",
-    ];
-
-    const { text } = await generateText({
-      model: utilityModel(),
-      system: withVoiceRules(systemPrompt),
-      prompt: promptBlocks.join("\n"),
-      maxOutputTokens: 400,
-    });
-    const cleaned = ensureParagraphs(
-      scrubBannedCoachWords(scrubReplyLight(text)),
-    );
-    return cleaned.length > 0 ? cleaned : null;
-  } catch (err) {
-    console.warn(
-      "[itc coach] generateColumnReview failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
-  }
-}

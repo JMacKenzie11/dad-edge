@@ -138,6 +138,10 @@ const COLUMNS: readonly Column[] = [
       f.entryRef.table === "goal" || f.entryRef.table === "map",
   },
   {
+    header: "Your behaviors",
+    matches: (f) => f.entryRef.table === "behaviors",
+  },
+  {
     header: "Your worries",
     matches: (f) => f.entryRef.table === "worries",
   },
@@ -245,6 +249,8 @@ function collectClauses(findings: Finding[]): string[] {
 // ---------------------------------------------------------------------------
 
 const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = {
+  depth_shortfall_behavior:
+    "Push it to observable depth — name a specific move you make that works against your goal, phrased as something you actually do (not what you wish you did).",
   depth_shortfall_worry:
     "Push it to identity depth — name who you'd be if the opposite behavior happened, not just what would happen.",
   depth_shortfall_commitment:
@@ -271,10 +277,11 @@ const GENERIC_ORDER: Partial<Record<IssueType, number>> = {
   interior_witness_worry: 2,
   interior_witness_commitment: 3,
   vague_assumption_then_clause: 4,
-  depth_shortfall_worry: 5,
-  depth_shortfall_commitment: 6,
-  depth_shortfall_assumption: 7,
-  assumption_uncovered_commitment: 8,
+  depth_shortfall_behavior: 5,
+  depth_shortfall_worry: 6,
+  depth_shortfall_commitment: 7,
+  depth_shortfall_assumption: 8,
+  assumption_uncovered_commitment: 9,
 };
 
 // ---------------------------------------------------------------------------
@@ -391,6 +398,7 @@ function stripDetailPrefix(detail: string): string {
 // Exhaustiveness check for IssueType — TS surfaces new types here.
 const _EXHAUSTIVENESS: readonly IssueType[] = [
   "bundled_goal",
+  "depth_shortfall_behavior",
   "interior_witness_worry",
   "interior_witness_commitment",
   "commitment_doesnt_mirror_worry",
