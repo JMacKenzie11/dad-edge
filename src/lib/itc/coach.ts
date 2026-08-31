@@ -509,9 +509,18 @@ function buildReactionPrompt(input: ReactionInput): string {
           `    - Bond pillar (marriage/partner) + goal about kids → wrong pillar (that's Raise).\n` +
           `    - Amplify pillar (business/wealth) + goal about family → wrong pillar (that's Bond or Raise).\n` +
           `    - Vitality/Movement pillar + goal about relationships → wrong pillar.\n` +
-          `  Test: after this goal is achieved, would his day-to-day change WITHIN the ${pillar.label} domain (${pillar.domain})? If not, it's the wrong pillar for this goal.\n` +
+          `  IMPORTANT — how a coachee shows up IN his work/business/practice is Amplify, not Vitality. Internal-state language ("staying grounded", "trusting myself", "not shrinking", "keeping my nerve", "handling the pressure") pointed at business context (client work, revenue, decisions, high-stakes performance, service delivery, leading his team) is a LEGITIMATE Amplify goal — do NOT redirect these to Vitality. Vitality is about how he fuels his mind and body (sleep, food, meditation, screen time, energy). Only kick a goal from Amplify to Vitality if the goal is actually about self-care habits with no business anchor. Concrete examples that STAY on Amplify:\n` +
+          `    - "staying grounded in service and trusting myself, especially when the stakes feel high" (service = his work; stakes = business performance).\n` +
+          `    - "not shrinking on client calls when I feel the pressure" (client work + performance).\n` +
+          `    - "keeping my nerve when I'm about to lose a deal" (business outcome).\n` +
+          `    - "trusting my own judgment in high-stakes decisions at work".\n` +
+          `  Concrete examples that DO belong on Vitality (not Amplify):\n` +
+          `    - "sleeping seven hours consistently".\n` +
+          `    - "cutting sugar so my energy holds through the afternoon".\n` +
+          `    - "meditating before the day starts".\n` +
+          `  Test: after this goal is achieved, would his day-to-day change WITHIN the ${pillar.label} domain (${pillar.domain})? For Amplify, "his day-to-day at work" counts — the change can be internal (how he handles pressure, holds his nerve, shows up for clients) as long as the CONTEXT is business/work. If not, it's the wrong pillar for this goal.\n` +
           `  When you catch a cross-pillar leak: name it plainly ("that reads as a [correct-pillar-name] goal, but you picked ${pillar.label}. Do you want to switch the map to [correct-pillar-name], or reword the goal to focus on ${pillar.domain}?"). Do NOT approve as Case 3. Do NOT offer a refinement chip that just tweaks wording — the fix is either a different pillar or a different goal.\n` +
-          `  ALSO populate the "suggested_pillar" field with the pillar code the goal actually belongs on (B/R/A/V/E/M/N — never A2). The client renders a "Switch this map to [Pillar]" action button from that field. Only set suggested_pillar when the leak is unambiguous; leave it unset for anything else. Pillar codes: B=Bond (marriage/partner), R=Raise (kids), A=Amplify (business/wealth), V=Vitality (mind/body fuel), E=Enjoyment (fun), M=Movement (body), N=Network (relationships with the Boardroom group and others).`,
+          `  ALSO populate the "suggested_pillar" field with the pillar code the goal actually belongs on (B/R/A/V/E/M/N — never A2). The client renders a "Switch this map to [Pillar]" action button from that field. Only set suggested_pillar when the leak is unambiguous; leave it unset for anything else — and specifically leave it unset when the goal is internal-state language about business context (that's still Amplify). Pillar codes: B=Bond (marriage/partner), R=Raise (kids), A=Amplify (business/wealth), V=Vitality (mind/body fuel), E=Enjoyment (fun), M=Movement (body), N=Network (relationships with the Boardroom group and others).`,
       );
       // Explicit specificity guard for goals. Repeated failure mode:
       // the model approves role-identity goals ("being a husband",
