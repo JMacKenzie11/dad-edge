@@ -97,7 +97,6 @@ function EmptySlot({
   return (
     <li className="bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
       <div className="flex items-center gap-3">
-        <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
         <textarea
           ref={inputRef}
           rows={1}
@@ -109,6 +108,11 @@ function EmptySlot({
             else if (description.trim().length === 0) setExpanded(false);
           }}
           onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (canSave) save();
+              return;
+            }
             if (e.key === "Escape") {
               setExpanded(false);
               setDescription("");
@@ -117,6 +121,7 @@ function EmptySlot({
           placeholder="Behavior + how you'll know it's done."
           className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
         />
+        <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
       </div>
       {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
       {pending ? (
@@ -225,33 +230,28 @@ function FilledSlot({
     persistIfChanged(text, dayIndex);
   };
 
-  const dotColor = isDone
+  const qualityLabel = score
+    ? score.ready
+      ? "READY"
+      : score.total >= 6
+        ? "SHARPEN"
+        : "SOFT"
+    : scoring
+      ? "…"
+      : null;
+  const qualityColor = isDone
     ? "var(--color-text-muted)"
     : score
       ? score.ready
         ? "var(--color-primary)"
-        : "var(--color-warning)"
-      : scoring
-        ? "var(--color-text-muted)"
-        : "var(--color-border)";
+        : score.total >= 6
+          ? "var(--color-warning)"
+          : "var(--color-danger)"
+      : "var(--color-text-muted)";
 
   return (
     <li className="group bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
       <div className="flex items-center gap-3">
-        {readOnly || isDone ? (
-          <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] shrink-0">
-            {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
-          </span>
-        ) : (
-          <DayPicker
-            weekDates={weekDates}
-            value={dayIndex}
-            onChange={(idx) => {
-              setDayIndex(idx);
-              persistIfChanged(description, idx);
-            }}
-          />
-        )}
         <div className="flex-1 min-w-0">
           {readOnly || isDone ? (
             <p
@@ -274,6 +274,12 @@ function FilledSlot({
                 setExpanded(false);
                 persistIfChanged(description, dayIndex);
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
               className="w-full p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none"
             />
           )}
@@ -283,17 +289,37 @@ function FilledSlot({
             </p>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowFeedback((v) => !v)}
-          onMouseEnter={() => {
-            if (score) setShowFeedback(true);
-          }}
-          className="shrink-0 h-2.5 w-2.5 rounded-full"
-          style={{ background: dotColor }}
-          aria-label="Quality readout"
-          disabled={!score && !scoring}
-        />
+        {readOnly || isDone ? (
+          <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] shrink-0">
+            {format(new Date(`${targetDate}T00:00:00`), "EEE").toUpperCase()}
+          </span>
+        ) : (
+          <DayPicker
+            weekDates={weekDates}
+            value={dayIndex}
+            onChange={(idx) => {
+              setDayIndex(idx);
+              persistIfChanged(description, idx);
+            }}
+          />
+        )}
+        {qualityLabel ? (
+          <button
+            type="button"
+            onClick={() => setShowFeedback((v) => !v)}
+            onMouseEnter={() => {
+              if (score) setShowFeedback(true);
+            }}
+            className="shrink-0 h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
+            style={{ color: qualityColor, borderColor: qualityColor }}
+            aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
+            title="Coach's take on this mission. Doesn't block saving."
+            disabled={!score && !scoring}
+          >
+            {qualityLabel}
+            {score ? ` ${score.total}/10` : ""}
+          </button>
+        ) : null}
         {!readOnly && !isDone ? (
           <div className="shrink-0 flex items-center gap-1">
             <button
@@ -306,7 +332,7 @@ function FilledSlot({
               disabled={completePending}
               className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40"
             >
-              DONE
+              COMPLETE
             </button>
             <button
               type="button"
