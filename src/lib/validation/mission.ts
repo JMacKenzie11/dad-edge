@@ -5,9 +5,8 @@
  *
  * Rules:
  *  1. target_date is required and must be a real date (schema enforces).
- *  2. description must start with (or contain) an action verb.
- *  3. description must not match blocked vague-only patterns.
- *  4. description length ≥ 8 characters (DB backstop mirrors this).
+ *  2. description must not match blocked vague-only patterns.
+ *  3. description length ≥ 8 characters (DB backstop mirrors this).
  */
 
 const VAGUE_PATTERNS = [
@@ -23,25 +22,13 @@ const VAGUE_PATTERNS = [
   /^mindful\b/i,
 ];
 
-// Compact allowlist of concrete action verbs. Not exhaustive — the vague-pattern
-// blocklist does the primary work; the verb check catches nouny descriptions.
-const CONCRETE_VERBS = new Set([
-  "call","text","email","write","send","book","take","go","run","lift","train","cook","make",
-  "read","study","learn","teach","meet","host","invite","ask","tell","confess","apologize",
-  "walk","hike","swim","bike","ride","drive","visit","fix","clean","organize","plan","review",
-  "record","log","journal","meditate","pray","stretch","stop","start","quit","cut","reduce",
-  "date","sit","talk","hug","kiss","hold","listen","play","build","paint","garden","fast",
-  "post","publish","record","present","pitch","close","ship","launch",
-]);
-
 export type MissionValidationInput = {
   description: string;
   target_date: string; // YYYY-MM-DD
-  /** Bypass the CONCRETE_VERBS + vague-pattern checks for missions
-   *  authored by the ITC coach (created_by='itc'). ITC test behaviors
-   *  like "stay in the room during the next argument" don't fit the
-   *  verb list but are already validated by SMART on the ITC side.
-   *  The min-length + real-date checks still apply. */
+  /** Bypass the vague-pattern check for missions authored by the ITC
+   *  coach (created_by='itc'). ITC test behaviors like "stay in the
+   *  room during the next argument" are already validated by SMART on
+   *  the ITC side. The min-length + real-date checks still apply. */
   bypassConcreteness?: boolean;
 };
 
@@ -74,21 +61,6 @@ export function validateMissionConcreteness({
     if (pat.test(desc)) {
       return { ok: false, reason: "Too vague. Behavior plus day." };
     }
-  }
-
-  // First word should look like an action verb (or contain one within the first 3 words).
-  const firstWords = desc
-    .toLowerCase()
-    .replace(/[^a-z\s']/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3);
-  const hasConcreteVerb = firstWords.some((w) => CONCRETE_VERBS.has(w));
-  if (!hasConcreteVerb) {
-    return {
-      ok: false,
-      reason: "Start with a verb. What are you doing?",
-    };
   }
 
   return { ok: true };
