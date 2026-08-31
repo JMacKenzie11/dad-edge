@@ -42,6 +42,7 @@ function EmptySlot({
   slotIndex,
   communityId,
   goalId,
+  goalDescription,
   pillarCode,
   readOnly,
 }: SlotProps) {
@@ -50,11 +51,49 @@ function EmptySlot({
   const [dayIndex, setDayIndex] = useState<number>(defaultDayIndex(weekDates));
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [score, setScore] = useState<MissionScore | null>(null);
+  const [scoring, setScoring] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const scoreSeq = useRef(0);
+  const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (expanded) inputRef.current?.focus();
   }, [expanded]);
+
+  useEffect(() => {
+    if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    if (description.trim().length < 3) {
+      setScore(null);
+      setScoring(false);
+      return;
+    }
+    setScoring(true);
+    scoreTimer.current = setTimeout(async () => {
+      const seq = ++scoreSeq.current;
+      try {
+        const res = await fetch("/api/missions/quality", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            description,
+            pillar_code: pillarCode,
+            target_date: weekDates[dayIndex],
+            goal_description: goalDescription,
+          }),
+        });
+        if (seq !== scoreSeq.current) return;
+        if (!res.ok) setScore(null);
+        else setScore((await res.json()) as MissionScore);
+      } finally {
+        if (seq === scoreSeq.current) setScoring(false);
+      }
+    }, 800);
+    return () => {
+      if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    };
+  }, [description, dayIndex, weekDates, pillarCode, goalDescription]);
 
   if (readOnly) {
     return (
@@ -102,6 +141,23 @@ function EmptySlot({
 
   const canSave = description.trim().length >= 8;
 
+  const qualityLabel = score
+    ? score.ready
+      ? "READY"
+      : score.total >= 6
+        ? "SHARPEN"
+        : "SOFT"
+    : scoring
+      ? "…"
+      : null;
+  const qualityColor = score
+    ? score.ready
+      ? "var(--color-primary)"
+      : score.total >= 6
+        ? "var(--color-warning)"
+        : "var(--color-danger)"
+    : "var(--color-text-muted)";
+
   return (
     <li className="bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
       <div className="flex items-center gap-3">
@@ -132,7 +188,25 @@ function EmptySlot({
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
           <DayPicker weekDates={weekDates} value={dayIndex} onChange={setDayIndex} />
         </div>
-        <div className={`shrink-0 ${COL_COACH_WIDTH}`} aria-hidden="true" />
+        <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
+          {qualityLabel ? (
+            <button
+              type="button"
+              onClick={() => setShowFeedback((v) => !v)}
+              onMouseEnter={() => {
+                if (score) setShowFeedback(true);
+              }}
+              className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
+              style={{ color: qualityColor, borderColor: qualityColor }}
+              aria-label={`Coach quality: ${qualityLabel}${score ? ` ${score.total}/10` : ""}. Click for details.`}
+              title="Coach's take on this mission. Doesn't block saving."
+              disabled={!score && !scoring}
+            >
+              {qualityLabel}
+              {score ? ` ${score.total}/10` : ""}
+            </button>
+          ) : null}
+        </div>
         <div className={`shrink-0 ${COL_ACTIONS_WIDTH}`} aria-hidden="true" />
       </div>
       {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
@@ -140,6 +214,13 @@ function EmptySlot({
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           SAVING…
         </p>
+      ) : null}
+      {showFeedback && score ? (
+        <FeedbackPanel
+          score={score}
+          onApplyRewrite={(text) => setDescription(text)}
+          onDismiss={() => setShowFeedback(false)}
+        />
       ) : null}
     </li>
   );
