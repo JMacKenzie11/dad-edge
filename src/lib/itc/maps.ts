@@ -27,6 +27,12 @@ export type ItcCommitment = {
    *  specifically to sharpen. Null on legacy rows saved before this
    *  field existed (treat as "no specific feedback yet"). */
   rubric_reason: string | null;
+  /** Per-criterion boolean from scoreCommitmentDepth: does the vow
+   *  name the identity/outcome the paired worry fears? Persisted so
+   *  the criteria module can fire a mirror-broken finding without a
+   *  second LLM call. Null on legacy rows saved before this field
+   *  existed (treat as unknown — no finding). */
+  mirrors_worry_identity: boolean | null;
   attempts: number;
   created_at: string;
 };
@@ -795,16 +801,24 @@ export async function updateCommitmentDepth(
   commitmentId: string,
   score: number,
   reason?: string | null,
+  mirrorsWorryIdentity?: boolean | null,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateCommitmentDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
-  const patch: { depth_score: number; rubric_reason?: string | null } = {
+  const patch: {
+    depth_score: number;
+    rubric_reason?: string | null;
+    mirrors_worry_identity?: boolean | null;
+  } = {
     depth_score: score,
   };
   if (reason !== undefined) {
     patch.rubric_reason = reason?.trim() || null;
+  }
+  if (mirrorsWorryIdentity !== undefined) {
+    patch.mirrors_worry_identity = mirrorsWorryIdentity;
   }
   const { error } = await supabase
     .from("itc_commitments")

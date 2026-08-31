@@ -14,7 +14,7 @@
  *    deletes it.
  */
 
-import type { ItcCommitment } from "../maps";
+import type { ItcCommitment, ItcWorry } from "../maps";
 import { COMMITMENT_STEM, ensureCommitmentStem } from "../stage";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
@@ -71,6 +71,47 @@ export async function checkInteriorWitnessInCommitments(input: {
       actualText: commitment.text,
       detail:
         "Commitment is framed around avoiding a feeling or an interior reckoning. The sharper form names the identity being protected AND what the outside world would see the coachee take the hit on — 'never being the [specific role] who [observable action]' rather than 'never seeing / knowing / feeling / facing X'.",
+    });
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// commitment_doesnt_mirror_worry
+// ---------------------------------------------------------------------------
+
+/**
+ * Kegan/Lahey's introductory form (Vol 1 pp 26-27): the competing
+ * commitment is the paired worry mirrored into "I'm also committed to
+ * never <the identity/outcome the worry fears>". The rubric already
+ * scores this at save time via mirrors_worry_identity and persists the
+ * boolean. If the value is false, the commitment has drifted from its
+ * worry — the derivation chain is broken and everything downstream
+ * (assumption, test) inherits the drift. Fire critical.
+ *
+ * Skips when the boolean is null (legacy rows saved before the field
+ * existed — no verdict, so no finding).
+ */
+export async function checkCommitmentMirrorsWorry(input: {
+  commitments: ItcCommitment[];
+  worries: ItcWorry[];
+}): Promise<Finding[]> {
+  const worryById = new Map(input.worries.map((w) => [w.id, w]));
+  const findings: Finding[] = [];
+  for (const commitment of input.commitments) {
+    if (commitment.mirrors_worry_identity !== false) continue;
+    const worry = worryById.get(commitment.worry_id);
+    findings.push({
+      entryRef: { table: "commitments", id: commitment.id },
+      issueType: "commitment_doesnt_mirror_worry",
+      severity: "critical",
+      actualText: commitment.text,
+      detail:
+        "Commitment doesn't mirror the identity or outcome its paired worry fears. The competing commitment is supposed to be the worry rewritten as a first-person vow — same identity, wrapped in \"I'm also committed to never...\". This one has drifted to a different concern.",
+      suggestedFix:
+        "Rewrite the vow so it names the exact identity or outcome the paired worry names. If the worry fears \"being the guy who...\", the commitment vows \"never being the guy who...\" — same nouns, same specificity.",
+      relatedEntryRef: worry ? { table: "worries", id: worry.id } : undefined,
+      relatedText: worry?.text,
     });
   }
   return findings;

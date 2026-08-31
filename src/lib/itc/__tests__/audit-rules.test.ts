@@ -47,6 +47,7 @@ function makeCommitment(overrides: Partial<ItcCommitment>): ItcCommitment {
     text: "I'm also committed to never being the coach who watched someone fail.",
     depth_score: 3,
     rubric_reason: null,
+    mirrors_worry_identity: null,
     attempts: 1,
     created_at: new Date().toISOString(),
     ...overrides,

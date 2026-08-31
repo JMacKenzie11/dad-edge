@@ -257,6 +257,8 @@ const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = {
     'Rewrite as "never being the [specific role] who [specific action]" instead of "avoiding the feeling that…" — name the identity plus the observable action.',
   missing_commitment_stem:
     'Start with "I\'m also committed to" instead of "I am committed to" — the "also" flags this as the second commitment sitting next to your improvement goal.',
+  commitment_doesnt_mirror_worry:
+    "Rewrite so it names the exact identity or outcome the paired worry fears. Same nouns, same specificity, wrapped in \"I'm also committed to never...\" — the commitment is supposed to be the worry rewritten as a vow.",
   vague_assumption_then_clause:
     'Name the identity plainly in the "then" half — write out what that guy actually is, not "the guy I\'m terrified of".',
   assumption_uncovered_commitment:
@@ -268,13 +270,14 @@ const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = {
 const GENERIC_ORDER: Partial<Record<IssueType, number>> = {
   bundled_goal: 0,
   missing_commitment_stem: 1,
-  interior_witness_worry: 2,
-  interior_witness_commitment: 3,
-  vague_assumption_then_clause: 4,
-  depth_shortfall_worry: 5,
-  depth_shortfall_commitment: 6,
-  depth_shortfall_assumption: 7,
-  assumption_uncovered_commitment: 8,
+  commitment_doesnt_mirror_worry: 2,
+  interior_witness_worry: 3,
+  interior_witness_commitment: 4,
+  vague_assumption_then_clause: 5,
+  depth_shortfall_worry: 6,
+  depth_shortfall_commitment: 7,
+  depth_shortfall_assumption: 8,
+  assumption_uncovered_commitment: 9,
 };
 
 // ---------------------------------------------------------------------------
@@ -394,6 +397,7 @@ const _EXHAUSTIVENESS: readonly IssueType[] = [
   "interior_witness_worry",
   "interior_witness_commitment",
   "missing_commitment_stem",
+  "commitment_doesnt_mirror_worry",
   "vague_assumption_then_clause",
   "depth_shortfall_worry",
   "depth_shortfall_commitment",

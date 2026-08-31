@@ -14,6 +14,7 @@ export type IssueType =
   | "interior_witness_worry"
   | "interior_witness_commitment"
   | "missing_commitment_stem"
+  | "commitment_doesnt_mirror_worry"
   | "vague_assumption_then_clause"
   | "depth_shortfall_worry"
   | "depth_shortfall_commitment"

@@ -33,6 +33,7 @@ import {
 } from "./worries";
 import {
   checkCommitmentDepth,
+  checkCommitmentMirrorsWorry,
   checkInteriorWitnessInCommitments,
 } from "./commitments";
 import {
@@ -91,8 +92,11 @@ async function runCommitmentsCriteria(
 ): Promise<Finding[]> {
   const results = await Promise.all([
     checkCommitmentDepth({ commitments: input.commitments }),
+    checkCommitmentMirrorsWorry({
+      commitments: input.commitments,
+      worries: input.worries,
+    }),
     checkInteriorWitnessInCommitments({ commitments: input.commitments }),
-    // Task 3 will add commitment_doesnt_mirror_worry here.
   ]);
   return sortFindings(results.flat());
 }

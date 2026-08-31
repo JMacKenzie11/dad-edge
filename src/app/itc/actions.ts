@@ -847,8 +847,15 @@ export async function saveCommitment(
       commitmentText: row.text,
     });
     score = scored.score;
-    // Persist reason too — surfaced by the "Needs more depth" UI.
-    await updateCommitmentDepth(row.id, score, scored.reason);
+    // Persist reason + mirrors_worry_identity boolean. The reason is
+    // surfaced by the "Needs more depth" UI; the mirror bool feeds
+    // the shared criteria check (commitment_doesnt_mirror_worry).
+    await updateCommitmentDepth(
+      row.id,
+      score,
+      scored.reason,
+      scored.mirrors_worry_identity,
+    );
     events.record(
       "rubric_scored",
       {
