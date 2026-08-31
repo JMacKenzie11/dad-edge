@@ -209,9 +209,6 @@ function EmptySlot({
             <button
               type="button"
               onClick={() => setShowFeedback((v) => !v)}
-              onMouseEnter={() => {
-                if (score) setShowFeedback(true);
-              }}
               className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
               style={{ color: pillColor, borderColor: pillColor }}
               aria-label={`Coach quality score: ${pillText}. Click for details.`}
@@ -469,9 +466,6 @@ function FilledSlot({
               <button
                 type="button"
                 onClick={() => setShowFeedback((v) => !v)}
-                onMouseEnter={() => {
-                  if (score) setShowFeedback(true);
-                }}
                 className="h-6 px-2 rounded border text-[9px] font-heading tracking-widest disabled:opacity-40"
                 style={{ color: pillColor, borderColor: pillColor }}
                 aria-label={`Coach quality score: ${pillText}. Click for details.`}
