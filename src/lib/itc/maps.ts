@@ -35,6 +35,7 @@ export type ItcCommitment = {
   mirrors_worry_identity: boolean | null;
   attempts: number;
   created_at: string;
+  updated_at: string;
 };
 
 export type ItcAssumption = {
@@ -48,6 +49,7 @@ export type ItcAssumption = {
   attempts: number;
   selected_for_testing: boolean;
   created_at: string;
+  updated_at: string;
 };
 
 export type ItcAssumptionCommitment = {
@@ -117,6 +119,7 @@ export type ItcWorry = {
    *  explicitly accepts (Use this draft) or types their own. */
   coach_commitment_draft: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type ItcMessageSurface =

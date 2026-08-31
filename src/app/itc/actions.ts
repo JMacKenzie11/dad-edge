@@ -1557,6 +1557,127 @@ const regenerateDraftsSchema = z.object({
   map_id: z.string().uuid(),
 });
 
+const redriveCommitmentSchema = z.object({
+  map_id: z.string().uuid(),
+  commitment_id: z.string().uuid(),
+});
+
+const redriveAssumptionSchema = z.object({
+  map_id: z.string().uuid(),
+  assumption_id: z.string().uuid(),
+});
+
+/**
+ * When a coachee edits a worry after the paired commitment already
+ * exists, the commitment sits on stale reasoning. This action wipes
+ * the existing commitment text (via draft) so the coachee can accept
+ * a fresh coach draft mirroring the current worry — same shape as the
+ * commit-drafter path used on advance into Column 4.
+ */
+export async function redriveCommitmentFromWorry(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = redriveCommitmentSchema.safeParse({
+    map_id: formData.get("map_id"),
+    commitment_id: formData.get("commitment_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    const [map, commitments, worries, behaviors] = await Promise.all([
+      getMapById(loaded.map.id),
+      listCommitments(loaded.map.id),
+      listWorries(loaded.map.id),
+      listBehaviors(loaded.map.id),
+    ]);
+    if (!map) return { ok: false, reason: "Map not found." };
+    const commitment = commitments.find((c) => c.id === parsed.data.commitment_id);
+    if (!commitment) return { ok: false, reason: "Commitment not found." };
+    const worry = worries.find((w) => w.id === commitment.worry_id);
+    if (!worry) return { ok: false, reason: "Paired worry not found." };
+    const behavior = behaviors.find((b) => b.id === worry.behavior_id);
+    if (!behavior) return { ok: false, reason: "Paired behavior not found." };
+    const draft = await draftCommitmentForWorry({
+      goalText: map.improvement_goal ?? "",
+      behaviorText: behavior.text,
+      worryText: worry.text,
+    });
+    if (!draft) return { ok: false, reason: "Could not draft a fresh commitment." };
+    await setWorryCommitmentDraft(worry.id, draft);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not re-derive.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+/**
+ * When a coachee edits a commitment after linked assumptions already
+ * exist, those assumptions sit on stale reasoning. This action wipes
+ * the current assumption drafts (if any) and re-runs the cluster-first
+ * assumption drafter against the current commitments, so the coachee
+ * sees fresh coach proposals covering the changed commitment.
+ *
+ * The touched assumption itself is left alone — the coachee decides
+ * whether to swap it out.
+ */
+export async function redriveAssumptionFromCommitment(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = redriveAssumptionSchema.safeParse({
+    map_id: formData.get("map_id"),
+    assumption_id: formData.get("assumption_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  try {
+    await clearAssumptionDraftsForMap(loaded.map.id);
+    const [map, commitments, worries] = await Promise.all([
+      getMapById(loaded.map.id),
+      listCommitments(loaded.map.id),
+      listWorries(loaded.map.id),
+    ]);
+    if (!map) return { ok: false, reason: "Map not found." };
+    if (commitments.length === 0) {
+      return { ok: false, reason: "No commitments to draft from." };
+    }
+    const worryById = new Map(worries.map((w) => [w.id, w]));
+    const orderedCommitments = commitments.map((c) => ({
+      id: c.id,
+      text: c.text,
+      worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
+    }));
+    const drafts = await draftAssumptionsFromCommitments({
+      goalText: map.improvement_goal ?? "",
+      commitments: orderedCommitments.map((c) => ({
+        text: c.text,
+        worry_text: c.worry_text,
+      })),
+    });
+    if (drafts.length > 0) {
+      const toPersist = drafts.map((d) => ({
+        text: d.text,
+        commitment_ids: d.commitment_indices
+          .map((n) => orderedCommitments[n - 1]?.id)
+          .filter((v): v is string => Boolean(v)),
+      }));
+      await saveAssumptionDrafts(loaded.map.id, toPersist);
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not re-derive.",
+    };
+  }
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
 /**
  * Client-triggered regenerate for the coach's Column 4 commitment
  * drafts. Wipes every draft on worries that don't have a real

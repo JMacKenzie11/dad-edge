@@ -8,7 +8,7 @@ import type {
   ItcWorry,
 } from "@/lib/itc/maps";
 import { worryPassesDepth } from "@/lib/itc/rules";
-import { saveCommitment } from "../actions";
+import { redriveCommitmentFromWorry, saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { InlineSpinner, SavingIndicator } from "./form-field";
@@ -211,6 +211,11 @@ function CommitmentItem({
     commitment !== null &&
     !worryPassesDepth(commitment.depth_score, commitment.attempts);
 
+  const worryMovedAfterCommitment =
+    commitment !== null &&
+    new Date(worry.updated_at).getTime() >
+      new Date(commitment.updated_at).getTime() + 1_000;
+
   return (
     <li
       className={
@@ -265,6 +270,13 @@ function CommitmentItem({
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>
         </div>
+        {worryMovedAfterCommitment && commitment ? (
+          <StaleUpstreamBanner
+            mapId={mapId}
+            commitmentId={commitment.id}
+            upstreamLabel="worry"
+          />
+        ) : null}
         {!commitment && worry.coach_commitment_draft ? (
           <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
             <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
@@ -329,5 +341,47 @@ function CommitmentItem({
         </p>
       ) : null}
     </li>
+  );
+}
+
+function StaleUpstreamBanner({
+  mapId,
+  commitmentId,
+  upstreamLabel,
+}: {
+  mapId: string;
+  commitmentId: string;
+  upstreamLabel: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[color:var(--color-warning)]">
+          The {upstreamLabel} changed since you wrote this. Re-derive?
+        </span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            const fd = new FormData();
+            fd.set("map_id", mapId);
+            fd.set("commitment_id", commitmentId);
+            startTransition(async () => {
+              const res = await redriveCommitmentFromWorry(fd);
+              if (!res.ok) setError(res.reason ?? "Could not re-derive.");
+            });
+          }}
+          className="shrink-0 rounded-md border border-[color:var(--color-warning)]/60 px-2 py-1 text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
+        >
+          {pending ? "…" : "RE-DERIVE"}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-1 text-[color:var(--color-danger)]">{error}</p>
+      ) : null}
+    </div>
   );
 }

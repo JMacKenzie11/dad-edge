@@ -29,6 +29,7 @@ function makeWorry(overrides: Partial<ItcWorry>): ItcWorry {
     attempts: 1,
     coach_commitment_draft: null,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -44,6 +45,7 @@ function makeCommitment(overrides: Partial<ItcCommitment>): ItcCommitment {
     mirrors_worry_identity: null,
     attempts: 1,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -59,6 +61,7 @@ function makeAssumption(overrides: Partial<ItcAssumption>): ItcAssumption {
     attempts: 1,
     selected_for_testing: false,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   };
 }
