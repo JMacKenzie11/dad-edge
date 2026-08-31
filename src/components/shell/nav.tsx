@@ -25,10 +25,12 @@ const items = [
  * bottom of this group since it's peer-driven, not planning.
  */
 const todayItem = { href: "/today", label: "Today", icon: "▣" } as const;
+const missionsItem = { href: "/missions", label: "Missions", icon: "◆" } as const;
 const dashboardItem = { href: "/dashboard", label: "My Braveman", icon: "▤" } as const;
 const goalsItem = { href: "/goals", label: "Goals", icon: "◎" } as const;
 const communityItem = { href: "/community", label: "Community", icon: "◈" } as const;
 const coachItem = { href: "/coach", label: "Coach Larry", icon: "◐" } as const;
+const meItem = { href: "/me", label: "Me", icon: "●" } as const;
 const messagesItem = { href: "/messages", label: "Messages", icon: "✉" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
@@ -64,20 +66,22 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
   const pathname = usePathname();
-  // Desktop order: Today (first — daily entry point) → My Braveman →
-  // Community → Coach Larry → Goals → remaining daily items
-  // (Missions, Me) → Messages → Admin (if platform admin). Today
-  // moved to top per product decision 2026-08-25 — it's the first
-  // surface most men land on, no reason to make them scan for it.
-  const remainingDaily = items.filter(
-    (it) =>
-      it.href !== "/community" &&
-      it.href !== "/coach" &&
-      it.href !== "/today",
-  );
-  const navItems = isPlatformAdmin
-    ? [todayItem, dashboardItem, communityItem, coachItem, goalsItem, ...remainingDaily, messagesItem, adminItem]
-    : [todayItem, dashboardItem, communityItem, coachItem, goalsItem, ...remainingDaily, messagesItem];
+  // Desktop order: Today → Missions → My Braveman → Community →
+  // Coach Larry → Goals → Me → Messages → Admin (if platform admin).
+  // Missions sits directly under Today because logging today's pillars
+  // and hitting missions for the week are the two most-frequent
+  // daily jobs; keeping them adjacent shortens the scan.
+  const base = [
+    todayItem,
+    missionsItem,
+    dashboardItem,
+    communityItem,
+    coachItem,
+    goalsItem,
+    meItem,
+    messagesItem,
+  ];
+  const navItems = isPlatformAdmin ? [...base, adminItem] : base;
   return (
     <nav className="hidden md:flex flex-col gap-1 p-4">
       {navItems.map((it) => {
