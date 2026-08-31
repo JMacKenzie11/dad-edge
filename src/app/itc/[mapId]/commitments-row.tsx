@@ -251,7 +251,7 @@ function CommitmentItem({
             </span>
           ) : null}
         </div>
-        {needsMoreDepth && commitment?.rubric_reason ? (
+        {commitment?.rubric_reason ? (
           // Boxed coach-message treatment mirroring EntryThread —
           // danger tint (red) so "you need to change this" reads
           // unambiguously. Populated by scoreCommitmentDepth on every

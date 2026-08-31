@@ -35,6 +35,12 @@ import {
   type ColumnName,
 } from "@/lib/itc/criteria/orchestrator";
 import { renderFindings } from "@/lib/itc/criteria/render";
+import {
+  composeAssumptionSharpen,
+  composeBehaviorSharpen,
+  composeCommitmentSharpen,
+  composeWorrySharpen,
+} from "@/lib/itc/criteria/row-sharpen";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   addAssumption,
@@ -374,7 +380,11 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
       behaviorText: parsed.data.text.trim(),
     });
     score = scored.score;
-    await updateBehaviorDepth(behaviorId, score, scored.reason);
+    const sharpen = composeBehaviorSharpen({
+      depthScore: score,
+      depthReason: scored.reason,
+    });
+    await updateBehaviorDepth(behaviorId, score, sharpen);
     events.record(
       "rubric_scored",
       {
@@ -460,7 +470,11 @@ export async function updateBehavior(
       behaviorText: updated.text,
     });
     score = scored.score;
-    await updateBehaviorDepth(updated.id, score, scored.reason);
+    const sharpen = composeBehaviorSharpen({
+      depthScore: score,
+      depthReason: scored.reason,
+    });
+    await updateBehaviorDepth(updated.id, score, sharpen);
     events.record(
       "rubric_scored",
       {
@@ -613,11 +627,16 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
       worryText: row.text,
     });
     score = scored.score;
-    // Persist reason too — surfaced by the "Needs more depth" UI so
-    // the coachee sees WHAT to sharpen instead of just that something
-    // is off. Only shown on shallow rows; passing rows get null from
-    // the UI's perspective (badge doesn't render).
-    await updateWorryDepth(row.id, score, scored.reason);
+    // Combine depth-rubric reason with row-level criteria (interior-
+    // witness regex) into one sharpen text. Persisted so the inline
+    // "One thing to sharpen" box matches what the hone waterfall
+    // would flag for the same worry.
+    const sharpen = await composeWorrySharpen({
+      worry: { ...row, depth_score: score },
+      behaviors: [behavior],
+      depthReason: scored.reason,
+    });
+    await updateWorryDepth(row.id, score, sharpen);
     events.record(
       "rubric_scored",
       {
@@ -736,13 +755,25 @@ export async function saveCommitment(
       commitmentText: row.text,
     });
     score = scored.score;
-    // Persist reason + mirrors_worry_identity boolean. The reason is
-    // surfaced by the "Needs more depth" UI; the mirror bool feeds
-    // the shared criteria check (commitment_doesnt_mirror_worry).
+    // Combine depth-rubric reason with row-level criteria (interior-
+    // witness regex + mirror-worry from the just-scored rubric bool)
+    // into one sharpen text. mirrors_worry_identity persists first so
+    // composeCommitmentSharpen can read the fresh value via
+    // checkCommitmentMirrorsWorry.
+    const rowWithFreshMirror = {
+      ...row,
+      depth_score: score,
+      mirrors_worry_identity: scored.mirrors_worry_identity,
+    };
+    const sharpen = await composeCommitmentSharpen({
+      commitment: rowWithFreshMirror,
+      worry,
+      depthReason: scored.reason,
+    });
     await updateCommitmentDepth(
       row.id,
       score,
-      scored.reason,
+      sharpen,
       scored.mirrors_worry_identity,
     );
     events.record(
@@ -900,8 +931,13 @@ export async function saveAssumption(
       assumptionText: row.text,
     });
     score = scored.score;
-    // Persist reason too — surfaced by the "Needs more depth" UI.
-    await updateAssumptionDepth(row.id, score, scored.reason);
+    // Combine depth-rubric reason with row-level criteria (vague-then
+    // regex) into one sharpen text.
+    const sharpen = await composeAssumptionSharpen({
+      assumption: { ...row, depth_score: score },
+      depthReason: scored.reason,
+    });
+    await updateAssumptionDepth(row.id, score, sharpen);
     events.record(
       "rubric_scored",
       {

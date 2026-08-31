@@ -395,7 +395,7 @@ function BehaviorItem({
           />
         </div>
       ) : null}
-      {needsMoreDepth && behavior.rubric_reason ? (
+      {behavior.rubric_reason ? (
         // Boxed coach-message treatment mirroring worries/commitments/
         // assumptions — danger tint so "you need to change this"
         // reads unambiguously, not the softer warning amber.

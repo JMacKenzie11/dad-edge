@@ -551,7 +551,7 @@ function AssumptionItem({
               upstreamLabel="commitment"
             />
           ) : null}
-          {needsMoreDepth && assumption.rubric_reason ? (
+          {assumption.rubric_reason ? (
             // Boxed coach-message treatment mirroring EntryThread —
             // danger tint (red) so "you need to change this" reads
             // unambiguously. Sits inside the flex-1 content column so

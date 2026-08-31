@@ -231,7 +231,7 @@ function WorryItem({
             </span>
           ) : null}
         </div>
-        {needsMoreDepth && worry?.rubric_reason ? (
+        {worry?.rubric_reason ? (
           // Boxed coach-message treatment mirroring EntryThread —
           // danger tint (red) so "you need to change this" reads
           // unambiguously, not the softer warning amber.
