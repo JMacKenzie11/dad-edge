@@ -230,7 +230,6 @@ function EmptySlot({
       {showFeedback && score ? (
         <FeedbackPanel
           score={score}
-          onApplyRewrite={(text) => setDescription(text)}
           onDismiss={() => setShowFeedback(false)}
         />
       ) : null}
@@ -364,11 +363,6 @@ function FilledSlot({
         if (patch.target_dates) initialDaysRef.current = nextDayIndexes;
       }
     });
-  };
-
-  const applyRewrite = (text: string) => {
-    setDescription(text);
-    persistIfChanged(text, dayIndexes);
   };
 
   // Score displayed in the pill. For active missions, use the live
@@ -523,7 +517,6 @@ function FilledSlot({
       {showFeedback && score ? (
         <FeedbackPanel
           score={score}
-          onApplyRewrite={applyRewrite}
           onDismiss={() => setShowFeedback(false)}
         />
       ) : null}
@@ -596,11 +589,9 @@ function DayPicker({
 
 function FeedbackPanel({
   score,
-  onApplyRewrite,
   onDismiss,
 }: {
   score: MissionScore;
-  onApplyRewrite: (text: string) => void;
   onDismiss: () => void;
 }) {
   const color = score.ready
@@ -626,21 +617,6 @@ function FeedbackPanel({
         </button>
       </div>
       <p className="text-[color:var(--color-text-muted)]">{score.feedback}</p>
-      {score.rewrite ? (
-        <div className="mt-1.5 flex items-start gap-2">
-          <p className="flex-1">
-            <span className="text-[color:var(--color-text-muted)]">Try: </span>
-            {score.rewrite}
-          </p>
-          <button
-            type="button"
-            onClick={() => onApplyRewrite(score.rewrite!)}
-            className="shrink-0 text-[10px] font-heading tracking-widest text-[color:var(--color-primary)] hover:underline"
-          >
-            USE
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
