@@ -11,6 +11,11 @@ export type ItcMap = {
   improvement_goal: string | null;
   reveal_delivered: boolean;
   walkthrough_delivered: boolean;
+  /** True when the delivered walkthrough is quoting a map version the
+   *  coachee has since edited (goal / behaviors / worries / commitments
+   *  / assumptions / links). DB triggers flip this on any child-row
+   *  change while walkthrough_delivered=true. Cleared on regenerate. */
+  walkthrough_stale: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -1414,7 +1419,7 @@ export async function markWalkthroughDelivered(mapId: string): Promise<void> {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("itc_maps")
-    .update({ walkthrough_delivered: true })
+    .update({ walkthrough_delivered: true, walkthrough_stale: false })
     .eq("id", mapId);
   if (error) throw new Error(`markWalkthroughDelivered: ${error.message}`);
 }

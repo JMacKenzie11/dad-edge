@@ -462,6 +462,11 @@ export function MapCanvas({
             }
             stageNotes={immuneSystemNotes}
           >
+            {immuneSystemNotes.length > 0 && map.walkthrough_stale ? (
+              <div className="mt-3 rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-xs text-[color:var(--color-warning)]">
+                The map has moved. Regenerate to refresh the walkthrough.
+              </div>
+            ) : null}
             {immuneSystemNotes.length > 0 ? (
               <RegenerateWalkthroughButton mapId={map.id} />
             ) : null}
