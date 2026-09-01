@@ -14,7 +14,12 @@
  *
  *  Checkpoint 2 (p 18), honing: "a testable assumption is one where
  *  the 'if' condition has degrees or shades to it so we can enact it
- *  safely" → assumption_not_enactable
+ *  safely" → assumption_not_enactable. At hone this is a MAP-level
+ *  question (p 4: "are there testable assumptions, or do they all have
+ *  such dire outcomes that there would be no safe way to test them?").
+ *  A root assumption that's untestable as written is normal and
+ *  powerful (p 21); it only becomes a problem when nothing on the
+ *  column can be tested, or when he picks it to test (prioritize).
  *
  *  Plus one map-shape check: assumption_uncovered_commitment, a
  *  commitment with no assumption under it. Moderate, not critical:
@@ -399,4 +404,113 @@ export async function checkAssumptionEnactable(input: {
     }),
   );
   return findings;
+}
+
+/**
+ * Hone-time enactability, at the level the guide asks it (Vol 1 p 4):
+ * is there at least one assumption whose "if" he could go do? If yes,
+ * nothing fires; the broad roots stay untouched. If none, every
+ * assumption gets the finding, because every one would need the same
+ * conversion before a test could be designed. Judge errors count as
+ * enactable (fail open), so a transient model failure can never make
+ * a clean column look untestable.
+ */
+export async function checkAssumptionsHaveAnEnactableIf(input: {
+  assumptions: ItcAssumption[];
+  behaviors: ItcBehavior[];
+}): Promise<Finding[]> {
+  if (input.assumptions.length === 0) return [];
+  const behaviors = input.behaviors
+    .filter((b) => b.selected)
+    .map((b, i) => ({ index: i + 1, text: b.text }));
+  const verdicts = await Promise.all(
+    input.assumptions.map(async (assumption) => {
+      try {
+        const v = await judgeAssumptionEnactable({
+          assumptionText: assumption.text,
+          behaviors,
+        });
+        return v.enactable;
+      } catch (err) {
+        console.warn(
+          "[itc criteria] checkAssumptionsHaveAnEnactableIf failed (assumption=%s): %s",
+          assumption.id,
+          err instanceof Error ? err.message : String(err),
+        );
+        return true;
+      }
+    }),
+  );
+  if (verdicts.some(Boolean)) return [];
+  return input.assumptions.map((assumption) => ({
+    entryRef: { table: "assumptions", id: assumption.id },
+    issueType: "assumption_not_enactable",
+    severity: "moderate",
+    actualText: assumption.text,
+    detail: ADVICE.assumption_not_enactable,
+    suggestedFix: assumption.suggested_fix ?? undefined,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Identity carried from the commitments — drafter verification bar
+// ---------------------------------------------------------------------------
+
+/**
+ * Role nouns from the commitments an assumption holds up. Commitments
+ * are canonical "I'm also committed to never being the [role] who …"
+ * (ensureCommitmentStem + the drafter's mirror form), so the role is
+ * mechanically extractable. Self-label commitments ("never being a
+ * fraud") contribute the label. Returns lowercase, de-duplicated.
+ */
+export function extractIdentityNouns(commitmentTexts: string[]): string[] {
+  const out = new Set<string>();
+  for (const text of commitmentTexts) {
+    for (const m of text.matchAll(/\b(?:the|a|an)\s+([a-z][a-z\-\/']*?)\s+(?:who|that|whose)\b/gi)) {
+      const noun = m[1].toLowerCase();
+      if (noun.length >= 3) out.add(noun);
+    }
+    for (const m of text.matchAll(/\b(fraud|fake|phony|failure|coward|imposter|impostor)\b/gi)) {
+      out.add(m[1].toLowerCase());
+    }
+  }
+  return [...out];
+}
+
+export type IdentityKeptResult = {
+  kept: boolean;
+  /** Nouns the draft had to carry. Empty when nothing was extractable,
+   *  in which case kept=true (fail open: no bar, no rejection). */
+  expected: string[];
+  reason: string;
+};
+
+/**
+ * Deterministic check that a drafted or rewritten assumption names
+ * the identity its commitments vow against, in the coachee's own
+ * nouns. Kegan/Lahey Vol 1 p 27: the wording has to "keep the yuk in
+ * it from the fear box." The drift this catches: a rewrite of the
+ * root that ends on "the man who's been faking it" when every linked
+ * commitment says "the coach who…" / "the father who…". Zero LLM
+ * cost. Companion to checkAssumptionLogicalConsistency in rubric.ts
+ * and the same bar for the fresh drafter and rewrite mode.
+ */
+export function checkAssumptionKeepsCommitmentIdentity(input: {
+  assumptionText: string;
+  commitmentTexts: string[];
+}): IdentityKeptResult {
+  const expected = extractIdentityNouns(input.commitmentTexts);
+  if (expected.length === 0) {
+    return { kept: true, expected, reason: "no identity noun to carry" };
+  }
+  const hay = input.assumptionText.toLowerCase();
+  const hit = expected.find((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\b`).test(hay));
+  if (hit) {
+    return { kept: true, expected, reason: `carries "${hit}"` };
+  }
+  return {
+    kept: false,
+    expected,
+    reason: `The "then" doesn't name the identity his commitments vow against. Use his own noun: ${expected.map((n) => `"the ${n} who…"`).join(" / ")}.`,
+  };
 }

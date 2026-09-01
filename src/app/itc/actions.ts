@@ -39,6 +39,7 @@ import {
   attachFixes,
   coachTextForAssumption,
   coachTextForCommitment,
+  coachTextForSelectedAssumption,
   coachTextForWorry,
 } from "@/lib/itc/fixes";
 import { isItcAdmin } from "@/lib/itc/admin";
@@ -2479,6 +2480,7 @@ export async function deliverPrioritizeRecommendationAfterAdvance(
   const picked = assumptions[recommendation.pickedIndex - 1];
   if (picked) {
     await setAssumptionSelected(picked.id, mapId);
+    await coachSelectedAssumption(mapId, picked.id);
   }
   events.record(
     "coach_reaction_sent",
@@ -2537,6 +2539,44 @@ const selectAssumptionSchema = z.object({
   map_id: z.string().uuid(),
   assumption_id: z.string().uuid(),
 });
+/**
+ * The assumption picked for testing gets the higher bar (Vol 1 p 18):
+ * its "if" has to be a move he can make. Runs the enactable judge on
+ * that one row and writes a rewrite onto it when needed. Best-effort:
+ * selection never fails because coaching did.
+ */
+async function coachSelectedAssumption(
+  mapId: string,
+  assumptionId: string,
+): Promise<void> {
+  const [map, assumptions, commitments, worries, behaviors, links] =
+    await Promise.all([
+      getMapById(mapId),
+      listAssumptions(mapId),
+      listCommitments(mapId),
+      listWorries(mapId),
+      listBehaviors(mapId),
+      listAssumptionLinks(mapId),
+    ]);
+  const assumption = assumptions.find((a) => a.id === assumptionId);
+  if (!map || !assumption) return;
+  const worryTextById = new Map(worries.map((w) => [w.id, w.text]));
+  const linkedCommitments = links
+    .filter((l) => l.assumption_id === assumptionId)
+    .map((l) => commitments.find((c) => c.id === l.commitment_id))
+    .filter((c): c is NonNullable<typeof c> => Boolean(c))
+    .map((c) => ({
+      text: c.text,
+      worry_text: worryTextById.get(c.worry_id) ?? "",
+    }));
+  await coachTextForSelectedAssumption({
+    goalText: map.improvement_goal ?? "",
+    assumption,
+    linkedCommitments,
+    behaviors: behaviors.filter((b) => b.selected),
+  });
+}
+
 export async function selectAssumptionForTesting(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -2555,6 +2595,7 @@ export async function selectAssumptionForTesting(
       reason: err instanceof Error ? err.message : "Could not select.",
     };
   }
+  await coachSelectedAssumption(loaded.map.id, parsed.data.assumption_id);
   const events = new TurnEventLog(loaded.map.id, 0);
   events.record(
     "entry_edited",

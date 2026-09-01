@@ -33,7 +33,13 @@ import {
   checkCommitmentMirrorsWorry,
   checkInteriorWitnessInCommitments,
 } from "../commitments";
-import { checkAssumptionCoverage, checkAssumptionDepth, checkVagueAssumptionThenClause } from "../assumptions";
+import {
+  checkAssumptionCoverage,
+  checkAssumptionDepth,
+  checkAssumptionKeepsCommitmentIdentity,
+  checkVagueAssumptionThenClause,
+  extractIdentityNouns,
+} from "../assumptions";
 import { checkInteriorWitnessInWorries, checkWorryDepth } from "../worries";
 import { checkBundledGoal } from "../goal";
 import { runHoneWaterfall } from "../orchestrator";
@@ -560,5 +566,70 @@ describe("runHoneWaterfall", () => {
     // where the fix lands), even though the waterfall column is
     // "assumptions".
     expect(findings[0].entryRef).toEqual({ table: "commitments", id: "c-1" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAssumptionKeepsCommitmentIdentity — drafter bar, deterministic
+// ---------------------------------------------------------------------------
+
+describe("extractIdentityNouns", () => {
+  it("pulls the role noun out of canonical 'the [role] who' commitments and self-labels", () => {
+    expect(
+      extractIdentityNouns([
+        "I'm also committed to never being the coach who talked a great game but couldn't help them transform.",
+        "I'm also committed to never being the father who was passive when my family needed me to provide.",
+        "I'm also committed to never being a fraud.",
+        "I'm also committed to never being the guy who claims to be a leader but isn't the real thing.",
+      ]),
+    ).toEqual(["coach", "father", "fraud", "guy"]);
+  });
+
+  it("returns nothing for commitments with no extractable identity", () => {
+    expect(extractIdentityNouns(["I'm also committed to never losing."])).toEqual([]);
+  });
+});
+
+describe("checkAssumptionKeepsCommitmentIdentity", () => {
+  const commitments = [
+    "I'm also committed to never being the coach who talked a great game but couldn't help them transform.",
+    "I'm also committed to never being the father who was passive when my family needed me to provide.",
+  ];
+
+  it("passes when the 'then' carries one of the commitments' role nouns", () => {
+    const r = checkAssumptionKeepsCommitmentIdentity({
+      assumptionText:
+        "I assume that if I let the work speak instead of chasing prospects, then the money doesn't come and I'd be the father who's been passive when they needed me.",
+      commitmentTexts: commitments,
+    });
+    expect(r.kept).toBe(true);
+  });
+
+  it("refuses a rewrite that swaps his nouns for a generic one (the A4 drift)", () => {
+    const r = checkAssumptionKeepsCommitmentIdentity({
+      assumptionText:
+        "I assume that if I send the message without perfecting it, then it wouldn't go over and I'd be the man who's been faking it.",
+      commitmentTexts: commitments,
+    });
+    expect(r.kept).toBe(false);
+    expect(r.expected).toEqual(["coach", "father"]);
+    expect(r.reason).toMatch(/"the coach who…" \/ "the father who…"/);
+  });
+
+  it("fails open when the commitments carry no extractable identity", () => {
+    const r = checkAssumptionKeepsCommitmentIdentity({
+      assumptionText: "I assume that if I stay, then I'd be the man who lost.",
+      commitmentTexts: ["I'm also committed to never losing."],
+    });
+    expect(r.kept).toBe(true);
+    expect(r.expected).toEqual([]);
+  });
+
+  it("matches whole words only (no 'coach' inside 'coaching' credit… and vice versa)", () => {
+    const r = checkAssumptionKeepsCommitmentIdentity({
+      assumptionText: "I assume that if I stop coaching, then I'd be the man who quit.",
+      commitmentTexts: ["I'm also committed to never being the coach who quit."],
+    });
+    expect(r.kept).toBe(false);
   });
 });

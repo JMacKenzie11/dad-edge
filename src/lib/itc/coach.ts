@@ -52,6 +52,7 @@ import {
 } from "./rubric";
 import { ADVICE } from "./criteria/advice";
 import {
+  checkAssumptionKeepsCommitmentIdentity,
   checkVagueAssumptionThenClause,
   judgeAssumptionEnactable,
   judgeAssumptionUnderwrites,
@@ -1955,13 +1956,31 @@ export async function draftAssumptionsFromCommitments(input: {
     // Verify each draft's logical consistency (deterministic pattern
     // match, cannot fail). Each drafted assumption gets its own
     // verdict; the batch retry (if any) knows which ones failed.
-    const checks = first.map((d) =>
-      checkAssumptionLogicalConsistency({
+    // Two deterministic checks per draft, same bar as rewrite mode:
+    // the identity is REVEALED by the counter-move (consistency), and
+    // it's named in the coachee's own commitment nouns (identity kept).
+    const checks = first.map((d) => {
+      const consistency = checkAssumptionLogicalConsistency({
         antecedentAct: d.slots.antecedent_act,
         consequentTell: d.slots.consequent_tell,
         consequentIdentity: d.slots.consequent_identity,
-      }),
-    );
+      });
+      const identity = checkAssumptionKeepsCommitmentIdentity({
+        assumptionText: d.text,
+        commitmentTexts: d.commitment_indices
+          .map((i) => input.commitments[i - 1]?.text ?? "")
+          .filter((t) => t.length > 0),
+      });
+      return {
+        consistent: consistency.consistent && identity.kept,
+        reason: [
+          consistency.consistent ? null : consistency.reason,
+          identity.kept ? null : identity.reason,
+        ]
+          .filter((r): r is string => Boolean(r))
+          .join(" "),
+      };
+    });
 
     const inverted = first
       .map((d, i) => ({ d, check: checks[i], index: i + 1 }))
@@ -1979,15 +1998,15 @@ export async function draftAssumptionsFromCommitments(input: {
     const feedbackBlock = inverted
       .map(
         (x) =>
-          `  - Draft #${x.index} was: "${x.d.text}". The logical-consistency check rejected it: "${x.check.reason}"`,
+          `  - Draft #${x.index} was: "${x.d.text}". Rejected: "${x.check.reason}"`,
       )
       .join("\n");
     const retry = await generateBatch([
       ``,
-      `Your previous batch had ${inverted.length} draft(s) that failed the logical-consistency check:`,
+      `Your previous batch had ${inverted.length} draft(s) that failed verification:`,
       feedbackBlock,
       ``,
-      `For each failed draft, the identity slot restated the CURRENT protective behavior's identity instead of describing what the antecedent_act would REVEAL. Rewrite the whole batch so every draft passes. Antecedent must be the counter-move; consequent must describe what DOING that counter-move would expose.`,
+      `Rewrite the whole batch so every draft passes. Antecedent must be the counter-move; consequent must describe what DOING that counter-move would expose, and it must name the identity in the coachee's own commitment words (the same role noun his commitment uses).`,
     ]).catch((err) => {
       console.warn(
         "[itc coach] assumption batch retry failed, returning first batch: %s",
@@ -2190,9 +2209,11 @@ export async function reviseAssumption(input: {
     };
   }
 
+  const linkedTexts = input.linkedCommitments.map((c) => c.text);
+
   async function verify(draft: Draft): Promise<{ ok: boolean; feedback: string[] }> {
     const feedback: string[] = [];
-    const [depth, vague, enactable] = await Promise.all([
+    const [depth, vague, enactable, underwrite] = await Promise.all([
       scoreAssumptionDepth({
         goalText: input.goalText,
         assumptionText: draft.text,
@@ -2233,6 +2254,22 @@ export async function reviseAssumption(input: {
             return null;
           })
         : Promise.resolve(null),
+      // The rewrite has to keep holding up the SAME commitments the
+      // original does. Same judge the hone audit runs, so a rewrite
+      // that drifts into another commitment's room is refused here
+      // instead of flagged later.
+      linkedTexts.length > 0
+        ? judgeAssumptionUnderwrites({
+            assumptionText: draft.text,
+            commitments: linkedTexts.map((text, i) => ({ index: i + 1, text })),
+          }).catch((err) => {
+            console.warn(
+              "[itc coach] underwrite judge failed on rewrite, treating as pass: %s",
+              err instanceof Error ? err.message : String(err),
+            );
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
     if (depth && depth.score < 3) {
       feedback.push(
@@ -2247,9 +2284,21 @@ export async function reviseAssumption(input: {
     if (!consistency.consistent) {
       feedback.push(`The logical-consistency check rejected it: "${consistency.reason}"`);
     }
+    const identity = checkAssumptionKeepsCommitmentIdentity({
+      assumptionText: draft.text,
+      commitmentTexts: linkedTexts,
+    });
+    if (!identity.kept) feedback.push(identity.reason);
     if (vague.length > 0) feedback.push(ADVICE.vague_assumption_then_clause);
     if (enactable && !enactable.enactable) {
       feedback.push(`${ADVICE.assumption_not_enactable} (${enactable.reason})`);
+    }
+    if (underwrite && underwrite.doesntFit.length > 0) {
+      feedback.push(
+        `The rewrite stopped holding up ${underwrite.doesntFit
+          .map((d) => `commitment ${d.index} ("${linkedTexts[d.index - 1]}"): ${d.reason}`)
+          .join("; ")}. Keep the same belief underneath all of them.`,
+      );
     }
     return { ok: feedback.length === 0, feedback };
   }

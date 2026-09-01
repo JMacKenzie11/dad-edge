@@ -41,7 +41,7 @@ import {
 import {
   checkAssumptionCoverage,
   checkAssumptionDepth,
-  checkAssumptionEnactable,
+  checkAssumptionsHaveAnEnactableIf,
   checkAssumptionUnderwritesCommitments,
   checkVagueAssumptionThenClause,
 } from "./assumptions";
@@ -127,7 +127,7 @@ async function runAssumptionsCriteria(
       commitments: input.commitments,
       links: input.assumptionLinks,
     }),
-    checkAssumptionEnactable({
+    checkAssumptionsHaveAnEnactableIf({
       assumptions: input.assumptions,
       behaviors: input.behaviors,
     }),

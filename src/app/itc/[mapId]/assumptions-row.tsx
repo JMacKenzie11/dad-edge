@@ -515,15 +515,24 @@ function AssumptionItem({
   }, [assumption.id]);
 
   function commit() {
-    saveText(draft);
+    save(draft, linkDraft);
   }
 
   /**
    * Save a specific text value with the current links. Used by the
-   * textarea commit and by the coach box's "Use this" button (a tap
-   * on the rewrite is already the user's intent; no extra Enter).
+   * coach box's "Use this" button (a tap on the rewrite is already
+   * the user's intent; no extra Enter).
    */
   function saveText(nextText: string) {
+    save(nextText, linkDraft);
+  }
+
+  /**
+   * One save path for text and links. Links are passed explicitly
+   * (not read from state) so a chip toggle can save the set it just
+   * produced without waiting for a re-render or a blur.
+   */
+  function save(nextText: string, nextLinks: string[]) {
     setError(null);
     if (inflightRef.current) return;
     const text = nextText.trim();
@@ -532,12 +541,13 @@ function AssumptionItem({
       setDraft(savedRef.current.text);
       return;
     }
-    const linksSorted = linkDraft.slice().sort();
+    const linksSorted = nextLinks.slice().sort();
     const textChanged = text !== savedRef.current.text.trim();
     const linksChanged = linksSorted.join(",") !== savedRef.current.links.join(",");
     if (!textChanged && !linksChanged) return;
-    if (linkDraft.length === 0) {
+    if (nextLinks.length === 0) {
       setError("Link at least one commitment.");
+      setLinkDraft(savedRef.current.links);
       return;
     }
     const priorSaved = savedRef.current;
@@ -548,7 +558,7 @@ function AssumptionItem({
     fd.set("map_id", mapId);
     fd.set("assumption_id", assumption.id);
     fd.set("text", text);
-    for (const id of linkDraft) fd.append("commitment_ids", id);
+    for (const id of nextLinks) fd.append("commitment_ids", id);
     startTransition(async () => {
       const res = await saveAssumption(fd);
       inflightRef.current = false;
@@ -561,10 +571,19 @@ function AssumptionItem({
     });
   }
 
+  /**
+   * A chip tap IS the edit. Save on the tap, not on blur: on macOS
+   * Safari/Firefox a button doesn't take focus on click, so a
+   * blur-triggered save never fired and the toggle never persisted
+   * (the "Drop #3 from it" fix in the coach box was impossible to
+   * carry out).
+   */
   function toggleLink(id: string) {
-    setLinkDraft((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    const next = linkDraft.includes(id)
+      ? linkDraft.filter((x) => x !== id)
+      : [...linkDraft, id];
+    setLinkDraft(next);
+    save(draft, next);
   }
 
   async function submitRemove() {
@@ -686,10 +705,7 @@ function AssumptionItem({
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => {
-                    toggleLink(c.id);
-                  }}
-                  onBlur={() => commit()}
+                  onClick={() => toggleLink(c.id)}
                   disabled={pending}
                   title={c.text}
                   className={

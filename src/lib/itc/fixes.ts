@@ -11,10 +11,13 @@
  *   sharpen_text   — the rendered "what's off" lines (render.ts)
  *   suggested_fix  — a rewrite that passed the same checks
  *
- * Two entry points:
+ * Three entry points:
  *   - coachTextFor{Worry,Commitment,Assumption}: save-time. Row-level
- *     findings only (plus the enactable judge for assumptions, which
- *     needs nothing but the behaviors already on the map).
+ *     findings only, no LLM judges.
+ *   - coachTextForSelectedAssumption: prioritize. The one assumption
+ *     he picked to test gets the enactable judge (Vol 1 p 18: the
+ *     threshold for testing is higher than for honing) and, if its
+ *     "if" isn't his move, a rewrite anchored to one of his behaviors.
  *   - attachFixes: after a column review or hone waterfall. Takes the
  *     findings, drafts a rewrite per entry that lacks one, writes the
  *     result onto the rows (so the boxes match the banner), and
@@ -162,14 +165,7 @@ export async function coachTextForAssumption(input: {
     rubric_reason: rubricReason,
     suggested_fix: null,
   };
-  const [rowFindings, enactable] = await Promise.all([
-    rowFindingsForAssumption({ assumption }),
-    checkAssumptionEnactable({
-      assumptions: [assumption],
-      behaviors: input.behaviors,
-    }),
-  ]);
-  const findings = [...rowFindings, ...enactable];
+  const findings = await rowFindingsForAssumption({ assumption });
   if (findings.length === 0) {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
@@ -179,13 +175,65 @@ export async function coachTextForAssumption(input: {
     linkedCommitments: input.linkedCommitments,
     behaviors: input.behaviors.filter((b) => b.selected).map((b) => b.text),
     problems: problemsOf(findings),
-    requireEnactable: enactable.length > 0,
+    requireEnactable: false,
   }).catch(() => null);
   return {
     rubricReason,
     sharpenText: renderRowSharpen(findings),
     suggestedFix,
   };
+}
+
+/**
+ * Prioritize: the assumption he picked to test must have an "if" he
+ * can go do (Vol 1 p 18, Checkpoint 2). Row-level findings plus the
+ * enactable judge on this one row; a rewrite anchored to one of his
+ * behaviors when the "if" isn't his move. Writes the result onto the
+ * row so the box shows it before he designs the test. Never throws;
+ * a judge failure leaves the row as it was.
+ */
+export async function coachTextForSelectedAssumption(input: {
+  goalText: string;
+  assumption: ItcAssumption;
+  linkedCommitments: Array<{ text: string; worry_text: string }>;
+  behaviors: ItcBehavior[];
+}): Promise<void> {
+  try {
+    const [rowFindings, enactable] = await Promise.all([
+      rowFindingsForAssumption({ assumption: input.assumption }),
+      checkAssumptionEnactable({
+        assumptions: [input.assumption],
+        behaviors: input.behaviors,
+      }),
+    ]);
+    const findings = [...rowFindings, ...enactable];
+    if (findings.length === 0) {
+      // Clean, including enactable. Clear anything a prior audit left.
+      await updateRowCoachText("itc_assumptions", input.assumption.id, {
+        sharpenText: null,
+        suggestedFix: null,
+      });
+      return;
+    }
+    const suggestedFix = await reviseAssumption({
+      goalText: input.goalText,
+      currentText: input.assumption.text,
+      linkedCommitments: input.linkedCommitments,
+      behaviors: input.behaviors.filter((b) => b.selected).map((b) => b.text),
+      problems: problemsOf(findings),
+      requireEnactable: enactable.length > 0,
+    }).catch(() => null);
+    await updateRowCoachText("itc_assumptions", input.assumption.id, {
+      sharpenText: renderRowSharpen(findings),
+      suggestedFix,
+    });
+  } catch (err) {
+    console.warn(
+      "[itc fixes] coachTextForSelectedAssumption failed (%s): %s",
+      input.assumption.id,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

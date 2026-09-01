@@ -20,6 +20,7 @@ vi.mock("@/lib/model-config", () => ({
 
 import {
   checkAssumptionEnactable,
+  checkAssumptionsHaveAnEnactableIf,
   checkAssumptionUnderwritesCommitments,
   judgeAssumptionUnderwrites,
 } from "../assumptions";
@@ -194,5 +195,56 @@ describe("checkAssumptionEnactable", () => {
     expect(
       await checkAssumptionEnactable({ assumptions: [assumption({})], behaviors: [b1] }),
     ).toEqual([]);
+  });
+});
+
+describe("checkAssumptionsHaveAnEnactableIf (hone: map-level, Vol 1 p 4)", () => {
+  const b1 = behavior("b-1", "I walk out when she raises her voice.");
+  const root = assumption({
+    id: "a-root",
+    text: "I assume that if something important goes badly, then I can't be trusted.",
+  });
+  const child = assumption({
+    id: "a-child",
+    text: "I assume that if I stay in the room while she's angry, then I'd lose it and be the husband who hurts her.",
+  });
+
+  it("stays quiet when at least one assumption is enactable, even if the root isn't", async () => {
+    generateObject.mockImplementation(async ({ prompt }: { prompt: string }) => ({
+      object: prompt.includes("stay in the room")
+        ? { enactable: true, reverses_behavior_index: 1, reason: "his move" }
+        : { enactable: false, reverses_behavior_index: null, reason: "an outcome" },
+    }));
+    const findings = await checkAssumptionsHaveAnEnactableIf({
+      assumptions: [root, child],
+      behaviors: [b1],
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("fires on every assumption when none is enactable", async () => {
+    generateObject.mockResolvedValue({
+      object: { enactable: false, reverses_behavior_index: null, reason: "an outcome" },
+    });
+    const findings = await checkAssumptionsHaveAnEnactableIf({
+      assumptions: [root, child],
+      behaviors: [b1],
+    });
+    expect(findings.map((f) => f.entryRef.id)).toEqual(["a-root", "a-child"]);
+    expect(findings.every((f) => f.issueType === "assumption_not_enactable")).toBe(true);
+  });
+
+  it("treats a judge error as enactable (fail open)", async () => {
+    generateObject.mockRejectedValue(new Error("boom"));
+    expect(
+      await checkAssumptionsHaveAnEnactableIf({ assumptions: [root], behaviors: [b1] }),
+    ).toEqual([]);
+  });
+
+  it("empty column: nothing to say", async () => {
+    expect(
+      await checkAssumptionsHaveAnEnactableIf({ assumptions: [], behaviors: [b1] }),
+    ).toEqual([]);
+    expect(generateObject).not.toHaveBeenCalled();
   });
 });
