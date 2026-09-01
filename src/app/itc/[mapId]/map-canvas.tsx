@@ -439,9 +439,15 @@ export function MapCanvas({
             assumptions={assumptions}
             commitments={commitments}
             links={assumptionLinks}
-            drafts={
-              map.current_stage === "assumptions" ? assumptionDrafts : []
-            }
+            // Drafts render whenever they exist — the assumptions
+            // section is only ever mounted at stageIndex >= assumptions
+            // (see the parent conditional), and AssumptionsRow's
+            // isLocked short-circuit still covers the never-hit case
+            // where the column is locked. Gating on current_stage ===
+            // "assumptions" was a construction-time leftover that hid
+            // freshly regenerated honing drafts because the coachee
+            // had advanced past this column.
+            drafts={assumptionDrafts}
             nowMs={renderedAt}
             threads={assumptionThreads}
             isLocked={isLocked("assumptions")}
