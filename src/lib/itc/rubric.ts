@@ -33,10 +33,22 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
 
 2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not about the other person's reaction ("she'd get upset"), not third-person ("men who don't listen lose their marriages"). If he's talking about the other person's feelings instead of his own, false.
 
-3. touches_identity: The worry lands on identity in one of two ITC-valid shapes:
-   (a) Self-labeling identity — a label he'd apply to himself. "I'm not enough," "I'm weak," "I'm a fraud," "I'd be the kind of husband who chose ego over her."
-   (b) Role/relational identity — a role he'd have failed in or a relationship whose collapse he can't face. "I've failed my family as a provider," "the guy who let people down," "someone whose work didn't help," "the husband who hurts her."
-   Both shapes pass. A worry that has clearly landed on either passes this criterion. Practical outcomes ("it'd take longer," "we'd lose the deal," "the money might not come") do NOT pass. But once the chain reaches "I couldn't provide for my family" or "I would have failed as a father," that IS role/relational identity — pass it. Do not require the further step of "and that means I'm unworthy" — that's imposing a self-labeling frame ITC doesn't require.
+3. touches_identity: The worry lands on an EXPLICITLY NAMED identity or role. Two valid shapes, both requiring a named identity noun (not just a failure event or outcome).
+
+   (a) Self-labeling identity — a label he'd apply to himself, spoken as an identity claim. "I'm a fraud." "I'm weak." "I'm not enough." "I'd be the kind of guy who freezes." The identity noun/label must be present in the worry text.
+
+   (b) Role/relational identity — a NAMED role rendered as "the [role] who [predicate]" (or equivalent phrasing that names a role noun). "The father who wasn't there." "The husband who chose ego over her." "The coach who talks a great game but can't deliver." "The provider who let his family down." The ROLE NOUN must appear, and a predicate must describe who he'd be SEEN AS after this behavior.
+
+   STRICTLY REJECT the following patterns — these are FAILURE EVENTS or OUTCOMES, not identity landings:
+   - "I'll have failed to [do X]" without naming WHO he'd be after that failure. ("I will have failed to really help them" — failure event, no identity noun. Would need "…and I'd be the coach who talks a great game but can't help people transform" to pass.)
+   - "I'll miss / won't be able to / won't deliver [outcome Y]" — future-tense outcome without identity naming. ("I'll miss an opportunity to demonstrate the value I know I can provide" — outcome only, no named identity.)
+   - "It won't be good enough / won't work / won't land" — external outcome without any identity claim about him.
+   - "I'm not doing enough to [X]" — behavior/effort gap, no identity landing.
+   - "I'd not be as capable / valuable as they think" — comparative, gestures at identity but doesn't name the specific identity he'd be seen as.
+
+   The bar (self-check before scoring true): after reading the worry, could you finish the sentence "The identity he's afraid of being is: ___" using words FROM the worry itself, not synthesized? If you have to invent the identity or infer it, the identity isn't landed — score false. If the worry names it directly with a role noun or self-label, score true.
+
+   Do not require the extra "and that means I'm unworthy" step for role identity — once the role and predicate are named ("the coach who couldn't help her when she needed me"), that IS identity. But bare failure verbs without a role noun ("I'd have failed to help her") don't clear the bar.
 
 Return your judgment as three booleans plus one short reason (under 40 words) explaining what would need to change to score better if any is false.
 `.trim();
