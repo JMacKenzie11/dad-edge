@@ -262,19 +262,16 @@ async function promoteToExemplar(missionId: string, description: string) {
   }
 }
 
-const RolloverSchema = z.object({
-  mission_id: z.string().uuid(),
-  new_target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
-
 const CarryForwardSchema = z.object({ mission_id: z.string().uuid() });
 
 /**
  * Duplicate a mission +7 days out — same description, same pillar, same
- * goal link, same day(s)-of-week. Source row is left intact (unlike
- * rolloverMission, which flips the source to "rolled_over"). Works on
- * completed and active missions — the two moments a coachee reaches for
- * this are "this is my weekly staple" and "I want another crack next week".
+ * goal link, same day(s)-of-week. Source row is left intact — this
+ * replaced the older rolloverMission (retired 2026-09-01), which
+ * flipped the source status to "rolled_over" and only fit the
+ * incomplete-mission-forward flow. Works on completed and active
+ * missions — the two moments a coachee reaches for this are "this
+ * is my weekly staple" and "I want another crack next week".
  *
  * Returns the new target dates so the caller can echo a confirmation.
  */
@@ -331,45 +328,3 @@ export async function carryMissionToNextWeek(
   return { ok: true, new_target_dates: nextDates, new_deadline: deadline };
 }
 
-export async function rolloverMission(input: unknown) {
-  const { user, readOnly } = await requireAccess();
-  if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = RolloverSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
-  const supabase = await createSupabaseServerClient();
-
-  const { data: prev, error: fetchErr } = await supabase
-    .from("missions")
-    .select("id, description, pillar_code, community_id, quarterly_goal_id")
-    .eq("id", parsed.data.mission_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (fetchErr || !prev) return { ok: false, error: "Not found." };
-
-  const { error: upErr } = await supabase
-    .from("missions")
-    .update({ status: "rolled_over" })
-    .eq("id", parsed.data.mission_id);
-  if (upErr) return { ok: false, error: upErr.message };
-
-  const p = prev as {
-    id: string;
-    description: string;
-    pillar_code: string;
-    community_id: string;
-    quarterly_goal_id: string | null;
-  };
-  const { error: insErr } = await supabase.from("missions").insert({
-    user_id: user.id,
-    community_id: p.community_id,
-    pillar_code: p.pillar_code,
-    description: p.description,
-    target_date: parsed.data.new_target_date,
-    quarterly_goal_id: p.quarterly_goal_id,
-    created_by: "user",
-    rolled_over_from_mission_id: p.id,
-  });
-  if (insErr) return { ok: false, error: insErr.message };
-  revalidatePath("/missions");
-  return { ok: true };
-}
