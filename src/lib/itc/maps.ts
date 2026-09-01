@@ -1013,18 +1013,23 @@ export async function listAssumptionDrafts(
  * advance-to-assumptions pipeline after the LLM has produced its
  * cluster proposals. Any draft with zero commitment links is
  * silently dropped — a draft that underwrites nothing is useless.
+ *
+ * Returns the count of drafts actually persisted (after the filter).
+ * Callers use this to give the coachee honest feedback — a silent
+ * "0 drafts written" without UI signaling is exactly the bug pattern
+ * we hit with the regenerate-drafts button.
  */
 export async function saveAssumptionDrafts(
   mapId: string,
   drafts: Array<{ text: string; commitment_ids: string[] }>,
-): Promise<void> {
+): Promise<number> {
   const clean = drafts
     .map((d) => ({
       text: d.text.trim(),
       commitment_ids: Array.from(new Set(d.commitment_ids)),
     }))
     .filter((d) => d.text.length >= 3 && d.commitment_ids.length > 0);
-  if (clean.length === 0) return;
+  if (clean.length === 0) return 0;
   const supabase = createSupabaseServiceClient();
   const { data: inserted, error } = await supabase
     .from("itc_assumption_drafts")
@@ -1039,11 +1044,12 @@ export async function saveAssumptionDrafts(
       linkRows.push({ draft_id: draftId, commitment_id: cid });
     }
   }
-  if (linkRows.length === 0) return;
+  if (linkRows.length === 0) return clean.length;
   const { error: lErr } = await supabase
     .from("itc_assumption_draft_commitments")
     .insert(linkRows);
   if (lErr) throw new Error(`saveAssumptionDrafts links: ${lErr.message}`);
+  return clean.length;
 }
 
 /**

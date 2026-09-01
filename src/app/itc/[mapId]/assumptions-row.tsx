@@ -91,6 +91,7 @@ export function AssumptionsRow({
               mapId={mapId}
               draft={d}
               commitmentIndexById={commitmentIndexById}
+              existingAssumptions={assumptions}
             />
           ))}
         </div>
@@ -270,41 +271,101 @@ function AddAssumptionForm({
 }
 
 /**
- * A single coach-drafted Big Assumption. Two buttons: "Use this draft"
- * promotes it to a real itc_assumptions row (with the same commitment
- * links the coach proposed) and dismisses the draft; "Dismiss" just
- * deletes it. The card disappears via revalidation after either.
+ * A single coach-drafted Big Assumption.
+ *
+ * Buttons depend on state:
+ *  - Always: "Use this draft" (add as new) + "Dismiss"
+ *  - If accepted assumptions already exist (honing): also render
+ *    "Replace #N" for each — replaces the old assumption with this
+ *    draft. Save-first ordering so if remove fails (tests attached),
+ *    the coachee sees an actionable error and no data is lost.
+ *
+ * The card disappears via revalidation after any action.
  */
 function DraftCard({
   mapId,
   draft,
   commitmentIndexById,
+  existingAssumptions,
 }: {
   mapId: string;
   draft: ItcAssumptionDraft;
   commitmentIndexById: Map<string, number>;
+  /** All accepted assumptions on the map. When non-empty, the card
+   *  offers per-assumption "Replace #N" buttons alongside "Use this
+   *  draft" so honing coachees don't end up doubling their column. */
+  existingAssumptions: ItcAssumption[];
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
   function useDraft() {
     setError(null);
     startTransition(async () => {
+      const ok = await saveDraftAsNew();
+      if (!ok) return;
+      await dismissDraftBestEffort();
+    });
+  }
+
+  async function saveDraftAsNew(): Promise<boolean> {
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("text", draft.text);
+    for (const cid of draft.commitment_ids) fd.append("commitment_ids", cid);
+    const res = await saveAssumption(fd);
+    if (!res.ok) {
+      setError(res.reason ?? "Could not use draft.");
+      return false;
+    }
+    return true;
+  }
+
+  async function dismissDraftBestEffort() {
+    const dfd = new FormData();
+    dfd.set("map_id", mapId);
+    dfd.set("draft_id", draft.id);
+    // Best-effort — even if this fails, the draft will be filtered
+    // out on next render once the user reviews the promoted row.
+    await dismissAssumptionDraft(dfd);
+  }
+
+  async function replaceAssumption(target: ItcAssumption, index: number) {
+    const shortDraft =
+      draft.text.length > 100 ? `${draft.text.slice(0, 100)}…` : draft.text;
+    const shortOld =
+      target.text.length > 100
+        ? `${target.text.slice(0, 100)}…`
+        : target.text;
+    const ok = await confirm({
+      title: `Replace assumption #${index}?`,
+      body: `Old: "${shortOld}"\n\nNew: "${shortDraft}"\n\nThe old assumption will be removed. Any tests attached to it will block the removal.`,
+      confirmLabel: "Replace",
+      destructive: true,
+    });
+    if (!ok) return;
+    setError(null);
+    startTransition(async () => {
+      // Save-first ordering. If save succeeds and remove fails
+      // (tests-attached), the new assumption is created and the
+      // coachee gets an actionable error rather than losing data.
+      const saved = await saveDraftAsNew();
+      if (!saved) return;
       const fd = new FormData();
       fd.set("map_id", mapId);
-      fd.set("text", draft.text);
-      for (const cid of draft.commitment_ids) fd.append("commitment_ids", cid);
-      const res = await saveAssumption(fd);
-      if (!res.ok) {
-        setError(res.reason ?? "Could not use draft.");
+      fd.set("assumption_id", target.id);
+      const rmRes = await removeAssumption(fd);
+      if (!rmRes.ok) {
+        setError(
+          `New draft was added, but the old assumption couldn't be removed: ${rmRes.reason}`,
+        );
+        // Still dismiss the draft — the coachee decides what to do
+        // with the two assumptions on the map.
+        await dismissDraftBestEffort();
         return;
       }
-      const dfd = new FormData();
-      dfd.set("map_id", mapId);
-      dfd.set("draft_id", draft.id);
-      // Best-effort — even if this fails, the draft will be filtered
-      // out on next render once the user reviews the promoted row.
-      await dismissAssumptionDraft(dfd);
+      await dismissDraftBestEffort();
     });
   }
 
@@ -326,6 +387,7 @@ function DraftCard({
 
   return (
     <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-4 py-3 space-y-2">
+      {confirmDialog}
       <div className="text-sm italic text-white/90 leading-relaxed">
         {draft.text}
       </div>
@@ -344,7 +406,7 @@ function DraftCard({
           ))}
         </div>
       ) : null}
-      <div className="flex items-center gap-2 pt-1">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           type="button"
           disabled={pending}
@@ -353,8 +415,20 @@ function DraftCard({
           className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
         >
           {pending ? <InlineSpinner className="h-3 w-3" /> : null}
-          Use this draft
+          Use as new
         </button>
+        {existingAssumptions.map((a, i) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={pending}
+            onClick={() => replaceAssumption(a, i + 1)}
+            title={`Replace assumption #${i + 1}: "${a.text}"`}
+            className="rounded-md border border-[color:var(--color-warning)]/50 px-3 py-1.5 text-xs text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
+          >
+            Replace #{i + 1}
+          </button>
+        ))}
         <button
           type="button"
           disabled={pending}

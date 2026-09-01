@@ -1305,19 +1305,19 @@ export async function advanceToStage(
 async function draftMissingWorriesAfterAdvance(
   mapId: string,
   events: TurnEventLog,
-): Promise<void> {
+): Promise<number> {
   const [map, behaviors, worries] = await Promise.all([
     getMapById(mapId),
     listBehaviors(mapId),
     listWorries(mapId),
   ]);
-  if (!map) return;
+  if (!map) return 0;
   const behaviorsWithWorries = new Set(worries.map((w) => w.behavior_id));
   const selected = behaviors.filter((b) => b.selected);
   const needsDraft = selected.filter(
     (b) => !behaviorsWithWorries.has(b.id) && !b.coach_worry_draft,
   );
-  if (needsDraft.length === 0) return;
+  if (needsDraft.length === 0) return 0;
 
   // Server-owned shape rotation. Each behavior's drafter call gets
   // a hard identity-shape constraint from WORRY_IDENTITY_SHAPES,
@@ -1345,20 +1345,22 @@ async function draftMissingWorriesAfterAdvance(
     }),
   );
 
+  const persisted = drafted.filter(
+    (d): d is { behaviorId: string; draft: string } => Boolean(d.draft),
+  );
   await Promise.all(
-    drafted
-      .filter((d): d is { behaviorId: string; draft: string } => Boolean(d.draft))
-      .map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft)),
+    persisted.map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft)),
   );
   events.record(
     "coach_reaction_sent",
     {
       kind: "worry_drafts",
       behavior_count: needsDraft.length,
-      drafted_count: drafted.filter((d) => d.draft).length,
+      drafted_count: persisted.length,
     },
     { stage: "worries" },
   );
+  return persisted.length;
 }
 
 /**
@@ -1633,17 +1635,21 @@ export async function redriveAssumptionFromCommitment(
  */
 export async function regenerateWorryDrafts(
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<
+  | { ok: true; draftsWritten: number }
+  | { ok: false; reason: string }
+> {
   const parsed = regenerateDraftsSchema.safeParse({
     map_id: formData.get("map_id"),
   });
   if (!parsed.success) return { ok: false, reason: "Invalid input." };
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  let draftsWritten = 0;
   try {
     await clearWorryDraftsForMap(loaded.map.id);
     const events = new TurnEventLog(loaded.map.id, 0);
-    await draftMissingWorriesAfterAdvance(loaded.map.id, events);
+    draftsWritten = await draftMissingWorriesAfterAdvance(loaded.map.id, events);
     await events.flush();
   } catch (err) {
     return {
@@ -1652,7 +1658,7 @@ export async function regenerateWorryDrafts(
     };
   }
   safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
+  return { ok: true, draftsWritten };
 }
 
 /**
@@ -1673,13 +1679,17 @@ export async function regenerateWorryDrafts(
  */
 export async function regenerateAssumptionDrafts(
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<
+  | { ok: true; draftsWritten: number }
+  | { ok: false; reason: string }
+> {
   const parsed = regenerateDraftsSchema.safeParse({
     map_id: formData.get("map_id"),
   });
   if (!parsed.success) return { ok: false, reason: "Invalid input." };
   const loaded = await requireParticipantAndMap(parsed.data.map_id);
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
+  let draftsWritten = 0;
   try {
     await clearAssumptionDraftsForMap(loaded.map.id);
     // Re-run the drafter directly (not via draftAssumptionsAfterAdvance
@@ -1709,7 +1719,7 @@ export async function regenerateAssumptionDrafts(
             .map((n) => orderedCommitments[n - 1]?.id)
             .filter((v): v is string => Boolean(v)),
         }));
-        await saveAssumptionDrafts(loaded.map.id, toPersist);
+        draftsWritten = await saveAssumptionDrafts(loaded.map.id, toPersist);
       }
     }
   } catch (err) {
@@ -1719,7 +1729,7 @@ export async function regenerateAssumptionDrafts(
     };
   }
   safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
+  return { ok: true, draftsWritten };
 }
 
 /**

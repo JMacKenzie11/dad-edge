@@ -37,9 +37,12 @@ export function RegenerateDraftsButton({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [dialog, confirm] = useConfirm();
 
   const labelKind = kind === "worries" ? "worry" : "assumption";
+  const labelKindPlural =
+    kind === "worries" ? "worry drafts" : "assumption drafts";
   const columnLabel =
     kind === "worries" ? "Column 2 behaviors" : "Column 4 commitments";
 
@@ -51,13 +54,28 @@ export function RegenerateDraftsButton({
     });
     if (!ok) return;
     setError(null);
+    setInfo(null);
     const fd = new FormData();
     fd.set("map_id", mapId);
     startTransition(async () => {
       const action =
         kind === "worries" ? regenerateWorryDrafts : regenerateAssumptionDrafts;
       const res = await action(fd);
-      if (!res.ok) setError(res.reason ?? "Could not regenerate.");
+      if (!res.ok) {
+        setError(res.reason ?? "Could not regenerate.");
+        return;
+      }
+      // Silent-zero was the bug: action succeeded but the drafter
+      // returned nothing (or every draft got filtered for missing
+      // links). Coachee saw the spinner then nothing. Surface it.
+      if (res.draftsWritten === 0) {
+        setInfo(
+          `The coach couldn't produce fresh ${labelKindPlural} against your current ${columnLabel}. Try sharpening a ${kind === "worries" ? "behavior" : "commitment"} first, then regenerate again.`,
+        );
+        return;
+      }
+      const n = res.draftsWritten;
+      setInfo(`${n} fresh ${n === 1 ? "draft" : "drafts"} added above.`);
     });
   }
 
@@ -77,6 +95,11 @@ export function RegenerateDraftsButton({
         {error ? (
           <span className="text-xs text-[color:var(--color-danger)]">
             {error}
+          </span>
+        ) : null}
+        {info ? (
+          <span className="text-xs text-[color:var(--color-text-muted)]">
+            {info}
           </span>
         ) : null}
       </div>
