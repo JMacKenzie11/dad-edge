@@ -69,6 +69,7 @@ describe("renderFindings — empty state", () => {
     const prose = renderHone([]);
     expect(prose).toMatch(/Your Bond map holds up/);
     expect(prose).not.toContain('"');
+    expect(prose).not.toMatch(/fix/i);
   });
 
   it("column_review: names the column", () => {
@@ -80,7 +81,7 @@ describe("renderFindings — empty state", () => {
 });
 
 describe("renderFindings — openings", () => {
-  it("hone: a critical finding opens with 'broken', a moderate one with 'holds up'", () => {
+  it("hone: a critical finding opens with 'is close' + start-first; a moderate one with 'holds up'", () => {
     const crit = renderHone([
       finding({
         severity: "critical",
@@ -88,8 +89,8 @@ describe("renderFindings — openings", () => {
         entryRef: { table: "worries", id: "w-1" },
       }),
     ]);
-    expect(crit).toMatch(/^Your Bond map has one thing that's broken\./);
-    expect(crit).not.toMatch(/critical/i);
+    expect(crit).toMatch(/^Your Bond map is close\. One thing to work on before you pick what to test\. Start with the first one; the map under it moves once it's finished\./);
+    expect(crit).not.toMatch(/critical|broken|fix/i);
 
     const mod = renderHone([
       finding({
@@ -98,7 +99,7 @@ describe("renderFindings — openings", () => {
         entryRef: { table: "worries", id: "w-1" },
       }),
     ]);
-    expect(mod).toMatch(/^Your Bond map holds up\. One thing to fix before you pick what to test\./);
+    expect(mod).toMatch(/^Your Bond map holds up\. One thing to work on before you pick what to test\./);
   });
 
   it("column_review: counts entries, not findings, and speaks about the column", () => {
@@ -117,11 +118,11 @@ describe("renderFindings — openings", () => {
       "Your worries",
     );
     // Two findings on one entry = one thing.
-    expect(prose).toMatch(/^One thing on your worries is broken\. Fix it before you move on\./);
+    expect(prose).toMatch(/^One thing to work on in your worries before you move on\. Start with the first one/);
     expect(prose).not.toMatch(/Bond map/);
   });
 
-  it("never uses the banned 'worth ___ing' family or 'critical'", () => {
+  it("never uses the banned 'worth ___ing' family, 'critical', or 'broken'", () => {
     const prose = renderHone(
       ALL_ISSUE_TYPES.map((issueType, i) =>
         finding({
@@ -134,6 +135,18 @@ describe("renderFindings — openings", () => {
     );
     expect(prose).not.toMatch(/\bworth\s+\w+ing\b/i);
     expect(prose).not.toMatch(/\bcritical\b/i);
+    expect(prose).not.toMatch(/\bbroken\b/i);
+  });
+
+  it("the opening count is the entries shown plus the entries marked, never the critical count alone", () => {
+    const prose = renderHone([
+      finding({ issueType: "depth_shortfall_assumption", severity: "critical", entryRef: { table: "assumptions", id: "a-2" }, actualText: "a2" }),
+      finding({ issueType: "depth_shortfall_assumption", severity: "critical", entryRef: { table: "assumptions", id: "a-3" }, actualText: "a3" }),
+      finding({ issueType: "assumption_doesnt_underwrite", entryRef: { table: "assumptions", id: "a-1" }, actualText: "a1", unfitCommitmentPositions: [1] }),
+    ]);
+    expect(prose).toMatch(/^Your Bond map is close\. Three things to work on before you pick what to test\. Start with the first two; the map under them moves once they're finished\./);
+    expect(prose).toContain('"a2"');
+    expect(prose).toMatch(/Two more after this\./);
   });
 });
 
@@ -282,7 +295,7 @@ describe("renderFindings — budget", () => {
     const prose = renderHone(four);
     expect(prose).toContain('"worry 1"');
     expect(prose).not.toContain('"worry 2"');
-    expect(prose).toMatch(/Four things to fix/);
+    expect(prose).toMatch(/Four things to work on/);
     expect(prose).toMatch(/Three more after this\. They're marked on the map\.$/);
   });
 

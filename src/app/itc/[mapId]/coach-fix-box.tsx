@@ -16,7 +16,8 @@ import { InlineSpinner } from "./form-field";
  *
  * "Use this" saves the rewrite through the row's normal save path,
  * which re-scores and clears the box when the new text holds up.
- * Danger tint (red) so "change this" reads unambiguously.
+ * Danger tint (red) so "this one needs work" reads unambiguously;
+ * the words stay appreciative ("Coach's take", never "broken").
  */
 export function CoachFixBox({
   text,
@@ -32,7 +33,7 @@ export function CoachFixBox({
   return (
     <div className="min-w-0 rounded-md border border-[color:var(--color-danger)]/30 border-l-[3px] border-l-[color:var(--color-danger)]/70 bg-[color:var(--color-danger)]/[0.08] px-3 py-2 text-sm leading-relaxed">
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-danger)]/90">
-        What to fix
+        Coach&apos;s take
       </div>
       <div className="whitespace-pre-wrap break-words text-white/90">{text}</div>
       {fix ? (

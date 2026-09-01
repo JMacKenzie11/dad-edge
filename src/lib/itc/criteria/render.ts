@@ -104,22 +104,36 @@ export function findingLine(f: Finding): string {
 function renderEmptyState(context: RenderContext): string {
   if (context.mode === "column_review") {
     const label = context.columnLabel ?? "This column";
-    return `${capitalize(label)} holds up. Nothing here needs fixing.`;
+    return `${capitalize(label)} holds up. Nothing here needs work.`;
   }
   const holds =
     context.goalText.trim().length > 0
       ? `Your ${context.pillarLabel} map holds up`
       : "Your map holds up";
-  return `${holds}. Nothing on it needs fixing right now. When something on the map changes, I'll check it again.`;
+  return `${holds}. Nothing on it needs work right now. When something on the map changes, I'll look again.`;
 }
 
 // ---------------------------------------------------------------------------
 // Opening
 // ---------------------------------------------------------------------------
 
+/**
+ * The count is every entry the audit is about to show or mark, so
+ * it always agrees with the paragraphs plus the trailer. Entries
+ * that block the gate (critical) come first in the ordering, and
+ * the opening says to start there. Voice: appreciative, plain.
+ * "Holds up" / "is close", never "broken".
+ */
 function renderOpening(groups: EntryGroup[], context: RenderContext): string {
   const criticals = groups.filter((g) => g.severity === "critical").length;
   const total = groups.length;
+  const things = total === 1 ? "One thing" : `${countWord(total)} things`;
+  const startFirst =
+    criticals === 0
+      ? ""
+      : criticals === 1
+        ? " Start with the first one; the map under it moves once it's finished."
+        : ` Start with the first ${countWordLower(criticals)}; the map under them moves once they're finished.`;
 
   if (context.mode === "column_review") {
     // Column labels arrive as "Your worries"; the sentence supplies
@@ -127,26 +141,13 @@ function renderOpening(groups: EntryGroup[], context: RenderContext): string {
     const label = (context.columnLabel ?? "this column")
       .replace(/^your\s+/i, "")
       .toLowerCase();
-    if (criticals > 0) {
-      return criticals === 1
-        ? `One thing on your ${label} is broken. Fix it before you move on.`
-        : `${countWord(criticals)} things on your ${label} are broken. Fix those before you move on.`;
-    }
-    return total === 1
-      ? `One thing to fix on your ${label} before you move on.`
-      : `${countWord(total)} things to fix on your ${label} before you move on.`;
+    return `${things} to work on in your ${label} before you move on.${startFirst}`;
   }
 
   // mode === "hone"
   const map = `Your ${context.pillarLabel} map`;
-  if (criticals > 0) {
-    return criticals === 1
-      ? `${map} has one thing that's broken. Fix it first. Everything under it changes once you do.`
-      : `${map} has ${countWordLower(criticals)} things that are broken. Fix those first. Everything under them changes once you do.`;
-  }
-  return total === 1
-    ? `${map} holds up. One thing to fix before you pick what to test.`
-    : `${map} holds up. ${countWord(total)} things to fix before you pick what to test.`;
+  const standing = criticals > 0 ? `${map} is close.` : `${map} holds up.`;
+  return `${standing} ${things} to work on before you pick what to test.${startFirst}`;
 }
 
 function renderTrailer(hidden: number): string {
