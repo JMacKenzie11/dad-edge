@@ -405,9 +405,12 @@ describe("normalizeWorryPrefix (DB-boundary worry stem guard)", () => {
     ).toBe("I worry that she'd stop trusting me");
   });
 
-  it("transforms bare 'I fear X' into 'I worry that X'", () => {
+  it("transforms bare 'I fear X' into 'I worry that X' (gerund objects get \"I'd be\")", () => {
     expect(normalizeWorryPrefix("I fear losing my team's respect")).toBe(
-      "I worry that losing my team's respect",
+      "I worry that I'd be losing my team's respect",
+    );
+    expect(normalizeWorryPrefix("I fear my team will stop asking me")).toBe(
+      "I worry that my team will stop asking me",
     );
   });
 
@@ -415,6 +418,21 @@ describe("normalizeWorryPrefix (DB-boundary worry stem guard)", () => {
     expect(
       normalizeWorryPrefix("I'm afraid that they'd never take me seriously again"),
     ).toBe("I worry that they'd never take me seriously again");
+  });
+
+  it("transforms 'I'm afraid of <gerund>' into 'I worry that I'd be <gerund>'", () => {
+    expect(normalizeWorryPrefix("I'm afraid of wasting time.")).toBe(
+      "I worry that I'd be wasting time.",
+    );
+    expect(normalizeWorryPrefix("I fear losing her.")).toBe(
+      "I worry that I'd be losing her.",
+    );
+  });
+
+  it("transforms 'I'm afraid of <noun>' into 'I worry about <noun>' (still on the stem)", () => {
+    const out = normalizeWorryPrefix("I'm afraid of the fallout.");
+    expect(out).toBe("I worry about the fallout.");
+    expect(/^I worry\b/.test(out)).toBe(true);
   });
 
   it("transforms 'I'm afraid of being X' into 'I worry that I'd be X'", () => {
@@ -434,6 +452,12 @@ describe("normalizeWorryPrefix (DB-boundary worry stem guard)", () => {
     expect(
       normalizeWorryPrefix("She'd see I've never been the man she thought"),
     ).toBe("I worry that she'd see I've never been the man she thought");
+  });
+
+  it("does not double 'that' when the text already opens with it", () => {
+    expect(normalizeWorryPrefix("That she'll finally see I've been faking it.")).toBe(
+      "I worry that she'll finally see I've been faking it.",
+    );
   });
 
   it("preserves capital I when prepending", () => {
@@ -974,48 +998,54 @@ describe("STAGE_INTROS", () => {
     "assumptions",
   ] as const;
 
+  const ctx = (goal: string | null) => ({ goal, pillarCode: "B" as const });
+
   it.each(requiredStages)("has an intro for stage %s", (stage) => {
     const factory = STAGE_INTROS[stage];
     expect(factory, `STAGE_INTROS[${stage}] must be defined`).toBeDefined();
     if (factory) {
-      const rendered = factory({ goal: "I'm committed to getting better at X" });
+      const rendered = factory(ctx("I'm committed to getting better at X"));
       expect(rendered.length).toBeGreaterThan(20);
     }
   });
 
-  it("has NO intro for the goal stage (Column 1 has its own inline stem-primed input)", () => {
-    expect(STAGE_INTROS["goal"]).toBeUndefined();
+  it("goal intro exists and names the pillar (the LLM goal reaction was retired 2026-08-31; the intro carries the orientation)", () => {
+    const factory = STAGE_INTROS["goal"];
+    expect(factory).toBeDefined();
+    const rendered = factory!(ctx(null));
+    expect(rendered).toContain("Bond");
+    expect(rendered).toContain("I'm committed to getting better at");
   });
 
   it("behaviors intro interpolates the goal text", () => {
     const factory = STAGE_INTROS["behaviors"]!;
-    const withGoal = factory({ goal: "SENTINEL_GOAL_TEXT" });
+    const withGoal = factory(ctx("SENTINEL_GOAL_TEXT"));
     expect(withGoal).toContain("SENTINEL_GOAL_TEXT");
-    const withoutGoal = factory({ goal: null });
+    const withoutGoal = factory(ctx(null));
     expect(withoutGoal).not.toContain("SENTINEL_GOAL_TEXT");
     expect(withoutGoal).toContain("your goal");
   });
 
   it("behaviors intro states the ITC 3-to-5 target", () => {
-    const rendered = STAGE_INTROS["behaviors"]!({ goal: "any goal" });
+    const rendered = STAGE_INTROS["behaviors"]!(ctx("any goal"));
     // Accept either "3 to 5" or "3-5" phrasing; both are ITC-aligned.
     expect(/3\s*(?:to|-)\s*5/.test(rendered)).toBe(true);
   });
 
-  it("worries intro names identity as the depth bar", () => {
-    const rendered = STAGE_INTROS["worries"]!({ goal: null });
+  it("worries intro names who-you-are as the depth bar", () => {
+    const rendered = STAGE_INTROS["worries"]!(ctx(null));
     // The Kegan/Lahey depth bar for a Column 3 worry is a first-
-    // person felt fear that lands on identity (self-labeling OR
-    // role/relational). The intro must signal that bar so the coachee
-    // doesn't stop at practical concerns.
-    expect(rendered.toLowerCase()).toContain("identity");
+    // person felt fear that ends on who he'd be (self-label OR role).
+    // The intro must signal that bar in plain words ("identity" is
+    // coach jargon the voice doc keeps out of coachee-facing copy).
+    expect(/who you are|label about you|role you['’]d have failed/i.test(rendered)).toBe(true);
     expect(/felt fear|felt.*about you|fear about you/i.test(rendered)).toBe(true);
     // Practical-concern anti-pattern should be called out.
     expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
   });
 
   it("assumptions intro names the ITC 'I assume that if…then…' shape and the many-to-many linking", () => {
-    const rendered = STAGE_INTROS["assumptions"]!({ goal: null });
+    const rendered = STAGE_INTROS["assumptions"]!(ctx(null));
     // Big Assumptions in ITC are "I assume that if I…, then …" beliefs
     // — the "I assume that" stem makes the epistemic status explicit
     // (testable belief, not fact) which is what unlocks the immunity.
@@ -1040,7 +1070,7 @@ describe("STAGE_INTROS", () => {
     for (const stage of Object.keys(STAGE_INTROS)) {
       const factory = STAGE_INTROS[stage as keyof typeof STAGE_INTROS];
       if (!factory) continue;
-      const out = factory({ goal: null });
+      const out = factory(ctx(null));
       expect(out).not.toContain("jumping jacks");
     }
   });

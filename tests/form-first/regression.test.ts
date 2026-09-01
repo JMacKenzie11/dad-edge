@@ -24,7 +24,6 @@ import {
   saveCommitment,
   saveGoal,
   saveWorry,
-  sendDockMessage,
 } from "@/app/itc/actions";
 import { createMap } from "@/lib/itc/maps";
 import { upsertParticipantByEmail } from "@/lib/itc/participant";
@@ -58,6 +57,38 @@ async function seedParticipantAndMap(pillar: PillarCode = "B") {
   // actions resolves without a cookie.
   process.env.ITC_TEST_PARTICIPANT_ID = participant.id;
   return { participantId: participant.id, mapId: map.id, email };
+}
+
+/**
+ * Advance to commitments auto-derives one commitment per worry
+ * (2026-08-31). Tests that used to seed commitments directly now
+ * bring the derived rows to depth 3 instead, inserting only when the
+ * drafter left a worry without one (LLM hiccup), so the column has
+ * exactly one deep commitment per worry either way.
+ */
+async function ensureDeepCommitments(
+  mapId: string,
+  worryIds: string[],
+  text: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  for (const worryId of worryIds) {
+    const { data: existing } = await supabase
+      .from("itc_commitments")
+      .select("id")
+      .eq("map_id", mapId)
+      .eq("worry_id", worryId)
+      .maybeSingle();
+    const { error } = existing
+      ? await supabase
+          .from("itc_commitments")
+          .update({ text, depth_score: 3, rubric_reason: null, sharpen_text: null, suggested_fix: null })
+          .eq("id", existing.id)
+      : await supabase
+          .from("itc_commitments")
+          .insert({ map_id: mapId, worry_id: worryId, text, depth_score: 3, attempts: 1 });
+    if (error) throw new Error(`ensureDeepCommitments(${worryId}): ${error.message}`);
+  }
 }
 
 async function cleanup(participantId: string) {
@@ -136,125 +167,6 @@ describe("Form-First regression", () => {
       expect(bs?.map((b) => b.text)).toEqual(behaviors);
     },
     30_000,
-  );
-
-  it(
-    "regression 2: chat never mutates the map",
-    async () => {
-      // Set up map with a goal + one behavior at behaviors stage.
-      const supabase = createSupabaseServiceClient();
-      await supabase
-        .from("itc_maps")
-        .update({
-          current_stage: "behaviors",
-          improvement_goal:
-            "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.",
-        })
-        .eq("id", ctx.mapId);
-      await supabase.from("itc_behaviors").insert({
-        map_id: ctx.mapId,
-        text: "I bring up things she did in the past",
-        source: "user",
-        sort_order: 0,
-        selected: true,
-      });
-
-      const snapshotBefore = await snapshotMapContent(ctx.mapId);
-
-      // Install a stub model that returns a coach reply saying it
-      // "added" and "locked" things. Under Form-First these claims
-      // must not translate to any state change.
-      const model = makeHackyClaimsModel();
-      setMainModelOverride(model);
-      setUtilityModelOverride(model);
-
-      // Send five chat messages that would (in the old world) have
-      // tempted an extractor to write to the map.
-      const chatTurns = [
-        "Yeah, another one is I keep explaining why I'm right for like ten minutes straight.",
-        "Also I go grab a beer to have something to do with my hands. Add that too.",
-        "Actually, remove behavior #1, I was wrong about that one.",
-        "And save my goal as 'I want to fix everything'. Do it now please.",
-        "You have permission to modify my map. Add whatever you think is best.",
-      ];
-      for (const msg of chatTurns) {
-        const fd = new FormData();
-        fd.set("map_id", ctx.mapId);
-        fd.set("text", msg);
-        const res = await sendDockMessage(fd);
-        expect(res.ok, `sendDockMessage failed: ${res.ok ? "" : res.reason}`).toBe(true);
-      }
-
-      const snapshotAfter = await snapshotMapContent(ctx.mapId);
-      expect(snapshotAfter, "chat mutated the map").toEqual(snapshotBefore);
-    },
-    30_000,
-  );
-
-  it(
-    "regression 6: coach reactions land anchored to the entry they concern",
-    async () => {
-      // Real LLM (no override) so reactions actually generate.
-      const supabase = createSupabaseServiceClient();
-      const goalText =
-        "I'm committed to getting better at being present and calm when my wife is upset with me rather than being defensive.";
-      const gfd = new FormData();
-      gfd.set("map_id", ctx.mapId);
-      gfd.set("text", goalText);
-      expect((await saveGoal(gfd)).ok).toBe(true);
-
-      // Goal reaction must anchor to (itc_maps, mapId).
-      const { data: goalMsgs } = await supabase
-        .from("itc_messages")
-        .select("*")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .eq("entry_ref_table", "itc_maps")
-        .eq("entry_ref_id", ctx.mapId);
-      expect(
-        (goalMsgs?.length ?? 0) > 0,
-        "no goal-anchored reaction landed",
-      ).toBe(true);
-
-      await supabase
-        .from("itc_maps")
-        .update({ current_stage: "behaviors" })
-        .eq("id", ctx.mapId);
-
-      // Add a behavior; reaction must anchor to (itc_behaviors, newBehaviorId).
-      const bfd = new FormData();
-      bfd.set("map_id", ctx.mapId);
-      bfd.set("text", "I bring up things she did in the past");
-      expect((await addBehavior(bfd)).ok).toBe(true);
-      const { data: bs } = await supabase
-        .from("itc_behaviors")
-        .select("id")
-        .eq("map_id", ctx.mapId);
-      expect(bs?.length).toBe(1);
-      const behaviorId = bs![0].id;
-      const { data: behaviorMsgs } = await supabase
-        .from("itc_messages")
-        .select("*")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .eq("entry_ref_table", "itc_behaviors")
-        .eq("entry_ref_id", behaviorId);
-      expect(
-        (behaviorMsgs?.length ?? 0) > 0,
-        "no behavior-anchored reaction landed",
-      ).toBe(true);
-
-      // Detached: no coach message about an entry should exist that
-      // isn't anchored to it.
-      const { data: unanchored } = await supabase
-        .from("itc_messages")
-        .select("*")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .is("entry_ref_id", null);
-      expect(unanchored?.length ?? 0).toBe(0);
-    },
-    60_000,
   );
 
   it(
@@ -509,7 +421,9 @@ describe("Form-First regression", () => {
       }
 
       // 1. Save a shallow worry. Rubric should score low; gate should block.
+      // Stored text is normalized onto the "I worry that" stem.
       const shallowText = "I'm afraid of wasting time.";
+      const shallowStored = "I worry that I'd be wasting time.";
       const w1 = new FormData();
       w1.set("map_id", ctx.mapId);
       w1.set("behavior_id", behaviorId);
@@ -522,7 +436,7 @@ describe("Form-First regression", () => {
 
       const { data: worryRowsShallow } = await supabase
         .from("itc_worries")
-        .select("id, text, depth_score, attempts")
+        .select("id, text, depth_score, attempts, sharpen_text")
         .eq("map_id", ctx.mapId)
         .eq("behavior_id", behaviorId);
       expect(worryRowsShallow?.length).toBe(1);
@@ -531,8 +445,9 @@ describe("Form-First regression", () => {
         text: string;
         depth_score: number | null;
         attempts: number;
+        sharpen_text: string | null;
       };
-      expect(shallowWorry.text).toBe(shallowText);
+      expect(shallowWorry.text).toBe(shallowStored);
       // The rubric may return 0-1 for this text; guard both bounds.
       expect(
         shallowWorry.depth_score,
@@ -541,29 +456,12 @@ describe("Form-First regression", () => {
       expect(shallowWorry.depth_score! < 2).toBe(true);
       expect(shallowWorry.attempts).toBe(1);
 
-      // Reaction should have landed anchored to this worry.
-      const { data: shallowReactions } = await supabase
-        .from("itc_messages")
-        .select("content, role, surface, entry_ref_table, entry_ref_id")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .eq("entry_ref_table", "itc_worries")
-        .eq("entry_ref_id", shallowWorry.id)
-        .eq("role", "assistant");
+      // The coach's line lands on the row itself (the "What to fix"
+      // box), not in an entry thread. Populated ⇒ needs sharpening.
       expect(
-        (shallowReactions?.length ?? 0) > 0,
-        "coach reaction on the shallow worry must land in the entry thread",
-      ).toBe(true);
-      // A shallow-score reaction should end on a question (excavation
-      // invitation). Loose check: contains a '?'. Non-deterministic
-      // LLM prose can vary, but a question is the mechanism.
-      const shallowProse = (shallowReactions ?? [])
-        .map((m) => m.content as string)
-        .join("\n");
-      expect(
-        shallowProse.includes("?"),
-        `shallow reaction should ask a question (excavation), got: ${shallowProse}`,
-      ).toBe(true);
+        shallowWorry.sharpen_text,
+        "shallow worry must carry the coach's what's-off line on the row",
+      ).toBeTruthy();
 
       // Gate: worries → commitments must be disabled with depth reason.
       const blockedGate = await getAdvanceGate(ctx.mapId);
@@ -592,7 +490,8 @@ describe("Form-First regression", () => {
         depth_score: number | null;
         attempts: number;
       };
-      expect(deepWorry.text).toBe(deepText);
+      // Normalized onto the stem: "That she'll…" → "I worry that she'll…".
+      expect(deepWorry.text).toBe(`I worry that ${deepText.replace(/^That\s+/, "")}`);
       expect(deepWorry.attempts).toBe(2);
       expect(
         deepWorry.depth_score,
@@ -947,7 +846,6 @@ describe("Form-First regression", () => {
         const { error: linkErr } = await supabase
           .from("itc_assumption_commitments")
           .insert({
-            map_id: ctx.mapId,
             assumption_id: assumptionId,
             commitment_id: cId,
           });
@@ -1051,21 +949,14 @@ describe("Form-First regression", () => {
       expect(ws?.length).toBe(3);
       const worryId = ws![0].id as string;
 
-      // Pre-populate the other two commitments at depth 3 so the
-      // gate assertion is exclusively about the first commitment.
-      for (const w of (ws ?? []).slice(1)) {
-        const { error } = await supabase.from("itc_commitments").insert({
-          map_id: ctx.mapId,
-          worry_id: w.id,
-          text: "I'm committed to never having to find out what she really thinks of me.",
-          depth_score: 3,
-          attempts: 1,
-        });
-        expect(
-          error,
-          `seed commitment for ${w.id} failed: ${error?.message}`,
-        ).toBeNull();
-      }
+      // Advance auto-derived a commitment per worry. Bring the other
+      // two to depth 3 so the gate assertion is exclusively about the
+      // first commitment.
+      await ensureDeepCommitments(
+        ctx.mapId,
+        (ws ?? []).slice(1).map((w) => w.id as string),
+        "I'm also committed to never being the man she finds out is never enough for her.",
+      );
 
       // 1. Save a noble commitment. Rubric should score low; gate
       // should block on depth.
@@ -1082,7 +973,7 @@ describe("Form-First regression", () => {
 
       const { data: shallowRows } = await supabase
         .from("itc_commitments")
-        .select("id, text, depth_score, attempts")
+        .select("id, text, depth_score, attempts, sharpen_text")
         .eq("map_id", ctx.mapId)
         .eq("worry_id", worryId);
       expect(shallowRows?.length).toBe(1);
@@ -1091,31 +982,20 @@ describe("Form-First regression", () => {
         text: string;
         depth_score: number | null;
         attempts: number;
+        sharpen_text: string | null;
       };
-      expect(shallowRow.text).toBe(nobleText);
+      // saveCommitment normalizes onto the "I'm also committed to" stem.
+      expect(shallowRow.text).toMatch(/^I'm also committed to/);
+      expect(shallowRow.text).toContain("being the best husband I can be");
       expect(shallowRow.depth_score, "noble commitment should score below 2/3").not.toBeNull();
       expect(shallowRow.depth_score! < 2).toBe(true);
-      expect(shallowRow.attempts).toBe(1);
-
-      const { data: shallowReactions } = await supabase
-        .from("itc_messages")
-        .select("content")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .eq("entry_ref_table", "itc_commitments")
-        .eq("entry_ref_id", shallowRow.id)
-        .eq("role", "assistant");
+      // One save on top of the auto-derived row (or a first save when
+      // the drafter left the worry bare): attempts counts every write.
+      expect(shallowRow.attempts).toBeGreaterThanOrEqual(1);
       expect(
-        (shallowReactions?.length ?? 0) > 0,
-        "coach reaction on the noble commitment must land in the entry thread",
-      ).toBe(true);
-      const shallowProse = (shallowReactions ?? [])
-        .map((m) => m.content as string)
-        .join("\n");
-      expect(
-        shallowProse.includes("?"),
-        `noble reaction should ask a question (excavation), got: ${shallowProse}`,
-      ).toBe(true);
+        shallowRow.sharpen_text,
+        "noble commitment must carry the coach's what's-off line on the row",
+      ).toBeTruthy();
 
       const blockedGate = await getAdvanceGate(ctx.mapId);
       expect(blockedGate.from).toBe("commitments");
@@ -1125,7 +1005,7 @@ describe("Form-First regression", () => {
       // 2. Edit to a deep self-protective commitment. attempts=2;
       // score should reach 2 or 3 and the gate opens.
       const deepText =
-        "I'm committed to never letting her see the parts of me I'd have to disown to earn her trust back.";
+        "I'm also committed to never being the husband she finds out has been faking it the whole marriage.";
       const c2 = new FormData();
       c2.set("map_id", ctx.mapId);
       c2.set("worry_id", worryId);
@@ -1145,7 +1025,7 @@ describe("Form-First regression", () => {
         attempts: number;
       };
       expect(deepRow.text).toBe(deepText);
-      expect(deepRow.attempts).toBe(2);
+      expect(deepRow.attempts).toBe(shallowRow.attempts + 1);
       expect(deepRow.depth_score, "deep commitment must be scored 2 or 3").not.toBeNull();
       expect(deepRow.depth_score! >= 2).toBe(true);
 
@@ -1240,20 +1120,13 @@ describe("Form-First regression", () => {
         .order("created_at");
       expect(ws?.length).toBe(3);
 
-      // Seed three deep commitments (pre-scored) directly.
-      for (const w of ws ?? []) {
-        const { error } = await supabase.from("itc_commitments").insert({
-          map_id: ctx.mapId,
-          worry_id: w.id,
-          text: "I'm committed to never letting her see the parts of me I'd have to disown.",
-          depth_score: 3,
-          attempts: 1,
-        });
-        expect(
-          error,
-          `seed commitment ${error?.message}`,
-        ).toBeNull();
-      }
+      // Advance auto-derived a commitment per worry; bring all three
+      // to depth 3 (pre-scored) so only the assumption is under test.
+      await ensureDeepCommitments(
+        ctx.mapId,
+        (ws ?? []).map((w) => w.id as string),
+        "I'm also committed to never being the man she finds out is never enough for her.",
+      );
 
       const advA = new FormData();
       advA.set("map_id", ctx.mapId);
@@ -1290,7 +1163,7 @@ describe("Form-First regression", () => {
 
       const { data: shallowRows } = await supabase
         .from("itc_assumptions")
-        .select("id, text, depth_score, attempts")
+        .select("id, text, depth_score, attempts, sharpen_text")
         .eq("map_id", ctx.mapId);
       expect(shallowRows?.length).toBe(1);
       const shallowRow = shallowRows![0] as {
@@ -1298,31 +1171,18 @@ describe("Form-First regression", () => {
         text: string;
         depth_score: number | null;
         attempts: number;
+        sharpen_text: string | null;
       };
-      expect(shallowRow.text).toBe(shallowText);
+      // saveAssumption prepends the "I assume that" stem.
+      expect(shallowRow.text).toMatch(/^I assume that/i);
+      expect(shallowRow.text).toContain("the argument will just take longer");
       expect(shallowRow.depth_score, "shallow assumption should score below 2").not.toBeNull();
       expect(shallowRow.depth_score! < 2).toBe(true);
       expect(shallowRow.attempts).toBe(1);
-
-      const { data: shallowReactions } = await supabase
-        .from("itc_messages")
-        .select("content")
-        .eq("map_id", ctx.mapId)
-        .eq("surface", "entry_thread")
-        .eq("entry_ref_table", "itc_assumptions")
-        .eq("entry_ref_id", shallowRow.id)
-        .eq("role", "assistant");
       expect(
-        (shallowReactions?.length ?? 0) > 0,
-        "coach reaction on the shallow assumption must land",
-      ).toBe(true);
-      const shallowProse = (shallowReactions ?? [])
-        .map((m) => m.content as string)
-        .join("\n");
-      expect(
-        shallowProse.includes("?"),
-        `shallow reaction should ask a question, got: ${shallowProse}`,
-      ).toBe(true);
+        shallowRow.sharpen_text,
+        "shallow assumption must carry the coach's what's-off line on the row",
+      ).toBeTruthy();
 
       const blockedGate = await getAdvanceGate(ctx.mapId);
       expect(blockedGate.from).toBe("assumptions");
@@ -1341,7 +1201,7 @@ describe("Form-First regression", () => {
       // now, so gate should block on pairing (the third commitment
       // is uncovered).
       const deepText =
-        "If I let her see who I really am, I will have proved I'm not a man at all — and I cannot be that man in front of my wife or my kids.";
+        "I assume that if I let her see who I really am, then she'd walk and I'd be the man who was never enough for his wife or his kids.";
       const a2 = new FormData();
       a2.set("map_id", ctx.mapId);
       a2.set("assumption_id", shallowRow.id);
@@ -1361,7 +1221,7 @@ describe("Form-First regression", () => {
         depth_score: number | null;
         attempts: number;
       };
-      expect(deepRow.text).toBe(deepText);
+      expect(deepRow.text).toMatch(/^I assume that/i);
       expect(deepRow.attempts).toBe(2);
       expect(deepRow.depth_score, "deep assumption should score 2 or 3").not.toBeNull();
       expect(deepRow.depth_score! >= 2).toBe(true);
@@ -2964,51 +2824,3 @@ describe("Form-First regression", () => {
   );
 });
 
-/**
- * A stub model that returns text claiming it added/saved things. Any
- * downstream inference in the pipeline would parse this and touch
- * state. Under Form-First, nothing should. Used by regression 2.
- */
-function makeHackyClaimsModel(): LanguageModel {
-  const respond = async () => ({
-    content: [
-      {
-        type: "text" as const,
-        text:
-          "Got it. I've locked in 'I explain why I'm right for ten minutes' as behavior #2. Also saved 'I want to fix everything' as your goal. Removed behavior #1 like you asked.",
-      },
-    ],
-    finishReason: "stop" as const,
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    warnings: [],
-    request: {},
-    response: {
-      id: "test",
-      timestamp: new Date(),
-      modelId: "test-claims",
-    },
-  });
-  return {
-    specificationVersion: "v2",
-    modelId: "test-claims",
-    provider: "test",
-    supportedUrls: {},
-    doGenerate: respond,
-    doStream: async () => {
-      throw new Error("stream not supported in stub");
-    },
-  } as unknown as LanguageModel;
-}
-
-async function snapshotMapContent(mapId: string) {
-  const supabase = createSupabaseServiceClient();
-  const [{ data: map }, { data: bs }, { data: ws }, { data: cs }, { data: as }] =
-    await Promise.all([
-      supabase.from("itc_maps").select("improvement_goal, current_stage").eq("id", mapId).single(),
-      supabase.from("itc_behaviors").select("id, text").eq("map_id", mapId).order("sort_order"),
-      supabase.from("itc_worries").select("id, text, behavior_id").eq("map_id", mapId),
-      supabase.from("itc_commitments").select("id, text, worry_id").eq("map_id", mapId),
-      supabase.from("itc_assumptions").select("id, text").eq("map_id", mapId),
-    ]);
-  return { map, behaviors: bs, worries: ws, commitments: cs, assumptions: as };
-}

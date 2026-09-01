@@ -553,6 +553,13 @@ export function normalizeWorryPrefix(text: string): string {
     [/^I['’`]m afraid of being /i, "I worry that I'd be "],
     [/^I fear that /i, "I worry that "],
     [/^I['’`]m afraid that /i, "I worry that "],
+    // "I'm afraid of wasting time" → "I worry that I'd be wasting time"
+    // (gerund object); "I'm afraid of the fallout" → "I worry about
+    // the fallout" (noun object). Both keep the "I worry" stem the
+    // rest of the pipeline keys on.
+    [/^I['’`]m afraid of (?=\w+ing\b)/i, "I worry that I'd be "],
+    [/^I['’`]m afraid of /i, "I worry about "],
+    [/^I fear (?=\w+ing\b)/i, "I worry that I'd be "],
     [/^I fear /i, "I worry that "],
     [/^I['’`]m afraid /i, "I worry that "],
     [/^My (fear|worry) is that /i, "I worry that "],
@@ -562,8 +569,10 @@ export function normalizeWorryPrefix(text: string): string {
   for (const [pattern, repl] of transforms) {
     if (pattern.test(s)) return s.replace(pattern, repl);
   }
-  const first = s.charAt(0);
-  const body = first === "I" ? s : first.toLowerCase() + s.slice(1);
+  // "That she'll leave" → "I worry that she'll leave", not "…that that".
+  const stripped = s.replace(/^that\s+/i, "");
+  const first = stripped.charAt(0);
+  const body = first === "I" ? stripped : first.toLowerCase() + stripped.slice(1);
   return `I worry that ${body}`;
 }
 
