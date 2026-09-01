@@ -49,6 +49,7 @@ import {
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "./rubric";
+import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -1215,6 +1216,23 @@ Worry: "I worry that if I stay quiet and let her finish, she'd know I've been th
 vow: "being the husband who can't let things go"
 Assembled: "I'm also committed to never being the husband who can't let things go."
 
+## Anti-pattern: "if I did X" worries — mirror the CONSEQUENT identity, not the antecedent behavior
+
+Worries of the form "if I did OPPOSITE_BEHAVIOR, she'd know I'm THE KIND OF GUY WHO Y" contain two parts:
+  - Antecedent (the "if" clause): the behavior. NOT the vow content.
+  - Consequent (what she'd know): the identity/outcome. THIS is the vow content.
+
+Worry: "I worry that if I admitted I was wrong, she'd know I'm the kind of guy who is incapable of changing"
+  WRONG vow: "admitting I'm wrong"                              (that's the antecedent — a behavior, not an identity)
+  RIGHT vow: "being the kind of guy who is incapable of changing"  (mirrors the identity in the consequent)
+  Assembled: "I'm also committed to never being the kind of guy who is incapable of changing."
+
+Worry: "I worry that if I let her see my flaws, she'd know she married a loser."
+  WRONG vow: "letting her see my flaws"                (that's the antecedent — a behavior)
+  RIGHT vow: "being the loser husband she'd discover if she saw my flaws"  (mirrors the identity in the consequent)
+
+Rule: if the worry has an "if I…, she'd know / see / find out that…" shape, the vow ALWAYS mirrors what she'd know / see / find out — never the "if I…" part.
+
 ## Length target
 
 Target for the assembled sentence: 10-20 words. Cap: 22. If the paired worry's identity content runs longer, keep the specificity — don't crop nouns just to hit the target.
@@ -1264,12 +1282,24 @@ const COMMITMENT_HARD_WORD_CAP = 24;
  * pass got rejected by the reaction coach and coachees never got
  * a legible draft.
  *
- * Verification: depth rubric only (single LLM check, no through-line
- * or consistency check). The introductory form is a text
- * transformation of the worry; there's no adjacent-mechanism drift
- * to guard against. Depth rubric verifies the vow mirrors the
- * worry's identity content and isn't a generic positive aspiration.
- * If it fails, one retry with the rubric feedback. Never silent-drop.
+ * Verification: the drafter checks its own output against the SAME
+ * criteria the hone auditor uses, so the coach never contradicts
+ * itself. Three failure modes gate the retry:
+ *   1. Depth rubric (LLM): score < 3.
+ *   2. Mirror check (LLM, folded into the depth call): the vow
+ *      doesn't carry the paired worry's identity concern.
+ *   3. Interior-witness regex: the vow ducks identity by framing as
+ *      "never seeing/knowing/feeling/admitting…" rather than naming
+ *      the outward identity plus observable action.
+ *
+ * Any failure triggers one retry with combined feedback naming ALL
+ * failed checks — the LLM should fix them together, not one at a
+ * time. If the retry still fails, we persist the best of the two
+ * attempts (fewest failed checks; ties → later attempt), never
+ * silent-drop. The persisted row will still carry a sharpen box from
+ * `composeCommitmentSharpen`, so the coachee sees "one thing to
+ * sharpen" from the moment the row lands — same signal the hone
+ * audit would surface, no contradiction between the two surfaces.
  */
 export async function draftCommitmentForWorry(input: {
   goalText: string;
@@ -1286,6 +1316,11 @@ export async function draftCommitmentForWorry(input: {
   ];
 
   type DraftShape = { assembled: string; slots: { vow: string } };
+  type Verdict = {
+    ok: boolean;
+    failures: string[];
+    depthScore: number | null;
+  };
 
   async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
     const { object } = await generateObject({
@@ -1303,16 +1338,21 @@ export async function draftCommitmentForWorry(input: {
     };
   }
 
-  try {
-    const first = await generateDraft(basePromptLines);
-    if (!first) return null;
+  /**
+   * Run the same criteria the hone auditor uses. Returns a verdict
+   * naming every failed check so the retry prompt can address all of
+   * them together. Fail-open on rubric error (transient Haiku hiccup
+   * shouldn't strand the drafter — depthScore=null skips the depth
+   * and mirror gates but the interior-witness regex still runs).
+   */
+  async function verifyDraft(assembled: string): Promise<Verdict> {
+    const failures: string[] = [];
+    let depthScore: number | null = null;
 
-    // Depth rubric only. Fail-open on rubric error — a transient Haiku
-    // hiccup shouldn't strand the drafter.
     const depthResult = await scoreCommitmentDepth({
       goalText: input.goalText,
       worryText: input.worryText,
-      commitmentText: first.assembled,
+      commitmentText: assembled,
     }).catch((err) => {
       console.warn(
         "[itc coach] commitment depth rubric failed, treating as pass: %s",
@@ -1320,19 +1360,73 @@ export async function draftCommitmentForWorry(input: {
       );
       return null;
     });
+    if (depthResult) {
+      depthScore = depthResult.score;
+      if (depthResult.score < 3) {
+        failures.push(
+          `Depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}". Push the vow to identity depth — name the identity being protected, not just the behavior.`,
+        );
+      }
+      if (depthResult.mirrors_worry_identity === false) {
+        failures.push(
+          `The vow doesn't mirror the paired worry's identity concern. Read the worry again: "${input.worryText}". Extract the identity/outcome it fears (e.g. "the kind of guy who X", "failing at Y"). The vow must mirror THAT — same nouns, same specificity.`,
+        );
+      }
+    }
 
-    if (depthResult === null || depthResult.score >= 3) return first.assembled;
+    // Regex check — cheap, deterministic. Wrap the assembled text in
+    // a minimal ItcCommitment shape so the shared check runs unchanged.
+    const iwFindings = await checkInteriorWitnessInCommitments({
+      commitments: [
+        {
+          id: "draft",
+          map_id: "draft",
+          worry_id: "draft",
+          text: assembled,
+          depth_score: null,
+          rubric_reason: null,
+          mirrors_worry_identity: null,
+          attempts: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    });
+    if (iwFindings.length > 0) {
+      failures.push(
+        `The vow uses an interior-witness verb ("never seeing/knowing/feeling/facing/admitting..."). That ducks the identity — it names an interior reckoning to avoid, not the identity itself. Rewrite as "never being the [specific role from the worry] who [observable action]" — outward identity plus what the outside world would see.`,
+      );
+    }
 
-    // One retry with the rubric feedback. Returning `first` on retry
-    // failure preserves the "never silent drop" invariant.
+    return { ok: failures.length === 0, failures, depthScore };
+  }
+
+  try {
+    const first = await generateDraft(basePromptLines);
+    if (!first) return null;
+
+    const firstVerdict = await verifyDraft(first.assembled);
+    if (firstVerdict.ok) return first.assembled;
+
     const retry = await generateDraft([
       ...basePromptLines,
       ``,
       `Your previous draft was: "${first.assembled}"`,
-      `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
-      `Rewrite the vow so it passes. Preserve intent; fix the flaw named.`,
+      `It failed ${firstVerdict.failures.length} check${firstVerdict.failures.length === 1 ? "" : "s"}:`,
+      ...firstVerdict.failures.map((f, i) => `${i + 1}. ${f}`),
+      ``,
+      `Rewrite the vow to pass ALL failing checks at once. Preserve intent; fix every flaw named.`,
     ]);
-    return retry?.assembled ?? first.assembled;
+
+    if (!retry) return first.assembled;
+    const retryVerdict = await verifyDraft(retry.assembled);
+    // Prefer the attempt with fewer failed checks; tie → later attempt.
+    // Both attempts persisted best-effort so composeCommitmentSharpen
+    // can still surface remaining findings on the row.
+    if (retryVerdict.failures.length <= firstVerdict.failures.length) {
+      return retry.assembled;
+    }
+    return first.assembled;
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentForWorry failed: %s",

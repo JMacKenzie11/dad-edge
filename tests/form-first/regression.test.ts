@@ -1979,9 +1979,16 @@ describe("Form-First regression", () => {
         ).toBe(true);
       }
 
-      // Score each auto-derived commitment against the depth rubric —
-      // the coach's own derivations must clear at 2/3 or better.
+      // Score each auto-derived commitment against the SAME criteria
+      // the hone auditor runs — depth rubric AND the interior-witness
+      // regex. Different bars between drafter and auditor create the
+      // "coach talks at cross-purposes" bug (system generates commitment
+      // X, then audit says X is bad). The drafter has its own verify-
+      // retry loop against these checks in draftCommitmentForWorry.
       const { scoreCommitmentDepth } = await import("@/lib/itc/rubric");
+      const { checkInteriorWitnessInCommitments } = await import(
+        "@/lib/itc/criteria/commitments"
+      );
       for (const w of worries ?? []) {
         const c = commitmentByWorryId.get(w.id);
         const scored = await scoreCommitmentDepth({
@@ -1993,6 +2000,26 @@ describe("Form-First regression", () => {
           scored.score >= 2,
           `auto-derived commitment for worry "${w.text}" scored ${scored.score}/3 — must be ≥ 2. Commitment: "${c?.text}". Rubric reason: ${scored.reason}`,
         ).toBe(true);
+        const iwFindings = await checkInteriorWitnessInCommitments({
+          commitments: [
+            {
+              id: c!.id as string,
+              map_id: ctx.mapId,
+              worry_id: w.id,
+              text: c!.text as string,
+              depth_score: null,
+              rubric_reason: null,
+              mirrors_worry_identity: null,
+              attempts: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        });
+        expect(
+          iwFindings.length,
+          `auto-derived commitment fired the interior-witness regex — drafter and auditor bar out of sync. Commitment: "${c?.text}"`,
+        ).toBe(0);
       }
     },
     240_000,
@@ -2389,13 +2416,16 @@ describe("Form-First regression", () => {
         "utf8",
       );
       // (a) No "Use this draft" button anywhere in commitments-row.
+      // Match JSX-text-between-tags shape so historical doc comments
+      // that reference the retired button don't trip this check.
       expect(
-        /Use this draft/i.test(rowSrc),
+        />\s*Use this draft\s*</i.test(rowSrc),
         "commitments-row must not render a 'Use this draft' button — commitments are auto-derived, not drafts",
       ).toBe(false);
-      // (b) No reference to a coach_commitment_draft field either.
+      // (b) No live read of the coach_commitment_draft field. Allow
+      // comments to mention it historically; forbid property access.
       expect(
-        /coach_commitment_draft/.test(rowSrc),
+        /\.coach_commitment_draft\b/.test(rowSrc),
         "commitments-row must not read coach_commitment_draft — the column is dropped",
       ).toBe(false);
 
@@ -2414,6 +2444,34 @@ describe("Form-First regression", () => {
       expect(
         /autoDeriveCommitmentForWorry\s*\(/.test(saveWorryBlock![0]),
         "saveWorry must call autoDeriveCommitmentForWorry so a worry edit re-syncs its paired commitment",
+      ).toBe(true);
+
+      // (d) draftCommitmentForWorry's verify loop must check the SAME
+      // criteria the hone auditor runs — otherwise the drafter can
+      // produce commitments its own audit will reject, and the coach
+      // ends up talking at cross-purposes.
+      //
+      // Bound the region between the function opener and the NEXT
+      // top-level `// ---` divider (coach.ts's function separator) so
+      // nested function braces don't truncate the match.
+      const coachSrc = readFileSync(
+        resolve(repoRoot, "src/lib/itc/coach.ts"),
+        "utf8",
+      );
+      const drafterBlock = coachSrc.match(
+        /export async function draftCommitmentForWorry[\s\S]*?(?=\n\/\/ ---)/,
+      );
+      expect(
+        drafterBlock,
+        "draftCommitmentForWorry must exist (and coach.ts must divide functions with `// ---` for the regex bound)",
+      ).toBeTruthy();
+      expect(
+        /checkInteriorWitnessInCommitments/.test(drafterBlock![0]),
+        "draftCommitmentForWorry's verify loop must run checkInteriorWitnessInCommitments (same check the hone auditor uses)",
+      ).toBe(true);
+      expect(
+        /mirrors_worry_identity/.test(drafterBlock![0]),
+        "draftCommitmentForWorry's verify loop must check mirrors_worry_identity (same check the hone auditor uses)",
       ).toBe(true);
     },
     5_000,
