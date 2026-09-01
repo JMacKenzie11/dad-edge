@@ -2473,6 +2473,24 @@ describe("Form-First regression", () => {
         /mirrors_worry_identity/.test(drafterBlock![0]),
         "draftCommitmentForWorry's verify loop must check mirrors_worry_identity (same check the hone auditor uses)",
       ).toBe(true);
+
+      // (e) Same alignment invariant on the WORRIES drafter: its
+      // verify loop must run checkInteriorWitnessInWorries — the
+      // exact regex the hone auditor runs on the column. Without this
+      // the drafter can produce "I'd have to see I…" text that passes
+      // depth but the auditor later flags. Same class of coach-talks-
+      // at-cross-purposes bug the commitments fix resolved.
+      const worryDrafterBlock = coachSrc.match(
+        /export async function draftWorryForBehavior[\s\S]*?(?=\n\/\/ ---)/,
+      );
+      expect(
+        worryDrafterBlock,
+        "draftWorryForBehavior must exist",
+      ).toBeTruthy();
+      expect(
+        /checkInteriorWitnessInWorries/.test(worryDrafterBlock![0]),
+        "draftWorryForBehavior's verify loop must run checkInteriorWitnessInWorries (same check the hone auditor uses)",
+      ).toBe(true);
     },
     5_000,
   );

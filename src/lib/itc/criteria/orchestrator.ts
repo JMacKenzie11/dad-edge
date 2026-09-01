@@ -30,7 +30,6 @@ import { checkBundledGoal } from "./goal";
 import {
   checkInteriorWitnessInWorries,
   checkWorryDepth,
-  checkWorryRedundancy,
 } from "./worries";
 import {
   checkCommitmentDepth,
@@ -92,7 +91,6 @@ async function runWorriesCriteria(input: CriteriaInput): Promise<Finding[]> {
       worries: input.worries,
       behaviors: input.behaviors,
     }),
-    checkWorryRedundancy({ worries: input.worries }),
   ]);
   return sortFindings(results.flat());
 }

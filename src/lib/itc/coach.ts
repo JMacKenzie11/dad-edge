@@ -50,6 +50,7 @@ import {
   scoreWorryDepth,
 } from "./rubric";
 import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
+import { checkInteriorWitnessInWorries } from "./criteria/worries";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
@@ -1001,8 +1002,15 @@ const WORRY_SHAPE_INSTRUCTIONS: Record<WorryIdentityShape, string> = {
  *      out, I'd have to see I'm the man who abandons her" (staying is
  *      the opposite of abandoning; "I'm the [X-er]" reads as staying
  *      creating the abandoner identity). Zero LLM cost, no judgment.
- *   4. If either check fails, one drafter retry fires with the failing
- *      reason(s) as feedback. Whatever comes back is returned — never
+ *   4. Interior-witness regex (checkInteriorWitnessInWorries) — same
+ *      check the hone auditor runs. Catches drafts where the identity
+ *      landing hides inside interior verbs applied to a self-truth
+ *      ("I'd have to see I…", "I'd know I…") instead of naming what
+ *      the outside world would witness. Added 2026-09-01 so drafter
+ *      and auditor speak with one voice (same alignment fix as
+ *      commitments 2026-08-31).
+ *   5. If any check fails, one drafter retry fires with all failing
+ *      reasons as feedback. Whatever comes back is returned — never
  *      silent drop; a slightly-off draft the coachee can edit beats
  *      no draft at all.
  */
@@ -1057,20 +1065,44 @@ export async function draftWorryForBehavior(input: {
     const first = await generateDraft(basePromptLines);
     if (!first) return null;
 
-    // Depth (LLM rubric, may fail) + consistency (deterministic pattern
-    // check, cannot fail). Depth fail-opens on rubric error — a
-    // transient Haiku hiccup shouldn't strand the drafter output.
-    const depthResult = await scoreWorryDepth({
-      goalText: input.goalText,
-      behaviorText: input.behaviorText,
-      worryText: first.assembled,
-    }).catch((err) => {
-      console.warn(
-        "[itc coach] worry depth rubric failed, treating as pass: %s",
-        err instanceof Error ? err.message : String(err),
-      );
-      return null;
-    });
+    // All three verifiers run in parallel. Depth (LLM) may fail — a
+    // transient Haiku hiccup shouldn't strand the drafter, so fail-open
+    // to pass on rubric error. Consistency (deterministic slot check)
+    // and interior-witness (deterministic regex on the assembled text)
+    // never throw.
+    const [depthResult, iwFindings] = await Promise.all([
+      scoreWorryDepth({
+        goalText: input.goalText,
+        behaviorText: input.behaviorText,
+        worryText: first.assembled,
+      }).catch((err) => {
+        console.warn(
+          "[itc coach] worry depth rubric failed, treating as pass: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+        return null;
+      }),
+      // Wrap the assembled text in a minimal ItcWorry shape so the
+      // shared auditor check runs unchanged. behaviors passed empty —
+      // the pronoun-picker used for the auditor's fix suggestion isn't
+      // needed here; we only care whether the regex fires.
+      checkInteriorWitnessInWorries({
+        worries: [
+          {
+            id: "draft",
+            map_id: "draft",
+            behavior_id: "draft",
+            text: first.assembled,
+            depth_score: null,
+            rubric_reason: null,
+            attempts: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        behaviors: [],
+      }),
+    ]);
     const consistencyResult = checkWorryLogicalConsistency({
       behaviorText: input.behaviorText,
       oppositeMove: first.slots.opposite_move,
@@ -1079,12 +1111,11 @@ export async function draftWorryForBehavior(input: {
 
     const depthOk = depthResult === null || depthResult.score >= 3;
     const consistencyOk = consistencyResult.consistent;
-    if (depthOk && consistencyOk) return first.assembled;
+    const interiorWitnessOk = iwFindings.length === 0;
+    if (depthOk && consistencyOk && interiorWitnessOk) return first.assembled;
 
-    // One retry with the failing reason(s) fed back. Both verifiers'
-    // feedback goes in if both failed; retry addresses whichever is
-    // wrong. Returning `first` on retry failure preserves the "never
-    // silent drop" invariant.
+    // One retry with all failing reasons fed back. Returning `first`
+    // on retry failure preserves the "never silent drop" invariant.
     const feedbackLines: string[] = [];
     if (!depthOk && depthResult) {
       feedbackLines.push(
@@ -1096,12 +1127,17 @@ export async function draftWorryForBehavior(input: {
         `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
       );
     }
+    if (!interiorWitnessOk) {
+      feedbackLines.push(
+        `The identity landing uses an interior-witness verb applied to a self-truth ("I'd have to see I…", "I'd know I…"). Flip to what the OUTSIDE WORLD would witness — "she'd see...", "she'd say...", "they'd know..." — so the identity landing sits in something observable, not an inner reckoning.`,
+      );
+    }
     const retry = await generateDraft([
       ...basePromptLines,
       ``,
       `Your previous draft was: "${first.assembled}"`,
       ...feedbackLines,
-      `Rewrite the slots so both checks pass. Preserve intent; fix the flaw(s) named. Same length target (under 20 words).`,
+      `Rewrite the slots so ALL checks pass. Preserve intent; fix every flaw named. Same length target (under 20 words).`,
     ]);
     return retry?.assembled ?? first.assembled;
   } catch (err) {

@@ -1,22 +1,20 @@
 /**
  * Column 3 (worries) criteria.
  *
- * Three checks:
+ * Two checks:
  *  - depth_shortfall_worry: worry hasn't reached identity depth
  *    (reads stored rubric score set at save time by scoreWorryDepth).
  *  - interior_witness_worry: worry uses interior-witness verbs applied
  *    to a self-truth ("I'd have to see I'm...") instead of what the
  *    outside world would witness.
- *  - worry_redundancy: two worries name the same identity concern —
- *    the map is doubling up on the same fear across excavation
- *    branches. Pairwise worry-vs-worry, order-independent (each pair
- *    checked once, finding rendered on the higher-indexed worry so
- *    duplicate messages don't stack).
+ *
+ * Retired 2026-09-01: worry_redundancy (pairwise LLM check). It was
+ * the only observation-severity finding on the map, and observations
+ * were retired the same day — the self-service coach only surfaces
+ * critical + moderate issues. Running an LLM per pair whose output
+ * gets filtered out was pure token waste.
  */
 
-import { generateObject } from "ai";
-import { z } from "zod";
-import { utilityModel } from "@/lib/model-config";
 import type { ItcBehavior, ItcWorry } from "../maps";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
@@ -104,87 +102,3 @@ export async function checkInteriorWitnessInWorries(input: {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// worry_redundancy
-// ---------------------------------------------------------------------------
-//
-// Two worries express the same identity concern → the map is carrying
-// the same fear twice across excavation branches. The fix is to push
-// one into a distinct concern or drop it.
-//
-// Historical note: this used to be worry_commitment_redundancy, which
-// pairwise-checked each worry against every non-paired competing
-// commitment. That was legitimate when commitments were coachee-
-// authored and could diverge from their paired worry. Since 2026-08-31
-// commitments auto-derive from worries (per the coaching guides —
-// competing commitment = non-noble transformation of the worry), so
-// worry-vs-non-paired-commitment ≈ worry-vs-worry. Reframed to check
-// worries directly — same signal, honest phrasing that doesn't ask the
-// coachee "how can a worry duplicate a commitment?".
-
-const RedundancySchema = z.object({
-  redundant: z.boolean(),
-  reason: z.string().max(400).optional(),
-});
-
-const REDUNDANCY_SYSTEM = `
-You judge whether two worries on an Immunity-to-Change map name the same identity fear in different framing.
-
-Return redundant=true only when both worries clearly point at the same identity concern (the map is bigger than it is — one is a re-phrasing of the other). Return redundant=false when they name distinct concerns, even if the framing overlaps.
-
-When in doubt, redundant=false. If redundant=true, give a short reason MAX 25 WORDS. Name the shared identity fear in one clause — don't enumerate "worry A says X, worry B says Y" (the audit already quotes both). Terseness matters — this reason renders inline and long reasons overwhelm the reader.
-`.trim();
-
-export async function checkWorryRedundancy(input: {
-  worries: ItcWorry[];
-}): Promise<Finding[]> {
-  const findings: Finding[] = [];
-  // Order-independent pairwise: only check pairs (a, b) where a comes
-  // before b in the list. Prevents the same identity concern from
-  // firing two findings (one on A→B, one on B→A) that would render
-  // as duplicate clauses. The finding lands on b (the later worry) so
-  // A stays as the "original" reference and B is the one asked to
-  // change or drop.
-  const pairs: Array<{ a: ItcWorry; b: ItcWorry }> = [];
-  for (let i = 0; i < input.worries.length; i++) {
-    for (let j = i + 1; j < input.worries.length; j++) {
-      pairs.push({ a: input.worries[i], b: input.worries[j] });
-    }
-  }
-  await Promise.all(
-    pairs.map(async ({ a, b }) => {
-      try {
-        const { object } = await generateObject({
-          model: utilityModel(),
-          schema: RedundancySchema,
-          system: REDUNDANCY_SYSTEM,
-          prompt: [`Worry A: ${a.text}`, `Worry B: ${b.text}`].join("\n"),
-          maxOutputTokens: 300,
-          temperature: 0.1,
-        });
-        if (!object.redundant) return;
-        findings.push({
-          entryRef: { table: "worries", id: b.id },
-          issueType: "worry_redundancy",
-          severity: "observation",
-          actualText: b.text,
-          detail: object.reason
-            ? `Worry duplicates the identity concern in another worry on the map. ${object.reason}`
-            : "Worry duplicates a concern already carried by another worry. The map reads as if it holds more distinct fears than it does.",
-          suggestedFix:
-            "Either push this worry into a distinct identity concern, or drop it so the map isn't doubled up.",
-          relatedEntryRef: { table: "worries", id: a.id },
-          relatedText: a.text,
-        });
-      } catch (err) {
-        console.warn(
-          "[itc criteria] checkWorryRedundancy failed (a=%s b=%s): %s",
-          a.id,
-          b.id,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }),
-  );
-  return findings;
-}

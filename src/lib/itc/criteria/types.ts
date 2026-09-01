@@ -23,8 +23,7 @@ export type IssueType =
   | "assumption_overload"
   | "assumption_uncovered_commitment"
   | "test_coverage_gap"
-  | "test_grip_through_data"
-  | "worry_redundancy";
+  | "test_grip_through_data";
 
 export type EntryRef =
   | { table: "goal"; id: string }
@@ -35,7 +34,14 @@ export type EntryRef =
   | { table: "tests"; id: string }
   | { table: "map"; id: string };
 
-export type Severity = "critical" | "moderate" | "observation";
+/**
+ * Only two severities. `critical` = structurally broken (blocks
+ * downstream derivation). `moderate` = shape/framing issue worth
+ * sharpening. Observation-severity was retired 2026-09-01 —
+ * nice-to-have signals were too strict for a self-service tool where
+ * the coach shouldn't nag on things that hold up structurally.
+ */
+export type Severity = "critical" | "moderate";
 
 export type Finding = {
   entryRef: EntryRef;
@@ -65,7 +71,6 @@ export type Finding = {
 export const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 0,
   moderate: 1,
-  observation: 2,
 };
 
 /** Depth score threshold. Rubric scores 0–3; anything below 3 is a

@@ -362,58 +362,6 @@ describe("renderAudit — drift, overload, redundancy clauses", () => {
     expect(prose).toMatch(/Draft additional Big Assumptions/i);
   });
 
-  it("renders single redundancy as a per-worry clause", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "worry_redundancy",
-          severity: "observation",
-          entryRef: { table: "worries", id: "w-2" },
-          actualText: "I worry X",
-          detail: "Same identity concern in two forms.",
-          relatedText: "I worry that Y",
-          relatedEntryRef: { table: "worries", id: "w-1" },
-        }),
-      ],
-      CTX,
-    );
-    expect(prose).toMatch(/Duplicates the worry "I worry that Y"/i);
-    expect(prose).toMatch(/Push this worry into a distinct/i);
-  });
-
-  it("merges multiple redundancy findings on the same worry into one clause", () => {
-    const prose = renderAudit(
-      [
-        finding({
-          issueType: "worry_redundancy",
-          severity: "observation",
-          entryRef: { table: "worries", id: "w-3" },
-          actualText: "I worry X",
-          detail: "Same concern.",
-          relatedText: "worry A",
-          relatedEntryRef: { table: "worries", id: "w-1" },
-        }),
-        finding({
-          issueType: "worry_redundancy",
-          severity: "observation",
-          entryRef: { table: "worries", id: "w-3" },
-          actualText: "I worry X",
-          detail: "Same concern.",
-          relatedText: "worry B",
-          relatedEntryRef: { table: "worries", id: "w-2" },
-        }),
-      ],
-      CTX,
-    );
-    // Worry quote once.
-    const quoteCount = prose.split('"I worry X"').length - 1;
-    expect(quoteCount).toBe(1);
-    // Both related worries listed.
-    expect(prose).toContain('"worry A"');
-    expect(prose).toContain('"worry B"');
-    expect(prose).toMatch(/Duplicates both worries/i);
-  });
-
   it("combines generic critiques with drift/overload in one enumerated paragraph", () => {
     // An assumption with vague-then + drift + overload should render as
     // a single paragraph enumerating all three fixes.
@@ -480,13 +428,8 @@ describe("renderAudit — exhaustiveness and voice hygiene", () => {
       "assumption_uncovered_commitment",
       "test_coverage_gap",
       "test_grip_through_data",
-      "worry_redundancy",
     ];
-    const severities: AuditSeverity[] = [
-      "critical",
-      "moderate",
-      "observation",
-    ];
+    const severities: AuditSeverity[] = ["critical", "moderate"];
     for (const issueType of allIssueTypes) {
       for (const severity of severities) {
         const f = finding({
@@ -600,7 +543,7 @@ describe("renderFindings — column_review mode", () => {
     expect(prose).toMatch(/Push it to identity depth/i);
   });
 
-  it("uses the moderate-only phrasing when there are no criticals or observations", () => {
+  it("uses the moderate phrasing when there are no criticals", () => {
     const prose = renderColumnReview(
       [
         finding({

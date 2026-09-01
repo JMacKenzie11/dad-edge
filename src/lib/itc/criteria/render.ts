@@ -79,10 +79,6 @@ function renderEmptyState(context: RenderContext): string {
 function renderOpening(findings: Finding[], context: RenderContext): string {
   const criticals = findings.filter((f) => f.severity === "critical").length;
   const moderates = findings.filter((f) => f.severity === "moderate").length;
-  const observations = findings.filter(
-    (f) => f.severity === "observation",
-  ).length;
-  const total = findings.length;
 
   if (context.mode === "column_review") {
     const label = context.columnLabel ?? "this column";
@@ -91,15 +87,8 @@ function renderOpening(findings: Finding[], context: RenderContext): string {
         criticals === 1 ? "one critical thing" : `${criticals} critical things`;
       return `${critWord} to sharpen on ${label.toLowerCase()} before you move on.`;
     }
-    if (moderates > 0 && observations === 0) {
-      const modWord = moderates === 1 ? "One thing" : `${moderates} things`;
-      return `${modWord} worth sharpening on ${label.toLowerCase()} before you move on.`;
-    }
-    if (moderates > 0 && observations > 0) {
-      return `${moderates} moderate issue${moderates === 1 ? "" : "s"} and ${observations} smaller observation${observations === 1 ? "" : "s"} on ${label.toLowerCase()} worth a look.`;
-    }
-    const obsWord = total === 1 ? "One small thing" : `${total} small things`;
-    return `${obsWord} worth noting on ${label.toLowerCase()}.`;
+    const modWord = moderates === 1 ? "One thing" : `${moderates} things`;
+    return `${modWord} worth sharpening on ${label.toLowerCase()} before you move on.`;
   }
 
   // mode === "hone"
@@ -109,17 +98,8 @@ function renderOpening(findings: Finding[], context: RenderContext): string {
     return `Your ${context.pillarLabel} map has ${critWord} to fix before this hone pass is worth much else. Working down the map.`;
   }
 
-  if (moderates > 0 && observations === 0) {
-    const modWord = moderates === 1 ? "one thing" : `${moderates} things`;
-    return `Your ${context.pillarLabel} map holds up structurally. ${modWord} worth sharpening before you keep going.`;
-  }
-
-  if (moderates > 0 && observations > 0) {
-    return `Your ${context.pillarLabel} map holds up structurally, with ${moderates} moderate issue${moderates === 1 ? "" : "s"} to sharpen and ${observations} smaller observation${observations === 1 ? "" : "s"} to consider.`;
-  }
-
-  const obsWord = total === 1 ? "one small thing" : `${total} small things`;
-  return `Your ${context.pillarLabel} map is in good shape. ${obsWord} worth noting.`;
+  const modWord = moderates === 1 ? "one thing" : `${moderates} things`;
+  return `Your ${context.pillarLabel} map holds up structurally. ${modWord} worth sharpening before you keep going.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,14 +213,6 @@ function collectClauses(findings: Finding[]): string[] {
   const overload = findings.find((f) => f.issueType === "assumption_overload");
   if (overload) clauses.push(renderOverloadClause(overload));
 
-  const redundancies = findings.filter(
-    (f) => f.issueType === "worry_redundancy",
-  );
-  if (redundancies.length === 1)
-    clauses.push(renderRedundancyClause(redundancies[0]));
-  else if (redundancies.length >= 2)
-    clauses.push(renderMergedRedundancyClause(redundancies));
-
   return clauses;
 }
 
@@ -317,21 +289,6 @@ function renderOverloadClause(f: Finding): string {
   return `Carrying more weight than one belief can hold — ${reason} Draft additional Big Assumptions so each commitment has one pointed at its own specific concern.`;
 }
 
-function renderRedundancyClause(f: Finding): string {
-  const related = f.relatedText ? `"${f.relatedText}"` : "another worry";
-  const reason = stripDetailPrefix(f.detail);
-  return `Duplicates the worry ${related} — ${reason} Push this worry into a distinct identity concern or drop it so the map isn't carrying the same fear twice.`;
-}
-
-function renderMergedRedundancyClause(findings: Finding[]): string {
-  const worryQuotes = findings
-    .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
-    .filter((s): s is string => s !== null);
-  const quotesList =
-    worryQuotes.length > 0 ? ` (${joinList(worryQuotes)})` : "";
-  const count = pluralCountPhrase(findings.length);
-  return `Duplicates ${count} worries${quotesList} — same identity concern in different forms. Push this worry into a distinct identity concern or drop it.`;
-}
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -411,6 +368,5 @@ const _EXHAUSTIVENESS: readonly IssueType[] = [
   "assumption_uncovered_commitment",
   "test_coverage_gap",
   "test_grip_through_data",
-  "worry_redundancy",
 ];
 void _EXHAUSTIVENESS;
