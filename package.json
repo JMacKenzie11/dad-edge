@@ -19,6 +19,7 @@
     "migrate:itc": "tsx scripts/migrate-itc-participants.ts",
     "backfill:itc-goals": "tsx scripts/backfill-itc-quarterly-goals.ts",
     "itc:rescore-worries": "tsx scripts/rescore-itc-worries.ts",
+    "itc:rescore-assumptions": "tsx scripts/rescore-itc-assumptions.ts",
     "reset:onboarding": "tsx scripts/reset-onboarding.ts",
     "help:extract": "tsx scripts/help/extract-routes.ts",
     "help:generate": "tsx scripts/help/generate-content.ts",
