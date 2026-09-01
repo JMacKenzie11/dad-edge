@@ -13,6 +13,7 @@
  */
 
 import type { ItcCommitment, ItcWorry } from "../maps";
+import { ADVICE } from "./advice";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -27,8 +28,8 @@ export async function checkCommitmentDepth(input: {
     if (commitment.depth_score == null) continue;
     if (commitment.depth_score >= DEPTH_THRESHOLD) continue;
     const detail = commitment.rubric_reason
-      ? `Commitment hasn't reached identity depth yet. Rubric reason: ${commitment.rubric_reason}`
-      : "Commitment hasn't reached identity depth yet. The vow needs to name the identity being protected and what the outside world would see.";
+      ? `${ADVICE.depth_shortfall_commitment} Rubric reason: ${commitment.rubric_reason}`
+      : ADVICE.depth_shortfall_commitment;
     findings.push({
       entryRef: { table: "commitments", id: commitment.id },
       issueType: "depth_shortfall_commitment",
@@ -66,8 +67,7 @@ export async function checkInteriorWitnessInCommitments(input: {
       issueType: "interior_witness_commitment",
       severity: "moderate",
       actualText: commitment.text,
-      detail:
-        "Commitment is framed around avoiding a feeling or an interior reckoning. The sharper form names the identity being protected AND what the outside world would see the coachee take the hit on — 'never being the [specific role] who [observable action]' rather than 'never seeing / knowing / feeling / facing X'.",
+      detail: ADVICE.interior_witness_commitment,
     });
   }
   return findings;
@@ -103,10 +103,7 @@ export async function checkCommitmentMirrorsWorry(input: {
       issueType: "commitment_doesnt_mirror_worry",
       severity: "critical",
       actualText: commitment.text,
-      detail:
-        "Commitment doesn't mirror the identity or outcome its paired worry fears. The competing commitment is supposed to be the worry rewritten as a first-person vow — same identity, wrapped in \"I'm also committed to never...\". This one has drifted to a different concern.",
-      suggestedFix:
-        "Rewrite the vow so it names the exact identity or outcome the paired worry names. If the worry fears \"being the guy who...\", the commitment vows \"never being the guy who...\" — same nouns, same specificity.",
+      detail: ADVICE.commitment_doesnt_mirror_worry,
       relatedEntryRef: worry ? { table: "worries", id: worry.id } : undefined,
       relatedText: worry?.text,
     });

@@ -12,6 +12,7 @@
  */
 
 import type { ItcBehavior } from "../maps";
+import { ADVICE } from "./advice";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
 export async function checkBehaviorDepth(input: {
@@ -23,8 +24,8 @@ export async function checkBehaviorDepth(input: {
     if (behavior.depth_score == null) continue;
     if (behavior.depth_score >= DEPTH_THRESHOLD) continue;
     const detail = behavior.rubric_reason
-      ? `Behavior hasn't reached observable / goal-connected depth yet. Rubric reason: ${behavior.rubric_reason}`
-      : "Behavior hasn't reached observable / goal-connected depth yet. It needs to be a specific move that works against the current goal, phrased as something the coachee actually does.";
+      ? `${ADVICE.depth_shortfall_behavior} Rubric reason: ${behavior.rubric_reason}`
+      : ADVICE.depth_shortfall_behavior;
     findings.push({
       entryRef: { table: "behaviors", id: behavior.id },
       issueType: "depth_shortfall_behavior",

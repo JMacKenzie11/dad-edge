@@ -22,6 +22,7 @@ import type {
   ItcAssumptionCommitment,
   ItcCommitment,
 } from "../maps";
+import { ADVICE } from "./advice";
 import { DEPTH_THRESHOLD, type Finding } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -36,8 +37,8 @@ export async function checkAssumptionDepth(input: {
     if (assumption.depth_score == null) continue;
     if (assumption.depth_score >= DEPTH_THRESHOLD) continue;
     const detail = assumption.rubric_reason
-      ? `Big Assumption hasn't reached identity depth yet. Rubric reason: ${assumption.rubric_reason}`
-      : "Big Assumption hasn't reached identity depth yet. The 'then' half needs to finish through to an identity landing or a Big Time Bad conclusion.";
+      ? `${ADVICE.depth_shortfall_assumption} Rubric reason: ${assumption.rubric_reason}`
+      : ADVICE.depth_shortfall_assumption;
     findings.push({
       entryRef: { table: "assumptions", id: assumption.id },
       issueType: "depth_shortfall_assumption",
@@ -82,10 +83,7 @@ export async function checkVagueAssumptionThenClause(input: {
       issueType: "vague_assumption_then_clause",
       severity: "moderate",
       actualText: assumption.text,
-      detail:
-        "Then-clause gestures at an identity ('the man I'm terrified of', 'what I fear I am') without naming it. Vague then-clauses do not test — there's no concrete identity claim to gather evidence against.",
-      suggestedFix:
-        "Name the identity itself. Instead of \"the guy I don't want to be\", write out what that guy actually is (\"the guy whose team stopped bringing him hard problems\", \"the dad whose kids don't call\").",
+      detail: ADVICE.vague_assumption_then_clause,
     });
   }
   return findings;
@@ -109,10 +107,7 @@ export async function checkAssumptionCoverage(input: {
       issueType: "assumption_uncovered_commitment",
       severity: "critical",
       actualText: commitment.text,
-      detail:
-        "No Big Assumption is linked to this competing commitment. The commitment is protecting something the coachee hasn't yet named as a testable belief, so nothing about it can be challenged with evidence.",
-      suggestedFix:
-        "Draft a Big Assumption whose if-clause names the exact scenario this commitment is protecting against, and whose then-clause names the identity or Big Time Bad conclusion the commitment fears.",
+      detail: ADVICE.assumption_uncovered_commitment,
     });
   }
   return findings;

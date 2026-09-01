@@ -49,6 +49,7 @@ import {
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "./rubric";
+import { ADVICE } from "./criteria/advice";
 import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
 import { checkInteriorWitnessInWorries } from "./criteria/worries";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
@@ -1128,9 +1129,13 @@ export async function draftWorryForBehavior(input: {
       );
     }
     if (!interiorWitnessOk) {
-      feedbackLines.push(
-        `The identity landing uses an interior-witness verb applied to a self-truth ("I'd have to see I…", "I'd know I…"). Flip to what the OUTSIDE WORLD would witness — "she'd see...", "she'd say...", "they'd know..." — so the identity landing sits in something observable, not an inner reckoning.`,
-      );
+      // Advice reads from ADVICE — single source of truth for what
+      // to tell the LLM (and the coachee) about how to fix this
+      // class of finding. Prior hand-written string suggested
+      // "she'd see..." which violates scoreWorryDepth's
+      // is_first_person_felt criterion; the coach ended up telling
+      // the drafter to produce shapes its own depth rubric rejects.
+      feedbackLines.push(ADVICE.interior_witness_worry);
     }
     const retry = await generateDraft([
       ...basePromptLines,
@@ -1404,8 +1409,12 @@ export async function draftCommitmentForWorry(input: {
         );
       }
       if (depthResult.mirrors_worry_identity === false) {
+        // Advice reads from ADVICE (see src/lib/itc/criteria/advice.ts).
+        // Worry text is quoted inline so the LLM has the exact identity
+        // it needs to mirror — the canonical advice tells it HOW,
+        // the quote tells it WHAT.
         failures.push(
-          `The vow doesn't mirror the paired worry's identity concern. Read the worry again: "${input.worryText}". Extract the identity/outcome it fears (e.g. "the kind of guy who X", "failing at Y"). The vow must mirror THAT — same nouns, same specificity.`,
+          `${ADVICE.commitment_doesnt_mirror_worry} The paired worry is: "${input.worryText}".`,
         );
       }
     }
@@ -1429,9 +1438,10 @@ export async function draftCommitmentForWorry(input: {
       ],
     });
     if (iwFindings.length > 0) {
-      failures.push(
-        `The vow uses an interior-witness verb ("never seeing/knowing/feeling/facing/admitting..."). That ducks the identity — it names an interior reckoning to avoid, not the identity itself. Rewrite as "never being the [specific role from the worry] who [observable action]" — outward identity plus what the outside world would see.`,
-      );
+      // Advice reads from ADVICE (see src/lib/itc/criteria/advice.ts)
+      // so drafter feedback stays aligned with the auditor's fix
+      // suggestion and the save-time sharpen box.
+      failures.push(ADVICE.interior_witness_commitment);
     }
 
     return { ok: failures.length === 0, failures, depthScore };

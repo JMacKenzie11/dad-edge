@@ -220,28 +220,36 @@ function collectClauses(findings: Finding[]): string[] {
 // Critique specs — plain-language fix-inline sentences
 // ---------------------------------------------------------------------------
 
-const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = {
-  depth_shortfall_behavior:
-    "Push it to observable depth — name a specific move you make that works against your goal, phrased as something you actually do (not what you wish you did).",
-  depth_shortfall_worry:
-    "Push it to identity depth — name who you'd be if the opposite behavior happened, not just what would happen.",
-  depth_shortfall_commitment:
-    "Push it to identity depth — name the identity you're protecting and what a friend on your shoulder would see you take the hit on.",
-  depth_shortfall_assumption:
-    'Push the "then" half to identity depth — who you\'d be, not just what would happen next.',
-  interior_witness_worry:
-    'Flip to outside witness — instead of what you\'d have to see, know, or feel, name what SHE would see, know, or say out loud.',
-  interior_witness_commitment:
-    'Rewrite as "never being the [specific role] who [specific action]" instead of "avoiding the feeling that…" — name the identity plus the observable action.',
-  commitment_doesnt_mirror_worry:
-    "Rewrite so it names the exact identity or outcome the paired worry fears. Same nouns, same specificity, wrapped in \"I'm also committed to never...\" — the commitment is supposed to be the worry rewritten as a vow.",
-  vague_assumption_then_clause:
-    'Name the identity plainly in the "then" half — write out what that guy actually is, not "the guy I\'m terrified of".',
-  assumption_uncovered_commitment:
-    "Draft a Big Assumption for this commitment — an if-then belief that names the scenario the commitment protects against and the identity it fears.",
-  bundled_goal:
-    "Split this into two improvements — pick one for this map, save the other for later.",
-};
+// CRITIQUE_SPECS reads the canonical advice from ADVICE (single source
+// of truth — see src/lib/itc/criteria/advice.ts). Prior local copy
+// drifted from the check functions' detail strings, producing coach-
+// vs-coach contradictions where the audit told the coachee to do the
+// exact thing the save-time depth rubric rejected. Do NOT add local
+// strings here; edit ADVICE and everyone stays aligned.
+//
+// Findings with dynamic sentence structure (assumption_commitment_drift
+// and assumption_overload) render via renderDriftClause /
+// renderOverloadClause below — they embed LLM-produced labels into
+// the sentence and can't be a static string, so they're excluded from
+// the generic-critique path.
+import { ADVICE } from "./advice";
+
+const GENERIC_CRITIQUE_ISSUE_TYPES: readonly IssueType[] = [
+  "bundled_goal",
+  "depth_shortfall_behavior",
+  "depth_shortfall_worry",
+  "depth_shortfall_commitment",
+  "depth_shortfall_assumption",
+  "interior_witness_worry",
+  "interior_witness_commitment",
+  "commitment_doesnt_mirror_worry",
+  "vague_assumption_then_clause",
+  "assumption_uncovered_commitment",
+];
+
+const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = Object.fromEntries(
+  GENERIC_CRITIQUE_ISSUE_TYPES.map((t) => [t, ADVICE[t]]),
+);
 
 const GENERIC_ORDER: Partial<Record<IssueType, number>> = {
   bundled_goal: 0,

@@ -117,7 +117,11 @@ describe("checkInteriorWitnessInWorries", () => {
     expect(findings[0].issueType).toBe("interior_witness_worry");
     expect(findings[0].actualText).toBe(worry.text);
     expect(findings[0].suggestedFix).toBeUndefined();
-    expect(findings[0].detail).toMatch(/external witness/i);
+    // Detail is sourced from ADVICE.interior_witness_worry — the
+    // aligned copy that keeps the fix framed in first-person felt
+    // dread (not "she'd see", which would violate is_first_person_felt).
+    expect(findings[0].detail).toMatch(/interior-witness/i);
+    expect(findings[0].detail).toMatch(/(I['\u2019]m afraid|I worry I['\u2019]m|I['\u2019]d be)/);
   });
 
   it("does not flag a worry that already uses external witness", async () => {
