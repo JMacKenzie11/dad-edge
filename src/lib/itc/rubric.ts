@@ -156,7 +156,14 @@ Score three binary criteria. When in doubt, false.
 
 2. is_first_person_felt: First-person, present-tense, feels true when he says it. Not third-person, not abstract, not about anyone else.
 
-3. lands_in_identity_or_big_time_bad: The "then" touches identity ("I'm the kind of man who...") or a Big Time Bad conclusion (irrecoverable failure, being seen as the thing he most dreads being). "It'd take longer" or "we'd lose the deal" doesn't land here.
+3. lands_in_identity_or_big_time_bad: The "then" names an identity ("I'd be the coach who talked a great game and couldn't deliver", "I'm the kind of man who...", "the fraud") or a Big Time Bad conclusion that can't be recovered from ("I can't be trusted when the people who depend on me need me most"). "It'd take longer" or "we'd lose the deal" doesn't land here.
+
+   STRICTLY REJECT these, the same way the worry rubric does. They gesture at identity without naming it:
+   - Comparative hedges: "I may not be as capable / valuable as they think", "I'm not as good as they believe", "I might not be enough for them". The hedge ("may", "might", "not as … as") is the immune system softening it. Would need the named identity ("I'd be the fraud who's been talking a great game").
+   - Bare failure events: "I have failed at the thing I claim to be great at", "I'll have failed to help them", "it won't have worked". Failure is an event; who he'd be after it is the identity. Would need "…and I'd be the coach who talked a great game but couldn't help them transform".
+   - Outcomes about others with no landing on him: "they'll leave", "she'd be upset", "the deal falls through".
+
+   Self-check before scoring true: can you finish "the identity he's afraid of being is: ___" using words FROM the "then" itself? If you have to infer it, score false.
 
 REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, under 40 words. Name what the entry stops at and what the finished version would say. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 `.trim();

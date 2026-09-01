@@ -6,7 +6,7 @@ import type {
   ItcCommitment,
   ItcWorry,
 } from "../../maps";
-import type { Finding } from "../types";
+import { depthSeverity, type Finding } from "../types";
 
 // Mock the goal check so waterfall tests can drive the goal layer
 // deterministically without hitting the LLM in checkBundledGoal.
@@ -282,7 +282,8 @@ describe("depth checks", () => {
       "depth_shortfall_behavior",
     ]);
     expect(findings[0].detail).toContain("not observable enough");
-    expect(findings[0].severity).toBe("critical");
+    // 2/3 can clear the gate on a second attempt, so it's fixable, not broken.
+    expect(findings[0].severity).toBe("moderate");
   });
 
   it("does not flag unselected behaviors even if they're at depth < 3", async () => {
@@ -631,5 +632,25 @@ describe("checkAssumptionKeepsCommitmentIdentity", () => {
       commitmentTexts: ["I'm also committed to never being the coach who quit."],
     });
     expect(r.kept).toBe(false);
+  });
+});
+
+describe("depthSeverity mirrors the advance gate", () => {
+  it("2/3 is fixable (moderate); below 2 is broken (critical)", () => {
+    expect(depthSeverity(3)).toBe("moderate");
+    expect(depthSeverity(2)).toBe("moderate");
+    expect(depthSeverity(1)).toBe("critical");
+    expect(depthSeverity(0)).toBe("critical");
+  });
+
+  it("depth checks carry it through on every column", async () => {
+    const [w] = await checkWorryDepth({ worries: [makeWorry({ depth_score: 2 })] });
+    expect(w.severity).toBe("moderate");
+    const [c] = await checkCommitmentDepth({ commitments: [makeCommitment({ depth_score: 1 })] });
+    expect(c.severity).toBe("critical");
+    const [a] = await checkAssumptionDepth({ assumptions: [makeAssumption({ depth_score: 2 })] });
+    expect(a.severity).toBe("moderate");
+    const [b] = await checkBehaviorDepth({ behaviors: [makeBehavior({ depth_score: 0 })] });
+    expect(b.severity).toBe("critical");
   });
 });

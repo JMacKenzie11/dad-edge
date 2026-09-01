@@ -92,3 +92,14 @@ export const SEVERITY_ORDER: Record<Severity, number> = {
  *  depth-shortfall finding. Shared across worries, commitments, and
  *  assumptions. */
 export const DEPTH_THRESHOLD = 3;
+
+/**
+ * Severity of a depth-shortfall finding mirrors the advance gate
+ * (rules.ts worryPassesDepth): 2/3 can pass the gate after a second
+ * honest attempt, so it's "one thing to fix" (moderate); below 2 is
+ * blocked outright, so it's "broken" (critical). Before 2026-09-01
+ * anything under 3 rendered as broken, which overstated a 2/3.
+ */
+export function depthSeverity(score: number): Severity {
+  return score < 2 ? "critical" : "moderate";
+}

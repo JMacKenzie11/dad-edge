@@ -14,7 +14,7 @@
 
 import type { ItcCommitment, ItcWorry } from "../maps";
 import { ADVICE } from "./advice";
-import { DEPTH_THRESHOLD, type Finding } from "./types";
+import { DEPTH_THRESHOLD, depthSeverity, type Finding } from "./types";
 
 // ---------------------------------------------------------------------------
 // depth_shortfall_commitment
@@ -30,7 +30,7 @@ export async function checkCommitmentDepth(input: {
     findings.push({
       entryRef: { table: "commitments", id: commitment.id },
       issueType: "depth_shortfall_commitment",
-      severity: "critical",
+      severity: depthSeverity(commitment.depth_score),
       actualText: commitment.text,
       detail:
         commitment.rubric_reason?.trim() || ADVICE.depth_shortfall_commitment,

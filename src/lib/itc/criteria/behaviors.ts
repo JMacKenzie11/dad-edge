@@ -13,7 +13,7 @@
 
 import type { ItcBehavior } from "../maps";
 import { ADVICE } from "./advice";
-import { DEPTH_THRESHOLD, type Finding } from "./types";
+import { DEPTH_THRESHOLD, depthSeverity, type Finding } from "./types";
 
 export async function checkBehaviorDepth(input: {
   behaviors: ItcBehavior[];
@@ -26,7 +26,7 @@ export async function checkBehaviorDepth(input: {
     findings.push({
       entryRef: { table: "behaviors", id: behavior.id },
       issueType: "depth_shortfall_behavior",
-      severity: "critical",
+      severity: depthSeverity(behavior.depth_score),
       actualText: behavior.text,
       detail: behavior.rubric_reason?.trim() || ADVICE.depth_shortfall_behavior,
     });

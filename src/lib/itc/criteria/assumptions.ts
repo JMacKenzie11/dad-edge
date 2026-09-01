@@ -47,7 +47,7 @@ import type {
   ItcCommitment,
 } from "../maps";
 import { ADVICE } from "./advice";
-import { DEPTH_THRESHOLD, type Finding } from "./types";
+import { DEPTH_THRESHOLD, depthSeverity, type Finding } from "./types";
 
 // ---------------------------------------------------------------------------
 // depth_shortfall_assumption
@@ -63,7 +63,7 @@ export async function checkAssumptionDepth(input: {
     findings.push({
       entryRef: { table: "assumptions", id: assumption.id },
       issueType: "depth_shortfall_assumption",
-      severity: "critical",
+      severity: depthSeverity(assumption.depth_score),
       actualText: assumption.text,
       detail: assumption.rubric_reason?.trim() || ADVICE.depth_shortfall_assumption,
       suggestedFix: assumption.suggested_fix ?? undefined,
