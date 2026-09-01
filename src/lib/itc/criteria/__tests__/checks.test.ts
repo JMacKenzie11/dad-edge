@@ -13,6 +13,19 @@ import type { Finding } from "../types";
 vi.mock("../goal", () => ({
   checkBundledGoal: vi.fn(async () => [] as Finding[]),
 }));
+// Same for the two LLM judges on the assumptions column: a clean map
+// in these tests means "everything fits, everything enactable".
+vi.mock("ai", () => ({
+  generateObject: vi.fn(async ({ schema }: { schema: { shape: Record<string, unknown> } }) =>
+    "enactable" in schema.shape
+      ? { object: { enactable: true, reverses_behavior_index: 1, reason: "ok" } }
+      : { object: { fits: [1, 2, 3, 4, 5, 6], doesnt_fit: [] } },
+  ),
+}));
+vi.mock("@/lib/model-config", () => ({
+  utilityModel: () => "utility-model",
+  mainModel: () => "main-model",
+}));
 
 import { checkBehaviorDepth } from "../behaviors";
 import {
@@ -54,6 +67,8 @@ function makeWorry(overrides: Partial<ItcWorry>): ItcWorry {
     text: "I worry that I would let my team down.",
     depth_score: 3,
     rubric_reason: null,
+    sharpen_text: null,
+    suggested_fix: null,
     attempts: 1,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -69,6 +84,8 @@ function makeCommitment(overrides: Partial<ItcCommitment>): ItcCommitment {
     text: "I'm also committed to never being the coach who watched someone fail.",
     depth_score: 3,
     rubric_reason: null,
+    sharpen_text: null,
+    suggested_fix: null,
     mirrors_worry_identity: null,
     attempts: 1,
     created_at: new Date().toISOString(),
@@ -85,6 +102,8 @@ function makeAssumption(overrides: Partial<ItcAssumption>): ItcAssumption {
     text: "I assume that if I let someone struggle without stepping in, then I've been the coach who abandoned them.",
     depth_score: 3,
     rubric_reason: null,
+    sharpen_text: null,
+    suggested_fix: null,
     attempts: 1,
     selected_for_testing: false,
     created_at: new Date().toISOString(),
@@ -120,7 +139,7 @@ describe("checkInteriorWitnessInWorries", () => {
     // Detail is sourced from ADVICE.interior_witness_worry — the
     // aligned copy that keeps the fix framed in first-person felt
     // dread (not "she'd see", which would violate is_first_person_felt).
-    expect(findings[0].detail).toMatch(/interior-witness/i);
+    expect(findings[0].detail).toMatch(/inside your own head/i);
     expect(findings[0].detail).toMatch(/(I['\u2019]m afraid|I worry I['\u2019]m|I['\u2019]d be)/);
   });
 
@@ -332,6 +351,9 @@ describe("checkAssumptionCoverage", () => {
     });
     expect(findings).toHaveLength(1);
     expect(findings[0].issueType).toBe("assumption_uncovered_commitment");
+    // Moderate, not critical: the guide says start from the juiciest
+    // commitments, not cover every one (Vol 1 p 17).
+    expect(findings[0].severity).toBe("moderate");
     expect(findings[0].entryRef).toEqual({ table: "commitments", id: "c-2" });
   });
 

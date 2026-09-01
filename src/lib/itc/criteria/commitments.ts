@@ -27,15 +27,14 @@ export async function checkCommitmentDepth(input: {
   for (const commitment of input.commitments) {
     if (commitment.depth_score == null) continue;
     if (commitment.depth_score >= DEPTH_THRESHOLD) continue;
-    const detail = commitment.rubric_reason
-      ? `${ADVICE.depth_shortfall_commitment} Rubric reason: ${commitment.rubric_reason}`
-      : ADVICE.depth_shortfall_commitment;
     findings.push({
       entryRef: { table: "commitments", id: commitment.id },
       issueType: "depth_shortfall_commitment",
       severity: "critical",
       actualText: commitment.text,
-      detail,
+      detail:
+        commitment.rubric_reason?.trim() || ADVICE.depth_shortfall_commitment,
+      suggestedFix: commitment.suggested_fix ?? undefined,
     });
   }
   return findings;
@@ -68,6 +67,7 @@ export async function checkInteriorWitnessInCommitments(input: {
       severity: "moderate",
       actualText: commitment.text,
       detail: ADVICE.interior_witness_commitment,
+      suggestedFix: commitment.suggested_fix ?? undefined,
     });
   }
   return findings;
@@ -104,6 +104,7 @@ export async function checkCommitmentMirrorsWorry(input: {
       severity: "critical",
       actualText: commitment.text,
       detail: ADVICE.commitment_doesnt_mirror_worry,
+      suggestedFix: commitment.suggested_fix ?? undefined,
       relatedEntryRef: worry ? { table: "worries", id: worry.id } : undefined,
       relatedText: worry?.text,
     });

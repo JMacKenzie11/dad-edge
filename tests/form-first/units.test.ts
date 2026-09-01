@@ -233,16 +233,16 @@ describe("assembleAssumption (structured slots → canonical sentence)", () => {
     );
   });
 
-  it("assembled length is bounded — worst-case slots produce ≤ 40 words", () => {
-    // Per-slot schema caps (12/10/10 words) + connectives (7) put
-    // the assembled sentence at ~40 words worst case. Real Kegan-
-    // canonical drafts land at 15-25.
+  it("assembled length is bounded — worst-case slots produce ≤ 42 words", () => {
+    // Per-slot schema caps (12/10/10 words) + connectives (up to 9 when
+    // the identity join injects "I'd be") put the assembled sentence at
+    // ~42 words worst case. Real Kegan-canonical drafts land at 15-25.
     const maxOut = assembleAssumption({
       antecedent_act: "one two three four five six seven eight nine ten eleven twelve",
       consequent_tell: "one two three four five six seven eight nine ten",
       consequent_identity: "one two three four five six seven eight nine ten",
     });
-    expect(maxOut.split(/\s+/).length).toBeLessThanOrEqual(40);
+    expect(maxOut.split(/\s+/).length).toBeLessThanOrEqual(42);
   });
 
   it("cannot produce compound-consequent chained drafts (structural guarantee)", () => {
@@ -259,6 +259,59 @@ describe("assembleAssumption (structured slots → canonical sentence)", () => {
     });
     // Exactly ONE " and " in the output (the server-written one).
     expect(out.match(/ and /g)?.length).toBe(1);
+  });
+
+  it("injects 'I'd be' when tell is a she/he/they clause and identity is a bare noun", () => {
+    // Regression from a real Jason map: tell="she'd build the list"
+    // (SVO with 'she' subject) + identity="the man whose wife has
+    // outgrown him" (bare noun) produced the ungrammatical
+    // "then she'd build the list and the man whose wife has outgrown
+    // him" under the old dumb `and ${identity}` template. The identity
+    // noun had no verb to attach to. The join now names a fresh
+    // I-subject so the noun becomes a predicate.
+    expect(
+      assembleAssumption({
+        antecedent_act: "admit how often I get it wrong",
+        consequent_tell: "she'd build the list",
+        consequent_identity: "the man whose wife has outgrown him",
+      }),
+    ).toBe(
+      "I assume that if I admit how often I get it wrong, then she'd build the list and I'd be the man whose wife has outgrown him.",
+    );
+  });
+
+  it("passes full-clause identity through as-is (no 'I'd be' injection)", () => {
+    // When identity is already a clause with its own subject — "the
+    // truth would come out", "I've been the man who X", "she'd see
+    // I've been hiding" — bare "and " is correct. Injecting "I'd be"
+    // would produce "and I'd be the truth would come out" which is
+    // broken.
+    expect(
+      assembleAssumption({
+        antecedent_act: "stop protecting her from my failures",
+        consequent_tell: "she'd pull away",
+        consequent_identity: "the truth would come out that I've been faking it",
+      }),
+    ).toBe(
+      "I assume that if I stop protecting her from my failures, then she'd pull away and the truth would come out that I've been faking it.",
+    );
+  });
+
+  it("reuses tell's I-subject when identity is a bare noun (no redundant 'I'd')", () => {
+    // tell="I'd lose control", identity="the husband who hurts her"
+    // should read "and be the husband who hurts her" — sharing the
+    // I-subject-aux from the tell — not "and I'd be the husband...".
+    // Same output the drafter has been producing (identity="be X"
+    // shape), just derived instead of LLM-provided.
+    expect(
+      assembleAssumption({
+        antecedent_act: "stay in the room while she's angry",
+        consequent_tell: "I'd lose control",
+        consequent_identity: "the husband who hurts her",
+      }),
+    ).toBe(
+      "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her.",
+    );
   });
 });
 

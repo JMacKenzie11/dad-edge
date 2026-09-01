@@ -4,18 +4,20 @@
  * Two public entry points:
  *   - runColumnCriteria(column, input) — fires the criteria for one
  *     column. Used at end-of-column construction reviews.
- *   - runHoneWaterfall(input) — walks the map top-down (goal → worries
- *     → commitments → assumptions) and stops at the first layer with
- *     any finding. Everything downstream of a broken column is
- *     re-derived when the coachee fixes it, so critiquing downstream
- *     entries now is asking them to fix something about to change.
- *     Matches the Kegan/Lahey guide's derivation chain (Vol 1 p 4:
- *     "do the fears stay present in the Column 3 commitments? do the
- *     Big Assumptions follow from key Column 3 commitments?").
+ *   - runHoneWaterfall(input) — walks the map top-down (goal →
+ *     behaviors → worries → commitments → assumptions) and stops at
+ *     the first layer with any finding. Everything downstream of a
+ *     broken column is re-derived when the coachee fixes it, so
+ *     critiquing downstream entries now is asking them to fix
+ *     something about to change. Matches the Kegan/Lahey guide's
+ *     derivation chain (Vol 1 p 4: "do the fears stay present in the
+ *     Column 3 commitments? do the Big Assumptions follow from key
+ *     Column 3 commitments?").
  *
- * Both entry points return typed `Finding[]` that render.ts turns into
- * prose. Same criteria functions on both sides — the construction
- * coach and the hone audit will never contradict each other.
+ * Both return typed `Finding[]`. Rewrites are attached one layer up
+ * (src/lib/itc/fixes.ts), and render.ts turns the result into prose.
+ * Same criteria functions on every surface, so the row box, the
+ * column review and the hone audit never contradict each other.
  */
 
 import type {
@@ -37,10 +39,10 @@ import {
   checkInteriorWitnessInCommitments,
 } from "./commitments";
 import {
-  checkAssumptionCommitmentDrift,
   checkAssumptionCoverage,
   checkAssumptionDepth,
-  checkAssumptionOverload,
+  checkAssumptionEnactable,
+  checkAssumptionUnderwritesCommitments,
   checkVagueAssumptionThenClause,
 } from "./assumptions";
 import { SEVERITY_ORDER, type Finding } from "./types";
@@ -120,15 +122,14 @@ async function runAssumptionsCriteria(
       assumptions: input.assumptions,
       links: input.assumptionLinks,
     }),
-    checkAssumptionCommitmentDrift({
+    checkAssumptionUnderwritesCommitments({
       assumptions: input.assumptions,
       commitments: input.commitments,
       links: input.assumptionLinks,
     }),
-    checkAssumptionOverload({
+    checkAssumptionEnactable({
       assumptions: input.assumptions,
-      commitments: input.commitments,
-      links: input.assumptionLinks,
+      behaviors: input.behaviors,
     }),
   ]);
   return sortFindings(results.flat());

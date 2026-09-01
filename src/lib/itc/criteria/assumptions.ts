@@ -1,17 +1,35 @@
 /**
  * Column 5 (Big Assumptions) criteria.
  *
- * Five checks:
- *  - depth_shortfall_assumption: assumption hasn't finished through to
- *    identity landing (reads stored rubric score).
- *  - vague_assumption_then_clause: then-clause gestures at an identity
- *    ("the man I'm terrified of") without naming it.
- *  - assumption_uncovered_commitment: a commitment has no linked
- *    assumption — untestable belief.
- *  - assumption_commitment_drift: assumption's if-clause names a
- *    different scenario than what the linked commitment protects.
- *  - assumption_overload: one assumption linked to 2+ commitments
- *    that name distinct identity concerns.
+ * Straight from the Kegan/Lahey Coach's Guide, Vol 1:
+ *
+ *  Appendix A (p 43), the Column 4 criteria:
+ *   1. Makes the Column 3 commitment absolutely necessary
+ *      → assumption_doesnt_underwrite
+ *   2. Has a Big Time Bad conclusion for you
+ *   3. Displays a contracted world
+ *   4. Feels real
+ *      → depth_shortfall_assumption (2–4, via the depth rubric) and
+ *        vague_assumption_then_clause (4)
+ *
+ *  Checkpoint 2 (p 18), honing: "a testable assumption is one where
+ *  the 'if' condition has degrees or shades to it so we can enact it
+ *  safely" → assumption_not_enactable
+ *
+ *  Plus one map-shape check: assumption_uncovered_commitment, a
+ *  commitment with no assumption under it. Moderate, not critical:
+ *  the guide says to start from the juiciest commitments (p 17), not
+ *  to cover every one.
+ *
+ * Retired 2026-09-01: assumption_commitment_drift (per-link LLM
+ * scenario match) and assumption_overload (per-assumption "distinct
+ * identities" LLM call). Neither is in the guide. Both were biased
+ * to fire and ran once per link, so a well-clustered map (one
+ * assumption under several commitments, which the guide and the
+ * drafter both want) produced a finding per link. The drafter's
+ * cluster verifier and the hone audit now share ONE judge
+ * (judgeAssumptionUnderwrites), so a cluster the drafter accepted
+ * can't be rejected by the audit.
  */
 
 import { generateObject } from "ai";
@@ -20,6 +38,7 @@ import { utilityModel } from "@/lib/model-config";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
+  ItcBehavior,
   ItcCommitment,
 } from "../maps";
 import { ADVICE } from "./advice";
@@ -36,15 +55,13 @@ export async function checkAssumptionDepth(input: {
   for (const assumption of input.assumptions) {
     if (assumption.depth_score == null) continue;
     if (assumption.depth_score >= DEPTH_THRESHOLD) continue;
-    const detail = assumption.rubric_reason
-      ? `${ADVICE.depth_shortfall_assumption} Rubric reason: ${assumption.rubric_reason}`
-      : ADVICE.depth_shortfall_assumption;
     findings.push({
       entryRef: { table: "assumptions", id: assumption.id },
       issueType: "depth_shortfall_assumption",
       severity: "critical",
       actualText: assumption.text,
-      detail,
+      detail: assumption.rubric_reason?.trim() || ADVICE.depth_shortfall_assumption,
+      suggestedFix: assumption.suggested_fix ?? undefined,
     });
   }
   return findings;
@@ -55,10 +72,10 @@ export async function checkAssumptionDepth(input: {
 // ---------------------------------------------------------------------------
 
 const VAGUE_THEN_CLAUSE_PATTERNS: RegExp[] = [
-  /\bthe\s+(?:person|man|husband|father|coach|guy|dad)\s+(?:I\s?['\u2019]?m\s+terrified|I\s+fear|I\s+don['\u2019]?t\s+want\s+to|I\s?['\u2019]?d\s+hate\s+to)\b/i,
-  /\bwhat\s+I(?:\s?['\u2019]?m\s+afraid|\s+fear)\b/i,
-  /\bI\s?['\u2019]?d\s+become\s+(?:what|who)\s+I\b/i,
-  /\bI\s?['\u2019]?d\s+be\s+the\s+(?:person|man|guy|dad|husband|father|coach)\s+I\b/i,
+  /\bthe\s+(?:person|man|husband|father|coach|guy|dad)\s+(?:I\s?['’]?m\s+terrified|I\s+fear|I\s+don['’]?t\s+want\s+to|I\s?['’]?d\s+hate\s+to)\b/i,
+  /\bwhat\s+I(?:\s?['’]?m\s+afraid|\s+fear)\b/i,
+  /\bI\s?['’]?d\s+become\s+(?:what|who)\s+I\b/i,
+  /\bI\s?['’]?d\s+be\s+the\s+(?:person|man|guy|dad|husband|father|coach)\s+I\b/i,
 ];
 
 function extractThenClause(text: string): string | null {
@@ -84,6 +101,7 @@ export async function checkVagueAssumptionThenClause(input: {
       severity: "moderate",
       actualText: assumption.text,
       detail: ADVICE.vague_assumption_then_clause,
+      suggestedFix: assumption.suggested_fix ?? undefined,
     });
   }
   return findings;
@@ -93,6 +111,13 @@ export async function checkVagueAssumptionThenClause(input: {
 // assumption_uncovered_commitment
 // ---------------------------------------------------------------------------
 
+/**
+ * A commitment with no Big Assumption under it. The fix isn't a
+ * rewrite of the commitment; it's a draft assumption (fixes.ts
+ * writes one to itc_assumption_drafts and puts its text in
+ * suggestedFix). Rendered under the Big Assumptions header, because
+ * that's the column with the gap.
+ */
 export async function checkAssumptionCoverage(input: {
   commitments: ItcCommitment[];
   assumptions: ItcAssumption[];
@@ -105,7 +130,7 @@ export async function checkAssumptionCoverage(input: {
     findings.push({
       entryRef: { table: "commitments", id: commitment.id },
       issueType: "assumption_uncovered_commitment",
-      severity: "critical",
+      severity: "moderate",
       actualText: commitment.text,
       detail: ADVICE.assumption_uncovered_commitment,
     });
@@ -114,167 +139,106 @@ export async function checkAssumptionCoverage(input: {
 }
 
 // ---------------------------------------------------------------------------
-// assumption_commitment_drift
+// assumption_doesnt_underwrite — ONE judge, shared by drafter + audit
 // ---------------------------------------------------------------------------
 
-const DriftSchema = z.object({
-  drifted: z.boolean(),
-  commitment_identity: z.string().max(120).optional(),
-  assumption_scenario: z.string().max(120).optional(),
+const UnderwriteSchema = z.object({
+  fits: z.array(z.number().int().min(1)),
+  doesnt_fit: z.array(
+    z.object({
+      index: z.number().int().min(1),
+      reason: z.string().max(200),
+    }),
+  ),
 });
 
-const DRIFT_SYSTEM = `
-You judge whether a Big Assumption's if-clause names the exact scenario the linked competing commitment is protecting against. Both fields are quoted verbatim from the coachee's map.
+export type UnderwriteVerdict = {
+  fits: number[];
+  doesntFit: Array<{ index: number; reason: string }>;
+};
 
-Two things need to match for drifted=false:
-1. The commitment names an identity the coachee is protecting (a person, role, or self-perception).
-2. The assumption's if-clause names the specific SCENARIO that, if it happened, would expose that same identity as true / real / seen. If the assumption's if-clause is about a DIFFERENT scenario than what the commitment is protecting against, they've drifted.
+const UNDERWRITE_SYSTEM = `
+You check one Big Assumption against the competing commitments it's linked to, using Kegan/Lahey's Column 4 criterion: a Big Assumption "makes the Column 3 commitment absolutely necessary." If the coachee took the assumption as fact, the commitment would feel like the only sane move.
 
-Don't require exact word-match. Semantic alignment is enough. But the scenario the assumption's if-clause names must be the one that would expose the specific identity the commitment protects.
+You receive the assumption and a numbered list of commitments. For each commitment ask: "If he believed this assumption as fact, would this commitment feel necessary?" If yes, it fits. If the assumption is about a different scene entirely and believing it wouldn't touch this vow, it doesn't fit.
 
-Return { drifted: false } when the pair is aligned.
-
-Return { drifted: true, commitment_identity: "<short noun phrase>", assumption_scenario: "<short noun phrase>" } when they name different scenarios. Each label MAX 10 WORDS. These are structured labels — the renderer synthesizes them into "The assumption is about [scenario]; the commitment protects [identity]." Do NOT write full sentences. Do NOT restate the commitment or assumption text. Just the two identifying phrases.
+Rules:
+- One assumption usually holds up several commitments. That's the guide's target, not a problem. Different wording between the assumption and the commitment is fine; different scene is not.
+- The test is about the belief driving the vow, not keyword overlap.
+- Return every index in exactly one of the two lists.
+- For doesnt_fit, give a reason under 25 words naming the different scene. Plain words, no jargon.
 
 === WORKED EXAMPLES ===
 
-Example 1 (drifted=false — clean pair):
-  Commitment: "I'm also committed to never becoming the husband who hurts her."
+Example 1 (all fit):
   Assumption: "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
-  Verdict: { drifted: false }
+  Commitments:
+    1. "I'm also committed to never being the man who can't handle her anger."
+    2. "I'm also committed to never being the husband who says something he can't take back."
+  Verdict: { fits: [1, 2], doesnt_fit: [] }
 
-Example 2 (drifted=true — different scenarios):
-  Commitment: "I'm also committed to never being the guy who isn't enough for her."
-  Assumption: "I assume that if I stop protecting her from my failures, then she'd see the pattern and I'd be the husband I'm terrified I am."
-  Verdict: { drifted: true, commitment_identity: "the insufficient partner (not enough for her)", assumption_scenario: "revealing failures / stopping protection" }
+Example 2 (one doesn't fit):
+  Assumption: "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her."
+  Commitments:
+    1. "I'm also committed to never being the man who can't handle her anger."
+    2. "I'm also committed to never being the guy whose team sees he doesn't have the answer."
+  Verdict: { fits: [1], doesnt_fit: [{ index: 2, reason: "Different scene: the assumption is about her anger at home, this vow is about looking capable at work." }] }
 
-Example 3 (drifted=false — semantic alignment despite different wording):
-  Commitment: "I'm also committed to never letting my team see I don't have the answer."
-  Assumption: "I assume that if I admit I don't know something in a meeting, then they'll stop trusting my judgment."
-  Verdict: { drifted: false }
-
-Example 4 (drifted=true — 3+ commitments case, one call at a time — same assumption_scenario returned each call):
-  Assumption: "I assume that if something important goes badly and I didn't do everything within my power to prevent it, then it proves I can't be trusted."
-  Commitment (call 1): "I'm also committed to avoiding the feeling that I could see the answer but was unable to help."
-    Verdict: { drifted: true, commitment_identity: "the helper who couldn't guide when needed", assumption_scenario: "failing to prevent bad outcomes" }
-  Commitment (call 2): "I'm also committed to protecting my identity as someone who consistently delivers at a high level."
-    Verdict: { drifted: true, commitment_identity: "the consistent high performer", assumption_scenario: "failing to prevent bad outcomes" }
-  (The scenario stays consistent across calls because it's derived from the same assumption. The identity varies because it's the commitment that differs.)
+Example 3 (broad root, all fit):
+  Assumption: "I assume that if something important goes badly and I didn't do everything in my power to prevent it, then I can't be trusted when people depend on me."
+  Commitments:
+    1. "I'm also committed to never being the coach who talked a great game but couldn't help them change."
+    2. "I'm also committed to never being the father who was passive when my family needed me to provide."
+  Verdict: { fits: [1, 2], doesnt_fit: [] }
+  (Both vows are the same belief in two rooms. Believing it makes both necessary.)
 
 === DECISION RULE ===
 
-Bias for calling drift when the identity concern the commitment protects doesn't match the specific scenario the assumption's if-clause names. Don't default to "aligned" out of caution. False negatives on drift let real map problems slip through; false positives are cheap to review.
+Keep the link unless the scenes are clearly different. The coachee reads these results himself, without a coach in the room. A wrong "doesn't fit" makes him unlink something true; a wrong "fits" costs nothing until he tests, and testing sorts it out.
 `.trim();
 
-export async function checkAssumptionCommitmentDrift(input: {
-  assumptions: ItcAssumption[];
-  commitments: ItcCommitment[];
-  links: ItcAssumptionCommitment[];
-}): Promise<Finding[]> {
-  const commitmentById = new Map(input.commitments.map((c) => [c.id, c]));
-  const assumptionById = new Map(input.assumptions.map((a) => [a.id, a]));
-  const findings: Finding[] = [];
-  await Promise.all(
-    input.links.map(async (link) => {
-      const assumption = assumptionById.get(link.assumption_id);
-      const commitment = commitmentById.get(link.commitment_id);
-      if (!assumption || !commitment) return;
-      try {
-        const { object } = await generateObject({
-          model: utilityModel(),
-          schema: DriftSchema,
-          system: DRIFT_SYSTEM,
-          prompt: [
-            `Competing commitment: ${commitment.text}`,
-            `Big Assumption: ${assumption.text}`,
-          ].join("\n"),
-          maxOutputTokens: 300,
-          temperature: 0.1,
-        });
-        if (!object.drifted) return;
-        findings.push({
-          entryRef: { table: "assumptions", id: assumption.id },
-          issueType: "assumption_commitment_drift",
-          severity: "moderate",
-          actualText: assumption.text,
-          detail:
-            "Assumption's if-clause and its linked commitment name different concerns.",
-          suggestedFix:
-            "Either sharpen the assumption so its if-clause names the exact scenario the commitment protects against, or the pair may be pointing at a missing commitment that hasn't been named yet.",
-          relatedEntryRef: { table: "commitments", id: commitment.id },
-          relatedText: commitment.text,
-          assumptionScenario: object.assumption_scenario,
-          commitmentIdentity: object.commitment_identity,
-        });
-      } catch (err) {
-        console.warn(
-          "[itc criteria] checkAssumptionCommitmentDrift failed (assumption=%s commitment=%s): %s",
-          assumption.id,
-          commitment.id,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }),
-  );
-  return findings;
+/**
+ * Shared judge. The drafter's cluster verifier (coach.ts
+ * verifyDraftClusters) and the hone check below both call this, so
+ * the bar for "this assumption holds up that commitment" is one
+ * function with one prompt. Positions are 1-based into the
+ * `commitments` array the caller passes.
+ */
+export async function judgeAssumptionUnderwrites(input: {
+  assumptionText: string;
+  commitments: Array<{ index: number; text: string }>;
+}): Promise<UnderwriteVerdict> {
+  const { object } = await generateObject({
+    model: utilityModel(),
+    schema: UnderwriteSchema,
+    system: UNDERWRITE_SYSTEM,
+    prompt: [
+      `Big Assumption: ${input.assumptionText}`,
+      "",
+      "Linked competing commitments:",
+      ...input.commitments.map((c) => `  ${c.index}. "${c.text}"`),
+    ].join("\n"),
+    maxOutputTokens: 400,
+    temperature: 0.1,
+  });
+  const valid = new Set(input.commitments.map((c) => c.index));
+  const doesntFit = object.doesnt_fit.filter((d) => valid.has(d.index));
+  const unfit = new Set(doesntFit.map((d) => d.index));
+  const fits = input.commitments
+    .map((c) => c.index)
+    .filter((i) => !unfit.has(i));
+  return { fits, doesntFit };
 }
 
-// ---------------------------------------------------------------------------
-// assumption_overload
-// ---------------------------------------------------------------------------
-
-const OverloadSchema = z.object({
-  same_concern: z.boolean(),
-  reason: z.string().max(400).optional(),
-});
-
-const OVERLOAD_SYSTEM = `
-You judge whether a set of competing commitments (all linked to the same Big Assumption) name the same underlying identity concern, or distinct concerns.
-
-Return { same_concern: true } when every commitment in the set is protecting the same identity fear in different wording (e.g. "the guy who fails his family" and "the man who can't provide" — same identity, two phrasings).
-
-Return { same_concern: false } when the commitments name distinct identities the coachee is protecting — even if the identities are related, if they're distinguishable (different nouns, different consequences, different scenes), they're distinct concerns and the assumption is carrying more than one belief.
-
-For same_concern=false, give reason MAX 30 WORDS. Name the identities in short form and one line naming what distinguishes them. DO NOT enumerate "Commitment 1 protects X, Commitment 2 protects Y" — that's how the coachee's map is already structured; the reason should name the KEY distinction, not walk each pair. Terseness matters — this reason renders inline in an audit and long reasons overwhelm the reader.
-
-=== WORKED EXAMPLES ===
-
-Example 1 (same_concern=true — genuine synonyms):
-  Commitments:
-    1. "I'm also committed to never being seen as the guy who fails his family."
-    2. "I'm also committed to never being the man who couldn't provide when it mattered."
-  Verdict: { same_concern: true }
-
-Example 2 (same_concern=false — distinct identities, 2 commitments):
-  Commitments:
-    1. "I'm also committed to never seeing that my defensive behaviour is the problem."
-    2. "I'm also committed to never being the guy who isn't enough for her."
-  Verdict: { same_concern: false, reason: "Distinct identities: 'defensiveness IS the problem' vs 'insufficient partner'. Different scenarios expose each." }
-
-Example 3 (same_concern=false — related but distinguishable):
-  Commitments:
-    1. "I'm also committed to never being the boss who makes his team scared to speak up."
-    2. "I'm also committed to never being the boss who loses his temper at work."
-  Verdict: { same_concern: false, reason: "Related but distinct: 'intimidating leader' (systemic pattern) vs 'loses-control' (single-moment failure)." }
-
-Example 4 (same_concern=false — 3+ commitments, don't enumerate):
-  Commitments:
-    1. "I'm also committed to never being the coach who can't help."
-    2. "I'm also committed to never being the professional whose work is questioned."
-    3. "I'm also committed to never being the provider who didn't work hard enough."
-  Verdict: { same_concern: false, reason: "Three distinct identities across three domains: helping (competence), reputation (quality), provision (effort). Different scenarios and consequences." }
-
-=== DECISION RULE ===
-
-Bias for same_concern=false when you can name distinct identities in the commitments. Overload findings surface real map problems (assumption carrying too much weight); missing them lets the coachee keep testing one thing when they're actually running multiple. False positives on overload are cheap — the coachee reviews and confirms or dismisses.
-`.trim();
-
-export async function checkAssumptionOverload(input: {
+export async function checkAssumptionUnderwritesCommitments(input: {
   assumptions: ItcAssumption[];
   commitments: ItcCommitment[];
   links: ItcAssumptionCommitment[];
 }): Promise<Finding[]> {
-  const commitmentById = new Map(input.commitments.map((c) => [c.id, c]));
+  // Map positions are the "#N" chips the coachee sees on the row, in
+  // commitment order. The renderer speaks in those numbers.
+  const positionById = new Map(input.commitments.map((c, i) => [c.id, i + 1]));
+  const textById = new Map(input.commitments.map((c) => [c.id, c.text]));
   const linksByAssumption = new Map<string, string[]>();
   for (const link of input.links) {
     const prev = linksByAssumption.get(link.assumption_id) ?? [];
@@ -284,40 +248,150 @@ export async function checkAssumptionOverload(input: {
   const findings: Finding[] = [];
   await Promise.all(
     input.assumptions.map(async (assumption) => {
-      const commitmentIds = linksByAssumption.get(assumption.id) ?? [];
-      if (commitmentIds.length < 2) return;
-      const commitments = commitmentIds
-        .map((id) => commitmentById.get(id))
-        .filter((c): c is ItcCommitment => Boolean(c));
-      if (commitments.length < 2) return;
+      const linked = (linksByAssumption.get(assumption.id) ?? [])
+        .map((id) => ({ index: positionById.get(id) ?? 0, text: textById.get(id) ?? "" }))
+        .filter((c) => c.index > 0 && c.text.length > 0)
+        .sort((a, b) => a.index - b.index);
+      // One link can't be "the wrong one of the set". Coverage of a
+      // single commitment is the drafter's job; nothing to judge.
+      if (linked.length < 2) return;
       try {
-        const { object } = await generateObject({
-          model: utilityModel(),
-          schema: OverloadSchema,
-          system: OVERLOAD_SYSTEM,
-          prompt: [
-            `Big Assumption: ${assumption.text}`,
-            "Linked competing commitments:",
-            ...commitments.map((c, i) => `  ${i + 1}. ${c.text}`),
-          ].join("\n"),
-          maxOutputTokens: 300,
-          temperature: 0.1,
+        const verdict = await judgeAssumptionUnderwrites({
+          assumptionText: assumption.text,
+          commitments: linked,
         });
-        if (object.same_concern) return;
+        if (verdict.doesntFit.length === 0) return;
         findings.push({
           entryRef: { table: "assumptions", id: assumption.id },
-          issueType: "assumption_overload",
+          issueType: "assumption_doesnt_underwrite",
           severity: "moderate",
           actualText: assumption.text,
-          detail: object.reason
-            ? `Assumption is carrying multiple distinct identity concerns. ${object.reason}`
-            : "Assumption is linked to commitments that name distinct identity concerns. One belief can't underwrite them all cleanly.",
-          suggestedFix:
-            "Additional Big Assumptions may need to be named so each commitment has an assumption pointed at its own specific concern.",
+          detail: ADVICE.assumption_doesnt_underwrite,
+          unfitCommitmentPositions: verdict.doesntFit
+            .map((d) => d.index)
+            .sort((a, b) => a - b),
         });
       } catch (err) {
         console.warn(
-          "[itc criteria] checkAssumptionOverload failed (assumption=%s): %s",
+          "[itc criteria] checkAssumptionUnderwritesCommitments failed (assumption=%s): %s",
+          assumption.id,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }),
+  );
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// assumption_not_enactable — Checkpoint 2, the "if" has to be his move
+// ---------------------------------------------------------------------------
+
+const EnactableSchema = z.object({
+  enactable: z.boolean(),
+  reverses_behavior_index: z.number().int().min(1).nullable(),
+  reason: z.string().max(200),
+});
+
+export type EnactableVerdict = {
+  enactable: boolean;
+  /** 1-based index into the behaviors passed in, when the "if" is
+   *  the coachee doing the opposite of one of them. Null otherwise. */
+  reversesBehaviorIndex: number | null;
+  reason: string;
+};
+
+const ENACTABLE_SYSTEM = `
+You check whether a Big Assumption's "if" half is something the coachee could go do himself, in a small dose, this week. Kegan/Lahey (Coach's Guide Vol 1 p 21): a testable assumption is one where the "if" condition has degrees to it so it can be enacted safely.
+
+You receive the assumption and a numbered list of the coachee's own behaviors (the moves he makes that work against his goal). The strongest "if" is him doing the opposite of one of those behaviors.
+
+enactable = true when the "if" names an act he would take (stay in the room, send it without rewriting it, let the client answer first, tell her no). Conditions attached to the act are fine ("when money is low", "while she's angry"). Degrees are fine ("one message", "for ten minutes").
+
+enactable = false when the "if" is:
+- an outcome, not an act ("if I fail", "if something important goes badly", "if I'm not perfect")
+- someone else's move ("if they don't make the change", "if my team pushes back")
+- all-or-nothing with no small dose ("if I never sold again")
+
+reverses_behavior_index: when enactable and the act is the opposite of one listed behavior, give that behavior's number. Otherwise null.
+
+reason: under 25 words, plain words, naming what the "if" is (an outcome, someone else's move) when not enactable.
+
+=== WORKED EXAMPLES ===
+
+Example 1:
+  Assumption: "I assume that if I send the message without rewriting it, then it won't land and I'd be the guy who claims to be a leader but isn't the real thing."
+  Behaviors: 1. "I rewrite emails over and over until they sound perfect." 2. "I rush through conversations to chase more prospects."
+  Verdict: { enactable: true, reverses_behavior_index: 1, reason: "Sending one message unrewritten is his move, the opposite of behavior 1." }
+
+Example 2:
+  Assumption: "I assume that if someone trusts me to coach them and they fail to make a change I could see, then I've failed at the thing I claim to be great at."
+  Behaviors: 1. "I push people toward what I think they need instead of letting them find it."
+  Verdict: { enactable: false, reverses_behavior_index: null, reason: "The 'if' is the client failing to change. That's their outcome, not a move he can make." }
+
+Example 3:
+  Assumption: "I assume that if something important goes badly and I didn't do everything in my power to prevent it, then I can't be trusted when people depend on me."
+  Behaviors: 1. "I take over tasks my team could handle."
+  Verdict: { enactable: false, reverses_behavior_index: null, reason: "The 'if' is something going badly. An outcome, not an act he can do in a small dose." }
+
+=== DECISION RULE ===
+
+When the act is his and could be done in a small dose, say enactable. Only flag an "if" that plainly isn't his move. The coachee reads this himself.
+`.trim();
+
+export async function judgeAssumptionEnactable(input: {
+  assumptionText: string;
+  behaviors: Array<{ index: number; text: string }>;
+}): Promise<EnactableVerdict> {
+  const { object } = await generateObject({
+    model: utilityModel(),
+    schema: EnactableSchema,
+    system: ENACTABLE_SYSTEM,
+    prompt: [
+      `Big Assumption: ${input.assumptionText}`,
+      "",
+      "Behaviors:",
+      ...input.behaviors.map((b) => `  ${b.index}. "${b.text}"`),
+    ].join("\n"),
+    maxOutputTokens: 300,
+    temperature: 0.1,
+  });
+  const valid = new Set(input.behaviors.map((b) => b.index));
+  const idx = object.reverses_behavior_index;
+  return {
+    enactable: object.enactable,
+    reversesBehaviorIndex: idx != null && valid.has(idx) ? idx : null,
+    reason: object.reason,
+  };
+}
+
+export async function checkAssumptionEnactable(input: {
+  assumptions: ItcAssumption[];
+  behaviors: ItcBehavior[];
+}): Promise<Finding[]> {
+  const behaviors = input.behaviors
+    .filter((b) => b.selected)
+    .map((b, i) => ({ index: i + 1, text: b.text }));
+  const findings: Finding[] = [];
+  await Promise.all(
+    input.assumptions.map(async (assumption) => {
+      try {
+        const verdict = await judgeAssumptionEnactable({
+          assumptionText: assumption.text,
+          behaviors,
+        });
+        if (verdict.enactable) return;
+        findings.push({
+          entryRef: { table: "assumptions", id: assumption.id },
+          issueType: "assumption_not_enactable",
+          severity: "moderate",
+          actualText: assumption.text,
+          detail: ADVICE.assumption_not_enactable,
+          suggestedFix: assumption.suggested_fix ?? undefined,
+        });
+      } catch (err) {
+        console.warn(
+          "[itc criteria] checkAssumptionEnactable failed (assumption=%s): %s",
           assumption.id,
           err instanceof Error ? err.message : String(err),
         );

@@ -46,10 +46,16 @@ export function withVoiceRules(drafterSystem: string): string {
 import {
   checkAssumptionLogicalConsistency,
   checkWorryLogicalConsistency,
+  scoreAssumptionDepth,
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "./rubric";
 import { ADVICE } from "./criteria/advice";
+import {
+  checkVagueAssumptionThenClause,
+  judgeAssumptionEnactable,
+  judgeAssumptionUnderwrites,
+} from "./criteria/assumptions";
 import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
 import { checkInteriorWitnessInWorries } from "./criteria/worries";
 import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
@@ -696,6 +702,32 @@ function isQuestionShaped(s: string): boolean {
   return openers.some((re) => re.test(trimmed));
 }
 
+/**
+ * Rewrite mode for the drafters. When present, the drafter is
+ * rewriting the coachee's OWN entry rather than drafting from
+ * scratch: it gets the current text plus the coach's lines on what's
+ * off (the same lines the row box shows, from criteria/advice.ts),
+ * and it only returns text that clears every check. Null means the
+ * drafter couldn't produce a verified rewrite; the caller shows the
+ * lines without one rather than offering a fix that fails the bar.
+ */
+export type ReviseInput = {
+  currentText: string;
+  problems: string[];
+};
+
+function reviseLines(revise: ReviseInput | undefined, what: string): string[] {
+  if (!revise) return [];
+  return [
+    ``,
+    `REWRITE MODE. The coachee already wrote this ${what}:`,
+    `  "${revise.currentText}"`,
+    `What's off with it:`,
+    ...revise.problems.map((p, i) => `  ${i + 1}. ${p}`),
+    `Rewrite it so every one of those is fixed. Keep his nouns, his people, his scene. Change as little as the fix needs. Don't start over with a different fear or a different move unless the problems above say the current one can't work.`,
+  ];
+}
+
 // -------------------------------------------------------------------------
 // draftWorryForBehavior — coach-drafted Column 3 starting text
 // -------------------------------------------------------------------------
@@ -1026,6 +1058,9 @@ export async function draftWorryForBehavior(input: {
    * across behaviors to guarantee map-level variety.
    */
   identityShape?: WorryIdentityShape;
+  /** Rewrite the coachee's own worry instead of drafting fresh. See
+   *  ReviseInput. In this mode only a verified draft is returned. */
+  revise?: ReviseInput;
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
@@ -1039,6 +1074,7 @@ export async function draftWorryForBehavior(input: {
     ``,
     `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what DOING opposite_move would REVEAL about him — the new truth exposed by the counter-move, not the identity of the current behavior. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
     ...(shapeLine ? [``, shapeLine] : []),
+    ...reviseLines(input.revise, "worry"),
   ];
 
   type DraftShape = {
@@ -1062,20 +1098,21 @@ export async function draftWorryForBehavior(input: {
     };
   }
 
-  try {
-    const first = await generateDraft(basePromptLines);
-    if (!first) return null;
-
-    // All three verifiers run in parallel. Depth (LLM) may fail — a
-    // transient Haiku hiccup shouldn't strand the drafter, so fail-open
-    // to pass on rubric error. Consistency (deterministic slot check)
-    // and interior-witness (deterministic regex on the assembled text)
-    // never throw.
+  /**
+   * Run the same criteria the hone auditor uses. All three verifiers
+   * run in parallel. Depth (LLM) may fail — a transient Haiku hiccup
+   * shouldn't strand the drafter, so fail-open to pass on rubric
+   * error. Consistency (deterministic slot check) and interior-
+   * witness (deterministic regex on the assembled text) never throw.
+   */
+  async function verifyDraft(
+    draft: DraftShape,
+  ): Promise<{ ok: boolean; feedback: string[] }> {
     const [depthResult, iwFindings] = await Promise.all([
       scoreWorryDepth({
         goalText: input.goalText,
         behaviorText: input.behaviorText,
-        worryText: first.assembled,
+        worryText: draft.assembled,
       }).catch((err) => {
         console.warn(
           "[itc coach] worry depth rubric failed, treating as pass: %s",
@@ -1084,18 +1121,18 @@ export async function draftWorryForBehavior(input: {
         return null;
       }),
       // Wrap the assembled text in a minimal ItcWorry shape so the
-      // shared auditor check runs unchanged. behaviors passed empty —
-      // the pronoun-picker used for the auditor's fix suggestion isn't
-      // needed here; we only care whether the regex fires.
+      // shared auditor check runs unchanged.
       checkInteriorWitnessInWorries({
         worries: [
           {
             id: "draft",
             map_id: "draft",
             behavior_id: "draft",
-            text: first.assembled,
+            text: draft.assembled,
             depth_score: null,
             rubric_reason: null,
+            sharpen_text: null,
+            suggested_fix: null,
             attempts: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -1106,44 +1143,65 @@ export async function draftWorryForBehavior(input: {
     ]);
     const consistencyResult = checkWorryLogicalConsistency({
       behaviorText: input.behaviorText,
-      oppositeMove: first.slots.opposite_move,
-      identityLanding: first.slots.identity_landing,
+      oppositeMove: draft.slots.opposite_move,
+      identityLanding: draft.slots.identity_landing,
     });
 
     const depthOk = depthResult === null || depthResult.score >= 3;
     const consistencyOk = consistencyResult.consistent;
     const interiorWitnessOk = iwFindings.length === 0;
-    if (depthOk && consistencyOk && interiorWitnessOk) return first.assembled;
-
-    // One retry with all failing reasons fed back. Returning `first`
-    // on retry failure preserves the "never silent drop" invariant.
-    const feedbackLines: string[] = [];
+    const feedback: string[] = [];
     if (!depthOk && depthResult) {
-      feedbackLines.push(
+      feedback.push(
         `The depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}"`,
       );
     }
     if (!consistencyOk) {
-      feedbackLines.push(
+      feedback.push(
         `The logical-consistency check rejected it: "${consistencyResult.reason}"`,
       );
     }
     if (!interiorWitnessOk) {
       // Advice reads from ADVICE — single source of truth for what
       // to tell the LLM (and the coachee) about how to fix this
-      // class of finding. Prior hand-written string suggested
-      // "she'd see..." which violates scoreWorryDepth's
-      // is_first_person_felt criterion; the coach ended up telling
-      // the drafter to produce shapes its own depth rubric rejects.
-      feedbackLines.push(ADVICE.interior_witness_worry);
+      // class of finding.
+      feedback.push(ADVICE.interior_witness_worry);
     }
+    return { ok: feedback.length === 0, feedback };
+  }
+
+  try {
+    const first = await generateDraft(basePromptLines);
+    if (!first) return null;
+    const firstVerdict = await verifyDraft(first);
+    if (firstVerdict.ok) return first.assembled;
+
+    // One retry with all failing reasons fed back.
     const retry = await generateDraft([
       ...basePromptLines,
       ``,
       `Your previous draft was: "${first.assembled}"`,
-      ...feedbackLines,
+      ...firstVerdict.feedback,
       `Rewrite the slots so ALL checks pass. Preserve intent; fix every flaw named. Same length target (under 20 words).`,
     ]);
+    // Rewrite mode returns only a draft that clears every check: a
+    // rewrite that fails the same bar it's fixing would be the coach
+    // contradicting itself. Draft mode keeps the "never silent drop"
+    // invariant — a slightly-off draft the coachee can edit beats
+    // no draft at all.
+    if (input.revise) {
+      if (!retry) return null;
+      const retryVerdict = await verifyDraft(retry);
+      if (!retryVerdict.ok) {
+        console.warn(
+          "[itc coach] worry rewrite refused after retry: draft=%o feedback=%o",
+          retry.assembled,
+          retryVerdict.feedback,
+        );
+        return null;
+      }
+      return retry.assembled;
+    }
     return retry?.assembled ?? first.assembled;
   } catch (err) {
     console.warn(
@@ -1346,6 +1404,9 @@ export async function draftCommitmentForWorry(input: {
   goalText: string;
   behaviorText: string;
   worryText: string;
+  /** Rewrite the coachee's own commitment instead of drafting fresh.
+   *  See ReviseInput. In this mode only a verified draft is returned. */
+  revise?: ReviseInput;
 }): Promise<string | null> {
   const started = Date.now();
   const basePromptLines = [
@@ -1354,6 +1415,7 @@ export async function draftCommitmentForWorry(input: {
     `Paired worry (Column 3): ${input.worryText}`,
     ``,
     `Fill vow with the identity/outcome the paired worry fears, mirrored into never-form. Preserve the coachee's nouns. Target 10-20 words assembled.`,
+    ...reviseLines(input.revise, "competing commitment"),
   ];
 
   type DraftShape = { assembled: string; slots: { vow: string } };
@@ -1430,6 +1492,8 @@ export async function draftCommitmentForWorry(input: {
           text: assembled,
           depth_score: null,
           rubric_reason: null,
+          sharpen_text: null,
+          suggested_fix: null,
           mirrors_worry_identity: null,
           attempts: 0,
           created_at: new Date().toISOString(),
@@ -1464,11 +1528,26 @@ export async function draftCommitmentForWorry(input: {
       `Rewrite the vow to pass ALL failing checks at once. Preserve intent; fix every flaw named.`,
     ]);
 
+    // Rewrite mode returns only a draft that clears every check (a
+    // rewrite that fails the bar it's fixing is the coach contradicting
+    // itself). Draft mode prefers the attempt with fewer failed checks,
+    // tie → later attempt, and never silent-drops: the persisted row
+    // still carries its own sharpen box.
+    if (input.revise) {
+      if (!retry) return null;
+      const retryVerdict = await verifyDraft(retry.assembled);
+      if (!retryVerdict.ok) {
+        console.warn(
+          "[itc coach] commitment rewrite refused after retry: draft=%o feedback=%o",
+          retry.assembled,
+          retryVerdict.failures,
+        );
+        return null;
+      }
+      return retry.assembled;
+    }
     if (!retry) return first.assembled;
     const retryVerdict = await verifyDraft(retry.assembled);
-    // Prefer the attempt with fewer failed checks; tie → later attempt.
-    // Both attempts persisted best-effort so composeCommitmentSharpen
-    // can still surface remaining findings on the row.
     if (retryVerdict.failures.length <= firstVerdict.failures.length) {
       return retry.assembled;
     }
@@ -1585,6 +1664,12 @@ const AssumptionDraftsSchema = z.object({
  * came capitalized (server writes the sentence-initial capital via
  * the "I" in "I assume").
  *
+ * The tell/identity join is shape-aware (see buildIdentityPredicate).
+ * Old dumb template `then ${tell} and ${identity}` broke when tell
+ * was "she'd V O" and identity was a bare noun — the "and" stranded
+ * the noun with no verb to attach to (produced "then she'd build the
+ * list and the man whose wife has outgrown him", ungrammatical).
+ *
  * Assembled result runs through scrubReply for final cleanup (dash
  * normalization, claim-of-action strip). No ensureStem or
  * ensureThenAfterIfClause needed — the server writes those tokens.
@@ -1597,7 +1682,52 @@ export function assembleAssumption(slots: {
   const act = normalizeSlot(slots.antecedent_act);
   const tell = normalizeSlot(slots.consequent_tell);
   const identity = normalizeSlot(slots.consequent_identity);
-  return `I assume that if I ${act}, then ${tell} and ${identity}.`;
+  return `I assume that if I ${act}, then ${tell} ${buildIdentityPredicate(tell, identity)}.`;
+}
+
+/**
+ * Grammar-safe join between the observable tell and the identity
+ * landing. Handles three identity shapes:
+ *
+ *   (a) Bare noun/adjective phrase — "the husband who hurts her" /
+ *       "not good enough for her" / "the man whose wife has outgrown
+ *       him". Server writes an "I'd be" (or bare "be", reusing the
+ *       tell's I-subject if it has one) so the noun becomes a
+ *       predicate.
+ *
+ *   (b) Predicate the LLM led with "be" / "become" — "be the husband
+ *       who hurts her". Strip the leading verb and re-derive from the
+ *       tell's subject so we don't end up with "she'd build the list
+ *       and be the man..." (that parses as "she'd be the man").
+ *
+ *   (c) Full clause with its own subject — "she'd see I've been
+ *       hiding" / "the truth would come out" / "I've been the man who
+ *       X". Join with bare "and "; the clause carries its own subject.
+ *
+ * Server-owned structure over LLM-obedience: the drafter prompt still
+ * asks for a bare identity slot, but if the model reaches for the
+ * "be X" walkthrough shape (or a full clause), the join adapts rather
+ * than breaking the sentence.
+ */
+function buildIdentityPredicate(tell: string, identity: string): string {
+  // Strip a leading predicate verb ("be", "become", "I'd be", "I would
+  // be") so we can re-derive it against the tell's subject.
+  const bareIdentity = identity.replace(
+    /^(?:i['\u2019]d\s+|i\s+would\s+)?(?:be|become)\s+/i,
+    "",
+  );
+  // Shape (c): already a full clause with its own subject.
+  const startsWithClauseSubject =
+    /^(?:i['\u2019](?:d|ve|ll|m)\b|i\s+would\b|she['\u2019](?:d|ll|s)\b|he['\u2019](?:d|ll|s)\b|they['\u2019](?:d|ll|ve)\b|she\s+would\b|he\s+would\b|they\s+would\b|the\s+truth\b|my\s+(?:wife|kids|family)\s+would\b)/i.test(
+      bareIdentity,
+    );
+  if (startsWithClauseSubject) {
+    return `and ${bareIdentity}`;
+  }
+  // Shape (a)/(b): bare noun or adjective. Reuse the tell's I-subject
+  // if it has one; otherwise start a fresh "I'd be".
+  const tellStartsWithI = /^i['\u2019](?:d|ll|ve|m)\b/i.test(tell);
+  return tellStartsWithI ? `and be ${bareIdentity}` : `and I'd be ${bareIdentity}`;
 }
 
 /**
@@ -1630,7 +1760,7 @@ You do NOT return a full sentence. You return three slots per draft — antecede
 
     "I assume that if I [antecedent_act], then [consequent_tell] and [consequent_identity]."
 
-You never write "I assume that", "if I", "then", or the connecting "and". The server writes those. You never write the trailing period. The server writes that. Focus entirely on the semantic content of each slot.
+You never write "I assume that", "if I", "then", or the connecting "and". The server writes those. You never write the trailing period. The server writes that. The server also writes the predicate verb ("I'd be" / "be") between "and" and the identity noun when needed — you do NOT need to prefix your identity slot with "be" or "I'd be". Just write the identity itself. Focus entirely on the semantic content of each slot.
 
 ## HARD CAP: 20 words per assembled draft. Non-negotiable.
 
@@ -1707,9 +1837,9 @@ To decompose a worry into slots:
   - Fill consequent_tell with the observable IF the belief were true.
   - Fill consequent_identity with the identity claim underneath.
 
-Wrong shape (worry re-stemmed into slots): antecedent_act="stay in the room instead of walking out", consequent_tell="I'd lose control and say something awful", consequent_identity="be the husband who hurts his wife". → assembled = "I assume that if I stay in the room instead of walking out, then I'd lose control and say something awful and be the husband who hurts his wife." That's the worry with prefix swap. 30 words. Rejected.
+Wrong shape (worry re-stemmed into slots): antecedent_act="stay in the room instead of walking out", consequent_tell="I'd lose control and say something awful", consequent_identity="the husband who hurts his wife". → assembled = "I assume that if I stay in the room instead of walking out, then I'd lose control and say something awful and be the husband who hurts his wife." That's the worry with prefix swap. 30 words. Rejected.
 
-Right shape: antecedent_act="stay in the room while she's angry", consequent_tell="I'd lose control", consequent_identity="be the husband who hurts her". → assembled = "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her." Atomic. 22 words. Passes.
+Right shape: antecedent_act="stay in the room while she's angry", consequent_tell="I'd lose control", consequent_identity="the husband who hurts her". → assembled = "I assume that if I stay in the room while she's angry, then I'd lose control and be the husband who hurts her." Atomic. 22 words. Passes.
 
 ## Clustering — shared-root FIRST, split only as fallback
 
@@ -1866,7 +1996,8 @@ export async function draftAssumptionsFromCommitments(input: {
       return null;
     });
     const chosen = retry && retry.length > 0 ? retry : first;
-    return chosen.map(({ slots: _slots, ...rest }) => rest);
+    const verified = await verifyDraftClusters(chosen, input.commitments);
+    return verified.map(({ slots: _slots, ...rest }) => rest);
   } catch (err) {
     console.warn(
       "[itc coach] draftAssumptionsFromCommitments failed: %s",
@@ -1876,6 +2007,287 @@ export async function draftAssumptionsFromCommitments(input: {
   } finally {
     console.warn(
       "[itc timing] draft kind=assumptions ms=%d",
+      Date.now() - started,
+    );
+  }
+
+  /**
+   * Draft-time cluster-fit verifier. For each draft that clusters 2+
+   * commitments, ask whether believing the assumption would make each
+   * linked commitment feel necessary (Kegan/Lahey Appendix A criterion
+   * 1). Drop the ones it wouldn't.
+   *
+   * Same judge the hone audit runs (`judgeAssumptionUnderwrites` in
+   * criteria/assumptions.ts) — preventative here, so bad clusters
+   * never reach the coachee's Draft card, and by construction never
+   * approved here then flagged on hone. Server-owned structure over
+   * LLM-obedience: the drafter prompt asks for antecedent-based
+   * coverage (`## Clustering` section), but the model isn't fully
+   * reliable at it, so verify the output structurally.
+   *
+   * Design choices:
+   *   - Never strip a draft's cluster to zero. If the verifier drops
+   *     everything, we keep the original — the LLM verifier can be
+   *     wrong too, and orphaned assumptions confuse the coachee. Let
+   *     honing catch a wrong cluster instead of hiding the draft.
+   *   - On verifier error, keep the draft's original cluster (never
+   *     worse than the pre-verifier status quo).
+   *   - Filtered-out commitments may become uncovered — that's the
+   *     right outcome. Honing's `checkAssumptionCoverage` will flag
+   *     "commitment X needs a Big Assumption", which is exactly the
+   *     K/L guidance for an unclustered concern.
+   */
+  async function verifyDraftClusters(
+    drafts: BatchDraft[],
+    commitments: Array<{ text: string; worry_text: string }>,
+  ): Promise<BatchDraft[]> {
+    return Promise.all(
+      drafts.map(async (draft) => {
+        if (draft.commitment_indices.length < 2) return draft;
+        const cluster = draft.commitment_indices
+          .map((i) => ({ index: i, text: commitments[i - 1]?.text ?? "" }))
+          .filter((c) => c.text.length > 0);
+        if (cluster.length < 2) return draft;
+        try {
+          // ONE judge for "does this assumption hold up that commitment",
+          // shared with the hone audit (checkAssumptionUnderwritesCommitments).
+          // A cluster the drafter accepts here is, by construction, a
+          // cluster the audit accepts later.
+          const verdict = await judgeAssumptionUnderwrites({
+            assumptionText: draft.text,
+            commitments: cluster,
+          });
+          const kept = verdict.fits.filter((i) =>
+            draft.commitment_indices.includes(i),
+          );
+          if (kept.length === 0) return draft;
+          if (kept.length === draft.commitment_indices.length) return draft;
+          console.warn(
+            "[itc coach] draft cluster split: draft=%o kept=%o dropped=%o",
+            draft.text,
+            kept,
+            verdict.doesntFit
+              .map((d) => `${d.index}: ${d.reason}`)
+              .join(" | "),
+          );
+          return { ...draft, commitment_indices: kept };
+        } catch (err) {
+          console.warn(
+            "[itc coach] cluster verify failed (draft=%o): %s",
+            draft.text,
+            err instanceof Error ? err.message : String(err),
+          );
+          return draft;
+        }
+      }),
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// reviseAssumption — rewrite ONE Big Assumption against the coach's lines
+// -------------------------------------------------------------------------
+
+/**
+ * Rewrite mode for a single Big Assumption. Same slot drafter and the
+ * same server assembly as draftAssumptionsFromCommitments, pointed at
+ * one existing entry: the coachee's current text plus the coach's
+ * lines on what's off (from criteria/advice.ts, the same lines the
+ * row box shows).
+ *
+ * Verified against the SAME checks the hone auditor runs on a saved
+ * assumption: depth rubric, logical consistency of the slots, the
+ * vague-then regex, and (when the problem is enactability) the
+ * enactable judge with the coachee's own behaviors as anchors. Returns
+ * only a draft that clears every check, else null. One retry with
+ * combined feedback, like the other drafters.
+ */
+/**
+ * Rewrite-mode slots. Same three slots as the fresh drafter, looser
+ * per-slot caps: a rewrite keeps the coachee's own nouns and scene,
+ * and his entries run longer than a fresh 15-word draft. No
+ * commitment_indices: the links are the caller's, not the model's.
+ */
+const ReviseAssumptionSchema = z.object({
+  antecedent_act: z.string().min(3).max(120),
+  consequent_tell: z.string().min(3).max(100),
+  consequent_identity: z.string().min(3).max(120),
+});
+
+export async function reviseAssumption(input: {
+  goalText: string;
+  currentText: string;
+  /** The commitments this assumption is linked to, with their worries,
+   *  so the rewrite keeps holding them up. */
+  linkedCommitments: Array<{ text: string; worry_text: string }>;
+  /** Selected Column 2 behaviors, map order. The "if" half should be
+   *  the coachee doing the opposite of one of them. */
+  behaviors: string[];
+  problems: string[];
+  /** True when one of the problems is that the "if" isn't his move.
+   *  The verifier then runs the enactable judge too. */
+  requireEnactable: boolean;
+}): Promise<string | null> {
+  const started = Date.now();
+  // Fresh drafts are capped at 20 words. A rewrite gets the room the
+  // coachee's own entry already takes (never less than 24), so the
+  // trimmer doesn't cut a long-but-honest assumption into a fragment.
+  const HARD_WORD_CAP = Math.max(
+    24,
+    input.currentText.trim().split(/\s+/).filter(Boolean).length,
+  );
+  const commitmentBlock =
+    input.linkedCommitments.length > 0
+      ? input.linkedCommitments
+          .map(
+            (c, i) =>
+              `  ${i + 1}. commitment: ${c.text}\n     paired worry: ${c.worry_text}`,
+          )
+          .join("\n")
+      : "  (none linked yet)";
+  const behaviorBlock =
+    input.behaviors.length > 0
+      ? input.behaviors.map((b, i) => `  ${i + 1}. ${b}`).join("\n")
+      : "  (none)";
+  const basePromptLines = [
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    ``,
+    `The coachee's behaviors (Column 2):`,
+    behaviorBlock,
+    ``,
+    `Competing commitments (Column 4) this assumption holds up, with their paired worries:`,
+    commitmentBlock,
+    ``,
+    `Return the three slots for ONE rewritten assumption. antecedent_act must be the coachee doing the OPPOSITE of one of his behaviors above (a move he could make in a small dose this week), and the assumption must keep holding up every commitment listed. Ignore the batch-drafting instructions about commitment_indices and draft counts; there is exactly one assumption here.`,
+    ...reviseLines(
+      { currentText: input.currentText, problems: input.problems },
+      "Big Assumption",
+    ),
+  ];
+
+  type Draft = {
+    text: string;
+    slots: { antecedent_act: string; consequent_tell: string; consequent_identity: string };
+  };
+
+  async function generate(lines: string[]): Promise<Draft | null> {
+    const { object: d } = await generateObject({
+      model: mainModel(),
+      schema: ReviseAssumptionSchema,
+      system: withVoiceRules(DRAFT_ASSUMPTIONS_SYSTEM),
+      prompt: lines.join("\n"),
+      maxOutputTokens: 600,
+    });
+    const raw = scrubReply(assembleAssumption(d));
+    if (!raw) return null;
+    return {
+      text: trimAssembledDraft(raw, HARD_WORD_CAP),
+      slots: {
+        antecedent_act: d.antecedent_act,
+        consequent_tell: d.consequent_tell,
+        consequent_identity: d.consequent_identity,
+      },
+    };
+  }
+
+  async function verify(draft: Draft): Promise<{ ok: boolean; feedback: string[] }> {
+    const feedback: string[] = [];
+    const [depth, vague, enactable] = await Promise.all([
+      scoreAssumptionDepth({
+        goalText: input.goalText,
+        assumptionText: draft.text,
+      }).catch((err) => {
+        console.warn(
+          "[itc coach] assumption depth rubric failed, treating as pass: %s",
+          err instanceof Error ? err.message : String(err),
+        );
+        return null;
+      }),
+      checkVagueAssumptionThenClause({
+        assumptions: [
+          {
+            id: "draft",
+            map_id: "draft",
+            sort_order: 0,
+            text: draft.text,
+            depth_score: null,
+            rubric_reason: null,
+            sharpen_text: null,
+            suggested_fix: null,
+            attempts: 0,
+            selected_for_testing: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      }),
+      input.requireEnactable && input.behaviors.length > 0
+        ? judgeAssumptionEnactable({
+            assumptionText: draft.text,
+            behaviors: input.behaviors.map((text, i) => ({ index: i + 1, text })),
+          }).catch((err) => {
+            console.warn(
+              "[itc coach] enactable judge failed, treating as pass: %s",
+              err instanceof Error ? err.message : String(err),
+            );
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
+    if (depth && depth.score < 3) {
+      feedback.push(
+        `The depth rubric rejected it (${depth.score}/3). Reason: "${depth.reason}"`,
+      );
+    }
+    const consistency = checkAssumptionLogicalConsistency({
+      antecedentAct: draft.slots.antecedent_act,
+      consequentTell: draft.slots.consequent_tell,
+      consequentIdentity: draft.slots.consequent_identity,
+    });
+    if (!consistency.consistent) {
+      feedback.push(`The logical-consistency check rejected it: "${consistency.reason}"`);
+    }
+    if (vague.length > 0) feedback.push(ADVICE.vague_assumption_then_clause);
+    if (enactable && !enactable.enactable) {
+      feedback.push(`${ADVICE.assumption_not_enactable} (${enactable.reason})`);
+    }
+    return { ok: feedback.length === 0, feedback };
+  }
+
+  try {
+    const first = await generate(basePromptLines);
+    if (!first) return null;
+    const firstVerdict = await verify(first);
+    if (firstVerdict.ok) return first.text;
+    const retry = await generate([
+      ...basePromptLines,
+      ``,
+      `Your previous draft was: "${first.text}"`,
+      `It failed ${firstVerdict.feedback.length} check${firstVerdict.feedback.length === 1 ? "" : "s"}:`,
+      ...firstVerdict.feedback.map((f, i) => `${i + 1}. ${f}`),
+      ``,
+      `Rewrite so ALL checks pass at once. Keep his nouns. Under 20 words assembled.`,
+    ]);
+    if (!retry) return null;
+    const retryVerdict = await verify(retry);
+    if (!retryVerdict.ok) {
+      console.warn(
+        "[itc coach] assumption rewrite refused after retry: draft=%o feedback=%o",
+        retry.text,
+        retryVerdict.feedback,
+      );
+      return null;
+    }
+    return retry.text;
+  } catch (err) {
+    console.warn(
+      "[itc coach] reviseAssumption failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] revise kind=assumption ms=%d",
       Date.now() - started,
     );
   }

@@ -36,11 +36,11 @@ import {
 } from "@/lib/itc/criteria/orchestrator";
 import { renderFindings } from "@/lib/itc/criteria/render";
 import {
-  composeAssumptionSharpen,
-  composeBehaviorSharpen,
-  composeCommitmentSharpen,
-  composeWorrySharpen,
-} from "@/lib/itc/criteria/row-sharpen";
+  attachFixes,
+  coachTextForAssumption,
+  coachTextForCommitment,
+  coachTextForWorry,
+} from "@/lib/itc/fixes";
 import { isItcAdmin } from "@/lib/itc/admin";
 import {
   addAssumption,
@@ -380,11 +380,11 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
       behaviorText: parsed.data.text.trim(),
     });
     score = scored.score;
-    const sharpen = composeBehaviorSharpen({
-      depthScore: score,
-      depthReason: scored.reason,
-    });
-    await updateBehaviorDepth(behaviorId, score, sharpen);
+    await updateBehaviorDepth(
+      behaviorId,
+      score,
+      score >= 3 ? null : scored.reason,
+    );
     events.record(
       "rubric_scored",
       {
@@ -470,11 +470,11 @@ export async function updateBehavior(
       behaviorText: updated.text,
     });
     score = scored.score;
-    const sharpen = composeBehaviorSharpen({
-      depthScore: score,
-      depthReason: scored.reason,
-    });
-    await updateBehaviorDepth(updated.id, score, sharpen);
+    await updateBehaviorDepth(
+      updated.id,
+      score,
+      score >= 3 ? null : scored.reason,
+    );
     events.record(
       "rubric_scored",
       {
@@ -627,16 +627,18 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
       worryText: row.text,
     });
     score = scored.score;
-    // Combine depth-rubric reason with row-level criteria (interior-
-    // witness regex) into one sharpen text. Persisted so the inline
-    // "One thing to sharpen" box matches what the hone waterfall
-    // would flag for the same worry.
-    const sharpen = await composeWorrySharpen({
-      worry: { ...row, depth_score: score },
-      behaviors: [behavior],
+    // Row-level findings → coach text + a verified rewrite, persisted
+    // together so the box under the row shows the same lines (and the
+    // same "Use this" sentence) the column review and hone would.
+    const coach = await coachTextForWorry({
+      goalText: loaded.map.improvement_goal ?? "",
+      pillar: loaded.map.pillar_code,
+      behavior,
+      worry: row,
+      score,
       depthReason: scored.reason,
     });
-    await updateWorryDepth(row.id, score, sharpen);
+    await updateWorryDepth(row.id, score, coach);
     events.record(
       "rubric_scored",
       {
@@ -854,25 +856,23 @@ export async function saveCommitment(
       commitmentText: row.text,
     });
     score = scored.score;
-    // Combine depth-rubric reason with row-level criteria (interior-
-    // witness regex + mirror-worry from the just-scored rubric bool)
-    // into one sharpen text. mirrors_worry_identity persists first so
-    // composeCommitmentSharpen can read the fresh value via
-    // checkCommitmentMirrorsWorry.
-    const rowWithFreshMirror = {
-      ...row,
-      depth_score: score,
-      mirrors_worry_identity: scored.mirrors_worry_identity,
-    };
-    const sharpen = await composeCommitmentSharpen({
-      commitment: rowWithFreshMirror,
+    // Row-level findings (depth + mirror + interior-witness) → coach
+    // text + a verified rewrite, persisted together.
+    const behaviorsForWorry = await listBehaviors(loaded.map.id);
+    const pairedBehavior = behaviorsForWorry.find((b) => b.id === worry.behavior_id);
+    const coach = await coachTextForCommitment({
+      goalText: loaded.map.improvement_goal ?? "",
+      behaviorText: pairedBehavior?.text ?? "",
       worry,
+      commitment: row,
+      score,
       depthReason: scored.reason,
+      mirrorsWorryIdentity: scored.mirrors_worry_identity,
     });
     await updateCommitmentDepth(
       row.id,
       score,
-      sharpen,
+      coach,
       scored.mirrors_worry_identity,
     );
     events.record(
@@ -1030,13 +1030,30 @@ export async function saveAssumption(
       assumptionText: row.text,
     });
     score = scored.score;
-    // Combine depth-rubric reason with row-level criteria (vague-then
-    // regex) into one sharpen text.
-    const sharpen = await composeAssumptionSharpen({
-      assumption: { ...row, depth_score: score },
+    // Row-level findings (depth + vague-then + enactable) → coach text
+    // + a verified rewrite, persisted together. The rewrite keeps the
+    // linked commitments and anchors the "if" to one of his behaviors.
+    const [behaviorsForMap, worriesForMap] = await Promise.all([
+      listBehaviors(loaded.map.id),
+      listWorries(loaded.map.id),
+    ]);
+    const worryTextById = new Map(worriesForMap.map((w) => [w.id, w.text]));
+    const linkedCommitments = parsed.data.commitment_ids
+      .map((cid) => commitmentsById.get(cid))
+      .filter((c): c is NonNullable<typeof c> => Boolean(c))
+      .map((c) => ({
+        text: c.text,
+        worry_text: worryTextById.get(c.worry_id) ?? "",
+      }));
+    const coach = await coachTextForAssumption({
+      goalText: loaded.map.improvement_goal ?? "",
+      assumption: row,
+      linkedCommitments,
+      behaviors: behaviorsForMap.filter((b) => b.selected),
+      score,
       depthReason: scored.reason,
     });
-    await updateAssumptionDepth(row.id, score, sharpen);
+    await updateAssumptionDepth(row.id, score, coach);
     events.record(
       "rubric_scored",
       {
@@ -1479,20 +1496,19 @@ async function autoDeriveCommitmentForWorry(input: {
       worryText: input.worry.text,
       commitmentText: row.text,
     });
-    const withFreshMirror = {
-      ...row,
-      depth_score: scored.score,
-      mirrors_worry_identity: scored.mirrors_worry_identity,
-    };
-    const sharpen = await composeCommitmentSharpen({
-      commitment: withFreshMirror,
+    const coach = await coachTextForCommitment({
+      goalText: input.goalText,
+      behaviorText: input.behavior.text,
       worry: input.worry,
+      commitment: row,
+      score: scored.score,
       depthReason: scored.reason,
+      mirrorsWorryIdentity: scored.mirrors_worry_identity,
     });
     await updateCommitmentDepth(
       row.id,
       scored.score,
-      sharpen,
+      coach,
       scored.mirrors_worry_identity,
     );
     await invalidateReviewsForColumn(input.mapId, "commitments");
@@ -2057,7 +2073,7 @@ export async function ensureColumnReviewDelivered(
     // so a coachee never sees a criterion approve an entry during
     // construction and flag it on hone.
     const column: ColumnName = stage;
-    const findings = await runColumnCriteria(column, {
+    const rawFindings = await runColumnCriteria(column, {
       mapId,
       goalText: map.improvement_goal ?? "",
       behaviors: selectedBehaviors,
@@ -2065,6 +2081,20 @@ export async function ensureColumnReviewDelivered(
       commitments,
       assumptions,
       assumptionLinks,
+    });
+    // Every finding gets a verified rewrite where a drafter exists,
+    // and the rows get the same text the review prints, so the box
+    // under an entry and the review above the Continue button agree.
+    const findings = await attachFixes(rawFindings, {
+      mapId,
+      goalText: map.improvement_goal ?? "",
+      pillar: map.pillar_code,
+      behaviors: selectedBehaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      persist: true,
     });
     const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
     const columnLabel = COLUMN_LABELS[column];
@@ -2146,14 +2176,31 @@ export async function runHoneDiagnostic(
     // describes (Vol 1 p 4: "do the fears stay present in the Column
     // 3 commitments? do the Big Assumptions follow from key Column 3
     // commitments?").
-    const { findings } = await runHoneWaterfall({
+    const selectedBehaviors = behaviors.filter((b) => b.selected);
+    const { findings: rawFindings } = await runHoneWaterfall({
       mapId: loaded.map.id,
       goalText: loaded.map.improvement_goal ?? "",
-      behaviors: behaviors.filter((b) => b.selected),
+      behaviors: selectedBehaviors,
       worries,
       commitments,
       assumptions,
       assumptionLinks,
+    });
+
+    // Rewrites + row text persisted BEFORE the stale flag is cleared
+    // below. The staleness triggers ignore coach-text columns anyway
+    // (migration 20260901000001), so this can't mark its own audit
+    // stale.
+    const findings = await attachFixes(rawFindings, {
+      mapId: loaded.map.id,
+      goalText: loaded.map.improvement_goal ?? "",
+      pillar: loaded.map.pillar_code,
+      behaviors: selectedBehaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      persist: true,
     });
 
     const pillarLabel = PILLAR_BY_CODE[loaded.map.pillar_code].label;
@@ -2251,21 +2298,37 @@ export async function previewHoneDiagnosticAdmin(
       listAssumptionLinks(map.id),
     ]);
 
-    const { findings } = await runHoneWaterfall({
+    const selectedBehaviors = behaviors.filter((b) => b.selected);
+    const { findings: rawFindings } = await runHoneWaterfall({
       mapId: map.id,
       goalText: map.improvement_goal ?? "",
-      behaviors: behaviors.filter((b) => b.selected),
+      behaviors: selectedBehaviors,
       worries,
       commitments,
       assumptions,
       assumptionLinks,
     });
+    // Preview: rewrites are drafted so the facilitator sees the full
+    // banner, but nothing is written to the coachee's rows or drafts.
+    const findings = await attachFixes(rawFindings, {
+      mapId: map.id,
+      goalText: map.improvement_goal ?? "",
+      pillar: map.pillar_code,
+      behaviors: selectedBehaviors,
+      worries,
+      commitments,
+      assumptions,
+      assumptionLinks,
+      persist: false,
+    });
 
     const pillarLabel = PILLAR_BY_CODE[map.pillar_code].label;
+    // Admin sees every entry, not the coachee's one-at-a-time budget.
     const prose = renderFindings(findings, {
       goalText: map.improvement_goal ?? "",
       pillarLabel,
       mode: "hone",
+      limit: Number.POSITIVE_INFINITY,
     });
     return { ok: true, prose };
   } catch (err) {

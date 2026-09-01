@@ -52,8 +52,8 @@ const ALL_ISSUE_TYPES: IssueType[] = [
   "depth_shortfall_worry",
   "depth_shortfall_commitment",
   "depth_shortfall_assumption",
-  "assumption_commitment_drift",
-  "assumption_overload",
+  "assumption_doesnt_underwrite",
+  "assumption_not_enactable",
   "assumption_uncovered_commitment",
   "test_coverage_gap",
   "test_grip_through_data",
@@ -69,6 +69,34 @@ describe("ADVICE — exhaustiveness", () => {
       expect(ADVICE[type].length).toBeGreaterThan(10);
     }
   });
+});
+
+describe("ADVICE — voice", () => {
+  // docs/coach-voice-and-tone.md, applied to every line the coachee
+  // reads. Not just the banned lists: second person, contractions,
+  // no machinery, no interface, no announcing.
+  const BANNED: Array<[RegExp, string]> = [
+    [/[—–]/, "em/en dash"],
+    [/\b(rubric|criterion|criteria|score|threshold|validation|rejected)\b/i, "machinery word"],
+    [/\b(click|tap|hit|press|the (add|save) button|input)\b/i, "interface word"],
+    [/\b(sharpen (it|this|up)|let me|let's name|worth \w+ing)\b/i, "announcing"],
+    [/\b(leverage|unpack|delve|robust|nuanced?|profound(ly)?|deeply|genuinely|truly|resonate|elevate)\b/i, "AI vocabulary"],
+    [/\b(architecture|framework|infrastructure|landscape|ecosystem|template)\b/i, "abstract noun"],
+    [/\b(land|lands|landing)\b/i, "'land' metaphor"],
+    [/\bnotice\b/i, "'notice'"],
+    [/\b(she|her|his wife|my wife)\b/i, "pronoun the coachee hasn't used"],
+    [/\bColumn \d\b/, "column number"],
+  ];
+  for (const type of ALL_ISSUE_TYPES) {
+    it(`${type} reads in coach voice`, () => {
+      const line = ADVICE[type];
+      for (const [re, why] of BANNED) {
+        expect(re.test(line), `${why} in ADVICE.${type}: "${line}"`).toBe(false);
+      }
+      // Second person, not third: never "he" / "the coachee".
+      expect(/\b(the coachee|he should|he needs)\b/i.test(line)).toBe(false);
+    });
+  }
 });
 
 describe("ADVICE — alignment with scoreWorryDepth", () => {

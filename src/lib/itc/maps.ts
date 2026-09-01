@@ -37,6 +37,9 @@ export type ItcCommitment = {
    *  specifically to sharpen. Null on legacy rows saved before this
    *  field existed (treat as "no specific feedback yet"). */
   rubric_reason: string | null;
+  /** See ItcWorry.sharpen_text / suggested_fix. */
+  sharpen_text: string | null;
+  suggested_fix: string | null;
   /** Per-criterion boolean from scoreCommitmentDepth: does the vow
    *  name the identity/outcome the paired worry fears? Persisted so
    *  the criteria module can fire a mirror-broken finding without a
@@ -54,8 +57,11 @@ export type ItcAssumption = {
   sort_order: number;
   text: string;
   depth_score: number | null;
-  /** See ItcCommitment.rubric_reason. */
+  /** See ItcWorry.rubric_reason. */
   rubric_reason: string | null;
+  /** See ItcWorry.sharpen_text / suggested_fix. */
+  sharpen_text: string | null;
+  suggested_fix: string | null;
   attempts: number;
   selected_for_testing: boolean;
   created_at: string;
@@ -119,8 +125,20 @@ export type ItcWorry = {
   behavior_id: string;
   text: string;
   depth_score: number | null;
-  /** See ItcCommitment.rubric_reason. */
+  /** The depth rubric's one-line reason for THIS row's current text,
+   *  raw (scrubbed of machinery words at save). Null when depth
+   *  passed. One input to the criteria module's depth finding. */
   rubric_reason: string | null;
+  /** Everything the coach has to say about this row, rendered from
+   *  its findings (row-level at save; plus cross-entry findings after
+   *  a column review or hone). The box under the row shows this
+   *  verbatim. Null when the row is clean. */
+  sharpen_text: string | null;
+  /** A verified rewrite that clears the row's findings, produced by
+   *  the drafters (src/lib/itc/fixes.ts). Null when the row is clean
+   *  or the drafter couldn't clear every check. The row shows a
+   *  "Use this" button for it. */
+  suggested_fix: string | null;
   attempts: number;
   created_at: string;
   updated_at: string;
@@ -582,9 +600,11 @@ export async function upsertWorryForBehavior(
       .update({
         text: trimmed,
         attempts: (existing.attempts ?? 0) + 1,
-        // Clear stale score + reason; caller re-scores immediately.
+        // Clear stale score + coach text; caller re-scores immediately.
         depth_score: null,
         rubric_reason: null,
+        sharpen_text: null,
+        suggested_fix: null,
       })
       .eq("id", existing.id)
       .select("*")
@@ -606,24 +626,75 @@ export async function upsertWorryForBehavior(
   return { row: data as ItcWorry, isEdit: false };
 }
 
+/**
+ * The coach's persisted text for one row. All three written together
+ * so the row box never shows a reason from one save and a rewrite
+ * from another. Pass `undefined` for a field to leave it alone;
+ * pass null to clear it.
+ */
+export type RowCoachText = {
+  rubricReason?: string | null;
+  sharpenText?: string | null;
+  suggestedFix?: string | null;
+};
+
+function coachTextPatch(coach?: RowCoachText): {
+  rubric_reason?: string | null;
+  sharpen_text?: string | null;
+  suggested_fix?: string | null;
+} {
+  if (!coach) return {};
+  const patch: {
+    rubric_reason?: string | null;
+    sharpen_text?: string | null;
+    suggested_fix?: string | null;
+  } = {};
+  if (coach.rubricReason !== undefined) {
+    patch.rubric_reason = coach.rubricReason?.trim() || null;
+  }
+  if (coach.sharpenText !== undefined) {
+    patch.sharpen_text = coach.sharpenText?.trim() || null;
+  }
+  if (coach.suggestedFix !== undefined) {
+    patch.suggested_fix = coach.suggestedFix?.trim() || null;
+  }
+  return patch;
+}
+
+export type CoachTextTable = "itc_worries" | "itc_commitments" | "itc_assumptions";
+
+/**
+ * Write coach text onto a row without touching its score. Used after
+ * a column review or hone audit so the row box carries the
+ * cross-entry findings (underwrite, enactable) the save-time path
+ * can't see. The staleness triggers ignore these columns (see
+ * migration 20260901000001), so this never marks the audit it came
+ * from as stale.
+ */
+export async function updateRowCoachText(
+  table: CoachTextTable,
+  rowId: string,
+  coach: RowCoachText,
+): Promise<void> {
+  const patch = coachTextPatch(coach);
+  if (Object.keys(patch).length === 0) return;
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from(table).update(patch).eq("id", rowId);
+  if (error) throw new Error(`updateRowCoachText(${table}): ${error.message}`);
+}
+
 export async function updateWorryDepth(
   worryId: string,
   score: number,
-  reason?: string | null,
+  coach?: RowCoachText,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateWorryDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
-  const patch: { depth_score: number; rubric_reason?: string | null } = {
-    depth_score: score,
-  };
-  if (reason !== undefined) {
-    patch.rubric_reason = reason?.trim() || null;
-  }
   const { error } = await supabase
     .from("itc_worries")
-    .update(patch)
+    .update({ depth_score: score, ...coachTextPatch(coach) })
     .eq("id", worryId);
   if (error) throw new Error(`updateWorryDepth: ${error.message}`);
 }
@@ -737,9 +808,11 @@ export async function upsertCommitmentForWorry(
       .update({
         text: trimmed,
         attempts: (existing.attempts ?? 0) + 1,
-        // Clear stale score + reason; caller re-scores immediately.
+        // Clear stale score + coach text; caller re-scores immediately.
         depth_score: null,
         rubric_reason: null,
+        sharpen_text: null,
+        suggested_fix: null,
       })
       .eq("id", existing.id)
       .select("*")
@@ -764,7 +837,7 @@ export async function upsertCommitmentForWorry(
 export async function updateCommitmentDepth(
   commitmentId: string,
   score: number,
-  reason?: string | null,
+  coach?: RowCoachText,
   mirrorsWorryIdentity?: boolean | null,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
@@ -774,13 +847,13 @@ export async function updateCommitmentDepth(
   const patch: {
     depth_score: number;
     rubric_reason?: string | null;
+    sharpen_text?: string | null;
+    suggested_fix?: string | null;
     mirrors_worry_identity?: boolean | null;
   } = {
     depth_score: score,
+    ...coachTextPatch(coach),
   };
-  if (reason !== undefined) {
-    patch.rubric_reason = reason?.trim() || null;
-  }
   if (mirrorsWorryIdentity !== undefined) {
     patch.mirrors_worry_identity = mirrorsWorryIdentity;
   }
@@ -875,6 +948,8 @@ export async function updateAssumptionText(
       // that no longer describes what's on the page. The next save's
       // rubric run will repopulate against the new text.
       rubric_reason: null,
+      sharpen_text: null,
+      suggested_fix: null,
     })
     .eq("id", id)
     .eq("map_id", mapId)
@@ -887,21 +962,15 @@ export async function updateAssumptionText(
 export async function updateAssumptionDepth(
   assumptionId: string,
   score: number,
-  reason?: string | null,
+  coach?: RowCoachText,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateAssumptionDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
-  const patch: { depth_score: number; rubric_reason?: string | null } = {
-    depth_score: score,
-  };
-  if (reason !== undefined) {
-    patch.rubric_reason = reason?.trim() || null;
-  }
   const { error } = await supabase
     .from("itc_assumptions")
-    .update(patch)
+    .update({ depth_score: score, ...coachTextPatch(coach) })
     .eq("id", assumptionId);
   if (error) throw new Error(`updateAssumptionDepth: ${error.message}`);
 }

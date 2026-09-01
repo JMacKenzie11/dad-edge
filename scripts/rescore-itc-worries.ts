@@ -19,9 +19,9 @@
  * coachee's next visit will see the "map has moved" banner and can
  * re-run the audit against the new bar.
  *
- * Runs the SAME composeWorrySharpen path saveWorry uses, so the
- * persisted rubric_reason includes both depth-rubric feedback and
- * any interior-witness regex finding — one source of truth.
+ * Runs the SAME coachTextForWorry path saveWorry uses, so the
+ * persisted rubric_reason / sharpen_text / suggested_fix triple is
+ * exactly what a fresh save would write — one source of truth.
  *
  * Usage:
  *
@@ -35,7 +35,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { composeWorrySharpen } from "@/lib/itc/criteria/row-sharpen";
+import { coachTextForWorry } from "@/lib/itc/fixes";
 import { scoreWorryDepth } from "@/lib/itc/rubric";
 import type { ItcBehavior, ItcMap, ItcWorry } from "@/lib/itc/maps";
 
@@ -45,8 +45,13 @@ type ScoreDelta = {
   worryId: string;
   mapId: string;
   worryText: string;
-  before: { depth_score: number | null; rubric_reason: string | null };
-  after: { depth_score: number; rubric_reason: string | null };
+  before: { depth_score: number | null; sharpen_text: string | null };
+  after: {
+    depth_score: number;
+    rubric_reason: string | null;
+    sharpen_text: string | null;
+    suggested_fix: string | null;
+  };
   changed: boolean;
 };
 
@@ -77,7 +82,10 @@ async function main() {
 
   const [{ data: maps, error: mErr }, { data: behaviors, error: bErr }] =
     await Promise.all([
-      supabase.from("itc_maps").select("id, improvement_goal").in("id", mapIds),
+      supabase
+        .from("itc_maps")
+        .select("id, improvement_goal, pillar_code")
+        .in("id", mapIds),
       supabase
         .from("itc_behaviors")
         .select("*")
@@ -86,7 +94,7 @@ async function main() {
   if (mErr) throw new Error(`fetch maps: ${mErr.message}`);
   if (bErr) throw new Error(`fetch behaviors: ${bErr.message}`);
   const mapById = new Map(
-    ((maps ?? []) as Pick<ItcMap, "id" | "improvement_goal">[]).map((m) => [
+    ((maps ?? []) as Pick<ItcMap, "id" | "improvement_goal" | "pillar_code">[]).map((m) => [
       m.id,
       m,
     ]),
@@ -123,23 +131,28 @@ async function main() {
       continue;
     }
 
-    const sharpen = await composeWorrySharpen({
-      worry: { ...worry, depth_score: scored.score },
-      behaviors: [behavior],
+    const coach = await coachTextForWorry({
+      goalText: map.improvement_goal ?? "",
+      pillar: map.pillar_code,
+      behavior,
+      worry,
+      score: scored.score,
       depthReason: scored.reason,
     });
 
     const before = {
       depth_score: worry.depth_score,
-      rubric_reason: worry.rubric_reason,
+      sharpen_text: worry.sharpen_text,
     };
     const after = {
       depth_score: scored.score,
-      rubric_reason: sharpen,
+      rubric_reason: coach.rubricReason ?? null,
+      sharpen_text: coach.sharpenText ?? null,
+      suggested_fix: coach.suggestedFix ?? null,
     };
     const changed =
       before.depth_score !== after.depth_score ||
-      (before.rubric_reason ?? null) !== (after.rubric_reason ?? null);
+      (before.sharpen_text ?? null) !== (after.sharpen_text ?? null);
 
     deltas.push({
       worryId: worry.id,
@@ -171,7 +184,7 @@ async function main() {
   console.log(`  changed (any field): ${changedDeltas.length}`);
   console.log(`    flipped PASS → FAIL: ${flippedToFail.length}`);
   console.log(`    flipped FAIL → PASS: ${flippedToPass.length}`);
-  console.log(`    same-verdict rubric_reason update: ${otherChanges.length}`);
+  console.log(`    same-verdict coach-text update: ${otherChanges.length}`);
   console.log("");
 
   if (flippedToFail.length > 0) {
@@ -181,7 +194,7 @@ async function main() {
         `  worry=${d.worryId} depth ${d.before.depth_score ?? "null"}→${d.after.depth_score}`,
       );
       console.log(`    text: "${d.worryText.slice(0, 120)}${d.worryText.length > 120 ? "…" : ""}"`);
-      console.log(`    new reason: ${d.after.rubric_reason?.slice(0, 200) ?? "(none)"}`);
+      console.log(`    coach: ${d.after.sharpen_text?.slice(0, 200) ?? "(none)"}`);
     }
     console.log("");
   }
@@ -198,9 +211,13 @@ async function main() {
     const patch: {
       depth_score: number;
       rubric_reason: string | null;
+      sharpen_text: string | null;
+      suggested_fix: string | null;
     } = {
       depth_score: d.after.depth_score,
       rubric_reason: d.after.rubric_reason?.trim() || null,
+      sharpen_text: d.after.sharpen_text?.trim() || null,
+      suggested_fix: d.after.suggested_fix?.trim() || null,
     };
     const { error } = await supabase
       .from("itc_worries")

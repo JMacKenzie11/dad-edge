@@ -30,19 +30,16 @@ export async function checkWorryDepth(input: {
   for (const worry of input.worries) {
     if (worry.depth_score == null) continue;
     if (worry.depth_score >= DEPTH_THRESHOLD) continue;
-    // detail = canonical advice + rubric's dynamic reason where present.
-    // Same fix-direction as the audit (which reads ADVICE directly via
-    // CRITIQUE_SPECS); the rubric reason adds granular why-it-failed for
-    // the save-time sharpen box.
-    const detail = worry.rubric_reason
-      ? `${ADVICE.depth_shortfall_worry} Rubric reason: ${worry.rubric_reason}`
-      : ADVICE.depth_shortfall_worry;
+    // detail = the rubric's own one-line reason (specific to this
+    // worry, scrubbed at save time) or the canonical line when the
+    // row predates rubric reasons. Same text on every surface.
     findings.push({
       entryRef: { table: "worries", id: worry.id },
       issueType: "depth_shortfall_worry",
       severity: "critical",
       actualText: worry.text,
-      detail,
+      detail: worry.rubric_reason?.trim() || ADVICE.depth_shortfall_worry,
+      suggestedFix: worry.suggested_fix ?? undefined,
     });
   }
   return findings;
@@ -86,6 +83,7 @@ export async function checkInteriorWitnessInWorries(input: {
       severity: "moderate",
       actualText: worry.text,
       detail: ADVICE.interior_witness_worry,
+      suggestedFix: worry.suggested_fix ?? undefined,
     });
   }
   return findings;

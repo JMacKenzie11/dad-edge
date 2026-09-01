@@ -31,7 +31,7 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
 
 1. is_fear: The worry is a fear — visceral, present-tense, felt. Not a practical concern, forecast, or cost/benefit calculation. "It'd be a waste of time" and "she might feel pushed" are practical. "I'm afraid I'd fail her" is a fear.
 
-2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not about the other person's reaction ("she'd get upset"), not third-person ("men who don't listen lose their marriages"). If he's talking about the other person's feelings instead of his own, false.
+2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not about the other person's reaction ("she'd get upset"), not third-person ("men who don't listen lose their marriages"). If he's talking about the other person's feelings instead of his own, false. A worry phrased as what someone else would SEE or KNOW about HIM ("she'd see I've been the husband who only cares about winning", "my team would know I've been faking it") is still his own dread about who he is; that passes. It fails only when the content is the other person's feelings or reaction instead of his identity.
 
 3. touches_identity: The worry lands on an EXPLICITLY NAMED identity or role. Two valid shapes, both requiring a named identity noun (not just a failure event or outcome).
 
@@ -50,7 +50,9 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
 
    Do not require the extra "and that means I'm unworthy" step for role identity — once the role and predicate are named ("the coach who couldn't help her when she needed me"), that IS identity. But bare failure verbs without a role noun ("I'd have failed to help her") don't clear the bar.
 
-Return your judgment as three booleans plus one short reason (under 40 words) explaining what would need to change to score better if any is false.
+Return your judgment as three booleans plus a reason.
+
+REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, under 40 words. Name what the entry stops at and what the finished version would say. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 `.trim();
 
 const CommitmentSchema = z.object({
@@ -79,9 +81,9 @@ Score three binary criteria. When in doubt, false.
 
 3. is_specific_not_generic: The vow keeps the coachee's specific nouns and context. "Never being a bad husband" fails (too generic). "Never being the husband who can't let things go" passes (specific role + specific behavior). "Never failing" fails (generic). "Never failing my family as the provider" passes (specific role + specific stakes).
 
-Also return a one-line reason (<40 words) explaining what would need to change to raise a false criterion to true.
+REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, under 40 words. Name what the entry stops at and what the finished version would say. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 
-When your reason includes an example rewrite, use the CANONICAL Column-4 stem: **"I'm also committed to never..."**. Column 4 competing commitments always take "also" because they COMPETE with the coachee's primary Column-1 goal ("I'm committed to getting better at X"). Dropping "also" turns the competing commitment into a bare commitment that reads as if it stands alone — losing the diagnostic tension the map is designed to surface.
+When your reason includes an example rewrite, use the canonical stem "I'm also committed to never...". The "also" is what makes it a COMPETING commitment next to the improvement goal; dropping it turns the entry into a bare commitment that reads as if it stands alone.
 `.trim();
 
 export async function scoreCommitmentDepth(input: {
@@ -156,7 +158,7 @@ Score three binary criteria. When in doubt, false.
 
 3. lands_in_identity_or_big_time_bad: The "then" touches identity ("I'm the kind of man who...") or a Big Time Bad conclusion (irrecoverable failure, being seen as the thing he most dreads being). "It'd take longer" or "we'd lose the deal" doesn't land here.
 
-Also return a one-line reason (<40 words) explaining what to extend or reframe if any is false.
+REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, under 40 words. Name what the entry stops at and what the finished version would say. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 `.trim();
 
 export async function scoreAssumptionDepth(input: {
@@ -229,7 +231,7 @@ Score three binary criteria. When in doubt, false.
 
 3. is_first_person_action_not_aspiration: It's what HE actually does or fails to do (present tense), not what he wishes he did, not what he plans to do, not an identity label about himself, not something the other person does. "I need to be more patient" / "I should listen better" / "I want to stop yelling" all fail (aspiration). "I'm a bad listener" / "I'm distant with her" fail (identity claims). "She doesn't respect me" fails (other person). "I don't ask what she needs" passes (first-person not-doing).
 
-Also return a one-line reason (<40 words) explaining what would need to change to raise a failing criterion.
+REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, under 40 words. Name what the entry stops at and what the finished version would say. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 `.trim();
 
 export async function scoreBehaviorDepth(input: {

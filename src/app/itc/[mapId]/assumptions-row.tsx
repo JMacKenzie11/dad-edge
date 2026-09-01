@@ -16,6 +16,7 @@ import {
   saveAssumption,
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
+import { CoachFixBox } from "./coach-fix-box";
 import { EntryThread } from "./entry-thread";
 import { InlineSpinner, SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
@@ -514,9 +515,18 @@ function AssumptionItem({
   }, [assumption.id]);
 
   function commit() {
+    saveText(draft);
+  }
+
+  /**
+   * Save a specific text value with the current links. Used by the
+   * textarea commit and by the coach box's "Use this" button (a tap
+   * on the rewrite is already the user's intent; no extra Enter).
+   */
+  function saveText(nextText: string) {
     setError(null);
     if (inflightRef.current) return;
-    const text = draft.trim();
+    const text = nextText.trim();
     if (text.length < 3) {
       setError("Too short.");
       setDraft(savedRef.current.text);
@@ -532,6 +542,7 @@ function AssumptionItem({
     }
     const priorSaved = savedRef.current;
     savedRef.current = { text, links: linksSorted };
+    setDraft(text);
     inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -628,19 +639,13 @@ function AssumptionItem({
               upstreamLabel="commitment"
             />
           ) : null}
-          {assumption.rubric_reason ? (
-            // Boxed coach-message treatment mirroring EntryThread —
-            // danger tint (red) so "you need to change this" reads
-            // unambiguously. Sits inside the flex-1 content column so
-            // it wraps cleanly and doesn't push the row layout.
-            <div className="min-w-0 rounded-md border border-[color:var(--color-danger)]/30 border-l-[3px] border-l-[color:var(--color-danger)]/70 bg-[color:var(--color-danger)]/[0.08] px-3 py-2 text-sm leading-relaxed">
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-danger)]/90">
-                One thing to sharpen
-              </div>
-              <div className="whitespace-pre-wrap break-words text-white/90">
-                {assumption.rubric_reason}
-              </div>
-            </div>
+          {assumption.sharpen_text ? (
+            <CoachFixBox
+              text={assumption.sharpen_text}
+              fix={assumption.suggested_fix}
+              pending={pending}
+              onUseFix={saveText}
+            />
           ) : null}
           <AutoTextarea
             ref={textareaRef}

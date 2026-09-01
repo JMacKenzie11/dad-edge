@@ -23,15 +23,12 @@ export async function checkBehaviorDepth(input: {
     if (!behavior.selected) continue;
     if (behavior.depth_score == null) continue;
     if (behavior.depth_score >= DEPTH_THRESHOLD) continue;
-    const detail = behavior.rubric_reason
-      ? `${ADVICE.depth_shortfall_behavior} Rubric reason: ${behavior.rubric_reason}`
-      : ADVICE.depth_shortfall_behavior;
     findings.push({
       entryRef: { table: "behaviors", id: behavior.id },
       issueType: "depth_shortfall_behavior",
       severity: "critical",
       actualText: behavior.text,
-      detail,
+      detail: behavior.rubric_reason?.trim() || ADVICE.depth_shortfall_behavior,
     });
   }
   return findings;

@@ -1,22 +1,30 @@
 /**
  * Deterministic renderer for criteria findings.
  *
- * One entry point — `renderFindings(findings, context)` — powers both
- * the hone audit banner and the end-of-column construction review. The
- * mode in the context tunes the opening sentence (hone vs. column
- * review); the per-entry rendering is identical so the coachee sees
- * the same coach voice in both flows.
+ * Three entry points, one voice:
+ *   - renderFindings(findings, context): the hone banner and the
+ *     end-of-column review. Quote + what's off + the sharper version.
+ *   - renderRowSharpen(findings): the box under one entry. Same
+ *     lines, minus the quote (the entry is right there).
+ *   - findingLine(finding): the single "what's off" sentence. Both
+ *     of the above build from it, and the drafters feed it back to
+ *     the LLM as rewrite instructions.
  *
- * Structure: per-column entry-centric. Sections walk the map top-down
- * (goal → worries → competing commitments → Big Assumptions). Within
- * each section, one paragraph per problematic entry, quoting the entry
- * verbatim + all fixes for that entry inline.
+ * Budget: the hone banner shows ONE entry (the guide: "think first
+ * about what MOST needs to be sharpened", Vol 1 p 5). The column
+ * review shows up to three. Anything past the budget is counted, not
+ * printed; every affected row carries its own box, so nothing is
+ * hidden, just not repeated.
  *
- * Language: plain English. Coachee-facing terminology, not coach
- * jargon.
+ * No LLM in this file. Coach voice per docs/coach-voice-and-tone.md:
+ * second person, contractions, plain nouns, no interface words, no
+ * machinery words, say it once.
  */
 
-import type { EntryRef, Finding, IssueType } from "./types";
+import type { EntryRef, Finding, IssueType, Severity } from "./types";
+import { SEVERITY_ORDER } from "./types";
+
+export type RenderMode = "hone" | "column_review";
 
 export type RenderContext = {
   /** Pillar label ("Amplify", "Bond", …). Used in the opening. */
@@ -25,15 +33,21 @@ export type RenderContext = {
   goalText: string;
   /** hone = whole-map audit banner. column_review = end-of-column
    *  feedback surfaced inline while the coachee is still building. */
-  mode: "hone" | "column_review";
-  /** For column_review mode: which column is being reviewed. Tunes
-   *  the opening sentence ("Two things worth sharpening on your
-   *  worries before you move on"). Optional for hone mode. */
+  mode: RenderMode;
+  /** For column_review mode: which column is being reviewed. */
   columnLabel?: string;
+  /** Max entries to print. Defaults per mode (hone 1, column_review
+   *  3). Pass Infinity to print everything (admin preview). */
+  limit?: number;
+};
+
+export const DEFAULT_LIMIT: Record<RenderMode, number> = {
+  hone: 1,
+  column_review: 3,
 };
 
 // ---------------------------------------------------------------------------
-// Public entry point
+// Public entry points
 // ---------------------------------------------------------------------------
 
 export function renderFindings(
@@ -44,16 +58,43 @@ export function renderFindings(
     return renderEmptyState(context);
   }
 
-  const opening = renderOpening(findings, context);
+  const groups = prioritizeEntries(findings);
+  const limit = context.limit ?? DEFAULT_LIMIT[context.mode];
+  const shown = groups.slice(0, Math.max(1, limit));
+  const hidden = groups.length - shown.length;
 
-  const sections: string[] = [];
-  for (const col of COLUMNS) {
-    const columnFindings = findings.filter((f) => col.matches(f));
-    if (columnFindings.length === 0) continue;
-    sections.push(renderColumnSection(col, columnFindings));
+  const opening = renderOpening(groups, context);
+  const paragraphs = shown.map((g) => renderEntryParagraph(g));
+  const trailer = hidden > 0 ? renderTrailer(hidden) : null;
+
+  return [opening, ...paragraphs, ...(trailer ? [trailer] : [])].join("\n\n");
+}
+
+/**
+ * The row box. One line per finding, then the sharper version if
+ * there is one. Returns null when the entry is clean.
+ */
+export function renderRowSharpen(findings: Finding[]): string | null {
+  if (findings.length === 0) return null;
+  const lines = uniqueLines(findings.map(findingLine));
+  return lines.join(" ");
+}
+
+/**
+ * The single "what's off" sentence for a finding. Static advice for
+ * most types; built from structured fields for the dynamic ones.
+ */
+export function findingLine(f: Finding): string {
+  switch (f.issueType) {
+    case "assumption_doesnt_underwrite":
+      return renderUnderwriteLine(f);
+    case "bundled_goal":
+      // The goal check carries its own split in suggestedFix; the
+      // line is the static advice.
+      return f.detail;
+    default:
+      return f.detail;
   }
-
-  return [opening, ...sections].join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -63,195 +104,115 @@ export function renderFindings(
 function renderEmptyState(context: RenderContext): string {
   if (context.mode === "column_review") {
     const label = context.columnLabel ?? "This column";
-    return `${label} holds up. Nothing on it needs sharpening — carry on.`;
+    return `${capitalize(label)} holds up. Nothing here needs fixing.`;
   }
   const holds =
     context.goalText.trim().length > 0
       ? `Your ${context.pillarLabel} map holds up`
       : "Your map holds up";
-  return `${holds}. Nothing on it needs sharpening right now. When something on the map changes, run the audit again and I'll re-check.`;
+  return `${holds}. Nothing on it needs fixing right now. When something on the map changes, I'll check it again.`;
 }
 
 // ---------------------------------------------------------------------------
-// Opening — varies by mode + severity distribution
+// Opening
 // ---------------------------------------------------------------------------
 
-function renderOpening(findings: Finding[], context: RenderContext): string {
-  const criticals = findings.filter((f) => f.severity === "critical").length;
-  const moderates = findings.filter((f) => f.severity === "moderate").length;
+function renderOpening(groups: EntryGroup[], context: RenderContext): string {
+  const criticals = groups.filter((g) => g.severity === "critical").length;
+  const total = groups.length;
 
   if (context.mode === "column_review") {
-    const label = context.columnLabel ?? "this column";
+    // Column labels arrive as "Your worries"; the sentence supplies
+    // its own "your".
+    const label = (context.columnLabel ?? "this column")
+      .replace(/^your\s+/i, "")
+      .toLowerCase();
     if (criticals > 0) {
-      const critWord =
-        criticals === 1 ? "one critical thing" : `${criticals} critical things`;
-      return `${critWord} to sharpen on ${label.toLowerCase()} before you move on.`;
+      return criticals === 1
+        ? `One thing on your ${label} is broken. Fix it before you move on.`
+        : `${countWord(criticals)} things on your ${label} are broken. Fix those before you move on.`;
     }
-    const modWord = moderates === 1 ? "One thing" : `${moderates} things`;
-    return `${modWord} worth sharpening on ${label.toLowerCase()} before you move on.`;
+    return total === 1
+      ? `One thing to fix on your ${label} before you move on.`
+      : `${countWord(total)} things to fix on your ${label} before you move on.`;
   }
 
   // mode === "hone"
+  const map = `Your ${context.pillarLabel} map`;
   if (criticals > 0) {
-    const critWord =
-      criticals === 1 ? "one critical issue" : `${criticals} critical issues`;
-    return `Your ${context.pillarLabel} map has ${critWord} to fix before this hone pass is worth much else. Working down the map.`;
+    return criticals === 1
+      ? `${map} has one thing that's broken. Fix it first. Everything under it changes once you do.`
+      : `${map} has ${countWordLower(criticals)} things that are broken. Fix those first. Everything under them changes once you do.`;
   }
+  return total === 1
+    ? `${map} holds up. One thing to fix before you pick what to test.`
+    : `${map} holds up. ${countWord(total)} things to fix before you pick what to test.`;
+}
 
-  const modWord = moderates === 1 ? "one thing" : `${moderates} things`;
-  return `Your ${context.pillarLabel} map holds up structurally. ${modWord} worth sharpening before you keep going.`;
+function renderTrailer(hidden: number): string {
+  return hidden === 1
+    ? "One more after this. It's marked on the map."
+    : `${countWord(hidden)} more after this. They're marked on the map.`;
 }
 
 // ---------------------------------------------------------------------------
-// Column definitions — top-down map walk
+// Per-entry paragraph: quote + line(s) + sharper version
 // ---------------------------------------------------------------------------
-
-type Column = {
-  header: string;
-  matches: (f: Finding) => boolean;
-};
-
-const COLUMNS: readonly Column[] = [
-  {
-    header: "Your goal",
-    matches: (f) =>
-      f.entryRef.table === "goal" || f.entryRef.table === "map",
-  },
-  {
-    header: "Your behaviors",
-    matches: (f) => f.entryRef.table === "behaviors",
-  },
-  {
-    header: "Your worries",
-    matches: (f) => f.entryRef.table === "worries",
-  },
-  {
-    header: "Your competing commitments",
-    matches: (f) => f.entryRef.table === "commitments",
-  },
-  {
-    header: "Your Big Assumptions",
-    matches: (f) => f.entryRef.table === "assumptions",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Column section: header + per-entry paragraphs
-// ---------------------------------------------------------------------------
-
-function renderColumnSection(column: Column, findings: Finding[]): string {
-  const groups = groupByEntry(findings);
-  const paragraphs = groups.map((g) => renderEntryParagraph(g.findings));
-  return [`${column.header}:`, ...paragraphs].join("\n\n");
-}
 
 interface EntryGroup {
   key: string;
+  ref: EntryRef;
+  severity: Severity;
   findings: Finding[];
 }
 
-function entryKey(ref: EntryRef): string {
-  return `${ref.table}:${ref.id}`;
-}
-
-function groupByEntry(findings: Finding[]): EntryGroup[] {
-  const byKey = new Map<string, Finding[]>();
-  const order: string[] = [];
-  for (const f of findings) {
-    const key = entryKey(f.entryRef);
-    if (!byKey.has(key)) {
-      byKey.set(key, []);
-      order.push(key);
-    }
-    byKey.get(key)!.push(f);
-  }
-  return order.map((key) => ({ key, findings: byKey.get(key)! }));
-}
-
-// ---------------------------------------------------------------------------
-// Per-entry paragraph: quote + fix(es)
-// ---------------------------------------------------------------------------
-
-function renderEntryParagraph(findings: Finding[]): string {
-  const first = findings[0];
+function renderEntryParagraph(group: EntryGroup): string {
+  const first = group.findings[0];
   const quote = `"${first.actualText}"`;
-  const clauses = collectClauses(findings);
-
-  if (clauses.length === 0) return quote;
-
-  if (clauses.length === 1) {
-    return `${quote}\n${clauses[0]}`;
-  }
-
-  const count = countWordCapitalized(clauses.length);
-  const enumerated = clauses
-    .map((c, i) => `(${String.fromCharCode(97 + i)}) ${c}`)
-    .join(" ");
-  return `${quote}\n${count} things to fix. ${enumerated}`;
+  const lines = uniqueLines(group.findings.map(findingLine));
+  const fix = group.findings.find((f) => f.suggestedFix?.trim())?.suggestedFix;
+  const out = [quote, lines.join(" ")];
+  if (fix) out.push(renderFixLine(group, fix.trim()));
+  return out.join("\n");
 }
 
-function collectClauses(findings: Finding[]): string[] {
-  const clauses: string[] = [];
-
-  const generic = findings
-    .filter((f) => CRITIQUE_SPECS[f.issueType])
-    .sort(
-      (a, b) =>
-        (GENERIC_ORDER[a.issueType] ?? 99) -
-        (GENERIC_ORDER[b.issueType] ?? 99),
-    );
-  for (const f of generic) {
-    clauses.push(CRITIQUE_SPECS[f.issueType]!);
+function renderFixLine(group: EntryGroup, fix: string): string {
+  const types = new Set(group.findings.map((f) => f.issueType));
+  if (types.has("assumption_uncovered_commitment")) {
+    return `A Big Assumption that would hold it up: "${fix}". It's waiting with your Big Assumptions.`;
   }
+  if (types.has("bundled_goal")) {
+    return fix;
+  }
+  return `Sharper: "${fix}"`;
+}
 
-  const drifts = findings.filter(
-    (f) => f.issueType === "assumption_commitment_drift",
-  );
-  if (drifts.length === 1) clauses.push(renderDriftClause(drifts[0]));
-  else if (drifts.length >= 2) clauses.push(renderMergedDriftClause(drifts));
-
-  const overload = findings.find((f) => f.issueType === "assumption_overload");
-  if (overload) clauses.push(renderOverloadClause(overload));
-
-  return clauses;
+function renderUnderwriteLine(f: Finding): string {
+  const positions = f.unfitCommitmentPositions ?? [];
+  if (positions.length === 0) return f.detail;
+  const list = joinList(positions.map((p) => `#${p}`));
+  const those = positions.length === 1 ? "that vow" : "those vows";
+  return `Believing this doesn't make ${list} feel necessary. Drop ${list} from it, or rewrite the "if" so doing it would break ${those} too.`;
 }
 
 // ---------------------------------------------------------------------------
-// Critique specs — plain-language fix-inline sentences
+// Grouping + priority
 // ---------------------------------------------------------------------------
 
-// CRITIQUE_SPECS reads the canonical advice from ADVICE (single source
-// of truth — see src/lib/itc/criteria/advice.ts). Prior local copy
-// drifted from the check functions' detail strings, producing coach-
-// vs-coach contradictions where the audit told the coachee to do the
-// exact thing the save-time depth rubric rejected. Do NOT add local
-// strings here; edit ADVICE and everyone stays aligned.
-//
-// Findings with dynamic sentence structure (assumption_commitment_drift
-// and assumption_overload) render via renderDriftClause /
-// renderOverloadClause below — they embed LLM-produced labels into
-// the sentence and can't be a static string, so they're excluded from
-// the generic-critique path.
-import { ADVICE } from "./advice";
+/** Column order for the top-down walk (goal → behaviors → worries →
+ *  commitments → assumptions). Coverage findings point at a
+ *  commitment but belong to the assumptions column. */
+const COLUMN_RANK: Record<EntryRef["table"], number> = {
+  goal: 0,
+  map: 0,
+  behaviors: 1,
+  worries: 2,
+  commitments: 3,
+  assumptions: 4,
+  tests: 5,
+};
 
-const GENERIC_CRITIQUE_ISSUE_TYPES: readonly IssueType[] = [
-  "bundled_goal",
-  "depth_shortfall_behavior",
-  "depth_shortfall_worry",
-  "depth_shortfall_commitment",
-  "depth_shortfall_assumption",
-  "interior_witness_worry",
-  "interior_witness_commitment",
-  "commitment_doesnt_mirror_worry",
-  "vague_assumption_then_clause",
-  "assumption_uncovered_commitment",
-];
-
-const CRITIQUE_SPECS: Partial<Record<IssueType, string>> = Object.fromEntries(
-  GENERIC_CRITIQUE_ISSUE_TYPES.map((t) => [t, ADVICE[t]]),
-);
-
-const GENERIC_ORDER: Partial<Record<IssueType, number>> = {
+const TYPE_RANK: Partial<Record<IssueType, number>> = {
   bundled_goal: 0,
   commitment_doesnt_mirror_worry: 1,
   interior_witness_worry: 2,
@@ -261,48 +222,63 @@ const GENERIC_ORDER: Partial<Record<IssueType, number>> = {
   depth_shortfall_worry: 6,
   depth_shortfall_commitment: 7,
   depth_shortfall_assumption: 8,
-  assumption_uncovered_commitment: 9,
+  assumption_not_enactable: 9,
+  assumption_doesnt_underwrite: 10,
+  assumption_uncovered_commitment: 11,
 };
 
-// ---------------------------------------------------------------------------
-// Non-aggregatable clauses (LLM-detail bearing)
-// ---------------------------------------------------------------------------
-
-function renderDriftClause(f: Finding): string {
-  const scenario = f.assumptionScenario ?? "a different scenario";
-  const identity = f.commitmentIdentity ?? "a different identity";
-  const relatedQuote = f.relatedText ? ` ("${f.relatedText}")` : "";
-  return `Sharpen the "if" half — the assumption is about ${scenario}, but the paired commitment${relatedQuote} protects ${identity}. Either match that scenario or name a missing commitment that pairs cleanly with the current assumption.`;
+function columnRank(f: Finding): number {
+  if (f.issueType === "assumption_uncovered_commitment") return COLUMN_RANK.assumptions;
+  return COLUMN_RANK[f.entryRef.table];
 }
 
-function renderMergedDriftClause(findings: Finding[]): string {
-  const first = findings[0];
-  const scenario = first.assumptionScenario ?? "a different scenario";
-  const identities = findings
-    .map((f) => f.commitmentIdentity)
-    .filter((s): s is string => Boolean(s));
-  const identityList =
-    identities.length > 0 ? joinList(identities) : "different identities";
-  const commitmentQuotes = findings
-    .map((f) => (f.relatedText ? `"${f.relatedText}"` : null))
-    .filter((s): s is string => s !== null);
-  const quotesList =
-    commitmentQuotes.length > 0 ? ` (${joinList(commitmentQuotes)})` : "";
-  const count = pluralCountPhrase(findings.length);
-  return `Sharpen the "if" half — the assumption is about ${scenario}, but the ${count} paired commitments${quotesList} protect ${identityList}. Either match those scenarios or name missing commitments.`;
+function entryKey(ref: EntryRef): string {
+  return `${ref.table}:${ref.id}`;
 }
 
-function renderOverloadClause(f: Finding): string {
-  const reason = stripDetailPrefix(f.detail);
-  return `Carrying more weight than one belief can hold — ${reason} Draft additional Big Assumptions so each commitment has one pointed at its own specific concern.`;
+/**
+ * Group findings by entry, then order the groups: broken before
+ * fixable, then top of the map before bottom, then in the order the
+ * findings arrived (map order from the check functions). Within a
+ * group, findings sort by type so the lines read in a stable order.
+ */
+export function prioritizeEntries(findings: Finding[]): EntryGroup[] {
+  const byKey = new Map<string, EntryGroup>();
+  const order: string[] = [];
+  findings.forEach((f) => {
+    const key = entryKey(f.entryRef);
+    let g = byKey.get(key);
+    if (!g) {
+      g = { key, ref: f.entryRef, severity: f.severity, findings: [] };
+      byKey.set(key, g);
+      order.push(key);
+    }
+    g.findings.push(f);
+    if (SEVERITY_ORDER[f.severity] < SEVERITY_ORDER[g.severity]) {
+      g.severity = f.severity;
+    }
+  });
+  const groups = order.map((k) => byKey.get(k)!);
+  for (const g of groups) {
+    g.findings.sort(
+      (a, b) => (TYPE_RANK[a.issueType] ?? 99) - (TYPE_RANK[b.issueType] ?? 99),
+    );
+  }
+  const arrival = new Map(order.map((k, i) => [k, i]));
+  return groups.sort((a, b) => {
+    const sev = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    if (sev !== 0) return sev;
+    const col = columnRank(a.findings[0]) - columnRank(b.findings[0]);
+    if (col !== 0) return col;
+    return (arrival.get(a.key) ?? 0) - (arrival.get(b.key) ?? 0);
+  });
 }
-
 
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 
-const CARDINALS_LC = [
+const CARDINALS = [
   "one",
   "two",
   "three",
@@ -315,16 +291,16 @@ const CARDINALS_LC = [
   "ten",
 ] as const;
 
-function countWordCapitalized(n: number): string {
-  const word = CARDINALS_LC[n - 1];
-  if (!word) return `${n}`;
-  return word.charAt(0).toUpperCase() + word.slice(1);
+function countWordLower(n: number): string {
+  return CARDINALS[n - 1] ?? `${n}`;
 }
 
-function pluralCountPhrase(n: number): string {
-  if (n === 2) return "both";
-  const word = CARDINALS_LC[n - 1];
-  return word ? `all ${word}` : `all ${n}`;
+function countWord(n: number): string {
+  return capitalize(countWordLower(n));
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function joinList(items: string[]): string {
@@ -334,30 +310,16 @@ function joinList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
-function stripDetailPrefix(detail: string): string {
-  const stripped = detail
-    .replace(
-      /^Assumption is carrying multiple distinct identity concerns\.\s*/i,
-      "",
-    )
-    .replace(
-      /^Assumption is linked to commitments that name distinct identity concerns\.\s*[^.]*\.\s*/i,
-      "",
-    )
-    .replace(
-      /^Assumption's if-clause and its linked commitment name different concerns\.\s*/i,
-      "",
-    )
-    .replace(
-      /^Worry duplicates the identity concern in a commitment on the map\.\s*/i,
-      "",
-    )
-    .replace(
-      /^Worry duplicates a concern already carried by one of the competing commitments\.\s*[^.]*\.\s*/i,
-      "",
-    )
-    .trim();
-  return stripped.length > 0 ? stripped : detail;
+function uniqueLines(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || seen.has(line)) continue;
+    seen.add(line);
+    out.push(line);
+  }
+  return out;
 }
 
 // Exhaustiveness check for IssueType — TS surfaces new types here.
@@ -371,8 +333,8 @@ const _EXHAUSTIVENESS: readonly IssueType[] = [
   "depth_shortfall_worry",
   "depth_shortfall_commitment",
   "depth_shortfall_assumption",
-  "assumption_commitment_drift",
-  "assumption_overload",
+  "assumption_doesnt_underwrite",
+  "assumption_not_enactable",
   "assumption_uncovered_commitment",
   "test_coverage_gap",
   "test_grip_through_data",

@@ -2,11 +2,16 @@
  * Shared types for the criteria module.
  *
  * A criterion is a pure function of a map slice that returns
- * `Finding[]`. The same criteria feed both the construction-side
- * column reviews (end-of-column feedback as the coachee builds the
- * map) and the on-demand hone waterfall. One source of truth so the
- * coachee never sees a criterion approved during construction and
- * flagged on hone.
+ * `Finding[]`. The same criteria feed three surfaces: the row box
+ * under an entry (save-time), the end-of-column review, and the
+ * whole-map hone audit. One source of truth so the coachee never
+ * sees a criterion approved during construction and flagged on hone.
+ *
+ * Every Finding can carry a `suggestedFix`: a verified rewrite that
+ * clears the finding. The drafters produce it (see
+ * src/lib/itc/fixes.ts); the renderer prints it; the row shows a
+ * "Use this" button for it. A finding without a fix still renders,
+ * it just asks the coachee to do the rewrite himself.
  */
 
 export type IssueType =
@@ -19,8 +24,17 @@ export type IssueType =
   | "depth_shortfall_worry"
   | "depth_shortfall_commitment"
   | "depth_shortfall_assumption"
-  | "assumption_commitment_drift"
-  | "assumption_overload"
+  /** Kegan/Lahey Appendix A criterion 1 for Big Assumptions: the
+   *  assumption makes the linked commitment absolutely necessary.
+   *  Fires when believing the assumption would NOT make one (or more)
+   *  of its linked commitments feel necessary. Fix is a link change,
+   *  not a rewrite. Replaces the retired drift + overload checks,
+   *  which enforced a 1:1 scenario match the guides never asked for. */
+  | "assumption_doesnt_underwrite"
+  /** Kegan/Lahey Checkpoint 2 (Vol 1 p 18): the "if" half must have
+   *  degrees to it so the coachee can enact it safely. Fires when
+   *  the "if" isn't a move he could make himself this week. */
+  | "assumption_not_enactable"
   | "assumption_uncovered_commitment"
   | "test_coverage_gap"
   | "test_grip_through_data";
@@ -36,10 +50,7 @@ export type EntryRef =
 
 /**
  * Only two severities. `critical` = structurally broken (blocks
- * downstream derivation). `moderate` = shape/framing issue worth
- * sharpening. Observation-severity was retired 2026-09-01 —
- * nice-to-have signals were too strict for a self-service tool where
- * the coach shouldn't nag on things that hold up structurally.
+ * downstream derivation). `moderate` = worth fixing before he tests.
  */
 export type Severity = "critical" | "moderate";
 
@@ -48,24 +59,28 @@ export type Finding = {
   issueType: IssueType;
   severity: Severity;
   /** Verbatim quote of the source entry text (or a specific field).
-   *  Never paraphrased. Any drift here corrupts the finding, so the
-   *  renderer can quote the entry accurately. */
+   *  Never paraphrased. */
   actualText: string;
-  /** Machine-readable description of what's wrong. The renderer
-   *  translates this into coach voice via CRITIQUE_SPECS. */
+  /** For depth findings: the rubric's one-line reason (raw LLM text,
+   *  scrubbed of machinery words). For the dynamic finding types
+   *  (underwrite, coverage) the renderer builds the sentence from
+   *  the structured fields below and this is a fallback. For every
+   *  other type it's a copy of ADVICE[issueType]. */
   detail: string;
-  /** Optional concrete rewrite suggestion. When present the renderer
-   *  should surface it. */
+  /** Verified rewrite that clears this finding. Produced by the
+   *  drafters (fixes.ts), never by the check itself. For coverage
+   *  findings it's the text of a Big Assumption draft. */
   suggestedFix?: string;
-  /** Optional cross-entry context (e.g. the paired commitment for a
-   *  drifted assumption). */
+  /** Optional cross-entry context (e.g. the paired worry for a
+   *  mirror-broken commitment, or the commitment a coverage finding
+   *  is about). */
   relatedEntryRef?: EntryRef;
   relatedText?: string;
-  /** Structured labels from the drift check LLM. Short noun phrases
-   *  the renderer synthesizes into "The assumption is about [scenario];
-   *  the commitment protects [identity]." */
-  assumptionScenario?: string;
-  commitmentIdentity?: string;
+  /** assumption_doesnt_underwrite only: 1-based map positions of the
+   *  linked commitments this assumption does NOT make necessary, in
+   *  the order the commitments appear on the map. The renderer turns
+   *  these into "#2 and #4". */
+  unfitCommitmentPositions?: number[];
 };
 
 export const SEVERITY_ORDER: Record<Severity, number> = {
@@ -77,4 +92,3 @@ export const SEVERITY_ORDER: Record<Severity, number> = {
  *  depth-shortfall finding. Shared across worries, commitments, and
  *  assumptions. */
 export const DEPTH_THRESHOLD = 3;
-
