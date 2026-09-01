@@ -25,7 +25,7 @@
     },
     {
       "kind": "button",
-      "label": "Replace #"
+      "label": "Replace # &quot;&quot;"
     },
     {
       "kind": "button",
@@ -44,7 +44,7 @@
       "label": "RE-DERIVE"
     }
   ],
-  "source_hash": "af2c87adb5b8e112",
+  "source_hash": "c62b7adb37819a9b",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

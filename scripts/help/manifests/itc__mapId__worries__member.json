@@ -5,6 +5,10 @@
   "elements": [
     {
       "kind": "button",
+      "label": "Remove"
+    },
+    {
+      "kind": "button",
       "label": "Use this draft"
     },
     {
@@ -12,7 +16,7 @@
       "label": "I worry that if I…"
     }
   ],
-  "source_hash": "3aa4604fa179267b",
+  "source_hash": "1e81e3e5fa52b84c",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",

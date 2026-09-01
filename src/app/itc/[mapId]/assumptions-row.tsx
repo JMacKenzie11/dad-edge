@@ -417,18 +417,25 @@ function DraftCard({
           {pending ? <InlineSpinner className="h-3 w-3" /> : null}
           Use as new
         </button>
-        {existingAssumptions.map((a, i) => (
-          <button
-            key={a.id}
-            type="button"
-            disabled={pending}
-            onClick={() => replaceAssumption(a, i + 1)}
-            title={`Replace assumption #${i + 1}: "${a.text}"`}
-            className="rounded-md border border-[color:var(--color-warning)]/50 px-3 py-1.5 text-xs text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
-          >
-            Replace #{i + 1}
-          </button>
-        ))}
+        {existingAssumptions.map((a, i) => {
+          const preview =
+            a.text.length > 60 ? `${a.text.slice(0, 60)}…` : a.text;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              disabled={pending}
+              onClick={() => replaceAssumption(a, i + 1)}
+              title={`Replace assumption #${i + 1}: "${a.text}"`}
+              className="flex flex-col items-start rounded-md border border-[color:var(--color-warning)]/50 px-3 py-1.5 text-xs text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50 max-w-[320px] min-w-0"
+            >
+              <span className="font-semibold">Replace #{i + 1}</span>
+              <span className="mt-0.5 truncate w-full text-left opacity-70 text-[10px] italic">
+                &quot;{preview}&quot;
+              </span>
+            </button>
+          );
+        })}
         <button
           type="button"
           disabled={pending}

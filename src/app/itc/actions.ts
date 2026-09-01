@@ -53,6 +53,7 @@ import {
   deleteAssumptionDraft,
   deleteBehavior,
   deleteMap,
+  deleteWorry,
   getActiveTest,
   getMapById,
   getMapForParticipant,
@@ -694,6 +695,72 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
     }
   }
 
+  await events.flush();
+
+  safeRevalidate(`/itc/${loaded.map.id}`);
+  return { ok: true };
+}
+
+const worryRemoveSchema = z.object({
+  map_id: z.string().uuid(),
+  worry_id: z.string().uuid(),
+});
+
+/**
+ * Hard-delete a worry and its paired competing commitment. Used during
+ * honing when the coachee decides a whole worry+commitment pair is
+ * redundant or wrong. FK cascades handle the downstream cleanup:
+ *   - itc_commitments row deleted (worry_id FK, ON DELETE CASCADE)
+ *   - itc_assumption_commitments links to that commitment deleted
+ *     (commitment_id FK, ON DELETE CASCADE)
+ *   - itc_assumptions stay put (coachee-authored, worth preserving)
+ *   - itc_tests stay put (attached to assumptions, not commitments)
+ *
+ * Not test-blocked: because assumptions themselves aren't deleted,
+ * their attached tests remain valid. This is different from
+ * removeAssumption, which IS test-blocked because the assumption row
+ * itself would go.
+ *
+ * All three reviews (worries, commitments, assumptions) invalidated
+ * because the delete touches all three columns' inputs.
+ */
+export async function removeWorry(formData: FormData): Promise<ActionResult> {
+  const parsed = worryRemoveSchema.safeParse({
+    map_id: formData.get("map_id"),
+    worry_id: formData.get("worry_id"),
+  });
+  if (!parsed.success) return { ok: false, reason: "Invalid remove input." };
+  const loaded = await requireParticipantAndMap(parsed.data.map_id);
+  if (!loaded.ok) return { ok: false, reason: loaded.reason };
+
+  const worries = await listWorries(loaded.map.id);
+  const worry = worries.find((w) => w.id === parsed.data.worry_id);
+  if (!worry) return { ok: false, reason: "That worry is not on the map." };
+
+  try {
+    await deleteWorry(parsed.data.worry_id, loaded.map.id);
+    await invalidateReviewsForColumn(loaded.map.id, "worries");
+    await invalidateReviewsForColumn(loaded.map.id, "commitments");
+    await invalidateReviewsForColumn(loaded.map.id, "assumptions");
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not remove.",
+    };
+  }
+
+  const events = new TurnEventLog(loaded.map.id, 0);
+  events.record(
+    "entry_edited",
+    {
+      kind: "worry",
+      entry_id: parsed.data.worry_id,
+      behavior_id: worry.behavior_id,
+      removed: true,
+      cascade: "commitment_via_fk",
+    },
+    { stage: loaded.map.current_stage },
+  );
   await events.flush();
 
   safeRevalidate(`/itc/${loaded.map.id}`);

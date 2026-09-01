@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ItcBehavior, ItcMessage, ItcWorry } from "@/lib/itc/maps";
 import { worryPassesDepth } from "@/lib/itc/rules";
-import { saveWorry } from "../actions";
+import { removeWorry, saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { InlineSpinner, SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 const FRESH_ROW_MS = 15_000;
 function isFresh(iso: string | null | undefined, nowMs: number): boolean {
@@ -119,9 +120,31 @@ function WorryItem({
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
   const savedRef = useRef(initial);
   const inflightRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  async function submitRemove() {
+    if (!worry) return;
+    const shortText =
+      worry.text.length > 100 ? `${worry.text.slice(0, 100)}…` : worry.text;
+    const ok = await confirm({
+      title: `Remove worry ${index}?`,
+      body: `"${shortText}"\n\nThe paired competing commitment (if any) is removed with it. Big Assumptions that link to that commitment will stay put but lose that link. Not undoable.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("map_id", mapId);
+    fd.set("worry_id", worry.id);
+    startTransition(async () => {
+      const res = await removeWorry(fd);
+      if (!res.ok) setError(res.reason ?? "Could not remove.");
+    });
+  }
 
   useEffect(() => {
     const next = worry?.text ?? "";
@@ -208,6 +231,7 @@ function WorryItem({
         (fresh ? "itc-fresh-row" : "")
       }
     >
+      {confirmDialog}
       {thread.length > 0 && worry ? (
         <div className="mb-3">
           <EntryThread
@@ -229,6 +253,20 @@ function WorryItem({
             >
               Needs more depth
             </span>
+          ) : null}
+          {worry ? (
+            <button
+              type="button"
+              onClick={submitRemove}
+              disabled={pending}
+              title="Remove this worry and its paired competing commitment"
+              className={
+                (needsMoreDepth ? "" : "ml-auto ") +
+                "shrink-0 rounded px-2 py-1 text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-50"
+              }
+            >
+              Remove
+            </button>
           ) : null}
         </div>
         {worry?.rubric_reason ? (

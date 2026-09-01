@@ -919,6 +919,34 @@ export async function deleteAssumption(
   if (error) throw new Error(`deleteAssumption: ${error.message}`);
 }
 
+/**
+ * Hard-delete a worry. Relies on FK cascades:
+ *   itc_worries → deleted directly
+ *   itc_commitments (worry_id FK, ON DELETE CASCADE) → paired commitment removed
+ *   itc_assumption_commitments (commitment_id FK, ON DELETE CASCADE) → coverage links removed
+ *   itc_assumptions themselves → untouched (assumption text is coachee-authored)
+ *   itc_tests → untouched (attached to assumptions, not commitments)
+ *
+ * Coachees use this during honing when a whole worry-commitment pair
+ * turns out to be redundant or wrong. Paired commitment goes automatically
+ * because it's a mechanical derivation of the worry — no data loss
+ * concern. Assumptions that lose a commitment link stay; the audit's
+ * uncovered-commitment check no longer flags them (the commitment they
+ * covered no longer exists).
+ */
+export async function deleteWorry(
+  worryId: string,
+  mapId: string,
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("itc_worries")
+    .delete()
+    .eq("id", worryId)
+    .eq("map_id", mapId);
+  if (error) throw new Error(`deleteWorry: ${error.message}`);
+}
+
 export async function clearAssumptionLinks(assumptionId: string): Promise<void> {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
