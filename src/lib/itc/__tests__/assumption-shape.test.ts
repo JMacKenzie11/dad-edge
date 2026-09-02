@@ -137,6 +137,19 @@ describe("the assumption box shows the stem it is going to save", () => {
   });
 });
 
+describe("the reason and the rewrite don't compete", () => {
+  it("no rubric asks its reason to write a replacement entry", () => {
+    // Observed 2026-09-02: a commitment's coach text ended with a
+    // full rewrite ("...so the commitment should mirror that: I'm
+    // also committed to never being the guy who folds under pressure
+    // and looks weak to clients") while the Sharper box beneath it
+    // offered a DIFFERENT sentence. Two rewrites on one screen reads
+    // as the coach arguing with itself.
+    expect(rubricSource).not.toMatch(/what the finished version would say/);
+    expect(rubricSource).toMatch(/Do NOT write out a replacement entry/);
+  });
+});
+
 describe("guide examples", () => {
   it("every pair carries the citation that makes it checkable", () => {
     // These are quoted from the guides, not written by us. The

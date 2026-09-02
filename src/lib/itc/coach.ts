@@ -1602,6 +1602,8 @@ export async function draftCommitmentOutcome(input: {
   type DraftShape = { assembled: string; slots: { vow: string } };
   type Verdict = {
     ok: boolean;
+    /** At least one failure means the draft is wrong, not just thin. */
+    hardFailure: boolean;
     failures: string[];
     depthScore: number | null;
     carried: CommitmentDraftOutcome["verdict"];
@@ -1636,6 +1638,11 @@ export async function draftCommitmentOutcome(input: {
    */
   async function verifyDraft(assembled: string): Promise<Verdict> {
     const failures: string[] = [];
+    // Failures that make the draft WRONG rather than merely
+    // improvable. The system may hand him something it considers
+    // unfinished; it must never hand him something it is about to
+    // flag as a defect. See the gate below.
+    let hardFailure = false;
     let depthScore: number | null = null;
 
     const depthResult = await scoreCommitmentDepth({
@@ -1651,6 +1658,11 @@ export async function draftCommitmentOutcome(input: {
     });
     if (depthResult) {
       depthScore = depthResult.score;
+      // 0 or 1 is not a competing commitment yet; 2 is one that
+      // could go deeper, which is what the row's own badge already
+      // says ("One more pass"). Only the former disqualifies it from
+      // being offered at all.
+      if (depthResult.score < 2) hardFailure = true;
       if (depthResult.score < 3) {
         failures.push(
           `Depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}". Push the vow to identity depth — name the identity being protected, not just the behavior.`,
@@ -1692,12 +1704,17 @@ export async function draftCommitmentOutcome(input: {
       // so drafter feedback stays aligned with the auditor's fix
       // suggestion and the save-time sharpen box.
       failures.push(ADVICE.interior_witness_commitment);
+      hardFailure = true;
     }
     const people = checkPeopleFromMap({ draftText: assembled, mapTexts });
-    if (!people.ok) failures.push(people.reason);
+    if (!people.ok) {
+      failures.push(people.reason);
+      hardFailure = true;
+    }
 
     return {
       ok: failures.length === 0,
+      hardFailure,
       failures,
       depthScore,
       carried: depthResult
@@ -1708,6 +1725,19 @@ export async function draftCommitmentOutcome(input: {
           }
         : null,
     };
+  }
+
+  /** Hand back the draft only if it is fit to offer. */
+  function offerable(v: Verdict, text: string): CommitmentDraftOutcome {
+    if (v.hardFailure) {
+      console.warn(
+        "[itc coach] commitment draft withheld (would be flagged on arrival): draft=%o failures=%o",
+        text,
+        v.failures,
+      );
+      return { text: null };
+    }
+    return { text, verdict: v.carried };
   }
 
   try {
@@ -1731,9 +1761,25 @@ export async function draftCommitmentOutcome(input: {
 
     // Rewrite mode returns only a draft that clears every check (a
     // rewrite that fails the bar it's fixing is the coach contradicting
-    // itself). Draft mode prefers the attempt with fewer failed checks,
-    // tie → later attempt, and never silent-drops: the persisted row
-    // still carries its own sharpen box.
+    // itself).
+    //
+    // Draft mode used to return the attempt with fewer failures even
+    // when it still failed, reasoning that the persisted row carries
+    // its own sharpen box. That reasoning was wrong, and it produced
+    // exactly the thing this codebase keeps removing: the system
+    // auto-derived a commitment and the coach flagged it in the same
+    // breath, twice over on one map (2026-09-02) — once for a phantom
+    // "she" the people check had missed, once for a vow that never
+    // reached the identity. A red box on words he did not write reads
+    // as the coach contradicting itself, not as guidance.
+    //
+    // So draft mode now offers a draft only when nothing in it is
+    // WRONG. Depth 2/3 still ships, because the row's badge already
+    // says "One more pass" and an invitation to go deeper is not a
+    // contradiction. A phantom person, an interior-witness verb, or
+    // depth below 2 means no commitment is written and he writes his
+    // own — the outcome autoDeriveCommitmentForWorry already handles
+    // and documents ("the coachee can type their own").
     if (input.revise) {
       if (!retry) return { text: null };
       const retryVerdict = await verifyDraft(retry.assembled);
@@ -1747,12 +1793,12 @@ export async function draftCommitmentOutcome(input: {
       }
       return { text: retry.assembled, verdict: retryVerdict.carried };
     }
-    if (!retry) return { text: first.assembled, verdict: firstVerdict.carried };
+    if (!retry) return offerable(firstVerdict, first.assembled);
     const retryVerdict = await verifyDraft(retry.assembled);
     if (retryVerdict.failures.length <= firstVerdict.failures.length) {
-      return { text: retry.assembled, verdict: retryVerdict.carried };
+      return offerable(retryVerdict, retry.assembled);
     }
-    return { text: first.assembled, verdict: firstVerdict.carried };
+    return offerable(firstVerdict, first.assembled);
   } catch (err) {
     console.warn(
       "[itc coach] draftCommitmentOutcome failed: %s",

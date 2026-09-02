@@ -69,15 +69,34 @@ function possessedNouns(text: string): Set<string> {
   return out;
 }
 
+/**
+ * Tokens for matching, including the stem of any contraction.
+ *
+ * "she's charging" used to tokenize as a single "she's", so
+ * `draft.has("she")` was false and a phantom she sailed through
+ * (observed 2026-09-02 on an auto-derived commitment: "...not worth
+ * what she's charging" on a map that names no woman). Every
+ * contracted form had the same hole: she's, she'd, she'll, he's.
+ *
+ * So each token contributes both itself and the part before its
+ * first apostrophe. "she's" -> {"she's", "she"}. Non-pronoun
+ * contractions add harmless extra stems ("don't" -> "don"), which
+ * nothing in the relational-noun or pronoun lists matches.
+ */
 function words(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[’‘]/g, "'")
-      .split(/[^a-z']+/)
-      .map((w) => w.replace(/^'+|'+$/g, ""))
-      .filter(Boolean),
-  );
+  const out = new Set<string>();
+  const raw = text
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .split(/[^a-z']+/)
+    .map((w) => w.replace(/^'+|'+$/g, ""))
+    .filter(Boolean);
+  for (const w of raw) {
+    out.add(w);
+    const stem = w.split("'")[0];
+    if (stem) out.add(stem);
+  }
+  return out;
 }
 
 export type PeopleVerdict = {

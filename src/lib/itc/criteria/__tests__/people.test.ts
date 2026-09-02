@@ -74,6 +74,52 @@ describe("checkPeopleFromMap", () => {
     expect(v.offenders).toEqual(["kids"]);
   });
 
+  it("catches a contracted pronoun with no bare form anywhere", () => {
+    // The hole that shipped a phantom she (2026-09-02): the auto
+    // derived commitment "...not worth what she's charging" on a map
+    // that names no woman. words() tokenized "she's" whole, so
+    // has("she") was false and the draft passed. Note this sentence
+    // contains NO bare "she" — the older tests that looked like they
+    // covered this each had one elsewhere in the string and so passed
+    // for the wrong reason.
+    const v = checkPeopleFromMap({
+      draftText:
+        "I'm also committed to never being the consultant clients see as not worth what she's charging.",
+      mapTexts: AMPLIFY_MAP,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.offenders).toContain("she");
+  });
+
+  it("catches every contracted form, not just the possessive", () => {
+    for (const frag of ["she's charging", "she'd walk", "she'll say so"]) {
+      const v = checkPeopleFromMap({
+        draftText: `I'm committed to never being the guy ${frag}.`,
+        mapTexts: AMPLIFY_MAP,
+      });
+      expect(v.ok, `"${frag}" slipped through`).toBe(false);
+    }
+  });
+
+  it("a contraction still passes when the map does have her", () => {
+    const v = checkPeopleFromMap({
+      draftText: "I worry that if I let her past rest, she'd see I've been dodging.",
+      mapTexts: BOND_MAP,
+    });
+    expect(v.ok).toBe(true);
+  });
+
+  it("splitting on the apostrophe doesn't invent offenders", () => {
+    // "don't" -> "don", "I've" -> "i". Neither is a pronoun or a
+    // relational noun, so the extra stems have to stay inert.
+    const v = checkPeopleFromMap({
+      draftText: "I don't ask what they need, and I've never said so out loud.",
+      mapTexts: AMPLIFY_MAP,
+    });
+    expect(v.ok).toBe(true);
+    expect(v.offenders).toEqual([]);
+  });
+
   it("fails open with no map text", () => {
     expect(checkPeopleFromMap({ draftText: "she'd see", mapTexts: [] }).ok).toBe(true);
   });
