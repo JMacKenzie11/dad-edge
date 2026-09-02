@@ -153,15 +153,26 @@ function WorryItem({
   }
 
   useEffect(() => {
-    // Only follow the saved worry. With none saved the box holds the
-    // coach's opening, which is the coachee's to finish, not state to
-    // sync away.
+    // Follow the saved worry once there is one.
     if (!worry) return;
     if (savedRef.current !== worry.text) {
       savedRef.current = worry.text;
       setDraft(worry.text);
     }
   }, [worry?.text, worry]);
+
+  // With no worry saved the box holds the coach's opening. A rewrite
+  // replaces it, but never over words he typed: swap only when the
+  // box is empty or still holds the opening exactly as seeded.
+  const seededOpening = useRef(behavior.coach_worry_draft ?? "");
+  useEffect(() => {
+    if (worry) return;
+    const next = behavior.coach_worry_draft ?? "";
+    if (next === seededOpening.current) return;
+    const untouched = draft.trim().length === 0 || draft === seededOpening.current;
+    seededOpening.current = next;
+    if (untouched) setDraft(next);
+  }, [behavior.coach_worry_draft, worry, draft]);
 
   // Refinement-chip fill: only the WorryItem whose entryId matches
   // the event's entryId picks up the fill.

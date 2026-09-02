@@ -160,14 +160,22 @@ function AddAssumptionForm({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // A new opening arrives after the previous one is consumed. Seed
-  // the form with it, but never overwrite words he has already typed.
+  // A new opening arrives when the previous one is consumed or the
+  // coachee regenerates. Seed the box with it, but never over words
+  // he typed: replace only when the box is empty or still holds the
+  // opening exactly as it was seeded. Regenerating used to look
+  // broken for this reason ("3 fresh drafts added" while the box kept
+  // the old sentence).
   const seededFor = useRef(opening?.id ?? null);
+  const seededText = useRef(opening?.text ?? "");
   useEffect(() => {
     const id = opening?.id ?? null;
     if (id === seededFor.current) return;
+    const untouched =
+      text.trim().length === 0 || text === seededText.current;
     seededFor.current = id;
-    if (text.trim().length === 0) {
+    if (untouched) {
+      seededText.current = opening?.text ?? "";
       setText(opening?.text ?? "");
       setLinkedIds(opening?.commitment_ids ?? []);
     }

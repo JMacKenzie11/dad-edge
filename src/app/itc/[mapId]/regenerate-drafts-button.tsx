@@ -40,17 +40,18 @@ export function RegenerateDraftsButton({
   const [info, setInfo] = useState<string | null>(null);
   const [dialog, confirm] = useConfirm();
 
+  // The coach writes the OPENING of each entry now, not a whole
+  // draft to accept, so the copy says so. "Drafts" implied something
+  // finished sitting above waiting for a yes.
   const labelKind = kind === "worries" ? "worry" : "assumption";
-  const labelKindPlural =
-    kind === "worries" ? "worry drafts" : "assumption drafts";
-  const columnLabel =
-    kind === "worries" ? "Column 2 behaviors" : "Column 4 commitments";
+  const upstream =
+    kind === "worries" ? "behaviors" : "competing commitments";
 
   async function onClick() {
     const ok = await confirm({
-      title: `Regenerate the coach's ${labelKind} drafts?`,
-      body: `The coach will rewrite the drafts against your current ${columnLabel}. Any drafts you haven't accepted go away. Real ${labelKind}s you've already written stay.`,
-      confirmLabel: "Regenerate",
+      title: `Rewrite the coach's ${labelKind} openings?`,
+      body: `The coach will write fresh openings against your current ${upstream}. Anything you've written yourself stays.`,
+      confirmLabel: "Rewrite",
     });
     if (!ok) return;
     setError(null);
@@ -70,12 +71,16 @@ export function RegenerateDraftsButton({
       // links). Coachee saw the spinner then nothing. Surface it.
       if (res.draftsWritten === 0) {
         setInfo(
-          `The coach couldn't produce fresh ${labelKindPlural} against your current ${columnLabel}. Try sharpening a ${kind === "worries" ? "behavior" : "commitment"} first, then regenerate again.`,
+          `The coach couldn't write fresh openings against your current ${upstream}. Try sharpening one of them first, then try again.`,
         );
         return;
       }
       const n = res.draftsWritten;
-      setInfo(`${n} fresh ${n === 1 ? "draft" : "drafts"} added above.`);
+      setInfo(
+        kind === "worries"
+          ? `${n} fresh ${n === 1 ? "opening" : "openings"} in the boxes above.`
+          : `Fresh opening in the box above.`,
+      );
     });
   }
 
@@ -88,9 +93,9 @@ export function RegenerateDraftsButton({
           onClick={onClick}
           disabled={pending}
           className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title={`If you've edited upstream since these drafts were written, get fresh ones against current content.`}
+          title={`If you've changed your ${upstream} since these openings were written, get fresh ones.`}
         >
-          {pending ? "Regenerating…" : "Regenerate drafts"}
+          {pending ? "Rewriting…" : "Rewrite openings"}
         </button>
         {error ? (
           <span className="text-xs text-[color:var(--color-danger)]">
