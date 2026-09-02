@@ -740,50 +740,61 @@ export async function draftWorryOpening(input: {
 // -------------------------------------------------------------------------
 
 const AssumptionOpeningSchema = z.object({
-  /** The act the assumption is about: the coachee doing the opposite
-   *  of one of his behaviors, which is what makes the belief testable
-   *  (Kegan Vol 1 p 21, the "if" needs degrees he can enact). Past
-   *  tense, bare verb phrase, no "if I" prefix. 3-10 words. */
-  antecedent_act: z.string().min(5).max(90),
+  /** The competing commitment's vow FAILING, written as a clause that
+   *  follows "I assume that if ". The commitment says "never being
+   *  the closer who can't sell value"; this returns "I were the
+   *  closer who can't sell value". No "if" prefix, no trailing
+   *  punctuation. 3-14 words. */
+  vow_failing: z.string().min(5).max(120),
 });
 
 const DRAFT_ASSUMPTION_OPENING_SYSTEM = `
 You write the OPENING of a Big Assumption for an Immunity to Change map, and nothing else. The coachee finishes it himself.
 
-Given his behavior and the competing commitment it protects, return the act the assumption is about: the coachee doing the OPPOSITE of that behavior. The server writes it into "I assume that if I <antecedent_act>, then " and he supplies what he believes would follow.
+You get one competing commitment: a vow of the form "I'm also committed to never being X". Return that vow FAILING, as a clause that reads after "I assume that if ".
 
-Rules for antecedent_act:
-  - PAST tense, bare verb phrase. No "if I" prefix, no trailing punctuation.
-  - 3-10 words. Something he could actually do in a small dose this week: that is what makes the belief testable (Coach's Guide Vol 1 p 21, the "if" must have degrees so it can be enacted safely).
-  - It is the counter-move to his behavior, never an outcome ("if something went badly") and never someone else's move ("if they walked away").
-  - Use HIS nouns. Never introduce a person he hasn't named.
-  - Do not write the "then", the consequence, or the identity. Only the act.
+This is the Kegan/Lahey shape. In their own worked maps the Big Assumption's "if" is always the commitment being violated, and the "then" is the Big Time Bad that follows:
+  commitment "I am committed to not becoming my brother Kurt"
+    -> "I assume that IF I AM BRAGGING, I am just like Kurt."
+  commitment "I am committed to always feeling the freedom of having lots of options"
+    -> "I assume that IF I DON'T HAVE LOTS OF OPTIONS, I will feel resentful, angry, impotent. Life will be bleak."
+  commitment "I am committed to rewarding myself, getting what I deserve"
+    -> "I assume that IF I DON'T REWARD MYSELF with food or drink, then I will be less motivated."
 
-Examples:
-  behavior "I avoid naming my price" -> "named my price and held it"
-  behavior "I rewrite the message until it's perfect" -> "sent the message without rewriting it"
-  behavior "I chase prospects instead of letting the work speak" -> "let the work speak for a week"
+Rules for vow_failing:
+  - It is the vow BROKEN, not a behavior and not a fear. "never being the closer who can't sell value" -> "I were the closer who can't sell value". "never being the father who was passive" -> "I were the father who was passive".
+  - Start with "I" ("I were…", "I couldn't…", "they saw me as…"). No "if" prefix, no trailing punctuation.
+  - 3-14 words. Keep HIS nouns and HIS identity words from the commitment; do not invent a smoother version.
+  - Never introduce a person he hasn't named.
+  - Do NOT write the "then", the consequence, or what it would cost him. That half is his.
+  - Do NOT write one of his Column 2 behaviours or their opposites. The behaviour is not the assumption's "if"; the broken vow is.
 `.trim();
 
 /**
  * The opening only, for the same reason as draftWorryOpening: the
- * server writes the half it is reliably right about (the enactable
- * act, which is also the guide's testability bar) and leaves the
- * belief to the man. A Big Assumption's "then" is his Big Time Bad,
- * and authoring it has the same failure mode the worry drafter had.
+ * server writes the half it is reliably right about and leaves the
+ * belief to the man.
+ *
+ * The "if" is the COMMITMENT being violated, not a behavior's
+ * counter-move. That is the shape of every Big Assumption in the
+ * guides' worked maps ("if I am bragging, I am just like Kurt"; "if I
+ * don't have lots of options, life will be bleak"), and anchoring it
+ * to a behavior instead was a real defect: an opening built from a
+ * Column 2 counter-move gives the coachee nowhere to go but restate
+ * his Column 3 worry, which is exactly what happened on a live map
+ * 2026-09-02. Starting from the broken vow, the only thing left to
+ * write is the Big Time Bad.
  *
  * Returns null rather than a guess.
  */
 export async function draftAssumptionOpening(input: {
   goalText: string;
-  behaviorText: string;
   commitmentText: string;
   mapTexts?: string[];
 }): Promise<string | null> {
   const started = Date.now();
   const mapTexts = [
     input.goalText,
-    input.behaviorText,
     input.commitmentText,
     ...(input.mapTexts ?? []),
   ];
@@ -794,22 +805,22 @@ export async function draftAssumptionOpening(input: {
         schema: AssumptionOpeningSchema,
         system: withVoiceRules(DRAFT_ASSUMPTION_OPENING_SYSTEM),
         prompt: [
-          `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-          `Behavior (Column 2): ${input.behaviorText}`,
+          `Improvement goal: ${input.goalText || "(not set)"}`,
           `Competing commitment this assumption holds up: ${input.commitmentText}`,
           peopleLine(mapTexts),
           ``,
-          `Return the act only.`,
+          `Return that vow failing, as a clause that reads after "I assume that if ".`,
         ].join("\n"),
         maxOutputTokens: 200,
       }),
     );
-    const act = normalizeSlot(stripRedundantIf(object.antecedent_act)).replace(
-      /[.!?,;:]+$/,
-      "",
-    );
-    if (act.split(/\s+/).filter(Boolean).length < 2) return null;
-    const opening = `I assume that if I ${act}, then `;
+    const failing = stripRedundantIf(object.vow_failing)
+      .trim()
+      .replace(/[.!?,;:]+$/, "");
+    if (failing.split(/\s+/).filter(Boolean).length < 2) return null;
+    // The slot carries its own subject ("I were…", "they saw me as…"),
+    // so the server writes only "if" here, not "if I".
+    const opening = `I assume that if ${failing}, then `;
     const people = checkPeopleFromMap({ draftText: opening, mapTexts });
     if (!people.ok) {
       console.warn("[itc coach] assumption opening refused: %s", people.reason);

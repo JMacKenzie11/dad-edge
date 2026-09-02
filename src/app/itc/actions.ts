@@ -1629,16 +1629,24 @@ async function autoDeriveCommitmentsAfterAdvance(
  * the whole point.
  */
 /**
- * One opening per commitment, anchored to the behavior underneath its
- * worry. The server writes the enactable act (which is also the
- * guide's testability bar, Vol 1 p 21) and the coachee writes what he
- * believes would follow. Anchoring per commitment also drives
- * coverage: as he finishes one, the next opening points at the next
- * commitment with no assumption on it.
+ * One opening per commitment, each being that commitment's vow
+ * failing: "I assume that if I were the closer who can't sell value,
+ * then ". The coachee writes the Big Time Bad.
  *
- * Openings are generated in parallel and the ones that come back null
- * are simply absent; an empty box with a placeholder beats an opening
- * pointed at the wrong act.
+ * Anchored to the COMMITMENT, never to a behavior. An opening built
+ * from a Column 2 counter-move leaves him nowhere to go but restate
+ * his worry, which is what a live map produced on 2026-09-02; the
+ * guides' own worked maps always take the "if" from the commitment
+ * being violated.
+ *
+ * One per commitment for coverage, not because assumptions are 1:1
+ * with commitments: the guide wants FEWER assumptions than
+ * commitments, each underwriting several (Vol 1 p 3). The link chips
+ * let one saved assumption cover several, and consuming an opening
+ * surfaces the next uncovered one.
+ *
+ * Openings are generated in parallel; ones that come back null are
+ * simply absent, since an empty box beats a wrong opening.
  */
 async function buildAssumptionOpenings(
   mapId: string,
@@ -1650,8 +1658,6 @@ async function buildAssumptionOpenings(
     listBehaviors(mapId),
   ]);
   if (!map || commitments.length === 0) return [];
-  const worryById = new Map(worries.map((w) => [w.id, w]));
-  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
   const mapTexts = [
     map.improvement_goal ?? "",
     ...behaviors.filter((b) => b.selected).map((b) => b.text),
@@ -1660,11 +1666,8 @@ async function buildAssumptionOpenings(
   ];
   const openings = await Promise.all(
     commitments.map(async (c) => {
-      const worry = worryById.get(c.worry_id);
-      const behavior = worry ? behaviorById.get(worry.behavior_id) : undefined;
       const text = await draftAssumptionOpening({
         goalText: map.improvement_goal ?? "",
-        behaviorText: behavior?.text ?? "",
         commitmentText: c.text,
         mapTexts,
       });

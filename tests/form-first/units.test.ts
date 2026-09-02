@@ -1242,9 +1242,19 @@ describe("coaching text is verified by the judge that scores it on save (structu
       const b = block(name);
       expect(b, `${name} must exist`).toBeTruthy();
       // It writes an opening, not a finished sentence.
-      expect(b).toMatch(/I (worry that if I|assume that if I) \$\{/);
+      expect(b).toMatch(/I (worry that if I|assume that if) \$\{/);
       expect(b).toMatch(/checkPeopleFromMap\(/);
     }
+    // The assumption's "if" is the COMMITMENT being violated, never a
+    // behavior's counter-move: an opening built from a behavior gives
+    // the coachee nowhere to go but restate his worry, which is what
+    // a live map produced. The guides' worked maps always take the
+    // "if" from the broken vow ("if I am bragging, I am just like
+    // Kurt").
+    const assumptionOpening = block("draftAssumptionOpening");
+    expect(assumptionOpening).toMatch(/commitmentText/);
+    expect(assumptionOpening).not.toMatch(/behaviorText/);
+    expect(assumptionOpening).toMatch(/vow_failing/);
     const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
     expect(actions).toMatch(/draftWorryOpening\(/);
     expect(actions).toMatch(/buildAssumptionOpenings\(/);

@@ -246,6 +246,17 @@ function AddAssumptionForm({
         }}
         className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-base leading-relaxed"
       />
+      {/*
+        The guide's own question for this move (Vol 1 p 17): the Big
+        Assumption is what has to be true for the vow to feel
+        necessary. Stated under the box because the opening starts
+        from the vow failing, and the half he writes is the cost.
+      */}
+      <p className="text-[11px] italic text-[color:var(--color-text-muted)]/70">
+        {opening
+          ? "Finish it: if that vow failed, what would it cost you? That's the belief holding the whole thing in place."
+          : "For a vow above to feel that necessary, what has to be true? Write it as \u201cI assume that if\u2026, then\u2026\u201d."}
+      </p>
       <div className="flex flex-wrap gap-2">
         {commitments.map((c, i) => {
           const on = linkedIds.includes(c.id);
