@@ -1312,6 +1312,38 @@ describe("stage intros name the same criteria the rubrics score (structural)", (
   const { resolve } = require("node:path") as typeof import("node:path");
   const rubric = readFileSync(resolve(__dirname, "../../src/lib/itc/rubric.ts"), "utf8");
 
+  it("goal: one improvement, implicates him, room to improve, his and this pillar", () => {
+    const intro = STAGE_INTROS.goal!(ctx);
+    // Appendix A's four Column 1 criteria plus the bundled-goal check
+    // the system runs. "It implicates you" is the one Vol 1 flags on
+    // its own worked map and it had no bullet.
+    expect(intro).toMatch(/One improvement, not two/i);
+    const goalCheck = readFileSync(
+      resolve(__dirname, "../../src/lib/itc/criteria/goal.ts"),
+      "utf8",
+    );
+    expect(goalCheck).toMatch(/bundled/);
+    expect(intro).toMatch(/It implicates you/i);
+    expect(intro).toMatch(/keep failing at even though you keep trying/i);
+    expect(intro).toMatch(/matters to you/i);
+    // No interface narration, and no promise of a reaction that was
+    // deleted when the criteria module took over goal coaching.
+    expect(intro).not.toMatch(/box below|I'll react/i);
+  });
+
+  it("commitments: names the interior-witness trap the regex flags, and no stale draft copy", () => {
+    const intro = STAGE_INTROS.commitments!(ctx);
+    expect(intro).toMatch(/not a feeling you'd dodge/i);
+    const commitmentChecks = readFileSync(
+      resolve(__dirname, "../../src/lib/itc/criteria/commitments.ts"),
+      "utf8",
+    );
+    expect(commitmentChecks).toMatch(/INTERIOR_WITNESS_COMMITMENT_PATTERNS/);
+    // Commitments are auto-derived; there is no draft to tap.
+    expect(intro).not.toMatch(/tap to use|drafted a starting point/i);
+    expect(intro).toMatch(/writes a first version/i);
+  });
+
   it("behaviors: observable / not a feeling or label / works against the goal", () => {
     const intro = STAGE_INTROS.behaviors!(ctx);
     expect(intro).toMatch(/friend watching you could point at/i);
@@ -1331,9 +1363,12 @@ describe("stage intros name the same criteria the rubrics score (structural)", (
     expect(rubric).toMatch(/2\. is_first_person_felt/);
     expect(intro).toMatch(/WHO YOU ARE/);
     expect(rubric).toMatch(/3\. touches_identity/);
-    // The direct fear-box → Column 3 route means the worry must name
-    // what the behavior protects, not the behavior said back.
-    expect(intro).toMatch(/did the OPPOSITE/);
+    // Appendix A, Column 3: the worry has to show why the behavior
+    // makes good sense. This is the criterion the coach flags most,
+    // so the intro has to warn him about it before he writes.
+    expect(intro).toMatch(/The behavior protects you from it/i);
+    expect(intro).toMatch(/that's a price you pay, not the fear underneath/i);
+    expect(rubric).toMatch(/4\. explains_behavior/);
     expect(rubric).toMatch(/THE BEHAVIOR SAID BACK AS SELF-CRITICISM/);
   });
 
@@ -1414,12 +1449,15 @@ describe("STAGE_INTROS", () => {
 
   it("worries intro names who-you-are as the depth bar", () => {
     const rendered = STAGE_INTROS["worries"]!(ctx(null));
+    // The box opens with the counter-move, so the intro points at
+    // that rather than repeating the stem as an instruction.
+    expect(rendered).toMatch(/opposite of one of your behaviors/i);
     // The Kegan/Lahey depth bar for a Column 3 worry is a first-
     // person felt fear that ends on who he'd be (self-label OR role).
     // The intro must signal that bar in plain words ("identity" is
     // coach jargon the voice doc keeps out of coachee-facing copy).
     expect(/who you are|label about you|role you['’]d have failed/i.test(rendered)).toBe(true);
-    expect(/felt fear|felt.*about you|fear about you/i.test(rendered)).toBe(true);
+    expect(/the fear underneath|felt fear|fear about you/i.test(rendered)).toBe(true);
     // Practical-concern anti-pattern should be called out.
     expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
   });

@@ -24,29 +24,41 @@ export const STAGE_INTROS: Partial<
 > = {
   goal: ({ pillarCode }) => {
     const pillar = PILLAR_BY_CODE[pillarCode];
-    return `Your goal for ${pillar.label} starts "${GOAL_STEM} …". Finish the sentence with something specific YOU'D know you were doing differently, not a vague vow. Write a rough version in the box below and save it — I'll react and we can sharpen from there.
+    // Bullets are Appendix A's four Column 1 criteria (true for you,
+    // implicates you, room for improvement, important to you) plus
+    // the bundled-goal check the system runs. "It implicates you" had
+    // no bullet, and it is the one Vol 1 flags on the worked map
+    // (Jackson's goal was about what other people should do).
+    return `Your goal for ${pillar.label} starts "${GOAL_STEM} …". Finish it with something you'd know you were doing differently, not a vague vow.
 
 What a good goal sounds like:
+• One improvement, not two. "Getting better at coaching my team and building my business" is two maps.
+• It implicates you. Something you need to get better at, not something other people need to change.
 • Something you keep failing at even though you keep trying. That's the whole point of this map.
-• Named in your voice, specific enough that you'd recognize when you're doing it
-• Fits the ${pillar.label} pillar (${pillar.domain}), not a goal from a different area of your life`;
+• It matters to you, in your own words, and it belongs to ${pillar.label} (${pillar.domain}) rather than another part of your life.`;
   },
   behaviors: ({ goal }) =>
     `The specific things you actually do, or fail to do, in the moments that pull you away from ${
       goal ? `"${goal}"` : "your goal"
-    }. Not why you do them. Not what you should do instead. Just the move itself. Aim for 3 to 5, enough to see the pattern, few enough to work with. Mix things you DO ("I interrupt her") with things you FAIL TO DO ("I don't ask what she needs"). Both matter.
+    }. Not why you do them. Not what you should do instead. Just the move itself. Aim for 3 to 5, enough to see the pattern, few enough to work with. Mix things you DO ("I interrupt them") with things you FAIL TO DO ("I don't ask what they need"). Both matter.
 
 What makes a good behavior:
 • Something a friend watching you could point at when it happens. Specific, not abstract.
 • Not a feeling ("I get anxious") and not a label about yourself ("I'm a bad listener")
 • Clearly pulling you away from the goal in that moment`,
   worries: () =>
-    `For each behavior above, name what you're afraid would happen if you did the OPPOSITE. Not the practical downside. The felt fear underneath. Start every one with "I worry that if I…" and let it land somewhere that stings.
+    // Four bullets, four criteria in scoreWorryDepth: is_fear,
+    // is_first_person_felt, touches_identity, and the self-protection
+    // pair. That last one had no bullet at all, and it is the one the
+    // coach flags most (Appendix A, Column 3: the worry "shows why
+    // Column 2 behaviors make good sense").
+    `Each box below opens with the opposite of one of your behaviors. Finish the sentence: what are you afraid would happen if you actually did that? Not the practical downside. The fear underneath.
 
 What makes a good worry:
-• A real gut-level fear, not a practical concern ("she'd get upset" or "we'd fall behind" don't count)
-• About what YOU dread, not what she'd feel or how it'd look to someone else
-• Says something about WHO YOU ARE. A label about you ("I'd be a fraud"), or a role you'd have failed at ("the husband who hurts her").`,
+• A real gut-level fear, not a practical concern ("they'd be annoyed" or "we'd fall behind" don't count)
+• About what YOU dread, not what they'd feel or how it'd look to someone else
+• Says something about WHO YOU ARE. A label about you ("I'd be a fraud"), or a role you'd have failed at ("the coach who couldn't deliver")
+• The behavior protects you from it. Doing the behavior is what keeps this fear from coming true. If the behavior is what causes the thing you named, that's a price you pay, not the fear underneath.`,
   commitments: () =>
     `What a part of you is SECRETLY committed to protecting. These are the hidden vows that keep every worry above from ever coming true, which means they also block your goal. That's why "just try harder" doesn't work: part of you is working against you. Start with "I'm also committed to never…" and name what you're vowing never to be.
 
@@ -54,8 +66,9 @@ What makes a good competing commitment:
 • Mirrors the worry above. If the worry is "I fear being the guy who folds under pressure," the commitment is "I'm also committed to never being the guy who folds under pressure." Same identity, same specificity.
 • YOUR commitment, in your voice. Uses the nouns from the worry (my team, my wife, my kids, whatever the worry actually names). Not general advice.
 • Names something to AVOID, not a positive aspiration. "Never being the leader who folds" belongs here. "Being a stronger leader" belongs in your goal at the top.
+• Names who you'd be, not a feeling you'd dodge. "Never being the guy who folds" works. "Never having to feel like a failure" doesn't.
 
-Under each worry, the coach has drafted a starting point. Review it, tap to use, edit, or write your own.`,
+The coach writes a first version of each one from your worry. Edit it until it sounds like you.`,
   assumptions: () =>
     // Each bullet is one criterion the system actually scores, in
     // plain words: makes-the-vow-necessary (judgeAssumptionUnderwrites,
