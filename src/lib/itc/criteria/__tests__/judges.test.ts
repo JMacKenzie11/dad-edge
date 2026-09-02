@@ -110,11 +110,25 @@ describe("checkAssumptionUnderwritesCommitments", () => {
   const c2 = commitment("c-2", "I'm also committed to never being the guy whose team sees he has no answer.");
   const c3 = commitment("c-3", "I'm also committed to never being the husband who says what he can't take back.");
 
-  it("skips assumptions with fewer than two links (nothing to judge)", async () => {
+  it("judges a single-link assumption too (Appendix A criterion 1 asks it of every one)", async () => {
+    generateObject.mockResolvedValue({
+      object: { fits: [], doesnt_fit: [{ index: 1, reason: "different scene" }] },
+    });
     const findings = await checkAssumptionUnderwritesCommitments({
       assumptions: [assumption({})],
       commitments: [c1, c2],
       links: [link("a-1", "c-1")],
+    });
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].unfitCommitmentPositions).toEqual([1]);
+  });
+
+  it("skips an assumption with no links at all (nothing to judge)", async () => {
+    const findings = await checkAssumptionUnderwritesCommitments({
+      assumptions: [assumption({})],
+      commitments: [c1, c2],
+      links: [],
     });
     expect(findings).toEqual([]);
     expect(generateObject).not.toHaveBeenCalled();

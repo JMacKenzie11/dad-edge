@@ -170,6 +170,15 @@ const AssumptionSchema = z.object({
   has_finished_then: z.boolean(),
   is_first_person_felt: z.boolean(),
   lands_in_identity_or_big_time_bad: z.boolean(),
+  // Same extract-then-decide shape as the worry rubric's criterion 4.
+  // A Big Assumption whose "then" is what the CURRENT behavior
+  // produces, rather than what the "if" act produces, is backwards.
+  antecedent_act: z.string().max(160),
+  consequent: z.string().max(240),
+  which_produces_the_consequent: z.enum([
+    "the act named in the if",
+    "the opposite of that act",
+  ]),
   reason: z.string().min(1).max(400),
 });
 
@@ -178,6 +187,13 @@ export type AssumptionRubricResult = {
   has_finished_then: boolean;
   is_first_person_felt: boolean;
   lands_in_identity_or_big_time_bad: boolean;
+  /** The "then" is produced by the act in the "if", not by its
+   *  opposite. False on a backwards assumption ("if I hold firm on
+   *  the terms, then they'd see me as desperate" — caving is what
+   *  looks desperate, holding firm is not). Folded into
+   *  lands_in_identity_or_big_time_bad for the score: an ending the
+   *  antecedent could not produce is not this belief's Big Time Bad. */
+  consequent_follows: boolean;
   reason: string;
 };
 
@@ -189,6 +205,15 @@ Score three binary criteria. When in doubt, false.
 1. has_finished_then: The assumption states "If X, then Y" and the Y half is followed through to its actual identity-level or existential end. "If I only rely on service energy, the money might not show up" is a forecast — the "then" hasn't finished. "If I only rely on service energy, then I'll fail as a provider and prove I never had it in me" has finished.
 
 2. is_first_person_felt: First-person, present-tense, feels true when he says it. Not third-person, not abstract, not about anyone else.
+
+4. Whether the "then" actually follows from the "if". Work it in order and write each step down:
+   - antecedent_act: the act named in the "if", in his words.
+   - consequent: what the "then" says would happen or be true.
+   - which_produces_the_consequent: read the "then" as one chain — he does the act, it goes the way he dreads, and THEN this. Ask whether that chain is coherent, not whether every word of it is directly caused by the act. Answer "the opposite of that act" ONLY when the consequent is plainly what his OTHER, current behavior produces. When the chain hangs together, answer "the act named in the if".
+     "the act named in the if": "if I let the work speak instead of chasing prospects, then the money wouldn't come and I'd be the passive provider". Letting the work speak is what risks the money not coming. Valid.
+     "the act named in the if": "if I hold firm on the terms, then they'd walk and I'd be the guy who can't close without giving it away". Holding firm is what risks them walking, and failing that way is what would prove the label. Valid. Do NOT mark this backwards on the reasoning that "giving it away" is the other behavior; the label is what the FAILURE of the act would prove.
+     "the opposite of that act": "if I hold firm on the terms, then they'd see me as desperate". CAVING on terms is what looks desperate; holding firm cannot produce that impression. Backwards.
+     "the opposite of that act": "if I stopped rewriting the message ten times, then they'd think I fuss over every word". FUSSING is what the rewriting produces, not what stopping produces. Backwards.
 
 3. lands_in_identity_or_big_time_bad: The "then" names an identity ("I'd be the coach who talked a great game and couldn't deliver", "I'm the kind of man who...", "the fraud") or a Big Time Bad conclusion that can't be recovered from ("I can't be trusted when the people who depend on me need me most"). "It'd take longer" or "we'd lose the deal" doesn't land here.
 
@@ -225,16 +250,23 @@ export async function scoreAssumptionDepth(input: {
       // borderline calls.
       temperature: 0.1,
     });
+    const consequentFollows =
+      object.which_produces_the_consequent === "the act named in the if";
     const score =
       (object.has_finished_then ? 1 : 0) +
       (object.is_first_person_felt ? 1 : 0) +
-      (object.lands_in_identity_or_big_time_bad ? 1 : 0);
+      // An ending the antecedent could not produce is not this
+      // belief's Big Time Bad. Score stays 0-3 so every gate keeps
+      // its meaning.
+      (object.lands_in_identity_or_big_time_bad && consequentFollows ? 1 : 0);
     scoreForLog = score;
     return {
       score: score as 0 | 1 | 2 | 3,
       has_finished_then: object.has_finished_then,
       is_first_person_felt: object.is_first_person_felt,
-      lands_in_identity_or_big_time_bad: object.lands_in_identity_or_big_time_bad,
+      lands_in_identity_or_big_time_bad:
+        object.lands_in_identity_or_big_time_bad && consequentFollows,
+      consequent_follows: consequentFollows,
       reason: object.reason,
     };
   } finally {

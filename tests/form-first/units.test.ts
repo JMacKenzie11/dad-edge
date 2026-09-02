@@ -1083,6 +1083,12 @@ describe("scoreWorryDepth prompt (structural)", () => {
     // The discriminator that replaced the lenient boolean: a worry
     // whose feared result is produced by the BEHAVIOR is backwards.
     expect(worrySystem).toMatch(/which_produces_the_feared_result/);
+    // The assumption rubric carries the same discriminator: a "then"
+    // that the antecedent could not produce is backwards.
+    const assumptionSystem = src.slice(src.indexOf("const ASSUMPTION_SYSTEM = `"), src.indexOf("export async function scoreAssumptionDepth"));
+    expect(assumptionSystem).toMatch(/which_produces_the_consequent/);
+    const assumptionFn = src.slice(src.indexOf("export async function scoreAssumptionDepth"));
+    expect(assumptionFn).toMatch(/object\.lands_in_identity_or_big_time_bad && consequentFollows \? 1 : 0/);
     const scoreFnBody = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFnBody).toMatch(/object\.which_produces_the_feared_result === "the opposite" &&\s*!object\.feared_result_is_the_behavior_restated/);
     expect(scoreFnBody).toMatch(/object\.touches_identity && explainsBehavior \? 1 : 0/);

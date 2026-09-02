@@ -257,9 +257,13 @@ export async function checkAssumptionUnderwritesCommitments(input: {
         .map((id) => ({ index: positionById.get(id) ?? 0, text: textById.get(id) ?? "" }))
         .filter((c) => c.index > 0 && c.text.length > 0)
         .sort((a, b) => a.index - b.index);
-      // One link can't be "the wrong one of the set". Coverage of a
-      // single commitment is the drafter's job; nothing to judge.
-      if (linked.length < 2) return;
+      // Runs on one link as readily as on several. The guard used to
+      // skip single-link assumptions on the theory that one link
+      // can't be "the wrong one of the set", but Appendix A criterion
+      // 1 asks of EVERY assumption whether believing it makes its
+      // commitment necessary, and the judge answers that correctly
+      // for a set of one (verified 2026-09-02).
+      if (linked.length === 0) return;
       try {
         const verdict = await judgeAssumptionUnderwrites({
           assumptionText: assumption.text,
