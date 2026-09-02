@@ -37,6 +37,7 @@ import { renderFindings } from "@/lib/itc/criteria/render";
 import {
   attachFixes,
   coachTextForAssumption,
+  loadMapTexts,
   coachTextForBehavior,
   coachTextForCommitment,
   coachTextForSelectedAssumption,
@@ -386,6 +387,7 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
     const addedRow = behaviorsNow.find((b) => b.id === behaviorId);
     const coach = addedRow
       ? await coachTextForBehavior({
+          mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
           goalText: loaded.map.improvement_goal ?? "",
           behavior: addedRow,
           score,
@@ -479,6 +481,7 @@ export async function updateBehavior(
     });
     score = scored.score;
     const coach = await coachTextForBehavior({
+      mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
       goalText: loaded.map.improvement_goal ?? "",
       behavior: updated,
       score,
@@ -661,6 +664,7 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
     // together so the box under the row shows the same lines (and the
     // same "Use this" sentence) the column review and hone would.
     const coach = await coachTextForWorry({
+      mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
       goalText: loaded.map.improvement_goal ?? "",
       pillar: loaded.map.pillar_code,
       behavior,
@@ -891,6 +895,7 @@ export async function saveCommitment(
     const behaviorsForWorry = await listBehaviors(loaded.map.id);
     const pairedBehavior = behaviorsForWorry.find((b) => b.id === worry.behavior_id);
     const coach = await coachTextForCommitment({
+      mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
       goalText: loaded.map.improvement_goal ?? "",
       behaviorText: pairedBehavior?.text ?? "",
       worry,
@@ -1076,6 +1081,7 @@ export async function saveAssumption(
         worry_text: worryTextById.get(c.worry_id) ?? "",
       }));
     const coach = await coachTextForAssumption({
+      mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
       goalText: loaded.map.improvement_goal ?? "",
       assumption: row,
       linkedCommitments,
@@ -1489,8 +1495,9 @@ async function draftMissingWorriesAfterAdvance(
  * the auto-derive here is the starting point, not a lock. If the
  * drafter LLM call fails, the caller can proceed — the commitment
  * just doesn't get created (advance) or doesn't get refreshed (edit),
- * and the coachee can type their own or retry via the RE-DERIVE
- * escape hatch.
+ * and the coachee types his own. (This used to name a RE-DERIVE
+ * escape hatch; that button never called a drafter and was removed
+ * 2026-09-02.)
  *
  * Idempotent: called with the same inputs, produces a fresh
  * commitment.text (LLM temperature is > 0, so text may vary slightly
@@ -1505,6 +1512,7 @@ async function autoDeriveCommitmentForWorry(input: {
 }): Promise<{ commitmentId: string; ok: true } | { ok: false; reason: string }> {
   try {
     const outcome = await draftCommitmentOutcome({
+      mapTexts: await loadMapTexts(input.mapId, input.goalText),
       goalText: input.goalText,
       behaviorText: input.behavior.text,
       worryText: input.worry.text,
@@ -1539,6 +1547,7 @@ async function autoDeriveCommitmentForWorry(input: {
           commitmentText: row.text,
         });
     const coach = await coachTextForCommitment({
+      mapTexts: await loadMapTexts(input.mapId, input.goalText),
       goalText: input.goalText,
       behaviorText: input.behavior.text,
       worry: input.worry,
@@ -1640,46 +1649,18 @@ async function autoDeriveCommitmentsAfterAdvance(
 // carried by honing's assumption_uncovered_commitment finding, which
 // is where the guide puts it (Vol 1 p 17).
 
-const redriveAssumptionSchema = z.object({
-  map_id: z.string().uuid(),
-  assumption_id: z.string().uuid(),
-});
-
-/**
- * When a coachee edits a commitment after linked assumptions already
- * exist, those assumptions sit on stale reasoning. This action wipes
- * the current assumption drafts (if any) and re-runs the cluster-first
- * assumption drafter against the current commitments, so the coachee
- * sees fresh coach proposals covering the changed commitment.
- *
- * The touched assumption itself is left alone — the coachee decides
- * whether to swap it out.
- */
-export async function redriveAssumptionFromCommitment(
-  formData: FormData,
-): Promise<ActionResult> {
-  const parsed = redriveAssumptionSchema.safeParse({
-    map_id: formData.get("map_id"),
-    assumption_id: formData.get("assumption_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  try {
-    await clearAssumptionDraftsForMap(loaded.map.id);
-    const commitments = await listCommitments(loaded.map.id);
-    if (commitments.length === 0) {
-      return { ok: false, reason: "No commitments to draft from." };
-    }
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not re-derive.",
-    };
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true };
-}
+// The RE-DERIVE affordance that used to live here was removed
+// 2026-09-02. Its docstring said it "re-runs the cluster-first
+// assumption drafter"; the body cleared assumption drafts, counted
+// commitments and returned ok. It never called a drafter, and since
+// nothing updated the assumption's timestamp the banner that offered
+// it reappeared immediately, so the button spun and visibly achieved
+// nothing.
+//
+// Not repaired, because repairing it would put assumption drafting
+// back through a side door — see the note above on why Column 5 gets
+// nothing. When a linked commitment moves, the assumption is his to
+// re-read.
 
 /**
  * On advance to the immune-system stage, generate the three-movement
@@ -2439,6 +2420,7 @@ async function coachSelectedAssumption(
       worry_text: worryTextById.get(c.worry_id) ?? "",
     }));
   await coachTextForSelectedAssumption({
+    mapTexts: await loadMapTexts(map.id, map.improvement_goal ?? ""),
     goalText: map.improvement_goal ?? "",
     assumption,
     linkedCommitments,

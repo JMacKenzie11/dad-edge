@@ -35,7 +35,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { coachTextForWorry } from "@/lib/itc/fixes";
+import { coachTextForWorry, loadMapTexts } from "@/lib/itc/fixes";
 import { scoreWorryDepth } from "@/lib/itc/rubric";
 import type { ItcBehavior, ItcMap, ItcWorry } from "@/lib/itc/maps";
 
@@ -132,6 +132,7 @@ async function main() {
     }
 
     const coach = await coachTextForWorry({
+      mapTexts: await loadMapTexts(map.id, map.improvement_goal ?? ""),
       goalText: map.improvement_goal ?? "",
       pillar: map.pillar_code,
       behavior,

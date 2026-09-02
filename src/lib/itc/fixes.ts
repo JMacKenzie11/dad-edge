@@ -49,6 +49,10 @@ import {
 import { DEPTH_THRESHOLD, type Finding, type IssueType } from "./criteria/types";
 import {
   listAssumptionDrafts,
+  listAssumptions,
+  listBehaviors,
+  listCommitments,
+  listWorries,
   saveAssumptionDrafts,
   updateRowCoachText,
   type CoachTextTable,
@@ -81,6 +85,10 @@ function problemsOf(findings: Finding[]): string[] {
 }
 
 export async function coachTextForBehavior(input: {
+  /** Everything else on this map, from loadMapTexts. Required so the
+   *  rewrite this path offers is held to the same people-check the
+   *  hone path applies. */
+  mapTexts: string[];
   goalText: string;
   behavior: ItcBehavior;
   score: number;
@@ -98,6 +106,7 @@ export async function coachTextForBehavior(input: {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
   const suggestedFix = await reviseBehavior({
+    mapTexts: input.mapTexts,
     goalText: input.goalText,
     currentText: behavior.text,
     problems: problemsOf(findings),
@@ -110,6 +119,10 @@ export async function coachTextForBehavior(input: {
 }
 
 export async function coachTextForWorry(input: {
+  /** Everything else on this map, from loadMapTexts. Required so the
+   *  rewrite this path offers is held to the same people-check the
+   *  hone path applies. */
+  mapTexts: string[];
   goalText: string;
   pillar: PillarCode;
   behavior: ItcBehavior;
@@ -132,6 +145,7 @@ export async function coachTextForWorry(input: {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
   const suggestedFix = await draftWorryForBehavior({
+    mapTexts: input.mapTexts,
     goalText: input.goalText,
     behaviorText: input.behavior.text,
     pillar: input.pillar,
@@ -145,6 +159,10 @@ export async function coachTextForWorry(input: {
 }
 
 export async function coachTextForCommitment(input: {
+  /** Everything else on this map, from loadMapTexts. Required so the
+   *  rewrite this path offers is held to the same people-check the
+   *  hone path applies. */
+  mapTexts: string[];
   goalText: string;
   behaviorText: string;
   worry: ItcWorry;
@@ -183,6 +201,7 @@ export async function coachTextForCommitment(input: {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
   const suggestedFix = await draftCommitmentForWorry({
+    mapTexts: input.mapTexts,
     goalText: input.goalText,
     behaviorText: input.behaviorText,
     worryText: input.worry.text,
@@ -196,6 +215,10 @@ export async function coachTextForCommitment(input: {
 }
 
 export async function coachTextForAssumption(input: {
+  /** Everything else on this map, from loadMapTexts. Required so the
+   *  rewrite this path offers is held to the same people-check the
+   *  hone path applies. */
+  mapTexts: string[];
   goalText: string;
   assumption: ItcAssumption;
   linkedCommitments: Array<{ text: string; worry_text: string }>;
@@ -215,6 +238,7 @@ export async function coachTextForAssumption(input: {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
   const suggestedFix = await reviseAssumption({
+    mapTexts: input.mapTexts,
     goalText: input.goalText,
     currentText: assumption.text,
     linkedCommitments: input.linkedCommitments,
@@ -238,6 +262,10 @@ export async function coachTextForAssumption(input: {
  * a judge failure leaves the row as it was.
  */
 export async function coachTextForSelectedAssumption(input: {
+  /** Everything else on this map, from loadMapTexts. Required so the
+   *  rewrite this path offers is held to the same people-check the
+   *  hone path applies. */
+  mapTexts: string[];
   goalText: string;
   assumption: ItcAssumption;
   linkedCommitments: Array<{ text: string; worry_text: string }>;
@@ -261,6 +289,7 @@ export async function coachTextForSelectedAssumption(input: {
       return;
     }
     const suggestedFix = await reviseAssumption({
+      mapTexts: input.mapTexts,
       goalText: input.goalText,
       currentText: input.assumption.text,
       linkedCommitments: input.linkedCommitments,
@@ -388,6 +417,7 @@ async function reviseBehaviorEntry(findings: Finding[], ctx: FixContext): Promis
   const behavior = ctx.behaviors.find((b) => b.id === findings[0].entryRef.id);
   if (!behavior) return null;
   return reviseBehavior({
+    mapTexts: mapTextsOf(ctx),
     goalText: ctx.goalText,
     currentText: behavior.text,
     problems: problemsOf(findings),
@@ -432,6 +462,7 @@ async function reviseAssumptionEntry(findings: Finding[], ctx: FixContext): Prom
   if (types.size === 1 && types.has("assumption_doesnt_underwrite")) return null;
   const linked = linkedCommitmentsFor(assumption.id, ctx);
   return reviseAssumption({
+    mapTexts: mapTextsOf(ctx),
     goalText: ctx.goalText,
     currentText: assumption.text,
     linkedCommitments: linked,
@@ -441,6 +472,35 @@ async function reviseAssumptionEntry(findings: Finding[], ctx: FixContext): Prom
     ),
     requireEnactable: types.has("assumption_not_enactable"),
   }).catch(() => null);
+}
+
+/**
+ * Everything the coachee has written on this map, for the drafters'
+ * people check. The save-time callers live in actions.ts and hold
+ * only the row they are saving, so they load it here.
+ *
+ * Deliberately the same list as mapTextsOf below, and deliberately
+ * adjacent to it: these are the two definitions of "the map's text",
+ * and when they drifted apart the same judge ran on two different
+ * evidence sets depending on which surface called it.
+ */
+export async function loadMapTexts(
+  mapId: string,
+  goalText: string,
+): Promise<string[]> {
+  const [behaviors, worries, commitments, assumptions] = await Promise.all([
+    listBehaviors(mapId),
+    listWorries(mapId),
+    listCommitments(mapId),
+    listAssumptions(mapId),
+  ]);
+  return [
+    goalText,
+    ...behaviors.map((b) => b.text),
+    ...worries.map((w) => w.text),
+    ...commitments.map((c) => c.text),
+    ...assumptions.map((a) => a.text),
+  ];
 }
 
 function mapTextsOf(ctx: FixContext): string[] {

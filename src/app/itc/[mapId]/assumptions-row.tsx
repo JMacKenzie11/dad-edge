@@ -10,7 +10,6 @@ import type {
 import { worryPassesDepth } from "@/lib/itc/rules";
 import { ASSUMPTION_STEM } from "@/lib/itc/stage";
 import {
-  redriveAssumptionFromCommitment,
   removeAssumption,
   saveAssumption,
 } from "../actions";
@@ -460,11 +459,6 @@ function AssumptionItem({
     assumption.attempts,
   );
 
-  const assumptionUpdatedMs = new Date(assumption.updated_at).getTime();
-  const upstreamMoved = commitments
-    .filter((c) => linkedCommitmentIds.includes(c.id))
-    .some((c) => new Date(c.updated_at).getTime() > assumptionUpdatedMs + 1_000);
-
   return (
     <li
       className={
@@ -497,13 +491,6 @@ function AssumptionItem({
           />
         ) : null}
         <div className="flex-1 min-w-0 space-y-2">
-          {upstreamMoved ? (
-            <StaleUpstreamBanner
-              mapId={mapId}
-              assumptionId={assumption.id}
-              upstreamLabel="commitment"
-            />
-          ) : null}
           {assumption.sharpen_text ? (
             <CoachFixBox
               text={assumption.sharpen_text}
@@ -595,44 +582,3 @@ function AssumptionItem({
   );
 }
 
-function StaleUpstreamBanner({
-  mapId,
-  assumptionId,
-  upstreamLabel,
-}: {
-  mapId: string;
-  assumptionId: string;
-  upstreamLabel: string;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-xs">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[color:var(--color-warning)]">
-          A linked {upstreamLabel} changed since you wrote this. Re-derive?
-        </span>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            setError(null);
-            const fd = new FormData();
-            fd.set("map_id", mapId);
-            fd.set("assumption_id", assumptionId);
-            startTransition(async () => {
-              const res = await redriveAssumptionFromCommitment(fd);
-              if (!res.ok) setError(res.reason ?? "Could not re-derive.");
-            });
-          }}
-          className="shrink-0 rounded-md border border-[color:var(--color-warning)]/60 px-2 py-1 text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
-        >
-          {pending ? "…" : "RE-DERIVE"}
-        </button>
-      </div>
-      {error ? (
-        <p className="mt-1 text-[color:var(--color-danger)]">{error}</p>
-      ) : null}
-    </div>
-  );
-}

@@ -53,6 +53,7 @@ import {
 } from "./rubric";
 import { hasCompetingGoalFraming } from "./rules";
 import { ADVICE } from "./criteria/advice";
+import { DEPTH_THRESHOLD } from "./criteria/types";
 import {
   checkAssumptionKeepsCommitmentIdentity,
   checkAssumptionRestatesWorry,
@@ -239,7 +240,7 @@ async function verifySuggestion(
           goalText: input.improvementGoal ?? "",
           behaviorText: text,
         });
-        return { ok: r.score >= 3, reason: r.reason };
+        return { ok: r.score >= DEPTH_THRESHOLD, reason: r.reason };
       }
       case "goal": {
         if (hasCompetingGoalFraming(text)) {
@@ -256,7 +257,7 @@ async function verifySuggestion(
           behaviorText: input.contextText ?? "",
           worryText: text,
         });
-        return { ok: r.score >= 3, reason: r.reason };
+        return { ok: r.score >= DEPTH_THRESHOLD, reason: r.reason };
       }
       case "commitment": {
         const r = await scoreCommitmentDepth({
@@ -264,14 +265,14 @@ async function verifySuggestion(
           worryText: input.contextText ?? "",
           commitmentText: text,
         });
-        return { ok: r.score >= 3, reason: r.reason };
+        return { ok: r.score >= DEPTH_THRESHOLD, reason: r.reason };
       }
       case "assumption": {
         const r = await scoreAssumptionDepth({
           goalText: input.improvementGoal ?? "",
           assumptionText: text,
         });
-        return { ok: r.score >= 3, reason: r.reason };
+        return { ok: r.score >= DEPTH_THRESHOLD, reason: r.reason };
       }
     }
   } catch (err) {
@@ -560,11 +561,14 @@ export async function reviseBehavior(input: {
   goalText: string;
   currentText: string;
   problems: string[];
+  /** Everything else the coachee has written on this map. REQUIRED,
+   *  not optional: see the note on draftWorryOutcome.mapTexts. */
+  mapTexts: string[];
 }): Promise<string | null> {
   const started = Date.now();
   const baseLines = [
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
-    peopleLine([input.goalText, input.currentText]),
+    peopleLine([input.goalText, input.currentText, ...input.mapTexts]),
     ...reviseLines(
       { currentText: input.currentText, problems: input.problems },
       "behavior",
@@ -584,7 +588,7 @@ export async function reviseBehavior(input: {
   async function verify(text: string): Promise<{ ok: boolean; feedback: string | null }> {
     const people = checkPeopleFromMap({
       draftText: text,
-      mapTexts: [input.goalText, input.currentText],
+      mapTexts: [input.goalText, input.currentText, ...input.mapTexts],
     });
     if (!people.ok) return { ok: false, feedback: people.reason };
     const r = await scoreBehaviorDepth({
@@ -597,7 +601,7 @@ export async function reviseBehavior(input: {
       );
       return null;
     });
-    if (!r || r.score >= 3) return { ok: true, feedback: null };
+    if (!r || r.score >= DEPTH_THRESHOLD) return { ok: true, feedback: null };
     return {
       ok: false,
       feedback: `The depth rubric rejected it (${r.score}/3). Reason: "${r.reason}"`,
@@ -691,7 +695,7 @@ Examples:
 export async function draftWorryOpening(input: {
   goalText: string;
   behaviorText: string;
-  mapTexts?: string[];
+  mapTexts: string[];
 }): Promise<string | null> {
   const started = Date.now();
   const mapTexts = [input.goalText, input.behaviorText, ...(input.mapTexts ?? [])];
@@ -1189,8 +1193,19 @@ export async function draftWorryOutcome(input: {
   revise?: ReviseInput;
   /** Everything else the coachee has written on this map. People in
    *  the draft (pronouns, relational nouns) must trace to this text
-   *  plus the goal and behavior. */
-  mapTexts?: string[];
+   *  plus the goal and behavior.
+   *
+   *  REQUIRED, and required on every drafter and reviser, on purpose.
+   *  It was optional, and the save-time callers all omitted it while
+   *  the hone-time callers all passed it (fixes.ts). Same judge, two
+   *  evidence sets: on a map whose WORRY names a wife but whose goal
+   *  and behavior don't, the save-time rewrite was refused for adding
+   *  "she" while the hone-time rewrite of the identical finding was
+   *  accepted, so the coachee got no "Use this" on the row and a
+   *  "Use this" in the banner. Making it required turns that whole
+   *  class of bug into a compile error. Pass loadMapTexts(mapId) or
+   *  mapTextsOf(ctx); never pass [] to silence the type. */
+  mapTexts: string[];
 }): Promise<WorryDraftOutcome> {
   const started = Date.now();
   const refusals: WorryDraftOutcome["refusals"] = [];
@@ -1292,7 +1307,7 @@ export async function draftWorryOutcome(input: {
       identityLanding: draft.slots.identity_landing,
     });
 
-    const depthOk = depthResult === null || depthResult.score >= 3;
+    const depthOk = depthResult === null || depthResult.score >= DEPTH_THRESHOLD;
     const consistencyOk = consistencyResult.consistent;
     const interiorWitnessOk = iwFindings.length === 0;
     const feedback: string[] = [];
@@ -1581,7 +1596,7 @@ export async function draftCommitmentOutcome(input: {
    *  See ReviseInput. In this mode only a verified draft is returned. */
   revise?: ReviseInput;
   /** See draftWorryForBehavior.mapTexts. */
-  mapTexts?: string[];
+  mapTexts: string[];
 }): Promise<CommitmentDraftOutcome> {
   const started = Date.now();
   const mapTexts = [
@@ -1664,7 +1679,7 @@ export async function draftCommitmentOutcome(input: {
       // says ("One more pass"). Only the former disqualifies it from
       // being offered at all.
       if (depthResult.score < 2) hardFailure = true;
-      if (depthResult.score < 3) {
+      if (depthResult.score < DEPTH_THRESHOLD) {
         failures.push(
           `Depth rubric rejected it (${depthResult.score}/3). Reason: "${depthResult.reason}". Push the vow to identity depth — name the identity being protected, not just the behavior.`,
         );
@@ -2268,7 +2283,7 @@ export async function draftAssumptionsOutcome(input: {
             ...input.commitments.flatMap((c) => [c.text, c.worry_text]),
           ],
         });
-        const depthOk = depth === null || depth.score >= 3;
+        const depthOk = depth === null || depth.score >= DEPTH_THRESHOLD;
         return {
           consistent: depthOk && consistency.consistent && identity.kept && people.ok,
           reason: [
@@ -2493,6 +2508,9 @@ export async function reviseAssumption(input: {
   /** True when one of the problems is that the "if" isn't his move.
    *  The verifier then runs the enactable judge too. */
   requireEnactable: boolean;
+  /** Everything else the coachee has written on this map. REQUIRED,
+   *  not optional: see the note on draftWorryOutcome.mapTexts. */
+  mapTexts: string[];
 }): Promise<string | null> {
   const started = Date.now();
   // Fresh drafts are capped at 20 words. A rewrite gets the room the
@@ -2522,6 +2540,7 @@ export async function reviseAssumption(input: {
       input.currentText,
       ...input.behaviors,
       ...input.linkedCommitments.flatMap((c) => [c.text, c.worry_text]),
+      ...input.mapTexts,
     ]),
     ``,
     `The coachee's behaviors (Column 2):`,
@@ -2624,7 +2643,7 @@ export async function reviseAssumption(input: {
           })
         : Promise.resolve(null),
     ]);
-    if (depth && depth.score < 3) {
+    if (depth && depth.score < DEPTH_THRESHOLD) {
       feedback.push(
         `The depth rubric rejected it (${depth.score}/3). Reason: "${depth.reason}"`,
       );
@@ -2649,6 +2668,7 @@ export async function reviseAssumption(input: {
         input.currentText,
         ...input.behaviors,
         ...input.linkedCommitments.flatMap((c) => [c.text, c.worry_text]),
+        ...input.mapTexts,
       ],
     });
     if (!people.ok) feedback.push(people.reason);

@@ -30,7 +30,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { coachTextForAssumption } from "@/lib/itc/fixes";
+import { coachTextForAssumption, loadMapTexts } from "@/lib/itc/fixes";
 import { scoreAssumptionDepth } from "@/lib/itc/rubric";
 import type {
   ItcAssumption,
@@ -133,6 +133,7 @@ async function main() {
         worry_text: worryById.get(c.worry_id)?.text ?? "",
       }));
     const coach = await coachTextForAssumption({
+      mapTexts: await loadMapTexts(map.id, map.improvement_goal ?? ""),
       goalText: map.improvement_goal ?? "",
       assumption,
       linkedCommitments,
