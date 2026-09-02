@@ -7,7 +7,7 @@ import { removeWorry, saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { CoachFixBox } from "./coach-fix-box";
-import { InlineSpinner, SavingIndicator } from "./form-field";
+import { SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "@/components/ui/use-confirm";
 
@@ -117,7 +117,12 @@ function WorryItem({
   thread: ItcMessage[];
 }) {
   const [pending, startTransition] = useTransition();
-  const initial = worry?.text ?? "";
+  // With no worry yet, the box opens with the coach's counter-move
+  // ("I worry that if I asked what they actually needed first, ") and
+  // he finishes the sentence. No draft card and no accept button: the
+  // server only wrote the half it can be right about, so there is
+  // nothing to accept, just a sentence to finish.
+  const initial = worry?.text ?? behavior.coach_worry_draft ?? "";
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -148,12 +153,15 @@ function WorryItem({
   }
 
   useEffect(() => {
-    const next = worry?.text ?? "";
-    if (savedRef.current !== next) {
-      savedRef.current = next;
-      setDraft(next);
+    // Only follow the saved worry. With none saved the box holds the
+    // coach's opening, which is the coachee's to finish, not state to
+    // sync away.
+    if (!worry) return;
+    if (savedRef.current !== worry.text) {
+      savedRef.current = worry.text;
+      setDraft(worry.text);
     }
-  }, [worry?.text]);
+  }, [worry?.text, worry]);
 
   // Refinement-chip fill: only the WorryItem whose entryId matches
   // the event's entryId picks up the fill.
@@ -278,26 +286,7 @@ function WorryItem({
             onUseFix={saveText}
           />
         ) : null}
-        {!worry && behavior.coach_worry_draft ? (
-          <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-3 py-2 space-y-2">
-            <div className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
-              Coach's draft
-            </div>
-            <div className="text-sm italic text-white/90 leading-relaxed">
-              {behavior.coach_worry_draft}
-            </div>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => saveText(behavior.coach_worry_draft ?? "")}
-              aria-busy={pending ? "true" : undefined}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-            >
-              {pending ? <InlineSpinner className="h-3 w-3" /> : null}
-              Use this draft
-            </button>
-          </div>
-        ) : null}
+
         <AutoTextarea
           ref={inputRef}
           value={draft}

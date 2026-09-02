@@ -17,7 +17,7 @@ import {
   draftAssumptionsOutcome,
   draftCommitmentOutcome,
   draftTestForAssumption,
-  draftWorryOutcome,
+  draftWorryOpening,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -1448,74 +1448,32 @@ async function draftMissingWorriesAfterAdvance(
   // so re-drafts land on the same shape for the same behavior on
   // retry, keeping the pattern stable rather than churning shape
   // across regenerations.
+  // The server writes the half of a worry it is reliably right about
+  // (the counter-move) and stops. The fear is his to supply: Kegan
+  // Vol 1 p 12 has the coach ask "what are the worst things that
+  // could happen if you did the opposite?", not answer it. See
+  // draftWorryOpening.
   const drafted = await Promise.all(
-    needsDraft.map(async (b, index) => {
-      // Server-owned rotation across the four Kegan shapes, starting
-      // at this behavior's slot so the map's set varies. A shape that
-      // can't fit this behavior (its draft failed verification) falls
-      // through to the next; only a verified draft is ever offered,
-      // so a behavior can end up with none. Every refusal and error
-      // lands in turn events so "no draft" is explainable after the
-      // fact, not just in a server log.
-      const n = WORRY_IDENTITY_SHAPES.length;
-      const shapes = Array.from({ length: n }, (_v, k) => WORRY_IDENTITY_SHAPES[(index + k) % n]);
-      let draft: string | null = null;
-      let verdict: { depthScore: number; rubricReason: string } | null = null;
-      const tried: Array<{ shape: string; refusals: Array<{ draft: string; feedback: string[] }>; error?: string }> = [];
-      for (const identityShape of shapes) {
-        const outcome = await draftWorryOutcome({
-          goalText: map.improvement_goal ?? "",
-          behaviorText: b.text,
-          pillar: map.pillar_code,
-          identityShape,
-          mapTexts: behaviors.map((x) => x.text),
-        });
-        tried.push({ shape: identityShape, refusals: outcome.refusals, error: outcome.error });
-        if (outcome.text) {
-          draft = outcome.text;
-          // Carried onto the row so accepting the draft reuses this
-          // verdict instead of scoring the same words again.
-          verdict = outcome.verdict ?? null;
-          break;
-        }
-      }
-      events.record(
-        "llm_attempt",
-        {
-          kind: "worry_draft",
-          behavior_id: b.id,
-          ok: draft !== null,
-          model: mainModelIdOrUnset(),
-          shapes_tried: tried.map((t) => t.shape),
-          refusals: tried.flatMap((t) =>
-            t.refusals.map((r) => ({
-              shape: t.shape,
-              draft: r.draft,
-              feedback: r.feedback.map((f) => f.slice(0, 300)),
-            })),
-          ),
-          errors: tried.filter((t) => t.error).map((t) => `${t.shape}: ${t.error}`),
-        },
-        { stage: "worries" },
-      );
-      return { behaviorId: b.id, draft, verdict };
+    needsDraft.map(async (b) => {
+      const opening = await draftWorryOpening({
+        goalText: map.improvement_goal ?? "",
+        behaviorText: b.text,
+        mapTexts: behaviors.map((x) => x.text),
+      });
+      return { behaviorId: b.id, draft: opening };
     }),
   );
 
   const persisted = drafted.filter(
-    (d): d is {
-      behaviorId: string;
-      draft: string;
-      verdict: { depthScore: number; rubricReason: string } | null;
-    } => Boolean(d.draft),
+    (d): d is { behaviorId: string; draft: string } => Boolean(d.draft),
   );
   await Promise.all(
-    persisted.map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft, d.verdict)),
+    persisted.map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft)),
   );
   events.record(
     "coach_reaction_sent",
     {
-      kind: "worry_drafts",
+      kind: "worry_openings",
       behavior_count: needsDraft.length,
       drafted_count: persisted.length,
     },

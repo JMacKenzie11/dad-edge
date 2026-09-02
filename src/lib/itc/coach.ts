@@ -637,6 +637,105 @@ export async function reviseBehavior(input: {
 }
 
 // -------------------------------------------------------------------------
+// draftWorryOpening — the half of a worry the server can be right about
+// -------------------------------------------------------------------------
+
+const WorryOpeningSchema = z.object({
+  /** The counter-move: what he'd be doing if he did the opposite of
+   *  the Column 2 behavior. Past tense, bare verb phrase, no "if I"
+   *  prefix (the server writes that). 3-10 words. */
+  opposite_move: z.string().min(5).max(90),
+});
+
+const DRAFT_WORRY_OPENING_SYSTEM = `
+You write the OPENING of a Column 3 worry for an Immunity to Change map, and nothing else. The coachee finishes it himself.
+
+Given his Column 2 behavior, return the counter-move: what he would be doing if he did the OPPOSITE of that behavior. The server writes it into "I worry that if I <opposite_move>, " and he supplies the fear.
+
+Rules for opposite_move:
+  - PAST tense, bare verb phrase. No "if I" prefix, no trailing punctuation.
+  - 3-10 words. Specific enough that he can picture the moment.
+  - For a doing behavior ("I interrupt her"), the counter-move is the restraint: "let her finish".
+  - For a not-doing behavior ("I don't ask what she needs"), the counter-move is the affirmative act: "asked her what she needed". NEVER "stopped not-asking" — unreadable double negative.
+  - Use HIS nouns, from his goal and behavior. Never introduce a person he hasn't named.
+  - Do not write the fear, the consequence, or any "then" clause. Only the act.
+
+Examples:
+  behavior "I interrupt her when she's upset" -> "let her finish"
+  behavior "I don't ask what the client actually needs before pitching" -> "asked what they actually needed first"
+  behavior "I over-promise on scope to keep the client happy" -> "told them the real scope and timeline"
+  behavior "I avoid naming my price" -> "named my price and held it"
+`.trim();
+
+/**
+ * The opening only. Kegan/Lahey (Vol 1 p 12) have the coach ask "what
+ * are the worst things that could happen to you if you were to do the
+ * opposite?" — the coach supplies the QUESTION, the client supplies
+ * the fear. This app used to author the whole worry, and the fear is
+ * the one input it cannot have: measured on live maps, the
+ * counter-move was right every time while the identity ending was
+ * wrong roughly one time in three, and no amount of tuning the judge
+ * moved that much (2026-09-02).
+ *
+ * So the server writes the half it is reliably right about and stops.
+ * The row's input opens with "I worry that if I <counter-move>, " and
+ * he finishes the sentence. The depth rubric still scores what he
+ * writes and the coach box still offers a sharper version of HIS
+ * fear, which is a far easier and more legitimate job than inventing
+ * one.
+ *
+ * Returns null rather than a guess: an empty box with a placeholder
+ * is better than an opening pointed at the wrong act.
+ */
+export async function draftWorryOpening(input: {
+  goalText: string;
+  behaviorText: string;
+  mapTexts?: string[];
+}): Promise<string | null> {
+  const started = Date.now();
+  const mapTexts = [input.goalText, input.behaviorText, ...(input.mapTexts ?? [])];
+  try {
+    const { object } = await generateWithRetry("worry opening", () =>
+      generateObject({
+        model: mainModel(),
+        schema: WorryOpeningSchema,
+        system: withVoiceRules(DRAFT_WORRY_OPENING_SYSTEM),
+        prompt: [
+          `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+          `Behavior (Column 2): ${input.behaviorText}`,
+          peopleLine(mapTexts),
+          ``,
+          `Return the counter-move only.`,
+        ].join("\n"),
+        maxOutputTokens: 200,
+      }),
+    );
+    const move = normalizeSlot(stripRedundantIf(object.opposite_move)).replace(
+      /[.!?,;:]+$/,
+      "",
+    );
+    if (move.split(/\s+/).filter(Boolean).length < 2) return null;
+    const opening = `I worry that if I ${move}, `;
+    // Same bar as any other coach text: no people he hasn't named.
+    const people = checkPeopleFromMap({ draftText: opening, mapTexts });
+    if (!people.ok) {
+      console.warn("[itc coach] worry opening refused: %s", people.reason);
+      return null;
+    }
+    return opening;
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftWorryOpening failed (model=%s): %s",
+      mainModelIdOrUnset(),
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn("[itc timing] draft kind=worry_opening ms=%d", Date.now() - started);
+  }
+}
+
+// -------------------------------------------------------------------------
 // draftWorryForBehavior — coach-drafted Column 3 starting text
 // -------------------------------------------------------------------------
 
