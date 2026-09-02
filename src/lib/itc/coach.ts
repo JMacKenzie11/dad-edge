@@ -736,6 +736,102 @@ export async function draftWorryOpening(input: {
 }
 
 // -------------------------------------------------------------------------
+// draftAssumptionOpening — Column 5's half of the same bargain
+// -------------------------------------------------------------------------
+
+const AssumptionOpeningSchema = z.object({
+  /** The act the assumption is about: the coachee doing the opposite
+   *  of one of his behaviors, which is what makes the belief testable
+   *  (Kegan Vol 1 p 21, the "if" needs degrees he can enact). Past
+   *  tense, bare verb phrase, no "if I" prefix. 3-10 words. */
+  antecedent_act: z.string().min(5).max(90),
+});
+
+const DRAFT_ASSUMPTION_OPENING_SYSTEM = `
+You write the OPENING of a Big Assumption for an Immunity to Change map, and nothing else. The coachee finishes it himself.
+
+Given his behavior and the competing commitment it protects, return the act the assumption is about: the coachee doing the OPPOSITE of that behavior. The server writes it into "I assume that if I <antecedent_act>, then " and he supplies what he believes would follow.
+
+Rules for antecedent_act:
+  - PAST tense, bare verb phrase. No "if I" prefix, no trailing punctuation.
+  - 3-10 words. Something he could actually do in a small dose this week: that is what makes the belief testable (Coach's Guide Vol 1 p 21, the "if" must have degrees so it can be enacted safely).
+  - It is the counter-move to his behavior, never an outcome ("if something went badly") and never someone else's move ("if they walked away").
+  - Use HIS nouns. Never introduce a person he hasn't named.
+  - Do not write the "then", the consequence, or the identity. Only the act.
+
+Examples:
+  behavior "I avoid naming my price" -> "named my price and held it"
+  behavior "I rewrite the message until it's perfect" -> "sent the message without rewriting it"
+  behavior "I chase prospects instead of letting the work speak" -> "let the work speak for a week"
+`.trim();
+
+/**
+ * The opening only, for the same reason as draftWorryOpening: the
+ * server writes the half it is reliably right about (the enactable
+ * act, which is also the guide's testability bar) and leaves the
+ * belief to the man. A Big Assumption's "then" is his Big Time Bad,
+ * and authoring it has the same failure mode the worry drafter had.
+ *
+ * Returns null rather than a guess.
+ */
+export async function draftAssumptionOpening(input: {
+  goalText: string;
+  behaviorText: string;
+  commitmentText: string;
+  mapTexts?: string[];
+}): Promise<string | null> {
+  const started = Date.now();
+  const mapTexts = [
+    input.goalText,
+    input.behaviorText,
+    input.commitmentText,
+    ...(input.mapTexts ?? []),
+  ];
+  try {
+    const { object } = await generateWithRetry("assumption opening", () =>
+      generateObject({
+        model: mainModel(),
+        schema: AssumptionOpeningSchema,
+        system: withVoiceRules(DRAFT_ASSUMPTION_OPENING_SYSTEM),
+        prompt: [
+          `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+          `Behavior (Column 2): ${input.behaviorText}`,
+          `Competing commitment this assumption holds up: ${input.commitmentText}`,
+          peopleLine(mapTexts),
+          ``,
+          `Return the act only.`,
+        ].join("\n"),
+        maxOutputTokens: 200,
+      }),
+    );
+    const act = normalizeSlot(stripRedundantIf(object.antecedent_act)).replace(
+      /[.!?,;:]+$/,
+      "",
+    );
+    if (act.split(/\s+/).filter(Boolean).length < 2) return null;
+    const opening = `I assume that if I ${act}, then `;
+    const people = checkPeopleFromMap({ draftText: opening, mapTexts });
+    if (!people.ok) {
+      console.warn("[itc coach] assumption opening refused: %s", people.reason);
+      return null;
+    }
+    return opening;
+  } catch (err) {
+    console.warn(
+      "[itc coach] draftAssumptionOpening failed (model=%s): %s",
+      mainModelIdOrUnset(),
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn(
+      "[itc timing] draft kind=assumption_opening ms=%d",
+      Date.now() - started,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // draftWorryForBehavior — coach-drafted Column 3 starting text
 // -------------------------------------------------------------------------
 

@@ -1232,14 +1232,31 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(saveWorry).toMatch(/row\.text\.trim\(\) === behavior\.coach_worry_draft\.trim\(\)/);
   });
 
-  it("the assumption batch drafter reports refusals and uncovered commitments", () => {
-    expect(coach).toMatch(/export type AssumptionDraftsOutcome/);
-    expect(block("draftAssumptionsOutcome")).toMatch(/uncoveredCommitmentIndices/);
+  it("both columns offer only the opening, never the fear or the belief", () => {
+    // Kegan Vol 1 p 12: the coach asks "what's the worst that could
+    // happen if you did the opposite?", the client answers. The
+    // server writes the counter-move (right every time on live maps)
+    // and stops; authoring the identity ending was wrong about one
+    // time in three and no amount of judge tuning moved it.
+    for (const name of ["draftWorryOpening", "draftAssumptionOpening"]) {
+      const b = block(name);
+      expect(b, `${name} must exist`).toBeTruthy();
+      // It writes an opening, not a finished sentence.
+      expect(b).toMatch(/I (worry that if I|assume that if I) \$\{/);
+      expect(b).toMatch(/checkPeopleFromMap\(/);
+    }
     const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
-    const fn = actions.slice(actions.indexOf("async function draftAssumptionsAfterAdvance"));
-    expect(fn).toMatch(/kind: "assumption_drafts"/);
-    expect(fn).toMatch(/uncovered_commitments/);
-    expect(fn).toMatch(/refusals/);
+    expect(actions).toMatch(/draftWorryOpening\(/);
+    expect(actions).toMatch(/buildAssumptionOpenings\(/);
+    // The accept-a-whole-draft affordances are gone from both rows.
+    const worries = readFileSync(resolve(__dirname, "../../src/app/itc/[mapId]/worries-row.tsx"), "utf8");
+    const assumptions = readFileSync(resolve(__dirname, "../../src/app/itc/[mapId]/assumptions-row.tsx"), "utf8");
+    expect(/>\s*Use this draft\s*</.test(worries)).toBe(false);
+    expect(/>\s*Use this draft\s*</.test(assumptions)).toBe(false);
+    expect(assumptions).not.toMatch(/function DraftCard/);
+    // The boxes open with the coach's opening instead.
+    expect(worries).toMatch(/behavior\.coach_worry_draft \?\? ""/);
+    expect(assumptions).toMatch(/opening\?\.text \?\? ""/);
   });
 
   it("a failed model call is retried, not counted as a shape that didn't fit", () => {

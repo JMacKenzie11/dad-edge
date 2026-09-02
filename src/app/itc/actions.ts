@@ -12,9 +12,8 @@ import {
 import { mainModelIdOrUnset } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
-  draftAssumptionsFromCommitments,
+  draftAssumptionOpening,
   draftCommitmentForWorry,
-  draftAssumptionsOutcome,
   draftCommitmentOutcome,
   draftTestForAssumption,
   draftWorryOpening,
@@ -1629,6 +1628,54 @@ async function autoDeriveCommitmentsAfterAdvance(
  * call for the whole map (not per commitment) since clustering is
  * the whole point.
  */
+/**
+ * One opening per commitment, anchored to the behavior underneath its
+ * worry. The server writes the enactable act (which is also the
+ * guide's testability bar, Vol 1 p 21) and the coachee writes what he
+ * believes would follow. Anchoring per commitment also drives
+ * coverage: as he finishes one, the next opening points at the next
+ * commitment with no assumption on it.
+ *
+ * Openings are generated in parallel and the ones that come back null
+ * are simply absent; an empty box with a placeholder beats an opening
+ * pointed at the wrong act.
+ */
+async function buildAssumptionOpenings(
+  mapId: string,
+): Promise<Array<{ text: string; commitment_ids: string[] }>> {
+  const [map, commitments, worries, behaviors] = await Promise.all([
+    getMapById(mapId),
+    listCommitments(mapId),
+    listWorries(mapId),
+    listBehaviors(mapId),
+  ]);
+  if (!map || commitments.length === 0) return [];
+  const worryById = new Map(worries.map((w) => [w.id, w]));
+  const behaviorById = new Map(behaviors.map((b) => [b.id, b]));
+  const mapTexts = [
+    map.improvement_goal ?? "",
+    ...behaviors.filter((b) => b.selected).map((b) => b.text),
+    ...worries.map((w) => w.text),
+    ...commitments.map((c) => c.text),
+  ];
+  const openings = await Promise.all(
+    commitments.map(async (c) => {
+      const worry = worryById.get(c.worry_id);
+      const behavior = worry ? behaviorById.get(worry.behavior_id) : undefined;
+      const text = await draftAssumptionOpening({
+        goalText: map.improvement_goal ?? "",
+        behaviorText: behavior?.text ?? "",
+        commitmentText: c.text,
+        mapTexts,
+      });
+      return text ? { text, commitment_ids: [c.id] } : null;
+    }),
+  );
+  return openings.filter(
+    (o): o is { text: string; commitment_ids: string[] } => o !== null,
+  );
+}
+
 async function draftAssumptionsAfterAdvance(
   mapId: string,
   events: TurnEventLog,
@@ -1653,52 +1700,19 @@ async function draftAssumptionsAfterAdvance(
     text: c.text,
     worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
   }));
-  const outcome = await draftAssumptionsOutcome({
-    goalText: map.improvement_goal ?? "",
-    commitments: orderedCommitments.map((c) => ({
-      text: c.text,
-      worry_text: c.worry_text,
-    })),
-  });
-  // Recorded whether or not anything survived, so a commitment left
-  // with no draft is explainable from the admin view instead of a
-  // server log. Same diagnostics the worry drafter carries.
+  const toPersist = await buildAssumptionOpenings(mapId);
   events.record(
     "llm_attempt",
     {
-      kind: "assumption_drafts",
+      kind: "assumption_openings",
       model: mainModelIdOrUnset(),
-      commitment_count: commitments.length,
-      drafted_count: outcome.drafts.length,
-      uncovered_commitments: outcome.uncoveredCommitmentIndices,
-      refusals: outcome.refusals.map((r) => ({
-        draft: r.draft,
-        reason: r.reason.slice(0, 300),
-      })),
-      ...(outcome.error ? { error: outcome.error } : {}),
-    },
-    { stage: "assumptions" },
-  );
-  const drafts = outcome.drafts;
-  if (drafts.length === 0) return;
-  const toPersist = drafts.map((d) => ({
-    text: d.text,
-    // Resolve 1-based indices → commitment_ids using the same
-    // ordered list the prompt saw.
-    commitment_ids: d.commitment_indices
-      .map((n) => orderedCommitments[n - 1]?.id)
-      .filter((v): v is string => Boolean(v)),
-  }));
-  await saveAssumptionDrafts(mapId, toPersist);
-  events.record(
-    "coach_reaction_sent",
-    {
-      kind: "assumption_drafts",
       commitment_count: commitments.length,
       drafted_count: toPersist.length,
     },
     { stage: "assumptions" },
   );
+  if (toPersist.length === 0) return;
+  await saveAssumptionDrafts(mapId, toPersist);
 }
 
 const regenerateDraftsSchema = z.object({
@@ -1741,26 +1755,8 @@ export async function redriveAssumptionFromCommitment(
     if (commitments.length === 0) {
       return { ok: false, reason: "No commitments to draft from." };
     }
-    const worryById = new Map(worries.map((w) => [w.id, w]));
-    const orderedCommitments = commitments.map((c) => ({
-      id: c.id,
-      text: c.text,
-      worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
-    }));
-    const drafts = await draftAssumptionsFromCommitments({
-      goalText: map.improvement_goal ?? "",
-      commitments: orderedCommitments.map((c) => ({
-        text: c.text,
-        worry_text: c.worry_text,
-      })),
-    });
-    if (drafts.length > 0) {
-      const toPersist = drafts.map((d) => ({
-        text: d.text,
-        commitment_ids: d.commitment_indices
-          .map((n) => orderedCommitments[n - 1]?.id)
-          .filter((v): v is string => Boolean(v)),
-      }));
+    const toPersist = await buildAssumptionOpenings(loaded.map.id);
+    if (toPersist.length > 0) {
       await saveAssumptionDrafts(loaded.map.id, toPersist);
     }
   } catch (err) {
@@ -1843,35 +1839,11 @@ export async function regenerateAssumptionDrafts(
   let draftsWritten = 0;
   try {
     await clearAssumptionDraftsForMap(loaded.map.id);
-    // Re-run the drafter directly (not via draftAssumptionsAfterAdvance
-    // which would short-circuit on existing assumptions).
-    const [commitments, worries] = await Promise.all([
-      listCommitments(loaded.map.id),
-      listWorries(loaded.map.id),
-    ]);
-    if (commitments.length > 0) {
-      const worryById = new Map(worries.map((w) => [w.id, w]));
-      const orderedCommitments = commitments.map((c) => ({
-        id: c.id,
-        text: c.text,
-        worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
-      }));
-      const drafts = await draftAssumptionsFromCommitments({
-        goalText: loaded.map.improvement_goal ?? "",
-        commitments: orderedCommitments.map((c) => ({
-          text: c.text,
-          worry_text: c.worry_text,
-        })),
-      });
-      if (drafts.length > 0) {
-        const toPersist = drafts.map((d) => ({
-          text: d.text,
-          commitment_ids: d.commitment_indices
-            .map((n) => orderedCommitments[n - 1]?.id)
-            .filter((v): v is string => Boolean(v)),
-        }));
-        draftsWritten = await saveAssumptionDrafts(loaded.map.id, toPersist);
-      }
+    // Build openings directly (not via draftAssumptionsAfterAdvance,
+    // which short-circuits when assumptions already exist).
+    const toPersist = await buildAssumptionOpenings(loaded.map.id);
+    if (toPersist.length > 0) {
+      draftsWritten = await saveAssumptionDrafts(loaded.map.id, toPersist);
     }
   } catch (err) {
     return {

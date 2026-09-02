@@ -77,31 +77,12 @@ export function AssumptionsRow({
       </p>
     );
   }
-  const commitmentIndexById = new Map(commitments.map((c, i) => [c.id, i + 1]));
 
   return (
     <div className="space-y-3">
-      {drafts.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-widest text-[color:var(--color-primary)]/80">
-            Coach's drafts
-          </p>
-          {drafts.map((d) => (
-            <DraftCard
-              key={d.id}
-              mapId={mapId}
-              draft={d}
-              commitmentIndexById={commitmentIndexById}
-              existingAssumptions={assumptions}
-            />
-          ))}
-        </div>
-      ) : null}
       {assumptions.length === 0 ? (
         <p className="text-sm italic text-[color:var(--color-text-muted)]/70">
-          {drafts.length > 0
-            ? "Review the drafts above, or write your own below."
-            : "None yet."}
+          None yet.
         </p>
       ) : (
         <ul className="space-y-3 text-base">
@@ -128,9 +109,13 @@ export function AssumptionsRow({
           <AddAssumptionForm
             mapId={mapId}
             commitments={commitments}
-            initiallyExpanded={
-              assumptions.length === 0 && drafts.length === 0
-            }
+            // The next pending opening: the server wrote the act
+            // ("I assume that if I named my price and held it, then ")
+            // and pre-picked the commitment it was anchored to. He
+            // finishes the belief. Consuming one surfaces the next,
+            // so the form walks him across uncovered commitments.
+            opening={drafts[0] ?? null}
+            initiallyExpanded={assumptions.length === 0 || drafts.length > 0}
           />
           {/*
             Single persistent regenerate affordance for the column.
@@ -154,18 +139,39 @@ export function AssumptionsRow({
 function AddAssumptionForm({
   mapId,
   commitments,
+  opening,
   initiallyExpanded,
 }: {
   mapId: string;
   commitments: ItcCommitment[];
+  /** The coach's opening for the next commitment with no assumption
+   *  on it, or null when there is none pending. Text and links are
+   *  seeded from it; there is no accept button because the server
+   *  only wrote the half it can be right about. */
+  opening: ItcAssumptionDraft | null;
   initiallyExpanded: boolean;
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [pending, startTransition] = useTransition();
-  const [text, setText] = useState("");
-  const [linkedIds, setLinkedIds] = useState<string[]>([]);
+  const [text, setText] = useState(opening?.text ?? "");
+  const [linkedIds, setLinkedIds] = useState<string[]>(
+    opening?.commitment_ids ?? [],
+  );
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // A new opening arrives after the previous one is consumed. Seed
+  // the form with it, but never overwrite words he has already typed.
+  const seededFor = useRef(opening?.id ?? null);
+  useEffect(() => {
+    const id = opening?.id ?? null;
+    if (id === seededFor.current) return;
+    seededFor.current = id;
+    if (text.trim().length === 0) {
+      setText(opening?.text ?? "");
+      setLinkedIds(opening?.commitment_ids ?? []);
+    }
+  }, [opening?.id, opening?.text, opening?.commitment_ids, text]);
 
   function toggleLink(id: string) {
     setLinkedIds((prev) =>
@@ -190,12 +196,20 @@ function AddAssumptionForm({
     for (const id of linkedIds) fd.append("commitment_ids", id);
     startTransition(async () => {
       const res = await saveAssumption(fd);
-      if (!res.ok) setError(res.reason ?? "Could not add.");
-      else {
-        setText("");
-        setLinkedIds([]);
-        setExpanded(false);
+      if (!res.ok) {
+        setError(res.reason ?? "Could not add.");
+        return;
       }
+      // Consume the opening so the next one surfaces on re-render.
+      if (opening) {
+        const dfd = new FormData();
+        dfd.set("map_id", mapId);
+        dfd.set("draft_id", opening.id);
+        await dismissAssumptionDraft(dfd);
+      }
+      setText("");
+      setLinkedIds([]);
+      setExpanded(false);
     });
   }
 
@@ -267,188 +281,6 @@ function AddAssumptionForm({
           <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-/**
- * A single coach-drafted Big Assumption.
- *
- * Buttons depend on state:
- *  - Always: "Use this draft" (add as new) + "Dismiss"
- *  - If accepted assumptions already exist (honing): also render
- *    "Replace #N" for each — replaces the old assumption with this
- *    draft. Save-first ordering so if remove fails (tests attached),
- *    the coachee sees an actionable error and no data is lost.
- *
- * The card disappears via revalidation after any action.
- */
-function DraftCard({
-  mapId,
-  draft,
-  commitmentIndexById,
-  existingAssumptions,
-}: {
-  mapId: string;
-  draft: ItcAssumptionDraft;
-  commitmentIndexById: Map<string, number>;
-  /** All accepted assumptions on the map. When non-empty, the card
-   *  offers per-assumption "Replace #N" buttons alongside "Use this
-   *  draft" so honing coachees don't end up doubling their column. */
-  existingAssumptions: ItcAssumption[];
-}) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [confirmDialog, confirm] = useConfirm();
-
-  function useDraft() {
-    setError(null);
-    startTransition(async () => {
-      const ok = await saveDraftAsNew();
-      if (!ok) return;
-      await dismissDraftBestEffort();
-    });
-  }
-
-  async function saveDraftAsNew(): Promise<boolean> {
-    const fd = new FormData();
-    fd.set("map_id", mapId);
-    fd.set("text", draft.text);
-    for (const cid of draft.commitment_ids) fd.append("commitment_ids", cid);
-    const res = await saveAssumption(fd);
-    if (!res.ok) {
-      setError(res.reason ?? "Could not use draft.");
-      return false;
-    }
-    return true;
-  }
-
-  async function dismissDraftBestEffort() {
-    const dfd = new FormData();
-    dfd.set("map_id", mapId);
-    dfd.set("draft_id", draft.id);
-    // Best-effort — even if this fails, the draft will be filtered
-    // out on next render once the user reviews the promoted row.
-    await dismissAssumptionDraft(dfd);
-  }
-
-  async function replaceAssumption(target: ItcAssumption, index: number) {
-    const shortDraft =
-      draft.text.length > 100 ? `${draft.text.slice(0, 100)}…` : draft.text;
-    const shortOld =
-      target.text.length > 100
-        ? `${target.text.slice(0, 100)}…`
-        : target.text;
-    const ok = await confirm({
-      title: `Replace assumption #${index}?`,
-      body: `Old: "${shortOld}"\n\nNew: "${shortDraft}"\n\nThe old assumption will be removed. Any tests attached to it will block the removal.`,
-      confirmLabel: "Replace",
-      destructive: true,
-    });
-    if (!ok) return;
-    setError(null);
-    startTransition(async () => {
-      // Save-first ordering. If save succeeds and remove fails
-      // (tests-attached), the new assumption is created and the
-      // coachee gets an actionable error rather than losing data.
-      const saved = await saveDraftAsNew();
-      if (!saved) return;
-      const fd = new FormData();
-      fd.set("map_id", mapId);
-      fd.set("assumption_id", target.id);
-      const rmRes = await removeAssumption(fd);
-      if (!rmRes.ok) {
-        setError(
-          `New draft was added, but the old assumption couldn't be removed: ${rmRes.reason}`,
-        );
-        // Still dismiss the draft — the coachee decides what to do
-        // with the two assumptions on the map.
-        await dismissDraftBestEffort();
-        return;
-      }
-      await dismissDraftBestEffort();
-    });
-  }
-
-  function dismiss() {
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("map_id", mapId);
-      fd.set("draft_id", draft.id);
-      const res = await dismissAssumptionDraft(fd);
-      if (!res.ok) setError(res.reason ?? "Could not dismiss.");
-    });
-  }
-
-  const coverageLabels = draft.commitment_ids
-    .map((cid) => commitmentIndexById.get(cid))
-    .filter((n): n is number => typeof n === "number")
-    .sort((a, b) => a - b);
-
-  return (
-    <div className="rounded-md border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-4 py-3 space-y-2">
-      {confirmDialog}
-      <div className="text-sm italic text-white/90 leading-relaxed">
-        {draft.text}
-      </div>
-      {coverageLabels.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 text-xs text-[color:var(--color-text-muted)]">
-          <span className="uppercase tracking-widest opacity-70">
-            holds up competing commitment{coverageLabels.length === 1 ? "" : "s"}
-          </span>
-          {coverageLabels.map((n) => (
-            <span
-              key={n}
-              className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 px-2 py-0.5 text-white"
-            >
-              #{n}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={useDraft}
-          aria-busy={pending ? "true" : undefined}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-primary)] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          {pending ? <InlineSpinner className="h-3 w-3" /> : null}
-          Use as new
-        </button>
-        {existingAssumptions.map((a, i) => {
-          const preview =
-            a.text.length > 60 ? `${a.text.slice(0, 60)}…` : a.text;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              disabled={pending}
-              onClick={() => replaceAssumption(a, i + 1)}
-              title={`Replace assumption #${i + 1}: "${a.text}"`}
-              className="flex flex-col items-start rounded-md border border-[color:var(--color-warning)]/50 px-3 py-1.5 text-xs text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50 max-w-[320px] min-w-0"
-            >
-              <span className="font-semibold">Replace #{i + 1}</span>
-              <span className="mt-0.5 truncate w-full text-left opacity-70 text-[10px] italic">
-                &quot;{preview}&quot;
-              </span>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          disabled={pending}
-          onClick={dismiss}
-          className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-        >
-          Dismiss
-        </button>
-      </div>
-      {error ? (
-        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
-      ) : null}
     </div>
   );
 }
