@@ -757,44 +757,6 @@ export async function setBehaviorWorryDraft(
   if (error) throw new Error(`setBehaviorWorryDraft: ${error.message}`);
 }
 
-/**
- * Null out coach_worry_draft on behaviors that don't have a real
- * paired worry yet. Used by regenerateWorryDrafts so the drafter
- * refills them against current behavior text after upstream edits.
- * Behaviors with real worries are untouched (the draft has already
- * been superseded by user content).
- */
-export async function clearWorryDraftsForMap(mapId: string): Promise<void> {
-  const supabase = createSupabaseServiceClient();
-  const { data: worries, error: wErr } = await supabase
-    .from("itc_worries")
-    .select("behavior_id")
-    .eq("map_id", mapId);
-  if (wErr) throw new Error(`clearWorryDraftsForMap: ${wErr.message}`);
-  const behaviorsWithWorries = new Set(
-    (worries ?? []).map((w) => w.behavior_id as string),
-  );
-  const { data: behaviors, error: bErr } = await supabase
-    .from("itc_behaviors")
-    .select("id")
-    .eq("map_id", mapId)
-    .not("coach_worry_draft", "is", null);
-  if (bErr) throw new Error(`clearWorryDraftsForMap behaviors: ${bErr.message}`);
-  const clearIds = (behaviors ?? [])
-    .map((b) => b.id as string)
-    .filter((id) => !behaviorsWithWorries.has(id));
-  if (clearIds.length === 0) return;
-  const { error: upErr } = await supabase
-    .from("itc_behaviors")
-    .update({
-      coach_worry_draft: null,
-      coach_worry_draft_depth_score: null,
-      coach_worry_draft_rubric_reason: null,
-    })
-    .in("id", clearIds);
-  if (upErr) throw new Error(`clearWorryDraftsForMap update: ${upErr.message}`);
-}
-
 export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase

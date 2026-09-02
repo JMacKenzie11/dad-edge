@@ -9,7 +9,6 @@ import { EntryThread } from "./entry-thread";
 import { CoachFixBox } from "./coach-fix-box";
 import { DepthBadge, depthBorderClass } from "./depth-badge";
 import { SavingIndicator } from "./form-field";
-import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "@/components/ui/use-confirm";
 
 const FRESH_ROW_MS = 15_000;
@@ -67,14 +66,6 @@ export function WorriesRow({
     );
   }
 
-  // Show the regenerate-drafts button when there's at least one
-  // behavior with a coach draft AND no accepted worry on it yet.
-  // Same conditional as commitments/assumptions rows.
-  const hasRegeneratableDrafts = selected.some(
-    (b) =>
-      Boolean(b.coach_worry_draft) && !worryByBehaviorId.has(b.id),
-  );
-
   return (
     <div className="space-y-3">
       <ul className="space-y-3 text-base">
@@ -93,11 +84,6 @@ export function WorriesRow({
           );
         })}
       </ul>
-      {hasRegeneratableDrafts ? (
-        <div className="pt-1">
-          <RegenerateDraftsButton mapId={mapId} kind="worries" />
-        </div>
-      ) : null}
     </div>
   );
 }

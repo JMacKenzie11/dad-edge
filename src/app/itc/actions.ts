@@ -73,7 +73,6 @@ import {
   markTestAbandoned,
   markTestSuperseded,
   clearAssumptionDraftsForMap,
-  clearWorryDraftsForMap,
   deleteColumnReviewMessages,
   deleteHoneDiagnosticMessages,
   deleteStageNoteMessages,
@@ -1616,22 +1615,30 @@ async function autoDeriveCommitmentsAfterAdvance(
   );
 }
 
-/**
- * Column 5 gets no coach-authored opening. The guides' Big
- * Assumptions take several shapes and many are not if-then at all
- * ("I assume that saying anything about my accomplishments is
- * bragging"), and Vol 1 p 4 asks only that AT LEAST ONE be in
- * if-then form. A prefilled stem picks one shape for him, and one
- * built from his own commitment mostly hands back what he already
- * wrote. He gets his commitments on screen (the reference box above
- * Column 5) and the coach's question under the box; the sentence is
- * his. Coverage is carried by honing's assumption_uncovered_commitment
- * finding, which is where the guide puts it (Vol 1 p 17).
- */
-
-const regenerateDraftsSchema = z.object({
-  map_id: z.string().uuid(),
-});
+// -------------------------------------------------------------------------
+// What the coach writes for the coachee, and what it doesn't
+// -------------------------------------------------------------------------
+//
+// Column 3 gets an OPENING and nothing more: "I worry that if I
+// <counter-move>, ". The counter-move is a mechanical inversion of
+// his own Column 2 behavior, which is the one half the server is
+// reliably right about; the fear is his. There is deliberately no
+// way to regenerate an opening. Rewriting a mechanical inversion
+// returns the same counter-move in different words, so the button
+// offered a choice that was never a choice, and its presence implied
+// the opening was a draft to approve rather than a sentence stem to
+// finish. Removed 2026-09-02 along with regenerateWorryDrafts.
+//
+// Column 5 gets nothing at all. The guides' Big Assumptions take
+// several shapes and many are not if-then ("I assume that saying
+// anything about my accomplishments is bragging"); Vol 1 p 4 asks
+// only that AT LEAST ONE on a map be in if-then form. A prefilled
+// stem picks one shape for him, and one built from his own
+// commitment mostly hands back what he already wrote. He gets his
+// commitments on screen (the reference box above Column 5) and the
+// coach's question under the box; the sentence is his. Coverage is
+// carried by honing's assumption_uncovered_commitment finding, which
+// is where the guide puts it (Vol 1 p 17).
 
 const redriveAssumptionSchema = z.object({
   map_id: z.string().uuid(),
@@ -1672,86 +1679,6 @@ export async function redriveAssumptionFromCommitment(
   }
   safeRevalidate(`/itc/${loaded.map.id}`);
   return { ok: true };
-}
-
-/**
- * Client-triggered regenerate for the coach's Column 3 worry drafts.
- * Wipes every draft on behaviors that don't have a real paired worry,
- * then re-fires the drafter against the current behavior text. Real
- * worries (already accepted) are untouched.
- *
- * Why this exists: coachee lands on Column 3, sees the drafts, goes
- * back to Column 2 and sharpens a behavior. The corresponding draft
- * is still based on the old behavior text. This lets them regenerate
- * without hand-editing.
- */
-export async function regenerateWorryDrafts(
-  formData: FormData,
-): Promise<
-  | { ok: true; draftsWritten: number }
-  | { ok: false; reason: string }
-> {
-  const parsed = regenerateDraftsSchema.safeParse({
-    map_id: formData.get("map_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  let draftsWritten = 0;
-  try {
-    await clearWorryDraftsForMap(loaded.map.id);
-    const events = new TurnEventLog(loaded.map.id, 0);
-    draftsWritten = await draftMissingWorriesAfterAdvance(loaded.map.id, events);
-    await events.flush();
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not regenerate.",
-    };
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true, draftsWritten };
-}
-
-/**
- * Client-triggered regenerate for the coach's Column 5 assumption
- * drafts. Wipes every itc_assumption_drafts row and re-fires the
- * drafter against the current commitments. Real itc_assumptions
- * (already accepted) are untouched — the drafter's idempotency
- * guard on existingAssumptions.length > 0 needs to be bypassed for
- * this call, so we clear first (drafts) and rely on the same
- * guard: if the coachee has any accepted assumptions, we skip.
- * That mirrors the auto-run semantics.
- *
- * Actually — for regenerate we WANT to write fresh drafts even if
- * some accepted assumptions exist (the coachee might have accepted
- * two and want fresh drafts for the remaining commitments). Bypass
- * the guard via a direct re-implementation instead of calling the
- * hook.
- */
-export async function regenerateAssumptionDrafts(
-  formData: FormData,
-): Promise<
-  | { ok: true; draftsWritten: number }
-  | { ok: false; reason: string }
-> {
-  const parsed = regenerateDraftsSchema.safeParse({
-    map_id: formData.get("map_id"),
-  });
-  if (!parsed.success) return { ok: false, reason: "Invalid input." };
-  const loaded = await requireParticipantAndMap(parsed.data.map_id);
-  if (!loaded.ok) return { ok: false, reason: loaded.reason };
-  let draftsWritten = 0;
-  try {
-    await clearAssumptionDraftsForMap(loaded.map.id);
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : "Could not regenerate.",
-    };
-  }
-  safeRevalidate(`/itc/${loaded.map.id}`);
-  return { ok: true, draftsWritten };
 }
 
 /**
