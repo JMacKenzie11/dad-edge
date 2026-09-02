@@ -44,31 +44,41 @@ export function GuideExamples({
           <div
             key={p.to}
             className={
-              "space-y-1 " +
-              // A rule between examples, not around them: three boxed
-              // cards read as three things to get through. The number
-              // and the divider are enough to tell them apart.
+              "flex gap-3 " +
+              // A rule between examples, not a box around each: three
+              // boxed cards read as three things to get through. The
+              // badge and the divider are enough to tell them apart.
               (i > 0
                 ? "border-t border-[color:var(--color-border)]/60 pt-3"
                 : "")
             }
           >
-            <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)]/60">
-              <span className="text-[color:var(--color-text-muted)]/80">
-                {i + 1}.
-              </span>{" "}
-              {fromLabel}
+            {/* The number anchors the whole pair, so it sits outside
+                the text column rather than inside the first label.
+                aria-hidden: it is decorative ordering, and a screen
+                reader announcing "1" before every label adds noise
+                without adding meaning. */}
+            <span
+              aria-hidden="true"
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)] text-[10px] font-semibold text-white"
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)]/60">
+                {fromLabel}
+              </div>
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                {p.from}
+              </p>
+              <div className="pt-1 text-[10px] uppercase tracking-widest text-[color:var(--color-primary)]/80">
+                {toLabel}
+              </div>
+              <p className="text-sm text-white/90">{p.to}</p>
+              <p className="text-[10px] italic text-[color:var(--color-text-muted)]/50">
+                {p.source}
+              </p>
             </div>
-            <p className="text-sm text-[color:var(--color-text-muted)]">
-              {p.from}
-            </p>
-            <div className="pt-1 text-[10px] uppercase tracking-widest text-[color:var(--color-primary)]/80">
-              {toLabel}
-            </div>
-            <p className="text-sm text-white/90">{p.to}</p>
-            <p className="text-[10px] italic text-[color:var(--color-text-muted)]/50">
-              {p.source}
-            </p>
           </div>
         ))}
       </div>
