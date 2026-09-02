@@ -1058,6 +1058,24 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(block("draftCommitmentForWorry")).toMatch(/scoreCommitmentDepth\(/);
   });
 
+  it("every drafter, reviser and suggester holds people to the map (checkPeopleFromMap)", () => {
+    for (const name of [
+      "draftWorryForBehavior",
+      "draftCommitmentForWorry",
+      "draftAssumptionsFromCommitments",
+      "reviseAssumption",
+      "reviseBehavior",
+    ]) {
+      expect(block(name), `${name} must run checkPeopleFromMap`).toMatch(/checkPeopleFromMap\(/);
+    }
+    const v = coach.slice(coach.indexOf("async function verifySuggestion("), coach.indexOf("export async function generateSuggestions("));
+    expect(v).toMatch(/checkPeopleFromMap\(/);
+    // No shape instruction hard-codes a witness.
+    const shapeStart = coach.indexOf("function worryShapeInstruction(");
+    const shapes = coach.slice(shapeStart, coach.indexOf("\n}\n", shapeStart));
+    expect(shapes).not.toMatch(/"she'd|she\\'d|\bher\b/);
+  });
+
   it("the per-entry LLM reaction and chat paths stay deleted", () => {
     expect(coach).not.toMatch(/export async function generateCoachReaction/);
     expect(coach).not.toMatch(/export async function generateCoachChat/);

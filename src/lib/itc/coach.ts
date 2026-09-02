@@ -59,6 +59,7 @@ import {
   judgeAssumptionEnactable,
   judgeAssumptionUnderwrites,
 } from "./criteria/assumptions";
+import { checkPeopleFromMap, witnessFromMap } from "./criteria/people";
 import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
 import { checkInteriorWitnessInWorries } from "./criteria/worries";
 import { ASSUMPTION_STEM, GOAL_STEM, ensureStem, type ItcStage } from "./stage";
@@ -210,10 +211,26 @@ export type SuggestionsInput = MapContextInput & {
  * action runs when the coachee taps the chip, so the chip and the
  * entry it becomes are held to one bar. Kinds without a rubric pass.
  */
+function mapTextsOf(input: MapContextInput, extra: string[] = []): string[] {
+  return [
+    input.improvementGoal ?? "",
+    ...input.behaviors.map((b) => b.text),
+    ...input.worries.map((w) => w.text),
+    ...input.commitments.map((c) => c.text),
+    ...input.assumptions.map((a) => a.text),
+    ...extra,
+  ];
+}
+
 async function verifySuggestion(
   input: SuggestionsInput,
   text: string,
 ): Promise<{ ok: boolean; reason: string }> {
+  const people = checkPeopleFromMap({
+    draftText: text,
+    mapTexts: mapTextsOf(input, input.contextText ? [input.contextText] : []),
+  });
+  if (!people.ok) return { ok: false, reason: people.reason };
   try {
     switch (input.kind) {
       case "behavior": {
@@ -307,6 +324,7 @@ export async function generateSuggestions(
     `- ${kindShape[input.kind]}`,
     `- No cross-domain options (no fitness on Bond, no work on Vitality, no marriage on Amplify, etc.).`,
     existingBlock,
+    `- ${peopleLine(mapTextsOf(input, input.contextText ? [input.contextText] : []))}`,
     input.contextText
       ? `- Ground the options in the paired context: "${input.contextText}".`
       : null,
@@ -453,6 +471,18 @@ export type ReviseInput = {
   problems: string[];
 };
 
+/**
+ * One prompt line naming who the map already has, so the model
+ * reaches for those people (or "they") instead of a training
+ * example's wife. The verify loops enforce it with checkPeopleFromMap.
+ */
+function peopleLine(mapTexts: string[]): string {
+  const { onMap } = checkPeopleFromMap({ draftText: "", mapTexts });
+  return onMap.length > 0
+    ? `People this map names: ${onMap.join(", ")}. Use them, or "they" / "the other person". Never add anyone the map doesn't have.`
+    : `This map names no one in particular. Say "they", "the other person", "people". Never add a wife, a boss, or kids the map doesn't have.`;
+}
+
 function reviseLines(revise: ReviseInput | undefined, what: string): string[] {
   if (!revise) return [];
   return [
@@ -500,6 +530,7 @@ export async function reviseBehavior(input: {
   const started = Date.now();
   const baseLines = [
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    peopleLine([input.goalText, input.currentText]),
     ...reviseLines(
       { currentText: input.currentText, problems: input.problems },
       "behavior",
@@ -517,6 +548,11 @@ export async function reviseBehavior(input: {
     return text.length >= 5 ? `${text}.` : null;
   }
   async function verify(text: string): Promise<{ ok: boolean; feedback: string | null }> {
+    const people = checkPeopleFromMap({
+      draftText: text,
+      mapTexts: [input.goalText, input.currentText],
+    });
+    if (!people.ok) return { ok: false, feedback: people.reason };
     const r = await scoreBehaviorDepth({
       goalText: input.goalText,
       behaviorText: text,
@@ -843,16 +879,31 @@ export const WORRY_IDENTITY_SHAPES: readonly WorryIdentityShape[] = [
   "self_label",
 ] as const;
 
-const WORRY_SHAPE_INSTRUCTIONS: Record<WorryIdentityShape, string> = {
-  role_noun:
-    'For THIS draft, land the identity as a ROLE-NOUN CLAIM. Use the shape: "she\'d see I\'ve been the [husband|man|father|guy|one] who [Y]" or "I\'ve been the [role] who [Y]". The [Y] slot MUST be a PLAIN CONCRETE VERB describing an OBSERVABLE ACTION (physical or verbal) toward her — something a friend on his shoulder could point at when it happens. Kegan Vol 1 p 14 canonical example: "the husband who hurts her" (plain concrete verb). Good [Y] shapes: "hurts her", "shuts her out", "talks over her", "never actually listened", "walks out on her", "lies to her every day", "keeps her at arm\'s length by bringing up her past", "makes her repeat herself three times before I hear it". BANNED [Y] shapes (literary condensations that don\'t sound like something he\'d say to his buddy — abstract even when structurally correct): "never let her matter", "kept her small", "held her at arm\'s length", "diminished her", "erased her presence", "made her invisible", "silenced her voice", "denied her existence". Foreman-at-the-tailgate test: would a working guy actually say [Y] to his buddy at a bar? If it needs a MFA to parse, it fails.',
-  role_failure_verb:
-    'For THIS draft, land the identity as an EXPLICIT ROLE-FAILURE VERB directed at her/him/them. Use the shape: "she\'d see I\'ve been [choosing myself over her | abandoning her | letting her down | hurting her | running from her | failing her]" or "I\'ve been [verb-ing] her all along". Kegan Vol 1 p 14 canonical example: "chose ego over her".',
-  seen_as:
-    'For THIS draft, land the identity via SEEN-AS framing (Kegan Vol 1 p 13 canonical vocabulary). Use the shape: "she\'d have seen me as [X]" / "she\'d see me as [role/label]" / "I\'d have been seen as [X]" / "she\'d know me as [X]". Kegan Vol 1 p 13 canonical example: "seen as incompetent".',
-  self_label:
-    'For THIS draft, land the identity as a SELF-LABEL (Kegan Vol 1 p 14). Use the shape: "she\'d know I\'ve been a [fraud|fake|phony|coward|failure]" / "the truth would come out that I\'ve never been [enough|the man she thought]" / "I couldn\'t pretend I\'m not a [X]". Kegan Vol 1 p 14 canonical example: "I\'d be a fraud".',
-};
+/**
+ * Shape instructions are built per map: the witness ("she'd" / "he'd" /
+ * "they'd") and the object ("her" / "him" / "them") come from the
+ * coachee's own text via witnessFromMap, never from the example. A
+ * map about "the other person" gets "they'd see…"; the example verbs
+ * are written against that same witness. Server-owned, so the model
+ * can't import a wife from a training example.
+ */
+function worryShapeInstruction(
+  shape: WorryIdentityShape,
+  w: { subject: string; would: string; object: string },
+): string {
+  const W = w.would;
+  const O = w.object;
+  switch (shape) {
+    case "role_noun":
+      return `For THIS draft, land the identity as a ROLE-NOUN CLAIM. Use the shape: "${W} see I've been the [man|guy|father|husband|coach|leader|one] who [Y]" or "I've been the [role] who [Y]". The [Y] slot MUST be a PLAIN CONCRETE VERB describing an OBSERVABLE ACTION (physical or verbal) toward ${O}, something a friend on his shoulder could point at when it happens. Kegan Vol 1 p 14 canonical shape: "the [role] who [hurts ${O}]" (plain concrete verb). Good [Y] shapes: "talks over ${O}", "shuts ${O} out", "never actually listened", "walks out on ${O}", "makes ${O} repeat it three times before I hear it". BANNED [Y] shapes (literary condensations): "never let ${O} matter", "kept ${O} small", "diminished ${O}", "erased ${O}", "silenced ${O}". Foreman-at-the-tailgate test: would a working guy say [Y] to his buddy at a bar? The role noun must fit HIS map (a work map gets "the leader who…", not "the husband who…").`;
+    case "role_failure_verb":
+      return `For THIS draft, land the identity as an EXPLICIT ROLE-FAILURE VERB directed at ${O}. Use the shape: "${W} see I've been [choosing myself over ${O} | letting ${O} down | running from ${O} | failing ${O}]" or "I've been [verb-ing] ${O} all along". Kegan Vol 1 p 14 canonical shape: "chose ego over ${O}".`;
+    case "seen_as":
+      return `For THIS draft, land the identity via SEEN-AS framing (Kegan Vol 1 p 13 canonical vocabulary). Use the shape: "${W} have seen me as [X]" / "${W} see me as [role/label]" / "I'd have been seen as [X]" / "${W} know me as [X]". Kegan Vol 1 p 13 canonical example: "seen as incompetent".`;
+    case "self_label":
+      return `For THIS draft, land the identity as a SELF-LABEL (Kegan Vol 1 p 14). Use the shape: "${W} know I've been a [fraud|fake|phony|coward|failure]" / "the truth would come out that I've never been [enough|the man ${w.subject} thought]" / "I couldn't pretend I'm not a [X]". Kegan Vol 1 p 14 canonical example: "I'd be a fraud".`;
+  }
+}
 
 /**
  * Server-side coach-draft generator for Column 3. Called once per
@@ -900,16 +951,23 @@ export async function draftWorryForBehavior(input: {
   /** Rewrite the coachee's own worry instead of drafting fresh. See
    *  ReviseInput. In this mode only a verified draft is returned. */
   revise?: ReviseInput;
+  /** Everything else the coachee has written on this map. People in
+   *  the draft (pronouns, relational nouns) must trace to this text
+   *  plus the goal and behavior. */
+  mapTexts?: string[];
 }): Promise<string | null> {
   const started = Date.now();
   const pillar = PILLAR_BY_CODE[input.pillar];
+  const mapTexts = [input.goalText, input.behaviorText, ...(input.mapTexts ?? [])];
+  const witness = witnessFromMap(mapTexts);
   const shapeLine = input.identityShape
-    ? WORRY_SHAPE_INSTRUCTIONS[input.identityShape]
+    ? worryShapeInstruction(input.identityShape, witness)
     : null;
   const basePromptLines = [
     `Pillar: ${pillar.label} (${pillar.domain})`,
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
     `Behavior (Column 2): ${input.behaviorText}`,
+    peopleLine(mapTexts),
     ``,
     `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what DOING opposite_move would REVEAL about him — the new truth exposed by the counter-move, not the identity of the current behavior. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
     ...(shapeLine ? [``, shapeLine] : []),
@@ -1006,6 +1064,8 @@ export async function draftWorryForBehavior(input: {
       // class of finding.
       feedback.push(ADVICE.interior_witness_worry);
     }
+    const people = checkPeopleFromMap({ draftText: draft.assembled, mapTexts });
+    if (!people.ok) feedback.push(people.reason);
     return { ok: feedback.length === 0, feedback };
   }
 
@@ -1246,12 +1306,21 @@ export async function draftCommitmentForWorry(input: {
   /** Rewrite the coachee's own commitment instead of drafting fresh.
    *  See ReviseInput. In this mode only a verified draft is returned. */
   revise?: ReviseInput;
+  /** See draftWorryForBehavior.mapTexts. */
+  mapTexts?: string[];
 }): Promise<string | null> {
   const started = Date.now();
+  const mapTexts = [
+    input.goalText,
+    input.behaviorText,
+    input.worryText,
+    ...(input.mapTexts ?? []),
+  ];
   const basePromptLines = [
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
     `Behavior (Column 2): ${input.behaviorText}`,
     `Paired worry (Column 3): ${input.worryText}`,
+    peopleLine(mapTexts),
     ``,
     `Fill vow with the identity/outcome the paired worry fears, mirrored into never-form. Preserve the coachee's nouns. Target 10-20 words assembled.`,
     ...reviseLines(input.revise, "competing commitment"),
@@ -1346,6 +1415,8 @@ export async function draftCommitmentForWorry(input: {
       // suggestion and the save-time sharpen box.
       failures.push(ADVICE.interior_witness_commitment);
     }
+    const people = checkPeopleFromMap({ draftText: assembled, mapTexts });
+    if (!people.ok) failures.push(people.reason);
 
     return { ok: failures.length === 0, failures, depthScore };
   }
@@ -1755,6 +1826,10 @@ export async function draftAssumptionsFromCommitments(input: {
       system: withVoiceRules(DRAFT_ASSUMPTIONS_SYSTEM),
       prompt: [
         `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+        peopleLine([
+          input.goalText,
+          ...input.commitments.flatMap((c) => [c.text, c.worry_text]),
+        ]),
         ``,
         `Competing commitments (Column 4) with their paired worries:`,
         commitmentBlock,
@@ -1822,13 +1897,21 @@ export async function draftAssumptionsFromCommitments(input: {
             .map((i) => input.commitments[i - 1]?.text ?? "")
             .filter((t) => t.length > 0),
         });
+        const people = checkPeopleFromMap({
+          draftText: d.text,
+          mapTexts: [
+            input.goalText,
+            ...input.commitments.flatMap((c) => [c.text, c.worry_text]),
+          ],
+        });
         const depthOk = depth === null || depth.score >= 3;
         return {
-          consistent: depthOk && consistency.consistent && identity.kept,
+          consistent: depthOk && consistency.consistent && identity.kept && people.ok,
           reason: [
             depthOk ? null : `The depth rubric rejected it (${depth!.score}/3): "${depth!.reason}"`,
             consistency.consistent ? null : consistency.reason,
             identity.kept ? null : identity.reason,
+            people.ok ? null : people.reason,
           ]
             .filter((r): r is string => Boolean(r))
             .join(" "),
@@ -2024,6 +2107,12 @@ export async function reviseAssumption(input: {
       : "  (none)";
   const basePromptLines = [
     `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    peopleLine([
+      input.goalText,
+      input.currentText,
+      ...input.behaviors,
+      ...input.linkedCommitments.flatMap((c) => [c.text, c.worry_text]),
+    ]),
     ``,
     `The coachee's behaviors (Column 2):`,
     behaviorBlock,
@@ -2143,6 +2232,16 @@ export async function reviseAssumption(input: {
       commitmentTexts: linkedTexts,
     });
     if (!identity.kept) feedback.push(identity.reason);
+    const people = checkPeopleFromMap({
+      draftText: draft.text,
+      mapTexts: [
+        input.goalText,
+        input.currentText,
+        ...input.behaviors,
+        ...input.linkedCommitments.flatMap((c) => [c.text, c.worry_text]),
+      ],
+    });
+    if (!people.ok) feedback.push(people.reason);
     if (vague.length > 0) feedback.push(ADVICE.vague_assumption_then_clause);
     if (enactable && !enactable.enactable) {
       feedback.push(`${ADVICE.assumption_not_enactable} (${enactable.reason})`);

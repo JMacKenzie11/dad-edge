@@ -1434,6 +1434,7 @@ async function draftMissingWorriesAfterAdvance(
         behaviorText: b.text,
         pillar: map.pillar_code,
         identityShape,
+        mapTexts: behaviors.map((x) => x.text),
       });
       return { behaviorId: b.id, draft };
     }),

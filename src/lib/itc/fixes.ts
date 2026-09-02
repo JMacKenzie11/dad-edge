@@ -390,6 +390,7 @@ async function reviseWorry(findings: Finding[], ctx: FixContext): Promise<string
     behaviorText: behavior.text,
     pillar: ctx.pillar,
     revise: { currentText: worry.text, problems: problemsOf(findings) },
+    mapTexts: mapTextsOf(ctx),
   }).catch(() => null);
 }
 
@@ -404,6 +405,7 @@ async function reviseCommitment(findings: Finding[], ctx: FixContext): Promise<s
     behaviorText: behavior?.text ?? "",
     worryText: worry.text,
     revise: { currentText: commitment.text, problems: problemsOf(findings) },
+    mapTexts: mapTextsOf(ctx),
   }).catch(() => null);
 }
 
@@ -425,6 +427,16 @@ async function reviseAssumptionEntry(findings: Finding[], ctx: FixContext): Prom
     ),
     requireEnactable: types.has("assumption_not_enactable"),
   }).catch(() => null);
+}
+
+function mapTextsOf(ctx: FixContext): string[] {
+  return [
+    ctx.goalText,
+    ...ctx.behaviors.map((b) => b.text),
+    ...ctx.worries.map((w) => w.text),
+    ...ctx.commitments.map((c) => c.text),
+    ...ctx.assumptions.map((a) => a.text),
+  ];
 }
 
 function linkedCommitmentsFor(
