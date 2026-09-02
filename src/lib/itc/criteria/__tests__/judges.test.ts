@@ -70,6 +70,8 @@ function behavior(id: string, text: string, selected = true): ItcBehavior {
     selected,
     depth_score: 3,
     rubric_reason: null,
+    sharpen_text: null,
+    suggested_fix: null,
     attempts: 1,
     coach_worry_draft: null,
     created_at: new Date().toISOString(),

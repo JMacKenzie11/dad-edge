@@ -10,6 +10,7 @@ import {
   updateBehavior,
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
+import { CoachFixBox } from "./coach-fix-box";
 import { EntryThread } from "./entry-thread";
 import { SavingIndicator } from "./form-field";
 import { useConfirm } from "@/components/ui/use-confirm";
@@ -321,9 +322,18 @@ function BehaviorItem({
   }, [behavior.id]);
 
   function commit() {
+    saveText(draft);
+  }
+
+  /**
+   * Save a specific text value. Used by the textarea commit and by the
+   * coach box's "Use this" button (a tap on the rewrite is already the
+   * user's intent; no extra Enter).
+   */
+  function saveText(nextText: string) {
     setError(null);
     if (inflightRef.current) return;
-    const text = draft.trim();
+    const text = nextText.trim();
     if (text.length < 3) {
       setError("Too short.");
       setDraft(savedRef.current); // revert
@@ -332,6 +342,7 @@ function BehaviorItem({
     if (text === savedRef.current.trim()) return; // no change
     const priorSaved = savedRef.current;
     savedRef.current = text; // optimistic — dedupes concurrent commits
+    setDraft(text);
     inflightRef.current = true;
     const fd = new FormData();
     fd.set("map_id", mapId);
@@ -395,17 +406,14 @@ function BehaviorItem({
           />
         </div>
       ) : null}
-      {behavior.rubric_reason ? (
-        // Boxed coach-message treatment mirroring worries/commitments/
-        // assumptions — danger tint so "you need to change this"
-        // reads unambiguously, not the softer warning amber.
-        <div className="mb-2 min-w-0 rounded-md border border-[color:var(--color-danger)]/30 border-l-[3px] border-l-[color:var(--color-danger)]/70 bg-[color:var(--color-danger)]/[0.08] px-3 py-2 text-sm leading-relaxed">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-danger)]/90">
-            One thing to sharpen
-          </div>
-          <div className="whitespace-pre-wrap break-words text-white/90">
-            {behavior.rubric_reason}
-          </div>
+      {behavior.sharpen_text ? (
+        <div className="mb-2">
+          <CoachFixBox
+            text={behavior.sharpen_text}
+            fix={behavior.suggested_fix}
+            pending={pending}
+            onUseFix={saveText}
+          />
         </div>
       ) : null}
       <div className="flex items-start gap-3">

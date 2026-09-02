@@ -47,9 +47,11 @@ import {
   checkAssumptionLogicalConsistency,
   checkWorryLogicalConsistency,
   scoreAssumptionDepth,
+  scoreBehaviorDepth,
   scoreCommitmentDepth,
   scoreWorryDepth,
 } from "./rubric";
+import { hasCompetingGoalFraming } from "./rules";
 import { ADVICE } from "./criteria/advice";
 import {
   checkAssumptionKeepsCommitmentIdentity,
@@ -59,7 +61,7 @@ import {
 } from "./criteria/assumptions";
 import { checkInteriorWitnessInCommitments } from "./criteria/commitments";
 import { checkInteriorWitnessInWorries } from "./criteria/worries";
-import { ASSUMPTION_STEM, ensureStem, type ItcStage } from "./stage";
+import { ASSUMPTION_STEM, GOAL_STEM, ensureStem, type ItcStage } from "./stage";
 
 function promptCachingEnabled(): boolean {
   const raw = process.env.ITC_PROMPT_CACHE;
@@ -90,8 +92,6 @@ function toCoachSystem(
     { role: "system", content: dynamic },
   ];
 }
-
-type ChatTurn = { role: "user" | "assistant"; content: string };
 
 type MapContextInput = {
   pillar: PillarCode;
@@ -161,383 +161,24 @@ function buildSystem(input: MapContextInput): string | SystemModelMessage[] {
 }
 
 // -------------------------------------------------------------------------
-// generateCoachChat — plain prose reply to a chat message
+// Coach chips — the persisted shape of a coach message with tappable chips
 // -------------------------------------------------------------------------
 
-export type ChatInput = MapContextInput & {
-  history: ChatTurn[];
-  userMessage: string;
-};
-
-export type ChatOutput = { reply: string; durationMs: number };
-
-export async function generateCoachChat(input: ChatInput): Promise<ChatOutput> {
-  const system = buildSystem(input);
-  const messages: ChatTurn[] = [
-    ...input.history,
-    { role: "user", content: input.userMessage },
-  ];
-  const started = Date.now();
-  try {
-    const { text } = await generateText({
-      model: mainModel(),
-      system,
-      messages,
-      maxOutputTokens: 2048,
-    });
-    return {
-      reply: ensureParagraphs(scrubReply(text)),
-      durationMs: Date.now() - started,
-    };
-  } catch (err) {
-    console.warn(
-      "[itc coach chat] failure: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return { reply: "", durationMs: Date.now() - started };
-  }
-}
-
-// -------------------------------------------------------------------------
-// generateCoachReaction — async response to a just-added entry
-// -------------------------------------------------------------------------
-
-const ReactionSchema = z.object({
-  /** Prose the coachee reads. Two or three sentences, coaching voice. */
-  reply: z.string().min(1).max(1200),
-  /** Optional one-line sharper phrasing of the entry the coachee just
-   *  added. Renders as a "Use this wording" chip that fills the input
-   *  when tapped. Omit unless the sharper version is genuinely
-   *  clearer; do not repeat the coachee's original. */
-  refinement: z.string().min(1).max(300).optional(),
-  /** Optional list of 3-5 concrete alternative phrasings the coachee
-   *  can consider. Chips. Same "tap to fill input" affordance.
-   *  Omit unless the entry could use several angles. */
-  suggestions: z.array(z.string().min(1).max(300)).min(2).max(5).optional(),
-});
-
-export type ReactionOutput = z.infer<typeof ReactionSchema> & {
+/**
+ * What persistReaction (action-helpers.ts) writes: prose plus optional
+ * chips. Only "Give me ideas" produces this now. The per-entry LLM
+ * reactions (generateCoachReaction) and the chat reply
+ * (generateCoachChat) were deleted 2026-09-01: every judgment about an
+ * entry comes from the criteria module and the rubrics, rendered
+ * deterministically, so the system can never say one thing in a
+ * reaction and another in the audit.
+ */
+export type ReactionOutput = {
+  reply: string;
+  refinement?: string;
+  suggestions?: string[];
   durationMs: number;
 };
-
-export type ReactionInput = MapContextInput & {
-  recentChat: ChatTurn[];
-  /** The entry that just landed — the coach reacts to it. */
-  justAdded: {
-    kind: "behavior" | "worry" | "commitment" | "assumption" | "goal";
-    text: string;
-    /** For worries: the paired behavior text.
-     *  For commitments: the paired worry text.
-     *  For assumptions: the paired commitment text.
-     *  The prompt labels it correctly based on kind. */
-    pairedText?: string;
-    /** Rubric score (server-computed) for depth-stage entries. Fed to
-     *  the coach as prompt input so it can excavate at the right depth.
-     *  The coach must never mention the score itself. */
-    depthScore?: number | null;
-    /** Number of save/edit attempts on this entry so far. Used
-     *  alongside depthScore to shape the excavation prose. */
-    attempts?: number;
-    /**
-     * Stable string identifier for this entry (typically the row's
-     * uuid). Used server-side to hash into a rotation of Kegan-canonical
-     * opener frames so each entry gets a distinct opener across a map,
-     * without the model needing visibility into prior reactions. Same
-     * architectural pattern as WORRY_IDENTITY_SHAPES rotation on the
-     * drafter side.
-     */
-    anchorId?: string;
-  };
-};
-
-/**
- * Kegan-canonical opener frames for depth-stage SCORE-3 reactions.
- * The reaction prompt already asks the model to "VARY YOUR OPENER"
- * with a list of alternatives, but per-reaction generation has no
- * visibility into prior reactions on the map — the model reliably
- * picks the same safest alternative every time ("You moved from
- * what you're doing to what you're afraid of.") across all N
- * worries. Result: templated monotony.
- *
- * Server-owned rotation via anchor-id hash. Each entry deterministically
- * gets its own opener, distinct across the map. Same architectural
- * pattern as WORRY_IDENTITY_SHAPES for drafter shape rotation.
- */
-const WORRY_REACTION_OPENERS: readonly string[] = [
-  "There it is.",
-  "You moved from what you're doing to what you're afraid of.",
-  "Now you're at the layer that runs it.",
-  "You landed the fear underneath.",
-  "Now the worry has teeth.",
-  "That names something you couldn't quite reach a minute ago.",
-] as const;
-
-const COMMITMENT_REACTION_OPENERS: readonly string[] = [
-  "There's the piece you weren't supposed to say out loud.",
-  "That's the commitment doing the work.",
-  "You named the game.",
-  "Now the map has what actually runs it.",
-  "You landed the protective flinch.",
-  "That reads as the real vow, not the noble version.",
-] as const;
-
-const ASSUMPTION_REACTION_OPENERS: readonly string[] = [
-  "There's the belief that makes all of it feel necessary.",
-  "You named the ground you're standing on.",
-  "Now the assumption is on the page instead of running underneath.",
-  "You got to the belief that has to be tested.",
-  "There's the piece that has to be tested for anything to move.",
-  "You just made the invisible thing visible.",
-] as const;
-
-/**
- * Deterministic string → index hash. Same string always maps to the
- * same index so retry of the same reaction picks the same opener
- * (avoids opener churn across retries). Simple djb2-ish variant.
- */
-function hashStringToIndex(s: string, mod: number): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) >>> 0;
-  }
-  return h % Math.max(1, mod);
-}
-
-/** Pick the opener frame for a given depth-stage reaction. Returns
- *  null when the kind doesn't use rotation (goal, behavior) or when
- *  no anchorId was passed. */
-function pickReactionOpener(
-  kind: ReactionInput["justAdded"]["kind"],
-  anchorId: string | undefined,
-): string | null {
-  if (!anchorId) return null;
-  const list =
-    kind === "worry"
-      ? WORRY_REACTION_OPENERS
-      : kind === "commitment"
-        ? COMMITMENT_REACTION_OPENERS
-        : kind === "assumption"
-          ? ASSUMPTION_REACTION_OPENERS
-          : null;
-  if (!list) return null;
-  return list[hashStringToIndex(anchorId, list.length)];
-}
-
-export async function generateCoachReaction(
-  input: ReactionInput,
-): Promise<ReactionOutput> {
-  const system = buildSystem(input);
-  const started = Date.now();
-  const promptLine = buildReactionPrompt(input);
-  try {
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: ReactionSchema,
-      system,
-      messages: [
-        ...input.recentChat,
-        { role: "user" as const, content: promptLine },
-      ],
-      maxOutputTokens: 1500,
-    });
-    // Reactions never carry a suggestions array — that's what the
-    // "Give me ideas" button is for. Strip regardless of what the
-    // model produced. Belt-and-suspenders against prompt drift.
-    return {
-      ...object,
-      reply: scrubReply(object.reply),
-      refinement: object.refinement ? scrubReply(object.refinement) : undefined,
-      suggestions: undefined,
-      durationMs: Date.now() - started,
-    };
-  } catch (err) {
-    console.warn(
-      "[itc coach reaction] schema failure, falling back to prose-only: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    // Fallback: plain prose reaction, no chips. Missing chip is
-    // cosmetic degradation, not lost state.
-    try {
-      const { text } = await generateText({
-        model: mainModel(),
-        system,
-        messages: [
-          ...input.recentChat,
-          { role: "user" as const, content: promptLine },
-        ],
-        maxOutputTokens: 800,
-      });
-      return {
-        reply: ensureParagraphs(scrubReply(text)),
-        durationMs: Date.now() - started,
-      };
-    } catch (err2) {
-      console.warn(
-        "[itc coach reaction] prose fallback also failed: %s",
-        err2 instanceof Error ? err2.message : String(err2),
-      );
-      return { reply: "", durationMs: Date.now() - started };
-    }
-  }
-}
-
-function buildReactionPrompt(input: ReactionInput): string {
-  const { kind, text, pairedText, depthScore, attempts } = input.justAdded;
-  const pillar = PILLAR_BY_CODE[input.pillar];
-  const isDepthStage =
-    kind === "worry" || kind === "commitment" || kind === "assumption";
-  const pairedLabel =
-    kind === "worry"
-      ? "behavior"
-      : kind === "commitment"
-        ? "worry"
-        : kind === "assumption"
-          ? "commitment"
-          : null;
-  const parts: string[] = [];
-  parts.push(
-    `[system: the coachee just added a ${kind} to the map: "${text}".` +
-      (pairedText && pairedLabel
-        ? ` (paired to ${pairedLabel}: "${pairedText}")`
-        : "") +
-      (isDepthStage && typeof depthScore === "number"
-        ? ` rubric depth: ${depthScore}/3 across ${attempts ?? 1} attempt(s). NEVER mention the score itself to the coachee — it's for your prose shaping only.`
-        : "") +
-      "]",
-  );
-
-  if (isDepthStage) {
-    // Depth-stage flow: the field IS the conversation. Coach reads the
-    // rubric score and shapes prose accordingly. Every reply either
-    // asks an excavation question the coachee can answer by rewriting
-    // the entry, or offers a sharper phrasing as a refinement chip.
-    parts.push(
-      "This is a DEPTH stage entry. The input field is the conversation — every save re-runs the server rubric and fires you again with the new score. Your job is to help him go deeper, not to hand him a pass.",
-    );
-    // Kind-specific excavation angle.
-    if (kind === "worry") {
-      parts.push(
-        "For a WORRY (Column 3): depth means a first-person felt fear that lands on his identity or role. Shallow = practical concern, external outcome, or someone else's reaction. Deep = 'what part of ME is on the line if this happens.' Your excavation question moves from external → felt → identity.",
-      );
-      parts.push(
-        "SCORE 0-1 (shallow): He's stayed at the surface. Name in one sentence what's still missing (\"that's a practical concern, not a fear you feel — what part of *you* is on the line if this happens?\"). Then ask ONE excavation question that goes one layer deeper. End with an explicit invitation to rewrite: \"Rewrite the worry with that in it.\" No refinement chip — you don't have a sharper phrasing until he does the excavation. Suggestions are also off — he needs to answer the question, not pick from a menu.",
-      );
-      parts.push(
-        "SCORE 2 (getting there): The worry is named and personal but still one layer up from identity. One-line acknowledgment of what's landed, then either (a) ONE more excavation question inviting a rewrite, OR (b) offer a specific sharper version in the `refinement` field. If it's clearly one small edit away, use the refinement chip. If it needs another layer of work, ask the question.",
-      );
-      parts.push(
-        "SCORE 3 (deep): The worry is at genuine depth. ONE SHORT sentence of plain acknowledgment. VARY YOUR OPENER — do NOT default to \"That's the [X]...\" / \"Yeah. That's...\" / \"Right. That's...\". Those are formulaic and coachees see them in sequence across their three worries; repeated openers read as a template, not a response. Reach for alternatives: \"There it is.\" / \"You moved from what you're doing to what you're afraid of.\" / \"Now you're at the layer that runs it.\" / \"You landed the fear underneath.\" / \"Now the worry has teeth.\" / \"That names something you couldn't quite reach a minute ago.\" Use \"That's the [X]...\" openers RARELY — at most once across the map. Then STOP. Do NOT list criteria (banned: chains like 'that's felt, it's yours, and it names X' — reads like a checklist). Do NOT restate the worry back to him. No question. No 'what else', 'what other', 'what more', 'what shows up'. No reference to other columns. No invitation to add or edit anything else.",
-      );
-    } else if (kind === "commitment") {
-      parts.push(
-        "For a COMMITMENT (Column 4): this is the HIDDEN, self-protective vow he's keeping — the flip side of the paired worry. It must sound like protecting himself from the fear, NOT like a virtuous goal or productivity advice. Deep commitments would sound strange said out loud (\"I'm committed to never having to find out that my effort didn't matter\"). Noble-sounding commitments (\"I'm committed to being a good husband\") are shallow — they're what he'd say in the group, not what's really running the show. Push past nobility to protection.",
-      );
-      parts.push(
-        "SCORE 0-1 (shallow): He wrote something noble, generic, or platitudinous — a productivity-blog vow, a goal, or a rule. Name it plainly (\"that's a productivity commitment, not a self-protective one — what are you keeping YOURSELF safe from when [paired worry]?\"). Ask ONE excavation question that flips it from virtue to protection. Invite rewrite: \"Rewrite the commitment starting with 'I'm committed to never...'.\" No chip. No suggestions.",
-      );
-      parts.push(
-        "SCORE 2 (getting there): Self-protective and first-person but still a bit too socially acceptable — would still pass on a productivity blog. One-line acknowledgment, then either (a) ONE more question that squeezes the last drop of nobility out, OR (b) offer a sharper (weirder-sounding, more protective) version in `refinement`. Use the chip when it's a one-line phrasing tweak.",
-      );
-      parts.push(
-        "SCORE 3 (deep): The commitment is self-protective, first-person, and would sound strange on a productivity blog — a real hidden vow. ONE SHORT sentence of plain acknowledgment. VARY YOUR OPENER — do NOT default to \"That's the vow\" / \"That's what's running it\" / \"That's the commitment...\". Those are formulaic and coachees see them across all three commitments; repeated openers feel templated. Alternatives: \"There's the piece you weren't supposed to say out loud.\" / \"That's the commitment doing the work.\" / \"You named the game.\" / \"Now the map has what actually runs it.\" / \"You landed the protective flinch.\" / \"That reads as the real vow, not the noble version.\" Use \"That's the [X]...\" openers RARELY — at most once across the map. Then STOP. Do NOT list criteria. Do NOT restate the commitment. No question. No 'what else', no cross-column direction.",
-      );
-    } else if (kind === "assumption") {
-      parts.push(
-        "For a BIG ASSUMPTION (Column 5): this is the if-then belief that lives UNDERNEATH the paired commitment(s) — the belief that makes those commitments feel necessary. It must (a) have a finished 'then' clause (not a forecast, but the identity-level or Big Time Bad conclusion the 'then' actually leads to), (b) be first-person and felt, (c) land in identity or a genuinely irrecoverable place. Shallow = forecast, strategy note, or if-then that stops at a practical outcome. Deep = if-then whose 'then' clause names something the coachee cannot let be true about himself.",
-      );
-      parts.push(
-        "SCORE 0-1 (shallow): The 'then' half hasn't been carried through to identity, or it's a forecast instead of a belief. Name what's still missing in one sentence (\"the 'then' side stopped at an outcome — carry it through: if that outcome happens, what does it MEAN about you?\"). Ask ONE excavation question that extends the if-then to identity. Invite rewrite: \"Rewrite the assumption with the finished 'then' in it.\" No chip. No suggestions.",
-      );
-      parts.push(
-        "SCORE 2 (getting there): The if-then is first-person and felt but the 'then' is still one layer up from identity — a real cost but not yet a Big Time Bad. One-line acknowledgment, then either (a) ONE more question that pushes the 'then' to identity, OR (b) offer a sharper phrasing in `refinement` that carries the 'then' the last step. Use the chip when it's one edit away.",
-      );
-      parts.push(
-        "SCORE 3 (deep): The assumption is a genuine identity-level belief — if-then form, first-person felt, 'then' lands in identity or Big Time Bad. ONE SHORT sentence of plain acknowledgment. VARY YOUR OPENER — do NOT default to \"That's the belief running it\" / \"That's the one\" / \"That's what the whole system is built on\". Those are formulaic and coachees see them across all their assumptions; repeated openers feel templated. Alternatives: \"There's the belief that makes all of it feel necessary.\" / \"You named the water you swim in.\" / \"Now the assumption is on the page instead of running underneath.\" / \"You got to the belief that has to be tested.\" / \"There's the piece that has to be tested for anything to move.\" / \"You just made the invisible thing visible.\" Use \"That's the [X]...\" openers RARELY — at most once across the map. Then STOP. Do NOT list criteria. Do NOT restate the assumption. No question. No 'what else' / 'what other' / cross-column direction.",
-      );
-    } else {
-      // Unreachable — isDepthStage only true for worry/commitment/assumption.
-      parts.push(
-        "SCORE 0-1 (shallow): Name what's missing in one sentence, ask ONE excavation question, invite rewrite. No chip.",
-      );
-      parts.push(
-        "SCORE 2 (getting there): One-line acknowledgment, then a question OR a refinement chip.",
-      );
-      parts.push(
-        "SCORE 3 (deep): ONE SHORT acknowledgment. Then STOP. No question, no chip, no cross-column direction.",
-      );
-    }
-
-    // Server-owned opener rotation for SCORE-3 replies. Per-reaction
-    // generation has no visibility into prior reactions on the map, so
-    // the LLM reliably picks the same "safest" alternative from the
-    // vary-your-opener list across all N entries. Result: three worries
-    // all opening "You moved from what you're doing to what you're
-    // afraid of." (templated monotony the user surfaced).
-    //
-    // Rotation via anchor-id hash makes each entry deterministically
-    // get its own opener, distinct across the map. Same ANOTHER_ROTATION
-    // pattern used for test-type rotation and WORRY_IDENTITY_SHAPES.
-    const pinnedOpener = pickReactionOpener(kind, input.justAdded.anchorId);
-    if (pinnedOpener && (depthScore ?? 0) >= 3) {
-      parts.push(
-        `SCORE-3 OPENER PIN (mandatory when depth is 3): use exactly this opener as the first sentence of your reply: "${pinnedOpener}". Do not paraphrase, do not swap, do not add "Yeah." or "Right." before it. This is server-picked per-entry so each entry on the map gets a distinct opener rather than the templated repetition that happens when you pick from the vary-your-opener list yourself. If depth is under 3, ignore this pin — the shallow/getting-there paths use different reply shapes.`,
-      );
-    }
-  } else {
-    // Non-depth stages (goal, behavior): the classic three-case flow.
-    parts.push(
-      "Evaluate the entry against the column's full criteria, including whether it belongs on the BRAVEMAN pillar he chose. Three cases:",
-    );
-    parts.push(
-      "CASE 1: Fundamental mismatch (wrong pillar, wrong column, not a valid entry type at all). Push back plainly. Name what's off in one to two sentences (\"jumping jacks is a fitness behavior, not a goal about your marriage. what would you actually want to be better at with your wife?\"). Do NOT offer a refinement chip. Do NOT offer suggestions — ask the question that gets him to the real entry.",
-    );
-    parts.push(
-      "CASE 2: Right shape but needs sharpening (right pillar, right column, but phrasing is vague, or implicates other people, or doesn't meet a specific criterion). Name what's off in one line and offer a specific sharper phrasing in the `refinement` field. He can tap the chip to fill his input.",
-    );
-    parts.push(
-      "CASE 3: Sharp entry that meets the criteria. Acknowledge in one line naming what makes it work (\"that's specific, it's yours to work on, and it names a real reaction — that's a real column-1 goal\"). Stop.",
-    );
-    // No goal-specific reaction rules — goal coaching lives entirely
-    // in the shared criteria module (src/lib/itc/criteria/goal.ts).
-    // fireCoachReaction is never called with kind="goal" anymore.
-    if (kind === "behavior") {
-      // Explicit specificity + goal-connection guard for behaviors.
-      // Same failure family as goal: identity claims, aspirational
-      // phrasings, vague verbs, or moves that don't clearly work
-      // against the Column 1 goal all get Case-3 approved when they
-      // shouldn't. Column 2 is specifically the counterproductive
-      // moments that undermine THIS specific goal.
-      parts.push(
-        "BEHAVIOR-SPECIFIC HARD RULES (do not skip):\n" +
-          "  (1) The behavior must CLEARLY work AGAINST the current Column 1 goal. Look at the goal in the map context above. Ask yourself: 'in the moment this behavior happens, is he moving away from that specific goal?' If the connection requires explanation, it's CASE 2 — ask him how this behavior works against his goal, and offer a sharper phrasing (in `refinement`) that makes the connection explicit.\n" +
-          "  (2) BANNED as Case 3 (must go to Case 2 or Case 1):\n" +
-          "    - Identity claims: \"I'm a bad listener\" / \"I'm not good at communicating\" / \"I'm distant with her\" — self-labels, not moment-in-time actions.\n" +
-          "    - Aspirational: \"I need to be more patient\" / \"I should listen better\" / \"I want to stop yelling\" — names what he wishes he did, not what he does. That's a Column 1 goal, not a Column 2 behavior.\n" +
-          "    - About other people: \"She doesn't respect me\" / \"He never listens\" — Column 2 is HIS moves only.\n" +
-          "    - Vague verbs without specifics: \"I withdraw\" / \"I shut down\" / \"I get defensive\" — on their own these are too abstract. Sharpen to a specific observable action (\"I stop talking and look at my phone\" / \"I leave the room without saying anything\" / \"I start explaining why she's wrong before she's finished\").\n" +
-          "  (3) PASSES as Case 3 (specific observable move that undermines the goal):\n" +
-          "    - \"I bring up things she did in the past instead of listening\"\n" +
-          "    - \"I explain why I'm right for ten minutes\"\n" +
-          "    - \"I check my phone during dinner\"\n" +
-          "    - \"I go silent for the rest of the day\"\n" +
-          "  If the behavior fails any of (1)–(3), react as CASE 2 or CASE 1 accordingly — do NOT bare-acknowledge a shallow behavior as sharp.",
-      );
-    }
-  }
-
-  parts.push(
-    "HARD RULES for every case:\n" +
-      "- Do NOT mention the next column, the next stage, moving on, being ready for the next step, or anything that suggests forward motion. The coachee decides when to advance by tapping the Continue button. Your job is done when you've reacted to this entry.\n" +
-      "- Do NOT ask 'ready to move on?', 'ready for the worry box?', 'want to move to X?', or any variant. He'll advance himself when he sees the button.\n" +
-      "- Do NOT claim to have saved, added, or locked anything. He wrote it. He'll write the next one too.\n" +
-      "- The rubric, scores, and attempts count are internal — never reference them in prose. Do not tell him 'you're at 2 out of 3' or 'attempt 3'.\n" +
-      "- No false praise. 'That's great' / 'perfect' / 'beautifully said' are banned. Acknowledgment is a plain check against the criteria.\n" +
-      "- VARY YOUR OPENING PHRASING. You have no memory of prior reactions, but coachees read all three (or five) of yours in sequence on the page. If every reaction opens with \"That's the [X]...\" or \"Yeah. That's...\" or \"Right. That's...\", it reads as a template, not a response. Reach for less-common openers by default. Reserve \"That's the [X]...\" for AT MOST ONE reaction per map — treat it as a scarce resource.\n" +
-      "- LEAVE `suggestions` EMPTY. Reactions never carry a multi-item suggestions menu — that's what the 'Give me ideas' button generates in a separate call. If you think he'd benefit from options, that's a signal to end your reaction with a question, not to hand him a menu.\n" +
-      "- `refinement` is optional; only include when it's a genuine one-line sharpening of what he wrote (Case 2 / depth-score 2 only).",
-  );
-  return parts.join("\n\n");
-}
 
 // -------------------------------------------------------------------------
 // generateSuggestions — "Give me ideas" button
@@ -563,6 +204,66 @@ export type SuggestionsInput = MapContextInput & {
    *  overlap with the ones he's already seen." */
   extra?: string;
 };
+
+/**
+ * The save-time judge for a suggestion kind. Same function the save
+ * action runs when the coachee taps the chip, so the chip and the
+ * entry it becomes are held to one bar. Kinds without a rubric pass.
+ */
+async function verifySuggestion(
+  input: SuggestionsInput,
+  text: string,
+): Promise<{ ok: boolean; reason: string }> {
+  try {
+    switch (input.kind) {
+      case "behavior": {
+        const r = await scoreBehaviorDepth({
+          goalText: input.improvementGoal ?? "",
+          behaviorText: text,
+        });
+        return { ok: r.score >= 3, reason: r.reason };
+      }
+      case "goal": {
+        if (hasCompetingGoalFraming(text)) {
+          return {
+            ok: false,
+            reason: `Starts as a competing commitment, not an improvement goal. Must start with "${GOAL_STEM}".`,
+          };
+        }
+        return { ok: true, reason: "" };
+      }
+      case "worry": {
+        const r = await scoreWorryDepth({
+          goalText: input.improvementGoal ?? "",
+          behaviorText: input.contextText ?? "",
+          worryText: text,
+        });
+        return { ok: r.score >= 3, reason: r.reason };
+      }
+      case "commitment": {
+        const r = await scoreCommitmentDepth({
+          goalText: input.improvementGoal ?? "",
+          worryText: input.contextText ?? "",
+          commitmentText: text,
+        });
+        return { ok: r.score >= 3, reason: r.reason };
+      }
+      case "assumption": {
+        const r = await scoreAssumptionDepth({
+          goalText: input.improvementGoal ?? "",
+          assumptionText: text,
+        });
+        return { ok: r.score >= 3, reason: r.reason };
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "[itc coach suggestions] judge failed, keeping chip: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { ok: true, reason: "" };
+  }
+}
 
 export async function generateSuggestions(
   input: SuggestionsInput,
@@ -619,28 +320,63 @@ export async function generateSuggestions(
     .filter((s): s is string => Boolean(s))
     .join("\n");
 
-  try {
+  const existingNormalized = new Set(existing.map(normalizeMapText));
+
+  /**
+   * Deterministic filter, then the save-time judge. A chip the
+   * coachee taps becomes an entry and gets scored by the same rubric
+   * on save; a chip that would draw a red box never reaches him.
+   * Rejected chips come back with the rubric's reason so one retry
+   * can replace them. Judge errors keep the chip (fail open).
+   */
+  async function generateAndVerify(
+    extraLines: string[],
+  ): Promise<{ reply: string; kept: string[]; rejected: Array<{ text: string; reason: string }> }> {
     const { object } = await generateObject({
       model: mainModel(),
       schema: SuggestionsSchema,
       system,
-      prompt,
+      prompt: [prompt, ...extraLines].join("\n"),
       maxOutputTokens: 1200,
     });
-    // Three-step filter:
-    //   1. scrub voice/dash cleanup
-    //   2. drop any question-shaped chip (meta-prompt leak)
-    //   3. drop any chip whose normalized text matches an existing
-    //      entry on the map (semantic dedup — prevents the coach from
-    //      re-offering what he just typed)
-    const existingNormalized = new Set(existing.map(normalizeMapText));
     const cleaned = object.suggestions
-      .map(scrubReply)
+      .map((s) => scrubBannedCoachWords(scrubReply(s)))
       .filter((s) => !isQuestionShaped(s))
       .filter((s) => !existingNormalized.has(normalizeMapText(s)));
+    const verdicts = await Promise.all(
+      cleaned.map((text) => verifySuggestion(input, text)),
+    );
+    const kept: string[] = [];
+    const rejected: Array<{ text: string; reason: string }> = [];
+    cleaned.forEach((text, i) => {
+      const v = verdicts[i];
+      if (v.ok) kept.push(text);
+      else rejected.push({ text, reason: v.reason });
+    });
+    return { reply: scrubBannedCoachWords(scrubReply(object.reply)), kept, rejected };
+  }
+
+  try {
+    const first = await generateAndVerify([]);
+    if (first.rejected.length === 0 || first.kept.length >= 3) {
+      return {
+        reply: first.reply,
+        suggestions: first.kept,
+        durationMs: Date.now() - started,
+      };
+    }
+    const retry = await generateAndVerify([
+      ``,
+      `Your previous set had ${first.rejected.length} option(s) that don't meet the bar for a ${input.kind}:`,
+      ...first.rejected.map((r) => `  - "${r.text}": ${r.reason}`),
+      ``,
+      `Keep these, which do meet it: ${first.kept.map((k) => `"${k}"`).join(", ") || "(none)"}.`,
+      `Replace the rejected ones with options that meet the bar. Return the full set.`,
+    ]).catch(() => null);
+    const kept = retry && retry.kept.length >= first.kept.length ? retry.kept : first.kept;
     return {
-      reply: scrubReply(object.reply),
-      suggestions: cleaned,
+      reply: (retry ?? first).reply,
+      suggestions: kept,
       durationMs: Date.now() - started,
     };
   } catch (err) {
@@ -727,6 +463,108 @@ function reviseLines(revise: ReviseInput | undefined, what: string): string[] {
     ...revise.problems.map((p, i) => `  ${i + 1}. ${p}`),
     `Rewrite it so every one of those is fixed. Keep his nouns, his people, his scene. Change as little as the fix needs. Don't start over with a different fear or a different move unless the problems above say the current one can't work.`,
   ];
+}
+
+// -------------------------------------------------------------------------
+// reviseBehavior — rewrite ONE Column 2 behavior against the coach's lines
+// -------------------------------------------------------------------------
+
+const BehaviorRewriteSchema = z.object({
+  /** The behavior, complete, first-person present. 5-25 words. Server
+   *  trims trailing punctuation and adds the period. */
+  behavior: z.string().min(5).max(200),
+});
+
+const REVISE_BEHAVIOR_SYSTEM = `
+You rewrite ONE Column 2 behavior on a coachee's Immunity to Change map. A Column 2 entry is a concrete, observable move the coachee himself makes (or fails to make) in the moments that pull him away from his goal. Not a feeling, not a label about himself, not what he should do instead, not something someone else does.
+
+The bar (the same one that scores the entry when he saves it):
+1. A friend standing next to him could point at it the moment it happens. "I stop talking and look at my phone" passes. "I shut down" / "I withdraw" / "I get defensive" fail on their own; name the physical or verbal move they stand for.
+2. It clearly pulls him away from his stated goal in that moment.
+3. It's what HE actually does or fails to do, present tense. Not what he wishes he did, not "I'm a bad listener", not what she does.
+
+You get his current text and the coach's lines on what's off. Keep his scene, his people, his nouns. Change as little as the fix needs. One sentence, first-person present, 5-25 words. Return only the behavior text.
+`.trim();
+
+/**
+ * Rewrite mode for a behavior. Verified against scoreBehaviorDepth,
+ * the judge that scores the row on save, and returned only when it
+ * clears 3/3; one retry with the rubric's reason as feedback. Null
+ * means no verified rewrite: the row shows the coach's lines alone.
+ */
+export async function reviseBehavior(input: {
+  goalText: string;
+  currentText: string;
+  problems: string[];
+}): Promise<string | null> {
+  const started = Date.now();
+  const baseLines = [
+    `Improvement goal (Column 1): ${input.goalText || "(not set)"}`,
+    ...reviseLines(
+      { currentText: input.currentText, problems: input.problems },
+      "behavior",
+    ),
+  ];
+  async function generate(lines: string[]): Promise<string | null> {
+    const { object } = await generateObject({
+      model: mainModel(),
+      schema: BehaviorRewriteSchema,
+      system: withVoiceRules(REVISE_BEHAVIOR_SYSTEM),
+      prompt: lines.join("\n"),
+      maxOutputTokens: 150,
+    });
+    const text = scrubReply(object.behavior).trim().replace(/[.!?,;:]+$/, "");
+    return text.length >= 5 ? `${text}.` : null;
+  }
+  async function verify(text: string): Promise<{ ok: boolean; feedback: string | null }> {
+    const r = await scoreBehaviorDepth({
+      goalText: input.goalText,
+      behaviorText: text,
+    }).catch((err) => {
+      console.warn(
+        "[itc coach] behavior rewrite rubric failed, treating as pass: %s",
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    });
+    if (!r || r.score >= 3) return { ok: true, feedback: null };
+    return {
+      ok: false,
+      feedback: `The depth rubric rejected it (${r.score}/3). Reason: "${r.reason}"`,
+    };
+  }
+  try {
+    const first = await generate(baseLines);
+    if (!first) return null;
+    const v1 = await verify(first);
+    if (v1.ok) return first;
+    const retry = await generate([
+      ...baseLines,
+      ``,
+      `Your previous rewrite was: "${first}"`,
+      v1.feedback ?? "",
+      `Rewrite so it passes. Name the physical or verbal move a friend could point at.`,
+    ]);
+    if (!retry) return null;
+    const v2 = await verify(retry);
+    if (!v2.ok) {
+      console.warn(
+        "[itc coach] behavior rewrite refused after retry: draft=%o feedback=%o",
+        retry,
+        v2.feedback,
+      );
+      return null;
+    }
+    return retry;
+  } catch (err) {
+    console.warn(
+      "[itc coach] reviseBehavior failed: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  } finally {
+    console.warn("[itc timing] revise kind=behavior ms=%d", Date.now() - started);
+  }
 }
 
 // -------------------------------------------------------------------------
@@ -1956,31 +1794,47 @@ export async function draftAssumptionsFromCommitments(input: {
     // Verify each draft's logical consistency (deterministic pattern
     // match, cannot fail). Each drafted assumption gets its own
     // verdict; the batch retry (if any) knows which ones failed.
-    // Two deterministic checks per draft, same bar as rewrite mode:
-    // the identity is REVEALED by the counter-move (consistency), and
-    // it's named in the coachee's own commitment nouns (identity kept).
-    const checks = first.map((d) => {
-      const consistency = checkAssumptionLogicalConsistency({
-        antecedentAct: d.slots.antecedent_act,
-        consequentTell: d.slots.consequent_tell,
-        consequentIdentity: d.slots.consequent_identity,
-      });
-      const identity = checkAssumptionKeepsCommitmentIdentity({
-        assumptionText: d.text,
-        commitmentTexts: d.commitment_indices
-          .map((i) => input.commitments[i - 1]?.text ?? "")
-          .filter((t) => t.length > 0),
-      });
-      return {
-        consistent: consistency.consistent && identity.kept,
-        reason: [
-          consistency.consistent ? null : consistency.reason,
-          identity.kept ? null : identity.reason,
-        ]
-          .filter((r): r is string => Boolean(r))
-          .join(" "),
-      };
-    });
+    // Same bar as rewrite mode and as the save that follows a tap on
+    // the draft card: the depth rubric (LLM, fail-open), the identity
+    // is REVEALED by the counter-move (consistency), and it's named
+    // in the coachee's own commitment nouns (identity kept). A draft
+    // that would draw a red box on tap doesn't reach the card.
+    const checks = await Promise.all(
+      first.map(async (d) => {
+        const depth = await scoreAssumptionDepth({
+          goalText: input.goalText,
+          assumptionText: d.text,
+        }).catch((err) => {
+          console.warn(
+            "[itc coach] assumption draft depth rubric failed, treating as pass: %s",
+            err instanceof Error ? err.message : String(err),
+          );
+          return null;
+        });
+        const consistency = checkAssumptionLogicalConsistency({
+          antecedentAct: d.slots.antecedent_act,
+          consequentTell: d.slots.consequent_tell,
+          consequentIdentity: d.slots.consequent_identity,
+        });
+        const identity = checkAssumptionKeepsCommitmentIdentity({
+          assumptionText: d.text,
+          commitmentTexts: d.commitment_indices
+            .map((i) => input.commitments[i - 1]?.text ?? "")
+            .filter((t) => t.length > 0),
+        });
+        const depthOk = depth === null || depth.score >= 3;
+        return {
+          consistent: depthOk && consistency.consistent && identity.kept,
+          reason: [
+            depthOk ? null : `The depth rubric rejected it (${depth!.score}/3): "${depth!.reason}"`,
+            consistency.consistent ? null : consistency.reason,
+            identity.kept ? null : identity.reason,
+          ]
+            .filter((r): r is string => Boolean(r))
+            .join(" "),
+        };
+      }),
+    );
 
     const inverted = first
       .map((d, i) => ({ d, check: checks[i], index: i + 1 }))
@@ -3335,9 +3189,12 @@ export function scrubBannedCoachWords(text: string): string {
     )
     // "lands different" / "lands right" — same family.
     .replace(/\blands?\s+(different|right|wrong|clean|hard)\b/gi, "reads $1")
-    // "lands on / at / against / in" — metaphor for "arrives at."
-    // Common phrasing: "that lands on the actual vow."
-    .replace(/\blands?\s+(on|at|against|in)\s+/gi, "arrives at ")
+    // "land(s) on / at / against / in" — metaphor for "arrive(s) at."
+    // Common phrasing: "that lands on the actual vow." Keeps the
+    // verb's number ("we land on" → "we arrive at", not "we arrives").
+    .replace(/\b(lands?)\s+(?:on|at|against|in)\s+/gi, (_m, verb: string) =>
+      verb.toLowerCase() === "lands" ? "arrives at " : "arrive at ",
+    )
     // "one thing to notice" — therapy-speak intro.
     .replace(/\bone\s+thing\s+to\s+notice\b/gi, "one thing")
     // "worth [any -ing verb]" — broader banned family. Catches

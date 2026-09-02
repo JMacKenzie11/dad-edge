@@ -132,6 +132,18 @@ describe("scrubReply", () => {
   });
 });
 
+describe("scrubBannedCoachWords", () => {
+  it("rewrites the 'land on' metaphor and keeps the verb's number", async () => {
+    const { scrubBannedCoachWords } = await import("@/lib/itc/coach");
+    expect(scrubBannedCoachWords("before we land on anything solid")).toBe(
+      "before we arrive at anything solid",
+    );
+    expect(scrubBannedCoachWords("that lands on the actual vow")).toBe(
+      "that arrives at the actual vow",
+    );
+  });
+});
+
 describe("scrubReplyLight", () => {
   it("does NOT truncate on column-label mentions (walkthrough must survive)", () => {
     // scrubReply's advance-cut truncates entry-reaction coach output
@@ -1005,6 +1017,106 @@ describe("scoreWorryDepth prompt (structural)", () => {
     expect(worrySystem).toMatch(/what the behavior PROTECTS him from/);
     const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);
+  });
+});
+
+describe("coaching text is verified by the judge that scores it on save (structural)", () => {
+  // The rule that closes the "system suggests X, then rejects X" class
+  // of bug: anything the system offers the coachee as text he can
+  // accept must already have passed the function that scores it when
+  // he does. These checks read the source so a refactor can't quietly
+  // wire a suggester or drafter around its judge.
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { resolve } = require("node:path") as typeof import("node:path");
+  const coach = readFileSync(resolve(__dirname, "../../src/lib/itc/coach.ts"), "utf8");
+  const block = (name: string) => {
+    const start = coach.indexOf(`export async function ${name}(`);
+    expect(start, `${name} must exist`).toBeGreaterThan(-1);
+    const end = coach.indexOf("\n// ---", start);
+    return coach.slice(start, end === -1 ? undefined : end);
+  };
+
+  it("Give me ideas chips run the save-time judge for their kind", () => {
+    const b = block("generateSuggestions");
+    expect(b).toMatch(/verifySuggestion\(/);
+    const v = coach.slice(coach.indexOf("async function verifySuggestion("), coach.indexOf("export async function generateSuggestions("));
+    for (const judge of ["scoreBehaviorDepth", "scoreWorryDepth", "scoreCommitmentDepth", "scoreAssumptionDepth", "hasCompetingGoalFraming"]) {
+      expect(v, `verifySuggestion must call ${judge}`).toMatch(new RegExp(judge));
+    }
+    expect(b).toMatch(/scrubBannedCoachWords/);
+  });
+
+  it("fresh assumption drafts run the depth rubric, not just the deterministic checks", () => {
+    expect(block("draftAssumptionsFromCommitments")).toMatch(/scoreAssumptionDepth\(/);
+  });
+
+  it("every rewrite path verifies with the save-time judge", () => {
+    expect(block("reviseBehavior")).toMatch(/scoreBehaviorDepth\(/);
+    expect(block("reviseAssumption")).toMatch(/scoreAssumptionDepth\(/);
+    expect(block("reviseAssumption")).toMatch(/judgeAssumptionUnderwrites\(/);
+    expect(block("draftWorryForBehavior")).toMatch(/scoreWorryDepth\(/);
+    expect(block("draftCommitmentForWorry")).toMatch(/scoreCommitmentDepth\(/);
+  });
+
+  it("the per-entry LLM reaction and chat paths stay deleted", () => {
+    expect(coach).not.toMatch(/export async function generateCoachReaction/);
+    expect(coach).not.toMatch(/export async function generateCoachChat/);
+  });
+});
+
+describe("stage intros name the same criteria the rubrics score (structural)", () => {
+  // The "What makes a good …" bullets are hand-written prose. Each
+  // bullet has to be one of the rubric's criteria in plain words, so
+  // the intro can never promise a bar the judge doesn't hold (or hide
+  // one it does).
+  const ctx = { goal: "I'm committed to getting better at X", pillarCode: "B" as const };
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { resolve } = require("node:path") as typeof import("node:path");
+  const rubric = readFileSync(resolve(__dirname, "../../src/lib/itc/rubric.ts"), "utf8");
+
+  it("behaviors: observable / not a feeling or label / works against the goal", () => {
+    const intro = STAGE_INTROS.behaviors!(ctx);
+    expect(intro).toMatch(/friend watching you could point at/i);
+    expect(rubric).toMatch(/is_concrete_observable/);
+    expect(intro).toMatch(/not a feeling/i);
+    expect(intro).toMatch(/not a label about yourself/i);
+    expect(rubric).toMatch(/is_first_person_action_not_aspiration/);
+    expect(intro).toMatch(/pulling you away from the goal/i);
+    expect(rubric).toMatch(/works_against_goal/);
+  });
+
+  it("worries: a fear not a practical concern / yours not theirs / who you are", () => {
+    const intro = STAGE_INTROS.worries!(ctx);
+    expect(intro).toMatch(/not a practical concern/i);
+    expect(rubric).toMatch(/1\. is_fear/);
+    expect(intro).toMatch(/what YOU dread/);
+    expect(rubric).toMatch(/2\. is_first_person_felt/);
+    expect(intro).toMatch(/WHO YOU ARE/);
+    expect(rubric).toMatch(/3\. touches_identity/);
+    // The direct fear-box → Column 3 route means the worry must name
+    // what the behavior protects, not the behavior said back.
+    expect(intro).toMatch(/did the OPPOSITE/);
+    expect(rubric).toMatch(/THE BEHAVIOR SAID BACK AS SELF-CRITICISM/);
+  });
+
+  it("commitments: mirrors the worry / his nouns / never, not an aspiration", () => {
+    const intro = STAGE_INTROS.commitments!(ctx);
+    expect(intro).toMatch(/Mirrors the worry above/i);
+    expect(rubric).toMatch(/mirrors_worry_identity/);
+    expect(intro).toMatch(/Uses the nouns from the worry/i);
+    expect(rubric).toMatch(/is_specific_not_generic/);
+    expect(intro).toMatch(/Names something to AVOID, not a positive aspiration/i);
+    expect(rubric).toMatch(/is_first_person_never_vow/);
+  });
+
+  it("assumptions: finished then / feels true / ends somewhere devastating", () => {
+    const intro = STAGE_INTROS.assumptions!(ctx);
+    expect(intro).toMatch(/A finished "then"/i);
+    expect(rubric).toMatch(/has_finished_then/);
+    expect(intro).toMatch(/Feels true when you say it out loud/i);
+    expect(rubric).toMatch(/is_first_person_felt: First-person, present-tense, feels true/);
+    expect(intro).toMatch(/Ends somewhere devastating/i);
+    expect(rubric).toMatch(/lands_in_identity_or_big_time_bad/);
   });
 });
 

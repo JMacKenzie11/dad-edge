@@ -102,10 +102,11 @@ export type ItcBehavior = {
    *  Continue-to-Worries gate reads it via worryPassesDepth. Null on
    *  fresh rows until the first rubric pass completes. */
   depth_score: number | null;
-  /** See ItcWorry.rubric_reason. Short human-readable string from the
-   *  rubric explaining what would raise a failing criterion. Rendered
-   *  by the "One thing to sharpen" UI on shallow rows. */
+  /** See ItcWorry.rubric_reason. */
   rubric_reason: string | null;
+  /** See ItcWorry.sharpen_text / suggested_fix. */
+  sharpen_text: string | null;
+  suggested_fix: string | null;
   /** Number of times this behavior has been saved (add + every edit).
    *  Powers the 2/3-with-attempts>=2 escape hatch in the gate. */
   attempts: number;
@@ -434,6 +435,8 @@ export async function updateBehaviorText(
       attempts: (existing.data.attempts ?? 0) + 1,
       depth_score: null,
       rubric_reason: null,
+      sharpen_text: null,
+      suggested_fix: null,
     })
     .eq("id", id)
     .eq("map_id", mapId)
@@ -446,21 +449,15 @@ export async function updateBehaviorText(
 export async function updateBehaviorDepth(
   behaviorId: string,
   score: number,
-  reason?: string | null,
+  coach?: RowCoachText,
 ): Promise<void> {
   if (score < 0 || score > 3 || !Number.isInteger(score)) {
     throw new Error(`updateBehaviorDepth: score must be int 0-3, got ${score}`);
   }
   const supabase = createSupabaseServiceClient();
-  const patch: { depth_score: number; rubric_reason?: string | null } = {
-    depth_score: score,
-  };
-  if (reason !== undefined) {
-    patch.rubric_reason = reason?.trim() || null;
-  }
   const { error } = await supabase
     .from("itc_behaviors")
-    .update(patch)
+    .update({ depth_score: score, ...coachTextPatch(coach) })
     .eq("id", behaviorId);
   if (error) throw new Error(`updateBehaviorDepth: ${error.message}`);
 }
@@ -670,7 +667,11 @@ function coachTextPatch(coach?: RowCoachText): {
   return patch;
 }
 
-export type CoachTextTable = "itc_worries" | "itc_commitments" | "itc_assumptions";
+export type CoachTextTable =
+  | "itc_behaviors"
+  | "itc_worries"
+  | "itc_commitments"
+  | "itc_assumptions";
 
 /**
  * Write coach text onto a row without touching its score. Used after

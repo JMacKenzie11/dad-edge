@@ -29,6 +29,7 @@ export async function checkBehaviorDepth(input: {
       severity: depthSeverity(behavior.depth_score),
       actualText: behavior.text,
       detail: behavior.rubric_reason?.trim() || ADVICE.depth_shortfall_behavior,
+      suggestedFix: behavior.suggested_fix ?? undefined,
     });
   }
   return findings;

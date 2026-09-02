@@ -34,6 +34,7 @@ import {
   draftCommitmentForWorry,
   draftWorryForBehavior,
   reviseAssumption,
+  reviseBehavior,
   scrubBannedCoachWords,
   scrubReplyLight,
 } from "./coach";
@@ -41,6 +42,7 @@ import { checkAssumptionEnactable } from "./criteria/assumptions";
 import { findingLine, prioritizeEntries, renderRowSharpen } from "./criteria/render";
 import {
   rowFindingsForAssumption,
+  rowFindingsForBehavior,
   rowFindingsForCommitment,
   rowFindingsForWorry,
 } from "./criteria/row-sharpen";
@@ -76,6 +78,35 @@ function rubricReasonFor(score: number, reason: string): string | null {
 
 function problemsOf(findings: Finding[]): string[] {
   return Array.from(new Set(findings.map(findingLine)));
+}
+
+export async function coachTextForBehavior(input: {
+  goalText: string;
+  behavior: ItcBehavior;
+  score: number;
+  depthReason: string;
+}): Promise<RowCoachText> {
+  const rubricReason = rubricReasonFor(input.score, input.depthReason);
+  const behavior: ItcBehavior = {
+    ...input.behavior,
+    depth_score: input.score,
+    rubric_reason: rubricReason,
+    suggested_fix: null,
+  };
+  const findings = await rowFindingsForBehavior({ behavior });
+  if (findings.length === 0) {
+    return { rubricReason, sharpenText: null, suggestedFix: null };
+  }
+  const suggestedFix = await reviseBehavior({
+    goalText: input.goalText,
+    currentText: behavior.text,
+    problems: problemsOf(findings),
+  }).catch(() => null);
+  return {
+    rubricReason,
+    sharpenText: renderRowSharpen(findings),
+    suggestedFix,
+  };
 }
 
 export async function coachTextForWorry(input: {
@@ -255,6 +286,7 @@ export type FixContext = {
 };
 
 const TABLE_FOR: Partial<Record<Finding["entryRef"]["table"], CoachTextTable>> = {
+  behaviors: "itc_behaviors",
   worries: "itc_worries",
   commitments: "itc_commitments",
   assumptions: "itc_assumptions",
@@ -263,6 +295,7 @@ const TABLE_FOR: Partial<Record<Finding["entryRef"]["table"], CoachTextTable>> =
 /** Types whose fix is on the row at save time. If a group has only
  *  these and the row already carries a rewrite, reuse it. */
 const ROW_LEVEL_TYPES: ReadonlySet<IssueType> = new Set<IssueType>([
+  "depth_shortfall_behavior",
   "depth_shortfall_worry",
   "depth_shortfall_commitment",
   "depth_shortfall_assumption",
@@ -315,6 +348,8 @@ async function fixEntry(
   const allRowLevel = [...types].every((t) => ROW_LEVEL_TYPES.has(t));
   if (stored && allRowLevel) {
     fix = stored;
+  } else if (ref.table === "behaviors") {
+    fix = await reviseBehaviorEntry(findings, ctx);
   } else if (ref.table === "worries") {
     fix = await reviseWorry(findings, ctx);
   } else if (ref.table === "commitments") {
@@ -322,8 +357,8 @@ async function fixEntry(
   } else if (ref.table === "assumptions") {
     fix = await reviseAssumptionEntry(findings, ctx);
   }
-  // goal / behaviors: the check supplies its own fix (bundled goal
-  // split) or none. Nothing to draft, nothing to persist.
+  // goal: the check supplies its own fix (bundled goal split).
+  // Nothing to draft, nothing to persist.
 
   const table = TABLE_FOR[ref.table];
   if (ctx.persist && table) {
@@ -333,6 +368,16 @@ async function fixEntry(
     });
   }
   return findings.map((f) => ({ ...f, suggestedFix: fix ?? f.suggestedFix }));
+}
+
+async function reviseBehaviorEntry(findings: Finding[], ctx: FixContext): Promise<string | null> {
+  const behavior = ctx.behaviors.find((b) => b.id === findings[0].entryRef.id);
+  if (!behavior) return null;
+  return reviseBehavior({
+    goalText: ctx.goalText,
+    currentText: behavior.text,
+    problems: problemsOf(findings),
+  }).catch(() => null);
 }
 
 async function reviseWorry(findings: Finding[], ctx: FixContext): Promise<string | null> {

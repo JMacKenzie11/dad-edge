@@ -15,7 +15,6 @@ import {
   draftCommitmentForWorry,
   draftTestForAssumption,
   draftWorryForBehavior,
-  generateCoachReaction,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -25,7 +24,6 @@ import {
   reviseTestFromReview,
   scrubReply,
   WORRY_IDENTITY_SHAPES,
-  type ReactionInput,
   type ReactionOutput,
   type SmartReview,
 } from "@/lib/itc/coach";
@@ -38,6 +36,7 @@ import { renderFindings } from "@/lib/itc/criteria/render";
 import {
   attachFixes,
   coachTextForAssumption,
+  coachTextForBehavior,
   coachTextForCommitment,
   coachTextForSelectedAssumption,
   coachTextForWorry,
@@ -381,11 +380,19 @@ export async function addBehavior(formData: FormData): Promise<ActionResult> {
       behaviorText: parsed.data.text.trim(),
     });
     score = scored.score;
-    await updateBehaviorDepth(
-      behaviorId,
-      score,
-      score >= 3 ? null : scored.reason,
-    );
+    // Row findings → coach text + a verified rewrite, same surface as
+    // the three honed columns.
+    const behaviorsNow = await listBehaviors(loaded.map.id);
+    const addedRow = behaviorsNow.find((b) => b.id === behaviorId);
+    const coach = addedRow
+      ? await coachTextForBehavior({
+          goalText: loaded.map.improvement_goal ?? "",
+          behavior: addedRow,
+          score,
+          depthReason: scored.reason,
+        })
+      : { rubricReason: score >= 3 ? null : scored.reason };
+    await updateBehaviorDepth(behaviorId, score, coach);
     events.record(
       "rubric_scored",
       {
@@ -471,11 +478,13 @@ export async function updateBehavior(
       behaviorText: updated.text,
     });
     score = scored.score;
-    await updateBehaviorDepth(
-      updated.id,
+    const coach = await coachTextForBehavior({
+      goalText: loaded.map.improvement_goal ?? "",
+      behavior: updated,
       score,
-      score >= 3 ? null : scored.reason,
-    );
+      depthReason: scored.reason,
+    });
+    await updateBehaviorDepth(updated.id, score, coach);
     events.record(
       "rubric_scored",
       {

@@ -27,10 +27,8 @@ import type { ItcStage } from "@/lib/itc/stage";
 import { requireItcParticipant } from "@/lib/itc/session-guards";
 import { TurnEventLog } from "@/lib/itc/turn-events";
 import type {
-  ReactionInput,
   ReactionOutput,
 } from "@/lib/itc/coach";
-import { generateCoachReaction } from "@/lib/itc/coach";
 
 /** Uniform action-result shape returned by every server action. */
 export type ActionResult = { ok: true } | { ok: false; reason: string };
@@ -224,73 +222,3 @@ export async function persistReaction(
   return msg.id;
 }
 
-/**
- * Fire-and-forget async coach reaction to a just-added entry. Runs
- * after the server action's response is sent back to the client via
- * next/server's `after()` primitive, so the form submit is fast and
- * the coach reply appears on the next revalidation.
- *
- * The reply is written to itc_messages as an assistant message.
- * Refinement + suggestions chips are persisted as structured JSON in
- * a separate metadata column (added by migration) OR — for MVP —
- * embedded in the message content as a fenced JSON footer the client
- * strips out.
- */
-export async function fireCoachReaction(
-  mapId: string,
-  justAdded: ReactionInput["justAdded"],
-  anchor: { table: string; id: string },
-): Promise<void> {
-  const events = new TurnEventLog(mapId, 0);
-  try {
-    const { context, history } = await loadCoachContext(mapId);
-    const recentChat = history.slice(-6);
-    const reaction = await generateCoachReaction({
-      ...context,
-      recentChat,
-      // Pass the anchor row id so the reaction generator can hash into
-      // a server-owned rotation of Kegan-canonical opener frames.
-      // Guarantees each entry on the map gets a distinct SCORE-3
-      // opener without the model needing visibility into prior
-      // reactions. See pickReactionOpener() in coach.ts.
-      justAdded: { ...justAdded, anchorId: anchor.id },
-    });
-    if (!reaction.reply.trim()) return;
-    const stored = await persistReaction(
-      mapId,
-      context.stage,
-      reaction,
-      "entry_thread",
-      anchor,
-    );
-    events.record(
-      "coach_reaction_sent",
-      {
-        entry_kind: justAdded.kind,
-        entry_text: justAdded.text,
-        has_refinement: Boolean(reaction.refinement),
-        suggestion_count: reaction.suggestions?.length ?? 0,
-        message_id: stored,
-        anchor_table: anchor.table,
-        anchor_id: anchor.id,
-      },
-      { durationMs: reaction.durationMs, stage: context.stage },
-    );
-    await events.flush();
-    safeRevalidate(`/itc/${mapId}`);
-  } catch (err) {
-    console.warn(
-      "[itc] fireCoachReaction failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    events.record("error", {
-      where: "fireCoachReaction",
-      message: err instanceof Error ? err.message : String(err),
-    });
-    try {
-      await events.flush();
-    } catch {
-      // non-fatal
-    }
-  }
-}
