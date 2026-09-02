@@ -8,6 +8,7 @@ import type {
   ItcMessage,
 } from "@/lib/itc/maps";
 import { worryPassesDepth } from "@/lib/itc/rules";
+import { ASSUMPTION_STEM } from "@/lib/itc/stage";
 import {
   redriveAssumptionFromCommitment,
   removeAssumption,
@@ -123,6 +124,10 @@ export function AssumptionsRow({
   );
 }
 
+/** What the empty box starts as. Trailing space so he types straight
+ *  into the sentence. */
+const SEED = `${ASSUMPTION_STEM} `;
+
 function AddAssumptionForm({
   mapId,
   commitments,
@@ -134,10 +139,37 @@ function AddAssumptionForm({
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [pending, startTransition] = useTransition();
-  const [text, setText] = useState("");
+  // Seeded with the bare stem so he can see the sentence he is
+  // writing. saveAssumption already prepends it (ensureStem), so
+  // before this the stem appeared only after saving and a man who
+  // typed "charging high prices makes me a fraud" had no idea what
+  // it would become.
+  //
+  // This is a STEM, not the opening we removed. That one carried
+  // content built from his own commitment ("I assume that if I
+  // <act>, ") and men finished it by restating the worry one column
+  // up. This carries none: it fixes the epistemic frame, which is
+  // the whole point of Column 5 (a belief he holds, not a fact about
+  // the world), and leaves every word of the belief to him.
+  const [text, setText] = useState(SEED);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // When the form renders already open (the empty-column state), the
+  // box can come up focused with the caret at 0, which would put
+  // whatever he types in FRONT of the stem. Move it to the end, but
+  // only if the box already has focus: calling focus() here would
+  // steal it and scroll the column into view unasked.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (document.activeElement !== el) return;
+    if (el.selectionStart === 0 && el.selectionEnd === 0) {
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    // Mount only. Later re-runs would fight the caret while he types.
+  }, []);
 
   function toggleLink(id: string) {
     setLinkedIds((prev) =>
@@ -148,8 +180,16 @@ function AddAssumptionForm({
   function submit() {
     setError(null);
     const trimmed = text.trim();
-    if (trimmed.length < 3) {
-      setError("Type an assumption first.");
+    // The stem on its own is not an assumption. Compare against the
+    // stem rather than a bare length so "I assume that" alone can't
+    // slip through on character count.
+    const beyondStem = trimmed
+      .toLowerCase()
+      .startsWith(ASSUMPTION_STEM.toLowerCase())
+      ? trimmed.slice(ASSUMPTION_STEM.length).trim()
+      : trimmed;
+    if (beyondStem.length < 3) {
+      setError("Finish the sentence: what do you assume?");
       return;
     }
     if (linkedIds.length === 0) {
@@ -166,7 +206,7 @@ function AddAssumptionForm({
         setError(res.reason ?? "Could not add.");
         return;
       }
-      setText("");
+      setText(SEED);
       setLinkedIds([]);
       setExpanded(false);
     });
@@ -178,7 +218,13 @@ function AddAssumptionForm({
         type="button"
         onClick={() => {
           setExpanded(true);
-          setTimeout(() => inputRef.current?.focus(), 50);
+          setTimeout(() => {
+            const el = inputRef.current;
+            if (!el) return;
+            el.focus();
+            // Caret after the stem, not before it.
+            el.setSelectionRange(el.value.length, el.value.length);
+          }, 50);
         }}
         className="w-full rounded-md border border-dashed border-[color:var(--color-border)] px-4 py-3 text-sm text-[color:var(--color-text-muted)] hover:text-white hover:border-[color:var(--color-text-muted)] transition-colors text-left"
       >
@@ -195,7 +241,7 @@ function AddAssumptionForm({
         onChange={(e) => setText(e.target.value)}
         minRows={2}
         disabled={pending}
-        placeholder="What has to be true for that vow to feel necessary?"
+        placeholder={`${ASSUMPTION_STEM} …`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();

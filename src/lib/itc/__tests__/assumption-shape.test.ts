@@ -97,6 +97,45 @@ describe("depth badge severity", () => {
   });
 });
 
+describe("the assumption box shows the stem it is going to save", () => {
+  const rowSource = readFileSync(
+    resolve(here, "..", "..", "..", "app", "itc", "[mapId]", "assumptions-row.tsx"),
+    "utf8",
+  );
+  /** The file with comments removed. The comments deliberately quote
+   *  the retired opening in order to explain how the seeded stem
+   *  differs from it, so a naive match on the whole file finds the
+   *  very explanation that documents its absence. */
+  const rowCode = rowSource
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  it("seeds the add box from ASSUMPTION_STEM, not a hand-typed copy", () => {
+    // saveAssumption prepends the stem via ensureStem either way. The
+    // box shows it so he can see the sentence he is writing instead
+    // of meeting it after the save. Reading the constant rather than
+    // retyping the words keeps the two from drifting apart.
+    expect(rowSource).toMatch(/import \{ ASSUMPTION_STEM \} from "@\/lib\/itc\/stage"/);
+    expect(rowSource).toMatch(/const SEED = `\$\{ASSUMPTION_STEM\} `/);
+    expect(rowSource).not.toMatch(/useState\("I assume/);
+  });
+
+  it("does not accept the stem on its own as an assumption", () => {
+    // A bare length check would pass "I assume that" on character
+    // count alone.
+    expect(rowSource).toMatch(/beyondStem/);
+    expect(rowSource).not.toMatch(/if \(trimmed\.length < 3\)/);
+  });
+
+  it("seeds a STEM and not the content-bearing opening that was removed", () => {
+    // The retired opening was "I assume that if I <act>, ", built
+    // from his own commitment, and men finished it by restating the
+    // worry one column up. A stem carries no content.
+    //
+    expect(rowCode).not.toMatch(/I assume that if I/);
+  });
+});
+
 describe("coach prose obeys the interior-witness ban it enforces", () => {
   it("scrubs 'have to face' out of its own reasons", async () => {
     const { scrubBannedCoachWords } = await import("../coach");

@@ -108,13 +108,25 @@ export function hasGoalStem(text: string): boolean {
 }
 
 /**
- * Column 5 Big-Assumption stem check. ITC's canonical assumption form
- * is "I assume that if I …, then …" — the "I assume that" prefix makes
- * the epistemic status explicit (this is a testable belief, not a fact
- * about reality). Unlike goals, where saveGoal rejects competing
- * framing, saveAssumption auto-prepends the stem via ensureStem so the
- * user can type either "If I …" or "I assume that if I …" and land in
- * the same place.
+ * Column 5 Big-Assumption stem check. The "I assume that" prefix makes
+ * the epistemic status explicit: this is a belief he holds and can
+ * test, not a fact about reality. That framing is the whole job of
+ * the stem, and it is why the stem stays even though the SHAPE that
+ * used to follow it does not.
+ *
+ * This comment used to say the canonical form is "I assume that if
+ * I …, then …". It isn't. Kegan & Lahey Vol 1 p 19 answer their own
+ * quiz of twelve assumptions: only 6, 7 and 10 are not testable.
+ * Items 1, 2 and 9 carry no "if" and no "then" and are fine, with
+ * worked tests in Appendix D. Vol 1 p 4 asks only that AT LEAST ONE
+ * assumption on a map be in if-then form. See
+ * src/lib/itc/__tests__/assumption-shape.test.ts.
+ *
+ * Unlike goals, where saveGoal rejects competing framing,
+ * saveAssumption auto-prepends the stem via ensureStem, so a man can
+ * type the belief with or without it and land in the same place. The
+ * add form seeds the box with it so he can see the sentence he is
+ * writing rather than meeting it after the save.
  */
 export function hasAssumptionStem(text: string): boolean {
   const normalized = text
