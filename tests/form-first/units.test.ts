@@ -678,7 +678,7 @@ describe("checkWorryLogicalConsistency (three-layer deterministic worry check)",
       identityLanding: "I'm the man who ignores her",
     });
     expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/revealer marker/i);
+    expect(out.reason).toMatch(/bare present tense/i);
   });
 
   it("layer 3 fails on strategy-level landing without identity marker", () => {
@@ -692,6 +692,21 @@ describe("checkWorryLogicalConsistency (three-layer deterministic worry check)",
     });
     expect(out.consistent).toBe(false);
     expect(out.reason).toMatch(/strategy|identity/i);
+  });
+
+  it("passes the consequence shape (Vol 1 p 13: who he'd be if the opposite went badly)", () => {
+    for (const identityLanding of [
+      "I'd be the expert who got it wrong with nowhere to hide",
+      "I'd be seen as the guy who can't back up what he sells",
+      "I'd have proven I'm the coach who can't deliver when it counts",
+    ]) {
+      const out = checkWorryLogicalConsistency({
+        behaviorText: "I hedge my recommendations with caveats",
+        oppositeMove: "stood behind what I believe will work",
+        identityLanding,
+      });
+      expect(out.consistent, identityLanding).toBe(true);
+    }
   });
 
   it("passes Kegan-canonical role-noun landing (she'd see I've been the husband who X)", () => {
@@ -1015,6 +1030,12 @@ describe("scoreWorryDepth prompt (structural)", () => {
     const worrySystem = src.slice(src.indexOf("const SYSTEM = `"), src.indexOf("export async function scoreCommitmentDepth"));
     expect(worrySystem).toMatch(/THE BEHAVIOR SAID BACK AS SELF-CRITICISM/);
     expect(worrySystem).toMatch(/what the behavior PROTECTS him from/);
+    // Appendix A, Column 3 as a named criterion, folded into the score.
+    expect(worrySystem).toMatch(/4\. explains_behavior/);
+    expect(worrySystem).toMatch(/feared_result_is_the_behavior_restated/);
+    const scoreFnBody = src.slice(src.indexOf("export async function scoreWorryDepth"));
+    expect(scoreFnBody).toMatch(/object\.behavior_protects_him_from_this &&\s*!object\.feared_result_is_the_behavior_restated/);
+    expect(scoreFnBody).toMatch(/object\.touches_identity && explainsBehavior \? 1 : 0/);
     const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);
   });
@@ -1074,6 +1095,23 @@ describe("coaching text is verified by the judge that scores it on save (structu
     const shapeStart = coach.indexOf("function worryShapeInstruction(");
     const shapes = coach.slice(shapeStart, coach.indexOf("\n}\n", shapeStart));
     expect(shapes).not.toMatch(/"she'd|she\\'d|\bher\b/);
+  });
+
+  it("drafts that fail verification are never offered (worry drafter, assumption batch)", () => {
+    const worry = block("draftWorryForBehavior");
+    expect(worry).not.toMatch(/\?\?\s*first\.assembled/);
+    expect(worry).toMatch(/worry draft refused after retry/);
+    const batch = block("draftAssumptionsFromCommitments");
+    expect(batch).toMatch(/const passing = chosen\.filter/);
+    expect(batch).toMatch(/verifyDraftClusters\(passing/);
+  });
+
+  it("the worry drafter names both Kegan shapes and forbids the behavior said back", () => {
+    const sys = coach.slice(coach.indexOf("const DRAFT_WORRY_SYSTEM = `"), coach.indexOf("const WORRY_HARD_WORD_CAP"));
+    expect(sys).toMatch(/\*\*Exposure\*\*/);
+    expect(sys).toMatch(/\*\*Consequence\*\*/);
+    expect(sys).toMatch(/NEVER the behavior itself said back/);
+    expect(sys).toMatch(/what the behavior PROTECTS him from/);
   });
 
   it("the per-entry LLM reaction and chat paths stay deleted", () => {

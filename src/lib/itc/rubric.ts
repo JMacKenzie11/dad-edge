@@ -13,6 +13,15 @@ const RubricSchema = z.object({
   is_fear: z.boolean(),
   is_first_person_felt: z.boolean(),
   touches_identity: z.boolean(),
+  // Criterion 4 is extract-then-decide: the judge writes the opposite
+  // move and the feared result down before it rules. Asked as one
+  // inline boolean, the model rationalized confessions of the
+  // behavior as fears ("standing behind your belief exposes exactly
+  // that identity"). With the two lines on the page first, it doesn't.
+  opposite_move: z.string().max(160),
+  feared_result_of_opposite: z.string().max(240),
+  feared_result_is_the_behavior_restated: z.boolean(),
+  behavior_protects_him_from_this: z.boolean(),
   reason: z.string().min(1).max(400),
 });
 
@@ -21,13 +30,20 @@ export type WorryDepthResult = {
   is_fear: boolean;
   is_first_person_felt: boolean;
   touches_identity: boolean;
+  /** Kegan/Lahey Appendix A, Column 3: the worry "shows why the
+   *  Column 2 behaviors make good sense." False when the worry is
+   *  the behavior said back as self-criticism, or when doing the
+   *  opposite wouldn't bring the fear about. Folded into
+   *  touches_identity for the score: an identity that doesn't explain
+   *  the behavior isn't the feared identity. */
+  explains_behavior: boolean;
   reason: string;
 };
 
 const SYSTEM = `
 You are a strict depth rubric for the worry-box column of an Immunity to Change map. The methodology (Kegan & Lahey) requires each worry to be a first-person felt fear that lands on identity. Practical concerns and forecasts are not enough. But "identity" comes in more than one valid shape — do NOT reject a worry that lands on role/relational identity in favor of one that lands on self-labeling.
 
-You score three BINARY criteria. Be strict. When in doubt, score false.
+You score four BINARY criteria. Be strict. When in doubt, score false.
 
 1. is_fear: The worry is a fear — visceral, present-tense, felt. Not a practical concern, forecast, or cost/benefit calculation. "It'd be a waste of time" and "she might feel pushed" are practical. "I'm afraid I'd fail her" is a fear.
 
@@ -48,6 +64,13 @@ You score three BINARY criteria. Be strict. When in doubt, score false.
    - THE BEHAVIOR SAID BACK AS SELF-CRITICISM. The behavior he pairs this worry to is in the prompt. If the identity is just that behavior restated ("I've been the man who brings up her mistakes to dodge mine" when the behavior is "I bring up things she did in the past instead of listening"), score false. That's a confession of the behavior, not the fear of doing the opposite. This map turns the worry straight into "I'm also committed to never being [that identity]", so a behavior-restating worry produces a vow to stop the behavior, a noble commitment, and the immune system disappears from the map (Coach's Guide Vol 1 p 13: "did the danger to the self get lost when moving from the fear box to the 3rd column?"). The fear has to name what the behavior PROTECTS him from: who he'd be, or be seen as, if he did the opposite and it went the way he dreads. ("If I let her past rest and listened, it'd be my mistakes we were talking about, and I'd be the man who's been the problem all along" passes; the behavior makes sense under it.)
 
    The bar (self-check before scoring true): after reading the worry, could you finish the sentence "The identity he's afraid of being is: ___" using words FROM the worry itself, not synthesized? If you have to invent the identity or infer it, the identity isn't landed — score false. If the worry names it directly with a role noun or self-label, score true.
+
+4. explains_behavior (Coach's Guide Vol 1, Appendix A, Column 3: the worry "shows why Column 2 behaviors make good sense" as SELF-PROTECTION). Work it in order and write each step down:
+   - opposite_move: the opposite of the paired behavior (in the prompt), in his words.
+   - feared_result_of_opposite: in one line, what the worry says would happen or be exposed if he did the opposite.
+   - feared_result_is_the_behavior_restated: true if that feared result is the behavior itself described as a fault. "I've been the guy who never listens to anybody" for the behavior "I don't ask what the prospect needs"; "I've been choosing my reputation over serving them" for the behavior "I hedge my recommendations". A worry that accuses the behavior does not explain it.
+   - behavior_protects_him_from_this: true only if DOING the behavior keeps that feared result from happening, so the behavior makes sense as protection. If the feared result is the behavior restated, false. If the opposite wouldn't bring the feared result about, false.
+   Passing example: "if I stood behind my recommendation and it failed, I'd be the expert who got it wrong with nowhere to hide" (hedging protects him from exactly that). "if I let her past rest and listened, it'd be my mistakes we were talking about and I'd be the man who's been the problem" (bringing up her past keeps his off the table).
 
    Do not require the extra "and that means I'm unworthy" step for role identity — once the role and predicate are named ("the coach who couldn't help her when she needed me"), that IS identity. But bare failure verbs without a role noun ("I'd have failed to help her") don't clear the bar.
 
@@ -313,17 +336,24 @@ export async function scoreWorryDepth(input: {
       temperature: 0.1,
     });
 
+    const explainsBehavior =
+      object.behavior_protects_him_from_this &&
+      !object.feared_result_is_the_behavior_restated;
     const score =
       (object.is_fear ? 1 : 0) +
       (object.is_first_person_felt ? 1 : 0) +
-      (object.touches_identity ? 1 : 0);
+      // An identity that doesn't explain the behavior isn't the feared
+      // identity (Appendix A, Column 3). The score stays 0–3 so every
+      // gate and threshold in the app keeps its meaning.
+      (object.touches_identity && explainsBehavior ? 1 : 0);
     scoreForLog = score;
 
     return {
       score: score as 0 | 1 | 2 | 3,
       is_fear: object.is_fear,
       is_first_person_felt: object.is_first_person_felt,
-      touches_identity: object.touches_identity,
+      touches_identity: object.touches_identity && explainsBehavior,
+      explains_behavior: explainsBehavior,
       reason: object.reason,
     };
   } finally {
@@ -423,6 +453,17 @@ const WORRY_REVEALER_MARKERS: RegExp[] = [
   /\bthe\s+truth\b/i,
   // Denial-of-hiding (the current behavior no longer works to hide)
   /\bcouldn['\u2019]t\s+(pretend|hide|deny)\b/i,
+  // CONSEQUENCE framing (Kegan Vol 1 p 13, "seen as incompetent"):
+  // who he'd be, or be seen as, if the opposite went the way he
+  // dreads. "I'd be the expert who got it wrong", "I'd end up the guy
+  // selling what nobody asked for", "I'd have proven I can't deliver".
+  // Added 2026-09-01: requiring only revealer framing forced every
+  // draft into "I've been the guy who…", which on a work map
+  // degenerates into the behavior said back. The behavior-said-back
+  // inversion is now caught semantically by scoreWorryDepth.
+  /\bi['\u2019]d\s+(?:be|become|end\s+up|turn\s+out|come\s+off|look)\b/i,
+  /\bi['\u2019]d\s+have\s+(?:proven|proved|shown|become)\b/i,
+  /\bi\s+would\s+(?:be|become|have\s+proven)\b/i,
 ];
 
 /**
@@ -477,6 +518,11 @@ const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
 const WORRY_IDENTITY_MARKERS: RegExp[] = [
   // Role/relational noun — Vol 1 p 14 shape
   /\b(the|a)\s+(husband|wife|father|dad|mother|mom|man|woman|guy|gal|person|kind|type|one|someone|somebody|parent|partner|spouse|son|daughter|brother|sister)\b/i,
+  // Any role rendered as "the [role] who …" / "a [role] who …": the
+  // canonical shape works for work roles too (the expert who, the
+  // coach who, the leader who). Added 2026-09-01 so consequence
+  // drafts on work maps aren't rejected as strategy descriptions.
+  /\b(the|a|an)\s+[a-z\-]+\s+(who|that)\b/i,
   // Self-label — Vol 1 p 14 shape
   /\b(a|the)\s+(fraud|fake|phony|coward|failure|liar|loser|monster|villain|cheat|hypocrite|fool|weakling)\b/i,
   /\bnot\s+(enough|good\s+enough|worthy|the\s+\w+|a\s+real|a\s+true)\b/i,
@@ -537,7 +583,7 @@ export function checkWorryLogicalConsistency(input: {
     return {
       consistent: false,
       reason:
-        "Identity landing lacks a past-tense revealer marker. Rewrite so it presents the identity as a pre-existing pattern being witnessed or revealed. Use one of: \"I've been [X]\", \"she'd see I've been [X]\", \"she'd realize [X]\", \"the truth would come out that [X]\", \"couldn't pretend anymore that [X]\". NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
+        "Identity landing is bare present tense. Frame it as what the counter-move would EXPOSE (\"I've been [X]\", \"they'd see I've been [X]\", \"the truth would come out that [X]\") or as its CONSEQUENCE (\"I'd be the [role] who [X]\", \"I'd be seen as [X]\", \"I'd have proven [X]\"). NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
     };
   }
 

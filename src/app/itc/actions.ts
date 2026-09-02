@@ -1427,15 +1427,26 @@ async function draftMissingWorriesAfterAdvance(
   // across regenerations.
   const drafted = await Promise.all(
     needsDraft.map(async (b, index) => {
-      const identityShape =
-        WORRY_IDENTITY_SHAPES[index % WORRY_IDENTITY_SHAPES.length];
-      const draft = await draftWorryForBehavior({
-        goalText: map.improvement_goal ?? "",
-        behaviorText: b.text,
-        pillar: map.pillar_code,
-        identityShape,
-        mapTexts: behaviors.map((x) => x.text),
-      });
+      // Server-owned rotation across the four Kegan shapes. A shape
+      // that can't fit this behavior (its draft failed verification)
+      // falls back to the next shape once; only a verified draft is
+      // ever offered, so a behavior can end up with none.
+      const shapeIndex = index % WORRY_IDENTITY_SHAPES.length;
+      const shapes = [
+        WORRY_IDENTITY_SHAPES[shapeIndex],
+        WORRY_IDENTITY_SHAPES[(shapeIndex + 1) % WORRY_IDENTITY_SHAPES.length],
+      ];
+      let draft: string | null = null;
+      for (const identityShape of shapes) {
+        draft = await draftWorryForBehavior({
+          goalText: map.improvement_goal ?? "",
+          behaviorText: b.text,
+          pillar: map.pillar_code,
+          identityShape,
+          mapTexts: behaviors.map((x) => x.text),
+        });
+        if (draft) break;
+      }
       return { behaviorId: b.id, draft };
     }),
   );

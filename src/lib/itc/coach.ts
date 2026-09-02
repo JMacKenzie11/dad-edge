@@ -767,7 +767,14 @@ The methodology (Vol 1 p. 13-14) is explicit: to find the worry, picture yoursel
 ### identity_landing
 The felt fear that lands when he pictures doing opposite_move. This is the whole point. If this slot is shallow, the map is shallow.
 
-**MUST land at identity level.** Two valid shapes — accept whichever fits his goal/behavior more naturally:
+**It names what the behavior PROTECTS him from.** Kegan/Lahey (Vol 1 p 12): "what are the worst things that could happen to you if you were to do the opposite?" Two ways that lands, both canonical; use whichever fits his material:
+
+  - **Exposure**: what doing opposite_move would show about who he's been. It has to be something the behavior HIDES (the fraud, the guy who was never as good as he claimed, the man who's been faking it). It is NEVER the behavior itself said back. "I've been the guy who never listens" when the behavior is not listening is a confession, not a fear; the map turns this worry straight into a commitment, and that confession becomes a vow to stop the behavior, which explains nothing. Ask: what does not-listening keep him from finding out?
+  - **Consequence**: who he'd be, or be seen as, if he did opposite_move and it went the way he dreads. "If I stood behind the call and it failed, I'd be the expert who got it wrong with nowhere to hide." "If I asked what they needed, I'd hear my offer isn't it and be the guy selling what nobody asked for." Vol 1 p 13: "seen as incompetent."
+
+Test before you write: under this fear, does the behavior make perfect sense as protection? If the fear accuses the behavior instead of explaining it, start over.
+
+**MUST land at identity level.** Two valid shapes for the landing itself — accept whichever fits his goal/behavior more naturally:
 
   1. **Self-labeling identity**: names a label he'd apply to himself. "I'd have to see I'm not the man I've pretended to be." / "I'd find out I'm weaker than I let on." / "I'd have to admit I'm a fraud."
   2. **Role/relational identity**: names a role he'd have failed in or a relationship whose collapse he can't face. Examples vary by domain — MATCH THE RELATIONAL NOUN TO HIS ACTUAL MAP:
@@ -839,8 +846,8 @@ The pillar constrains the domain. A fear that could be pasted onto any pillar is
 
   A. Read the goal and the specific behavior.
   B. Compute the OPPOSITE of the behavior — the counter-move he'd be doing. Fill opposite_move with that verb phrase.
-  C. Ask: if he actually did opposite_move in a real moment, what would he most fear it would CONFIRM about who he is?
-  D. Fill identity_landing with that felt fear, at the identity rung (self-labeling or role/relational — whichever fits his material). Wince test must pass.
+  C. Ask: what does the behavior protect him from? If he actually did opposite_move in a real moment and it went the way he dreads, who would he be, or what would it expose about who he's been (something the behavior hides, never the behavior said back)?
+  D. Fill identity_landing with that felt fear, at the identity rung (self-labeling or role/relational — whichever fits his material). Wince test must pass. Under it, the behavior must make sense as protection.
 
 Return only the structured slots ({ opposite_move: "...", identity_landing: "..." }). No prose, no explanation, no meta, no wrapping sentence — the server writes that.
 `.trim();
@@ -895,13 +902,13 @@ function worryShapeInstruction(
   const O = w.object;
   switch (shape) {
     case "role_noun":
-      return `For THIS draft, land the identity as a ROLE-NOUN CLAIM. Use the shape: "${W} see I've been the [man|guy|father|husband|coach|leader|one] who [Y]" or "I've been the [role] who [Y]". The [Y] slot MUST be a PLAIN CONCRETE VERB describing an OBSERVABLE ACTION (physical or verbal) toward ${O}, something a friend on his shoulder could point at when it happens. Kegan Vol 1 p 14 canonical shape: "the [role] who [hurts ${O}]" (plain concrete verb). Good [Y] shapes: "talks over ${O}", "shuts ${O} out", "never actually listened", "walks out on ${O}", "makes ${O} repeat it three times before I hear it". BANNED [Y] shapes (literary condensations): "never let ${O} matter", "kept ${O} small", "diminished ${O}", "erased ${O}", "silenced ${O}". Foreman-at-the-tailgate test: would a working guy say [Y] to his buddy at a bar? The role noun must fit HIS map (a work map gets "the leader who…", not "the husband who…").`;
+      return `For THIS draft, land the identity as a ROLE-NOUN CLAIM. Use the shape: "${W} see I've been the [man|guy|father|husband|coach|leader|one] who [Y]" or "I've been the [role] who [Y]". The [Y] slot MUST be a PLAIN CONCRETE VERB describing an OBSERVABLE ACTION (physical or verbal) toward ${O}, something a friend on his shoulder could point at when it happens. Kegan Vol 1 p 14 canonical shape: "the [role] who [hurts ${O}]" (plain concrete verb). Good [Y] shapes: "got it wrong when it counted", "couldn't back up what I promised", "walks out on ${O}", "talks over ${O}". [Y] must be what the behavior HIDES or what the opposite would cost, never the behavior itself said back. BANNED [Y] shapes (literary condensations): "never let ${O} matter", "kept ${O} small", "diminished ${O}", "erased ${O}", "silenced ${O}". Foreman-at-the-tailgate test: would a working guy say [Y] to his buddy at a bar? The role noun must fit HIS map (a work map gets "the leader who…", not "the husband who…").`;
     case "role_failure_verb":
-      return `For THIS draft, land the identity as an EXPLICIT ROLE-FAILURE VERB directed at ${O}. Use the shape: "${W} see I've been [choosing myself over ${O} | letting ${O} down | running from ${O} | failing ${O}]" or "I've been [verb-ing] ${O} all along". Kegan Vol 1 p 14 canonical shape: "chose ego over ${O}".`;
+      return `For THIS draft, land the identity as an EXPLICIT ROLE-FAILURE VERB directed at ${O}: what he'd have done TO ${O} if the opposite went the way he dreads, or what the opposite would expose he's been doing to ${O}. Use the shape: "I'd be the one who [let ${O} down when it counted | cost ${O} the thing they came for | failed ${O}]" or "${W} see I've been [failing ${O} | letting ${O} down] all along". The verb must be what the behavior PROTECTS him from: under this fear, the behavior has to make sense. Do not reach for "choosing myself over ${O}" unless the behavior is literally a way of putting himself first; on most maps that accuses the behavior instead of explaining it. Kegan Vol 1 p 14 canonical shape (a marriage map): "chose ego over ${O}".`;
     case "seen_as":
-      return `For THIS draft, land the identity via SEEN-AS framing (Kegan Vol 1 p 13 canonical vocabulary). Use the shape: "${W} have seen me as [X]" / "${W} see me as [role/label]" / "I'd have been seen as [X]" / "${W} know me as [X]". Kegan Vol 1 p 13 canonical example: "seen as incompetent".`;
+      return `For THIS draft, land the identity via SEEN-AS framing (Kegan Vol 1 p 13 canonical vocabulary). Use the shape: "${W} have seen me as [X]" / "${W} see me as [role/label]" / "I'd have been seen as [X]" / "${W} know me as [X]". [X] is what the behavior PROTECTS him from being seen as. Kegan Vol 1 p 13 canonical example: "seen as incompetent".`;
     case "self_label":
-      return `For THIS draft, land the identity as a SELF-LABEL (Kegan Vol 1 p 14). Use the shape: "${W} know I've been a [fraud|fake|phony|coward|failure]" / "the truth would come out that I've never been [enough|the man ${w.subject} thought]" / "I couldn't pretend I'm not a [X]". Kegan Vol 1 p 14 canonical example: "I'd be a fraud".`;
+      return `For THIS draft, land the identity as a SELF-LABEL (Kegan Vol 1 p 14). Use the shape: "${W} know I've been a [fraud|fake|phony|coward|failure]" / "the truth would come out that I've never been [enough|the man ${w.subject} thought]" / "I'd be a [X]". The label is what the behavior PROTECTS him from being found to be. Kegan Vol 1 p 14 canonical example: "I'd be a fraud".`;
   }
 }
 
@@ -933,9 +940,10 @@ function worryShapeInstruction(
  *      and auditor speak with one voice (same alignment fix as
  *      commitments 2026-08-31).
  *   5. If any check fails, one drafter retry fires with all failing
- *      reasons as feedback. Whatever comes back is returned — never
- *      silent drop; a slightly-off draft the coachee can edit beats
- *      no draft at all.
+ *      reasons as feedback. Only a draft that clears every check is
+ *      returned (2026-09-01). A draft the judge would reject on tap
+ *      is worse than no draft: the coachee writes his own and the
+ *      row's coach box does the coaching.
  */
 export async function draftWorryForBehavior(input: {
   goalText: string;
@@ -969,7 +977,7 @@ export async function draftWorryForBehavior(input: {
     `Behavior (Column 2): ${input.behaviorText}`,
     peopleLine(mapTexts),
     ``,
-    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what DOING opposite_move would REVEAL about him — the new truth exposed by the counter-move, not the identity of the current behavior. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
+    `Fill opposite_move with the affirmative counter-move to this behavior, and identity_landing with what the behavior PROTECTS him from: what doing opposite_move would expose about who he's been (something the behavior hides, never the behavior said back), or who he'd be if opposite_move went the way he dreads. Under the fear, the behavior must make sense as protection. Yuck bar mandatory. Assembled sentence must be under 20 words.`,
     ...(shapeLine ? [``, shapeLine] : []),
     ...reviseLines(input.revise, "worry"),
   ];
@@ -1083,25 +1091,20 @@ export async function draftWorryForBehavior(input: {
       ...firstVerdict.feedback,
       `Rewrite the slots so ALL checks pass. Preserve intent; fix every flaw named. Same length target (under 20 words).`,
     ]);
-    // Rewrite mode returns only a draft that clears every check: a
-    // rewrite that fails the same bar it's fixing would be the coach
-    // contradicting itself. Draft mode keeps the "never silent drop"
-    // invariant — a slightly-off draft the coachee can edit beats
-    // no draft at all.
-    if (input.revise) {
-      if (!retry) return null;
-      const retryVerdict = await verifyDraft(retry);
-      if (!retryVerdict.ok) {
-        console.warn(
-          "[itc coach] worry rewrite refused after retry: draft=%o feedback=%o",
-          retry.assembled,
-          retryVerdict.feedback,
-        );
-        return null;
-      }
-      return retry.assembled;
+    // Only a draft that clears every check is offered, in draft mode
+    // and rewrite mode alike. Anything the system offers has already
+    // passed the judge that scores it on save.
+    if (!retry) return null;
+    const retryVerdict = await verifyDraft(retry);
+    if (!retryVerdict.ok) {
+      console.warn(
+        "[itc coach] worry draft refused after retry: draft=%o feedback=%o",
+        retry.assembled,
+        retryVerdict.feedback,
+      );
+      return null;
     }
-    return retry?.assembled ?? first.assembled;
+    return retry.assembled;
   } catch (err) {
     console.warn(
       "[itc coach] draftWorryForBehavior failed: %s",
@@ -1871,11 +1874,12 @@ export async function draftAssumptionsFromCommitments(input: {
     // verdict; the batch retry (if any) knows which ones failed.
     // Same bar as rewrite mode and as the save that follows a tap on
     // the draft card: the depth rubric (LLM, fail-open), the identity
-    // is REVEALED by the counter-move (consistency), and it's named
-    // in the coachee's own commitment nouns (identity kept). A draft
-    // that would draw a red box on tap doesn't reach the card.
-    const checks = await Promise.all(
-      first.map(async (d) => {
+    // is REVEALED by the counter-move (consistency), it's named in
+    // the coachee's own commitment nouns (identity kept), and its
+    // people come from the map. A draft that would draw a red box on
+    // tap doesn't reach the card.
+    const verifyBatch = (drafts: BatchDraft[]) => Promise.all(
+      drafts.map(async (d) => {
         const depth = await scoreAssumptionDepth({
           goalText: input.goalText,
           assumptionText: d.text,
@@ -1918,6 +1922,7 @@ export async function draftAssumptionsFromCommitments(input: {
         };
       }),
     );
+    const checks = await verifyBatch(first);
 
     const inverted = first
       .map((d, i) => ({ d, check: checks[i], index: i + 1 }))
@@ -1951,8 +1956,29 @@ export async function draftAssumptionsFromCommitments(input: {
       );
       return null;
     });
+    // Only drafts that clear every check reach the card. After the
+    // batch retry, drop what still fails; then give each commitment
+    // left uncovered one targeted attempt of its own. What still
+    // fails is left to the coachee (and to honing's coverage draft).
     const chosen = retry && retry.length > 0 ? retry : first;
-    const verified = await verifyDraftClusters(chosen, input.commitments);
+    const chosenChecks = await verifyBatch(chosen);
+    const passing = chosen.filter((_d, i) => chosenChecks[i].consistent);
+    const covered = new Set(passing.flatMap((d) => d.commitment_indices));
+    const uncovered = input.commitments
+      .map((_c, i) => i + 1)
+      .filter((i) => !covered.has(i));
+    for (const idx of uncovered) {
+      const c = input.commitments[idx - 1];
+      const single = await generateBatch([
+        ``,
+        `Draft ONE Big Assumption for commitment ${idx} only: "${c.text}" (paired worry: "${c.worry_text}"). commitment_indices must be [${idx}].`,
+      ]).catch(() => [] as BatchDraft[]);
+      const d = single.find((s) => s.commitment_indices.includes(idx));
+      if (!d) continue;
+      const [check] = await verifyBatch([d]);
+      if (check.consistent) passing.push({ ...d, commitment_indices: [idx] });
+    }
+    const verified = await verifyDraftClusters(passing, input.commitments);
     return verified.map(({ slots: _slots, ...rest }) => rest);
   } catch (err) {
     console.warn(
