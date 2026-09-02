@@ -55,6 +55,7 @@ import { hasCompetingGoalFraming } from "./rules";
 import { ADVICE } from "./criteria/advice";
 import {
   checkAssumptionKeepsCommitmentIdentity,
+  checkAssumptionRestatesWorry,
   checkVagueAssumptionThenClause,
   judgeAssumptionEnactable,
   judgeAssumptionUnderwrites,

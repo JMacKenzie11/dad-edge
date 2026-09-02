@@ -518,3 +518,128 @@ export function checkAssumptionKeepsCommitmentIdentity(input: {
     reason: `The "then" doesn't name the identity his commitments vow against. Use his own noun: ${expected.map((n) => `"the ${n} who…"`).join(" / ")}.`,
   };
 }
+
+// -------------------------------------------------------------------------
+// The assumption must not be the worry said again
+// -------------------------------------------------------------------------
+//
+// Observed 2026-09-02. Worry: "I worry that if I said the price and
+// waited, they'd see I'm not worth what I'm charging." Offered
+// assumption: "I assume that if I say the price and wait, then they'd
+// see I'm not worth it and I'd be the consultant who's been charging
+// more than he's worth." Same act, same dread, stem swapped.
+//
+// It was not the model going off-script. reviseAssumption's prompt
+// told it "antecedent_act must be the coachee doing the OPPOSITE of
+// one of his behaviors", and that IS the worry's if-clause, so the
+// consequent had nowhere to go but the worry's. The design produced
+// the restatement.
+//
+// The guides anchor the "if" somewhere else: on the COMMITMENT being
+// violated. Every worked example does it (see
+// src/lib/itc/guide-examples.ts):
+//
+//   "not becoming my brother (Kurt)"
+//     -> "I assume that if I am bragging, I am just like Kurt."
+//   "always feeling the freedom of having lots of options"
+//     -> "I assume that if I don't have lots of options, I will feel
+//        resentful, angry, impotent, and stressed."
+//
+// The act in the "if" is the vow being broken, not the behavior being
+// reversed. That is what makes Column 5 a different sentence from
+// Column 3 rather than a rewording of it.
+//
+// This check is the backstop, not the fix: the fix is the anchor.
+// Deterministic on purpose. The failure is structural (the assumption
+// covers the worry's own content words), so a regex-level test is
+// cheaper than another model call, explains itself in the feedback,
+// and cannot drift.
+
+/** Words carrying no topic: shared by every entry, so they say nothing
+ *  about whether two sentences are the same sentence. */
+const RESTATE_STOPWORDS = new Set([
+  "i", "im", "id", "ive", "me", "my", "myself", "we", "our",
+  "a", "an", "the", "this", "that", "there", "it", "its",
+  "and", "or", "but", "if", "then", "so", "as", "than", "of", "to",
+  "in", "on", "at", "for", "with", "by", "from", "into", "about",
+  "is", "am", "are", "was", "were", "be", "been", "being",
+  "do", "dont", "does", "did", "have", "has", "had",
+  "will", "would", "wont", "can", "cant", "could", "should",
+  "not", "no", "never", "ever", "just", "even", "more", "most",
+  "what", "who", "whos", "when", "where", "how", "why",
+  "worry", "worries", "assume", "assumption", "committed", "commit",
+  "they", "theyd", "them", "he", "hes", "him", "she", "shes", "her",
+  "you", "your", "up", "out", "over",
+]);
+
+/** Crude stem so "charging"/"charged"/"charge" collide, and the
+ *  handful of irregulars these entries actually use. */
+const RESTATE_IRREGULARS: Record<string, string> = {
+  said: "say",
+  says: "say",
+  saw: "see",
+  seen: "see",
+  told: "tell",
+  felt: "feel",
+  kept: "keep",
+  lost: "lose",
+  went: "go",
+};
+
+function restateStem(word: string): string {
+  const w = RESTATE_IRREGULARS[word] ?? word;
+  return w
+    .replace(/ing$/, "")
+    .replace(/ed$/, "")
+    .replace(/e?s$/, "")
+    .replace(/(.)\1$/, "$1");
+}
+
+function restateContentWords(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of text.toLowerCase().replace(/[’']/g, "").split(/[^a-z]+/)) {
+    if (!raw || RESTATE_STOPWORDS.has(raw)) continue;
+    const stem = restateStem(raw);
+    if (stem.length >= 3) out.add(stem);
+  }
+  return out;
+}
+
+export type RestateVerdict = { restates: boolean; coverage: number; reason: string };
+
+/**
+ * True when the assumption is the paired worry wearing a different
+ * stem. Measures how much of the WORRY the assumption reproduces, not
+ * the other way round: an assumption is allowed to be longer and to
+ * bring its own words, but it is not allowed to carry the worry whole.
+ *
+ * Threshold is deliberately high (80%). Sharing the map's nouns is
+ * normal and expected — both entries are about the same part of his
+ * life — so only near-total reproduction counts. Short worries are
+ * skipped: with three content words, coincidence is likely.
+ */
+export function checkAssumptionRestatesWorry(input: {
+  assumptionText: string;
+  worryText: string;
+}): RestateVerdict {
+  const worry = restateContentWords(input.worryText);
+  const assumption = restateContentWords(input.assumptionText);
+  if (worry.size < 4) {
+    return { restates: false, coverage: 0, reason: "worry too short to compare" };
+  }
+  let shared = 0;
+  for (const w of worry) if (assumption.has(w)) shared += 1;
+  const coverage = shared / worry.size;
+  if (coverage < 0.8) {
+    return { restates: false, coverage, reason: "assumption stands on its own words" };
+  }
+  return {
+    restates: true,
+    coverage,
+    reason:
+      `This is the worry again with a different opening. The worry already says what he fears if he does the opposite. ` +
+      `A Big Assumption says what has to be TRUE for the vow to feel necessary, so put the COMMITMENT BEING BROKEN in the "if" ` +
+      `(the guides: "if I am bragging…", "if I don't have lots of options…"), not the behavior being reversed. ` +
+      `The paired worry, for contrast: "${input.worryText}"`,
+  };
+}
