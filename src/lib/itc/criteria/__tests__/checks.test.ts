@@ -62,6 +62,8 @@ function makeBehavior(overrides: Partial<ItcBehavior>): ItcBehavior {
     suggested_fix: null,
     attempts: 1,
     coach_worry_draft: null,
+    coach_worry_draft_depth_score: null,
+    coach_worry_draft_rubric_reason: null,
     created_at: new Date().toISOString(),
     ...overrides,
   };

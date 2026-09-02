@@ -14,6 +14,7 @@ import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
+  draftAssumptionsOutcome,
   draftTestForAssumption,
   draftWorryOutcome,
   generateImmuneSystemWalkthrough,
@@ -630,9 +631,29 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
   // Rubric — deterministic pipeline step. Score persists even if the
   // coach reaction later fails; the Continue gate reads directly from
   // depth_score/attempts.
+  //
+  // When the coachee accepted a coach draft unchanged, the drafter
+  // already verified these exact words and the verdict travelled with
+  // the draft. Reuse it. Scoring the same text a second time is a
+  // second sample of a model, and any difference between the two
+  // surfaces as the coach contradicting a draft it just offered.
+  // Any edit, however small, falls through to a fresh score.
+  const acceptedDraftUnchanged =
+    behavior.coach_worry_draft !== null &&
+    behavior.coach_worry_draft_depth_score !== null &&
+    row.text.trim() === behavior.coach_worry_draft.trim();
   let score = 0;
   try {
-    const scored = await scoreWorryDepth({
+    const scored = acceptedDraftUnchanged
+      ? {
+          score: behavior.coach_worry_draft_depth_score!,
+          reason: behavior.coach_worry_draft_rubric_reason ?? "",
+          is_fear: true,
+          is_first_person_felt: true,
+          touches_identity: true,
+          explains_behavior: true,
+        }
+      : await scoreWorryDepth({
       goalText: loaded.map.improvement_goal ?? "",
       behaviorText: behavior.text,
       worryText: row.text,
@@ -1438,6 +1459,7 @@ async function draftMissingWorriesAfterAdvance(
       const n = WORRY_IDENTITY_SHAPES.length;
       const shapes = Array.from({ length: n }, (_v, k) => WORRY_IDENTITY_SHAPES[(index + k) % n]);
       let draft: string | null = null;
+      let verdict: { depthScore: number; rubricReason: string } | null = null;
       const tried: Array<{ shape: string; refusals: Array<{ draft: string; feedback: string[] }>; error?: string }> = [];
       for (const identityShape of shapes) {
         const outcome = await draftWorryOutcome({
@@ -1450,6 +1472,9 @@ async function draftMissingWorriesAfterAdvance(
         tried.push({ shape: identityShape, refusals: outcome.refusals, error: outcome.error });
         if (outcome.text) {
           draft = outcome.text;
+          // Carried onto the row so accepting the draft reuses this
+          // verdict instead of scoring the same words again.
+          verdict = outcome.verdict ?? null;
           break;
         }
       }
@@ -1472,15 +1497,19 @@ async function draftMissingWorriesAfterAdvance(
         },
         { stage: "worries" },
       );
-      return { behaviorId: b.id, draft };
+      return { behaviorId: b.id, draft, verdict };
     }),
   );
 
   const persisted = drafted.filter(
-    (d): d is { behaviorId: string; draft: string } => Boolean(d.draft),
+    (d): d is {
+      behaviorId: string;
+      draft: string;
+      verdict: { depthScore: number; rubricReason: string } | null;
+    } => Boolean(d.draft),
   );
   await Promise.all(
-    persisted.map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft)),
+    persisted.map((d) => setBehaviorWorryDraft(d.behaviorId, d.draft, d.verdict)),
   );
   events.record(
     "coach_reaction_sent",
@@ -1652,13 +1681,33 @@ async function draftAssumptionsAfterAdvance(
     text: c.text,
     worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
   }));
-  const drafts = await draftAssumptionsFromCommitments({
+  const outcome = await draftAssumptionsOutcome({
     goalText: map.improvement_goal ?? "",
     commitments: orderedCommitments.map((c) => ({
       text: c.text,
       worry_text: c.worry_text,
     })),
   });
+  // Recorded whether or not anything survived, so a commitment left
+  // with no draft is explainable from the admin view instead of a
+  // server log. Same diagnostics the worry drafter carries.
+  events.record(
+    "llm_attempt",
+    {
+      kind: "assumption_drafts",
+      model: mainModelIdOrUnset(),
+      commitment_count: commitments.length,
+      drafted_count: outcome.drafts.length,
+      uncovered_commitments: outcome.uncoveredCommitmentIndices,
+      refusals: outcome.refusals.map((r) => ({
+        draft: r.draft,
+        reason: r.reason.slice(0, 300),
+      })),
+      ...(outcome.error ? { error: outcome.error } : {}),
+    },
+    { stage: "assumptions" },
+  );
+  const drafts = outcome.drafts;
   if (drafts.length === 0) return;
   const toPersist = drafts.map((d) => ({
     text: d.text,

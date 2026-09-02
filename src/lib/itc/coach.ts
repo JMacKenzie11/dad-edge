@@ -1003,6 +1003,12 @@ function worryShapeInstruction(
 export type WorryDraftOutcome = {
   /** The verified draft, or null when nothing cleared every check. */
   text: string | null;
+  /** The verdict verification produced for `text`. Carried so the
+   *  save path can reuse it rather than scoring the same words a
+   *  second time, which is where drafter/coach disagreements came
+   *  from (see migration 20260902000001). Null when there's no text
+   *  or the depth rubric errored and verification failed open. */
+  verdict?: { depthScore: number; rubricReason: string } | null;
   /** Every draft the checks refused, with the checks' own lines. Lands
    *  in turn events so a missing draft is explainable after the fact. */
   refusals: Array<{ draft: string; feedback: string[] }>;
@@ -1092,7 +1098,11 @@ export async function draftWorryOutcome(input: {
    */
   async function verifyDraft(
     draft: DraftShape,
-  ): Promise<{ ok: boolean; feedback: string[] }> {
+  ): Promise<{
+    ok: boolean;
+    feedback: string[];
+    verdict: { depthScore: number; rubricReason: string } | null;
+  }> {
     const [depthResult, iwFindings] = await Promise.all([
       scoreWorryDepth({
         goalText: input.goalText,
@@ -1154,14 +1164,22 @@ export async function draftWorryOutcome(input: {
     }
     const people = checkPeopleFromMap({ draftText: draft.assembled, mapTexts });
     if (!people.ok) feedback.push(people.reason);
-    return { ok: feedback.length === 0, feedback };
+    return {
+      ok: feedback.length === 0,
+      feedback,
+      verdict: depthResult
+        ? { depthScore: depthResult.score, rubricReason: depthResult.reason }
+        : null,
+    };
   }
 
   try {
     const first = await generateDraft(basePromptLines);
     if (!first) return { text: null, refusals };
     const firstVerdict = await verifyDraft(first);
-    if (firstVerdict.ok) return { text: first.assembled, refusals };
+    if (firstVerdict.ok) {
+      return { text: first.assembled, refusals, verdict: firstVerdict.verdict };
+    }
     refusals.push({ draft: first.assembled, feedback: firstVerdict.feedback });
 
     // One retry with all failing reasons fed back.
@@ -1186,7 +1204,7 @@ export async function draftWorryOutcome(input: {
       );
       return { text: null, refusals };
     }
-    return { text: retry.assembled, refusals };
+    return { text: retry.assembled, refusals, verdict: retryVerdict.verdict };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(
@@ -1888,12 +1906,33 @@ Return only structured drafts (the three slots + commitment_indices per draft). 
  * feedback naming which are inverted. Whatever comes back is
  * returned — never silent drop.
  */
+export type AssumptionDraftsOutcome = {
+  drafts: Array<{ text: string; commitment_indices: number[] }>;
+  /** Every draft the checks refused, with the checks' own lines, and
+   *  which commitments were left with nothing. Lands in turn events
+   *  so "one draft for three commitments" is explainable after the
+   *  fact rather than invisible (the gap that made the worry-draft
+   *  failures so hard to diagnose). */
+  refusals: Array<{ draft: string; reason: string }>;
+  uncoveredCommitmentIndices: number[];
+  error?: string;
+};
+
+/** See draftAssumptionsOutcome. Kept for callers that only need the drafts. */
 export async function draftAssumptionsFromCommitments(input: {
   goalText: string;
   commitments: Array<{ text: string; worry_text: string }>;
 }): Promise<Array<{ text: string; commitment_indices: number[] }>> {
+  return (await draftAssumptionsOutcome(input)).drafts;
+}
+
+export async function draftAssumptionsOutcome(input: {
+  goalText: string;
+  commitments: Array<{ text: string; worry_text: string }>;
+}): Promise<AssumptionDraftsOutcome> {
   const started = Date.now();
   const HARD_WORD_CAP = 20;
+  const refusals: AssumptionDraftsOutcome["refusals"] = [];
 
   type BatchDraft = {
     text: string;
@@ -1957,7 +1996,9 @@ export async function draftAssumptionsFromCommitments(input: {
 
   try {
     const first = await generateBatch([]);
-    if (first.length === 0) return [];
+    if (first.length === 0) {
+      return { drafts: [], refusals, uncoveredCommitmentIndices: input.commitments.map((_c, i) => i + 1) };
+    }
 
     // Verify each draft's logical consistency (deterministic pattern
     // match, cannot fail). Each drafted assumption gets its own
@@ -2019,7 +2060,11 @@ export async function draftAssumptionsFromCommitments(input: {
       .filter((x) => !x.check.consistent);
 
     if (inverted.length === 0) {
-      return first.map(({ slots: _slots, ...rest }) => rest);
+      return {
+        drafts: first.map(({ slots: _slots, ...rest }) => rest),
+        refusals,
+        uncoveredCommitmentIndices: [],
+      };
     }
 
     // One batch retry with per-draft inversion feedback. The retry
@@ -2052,6 +2097,11 @@ export async function draftAssumptionsFromCommitments(input: {
     // fails is left to the coachee (and to honing's coverage draft).
     const chosen = retry && retry.length > 0 ? retry : first;
     const chosenChecks = await verifyBatch(chosen);
+    chosen.forEach((d, i) => {
+      if (!chosenChecks[i].consistent) {
+        refusals.push({ draft: d.text, reason: chosenChecks[i].reason });
+      }
+    });
     const passing = chosen.filter((_d, i) => chosenChecks[i].consistent);
     const covered = new Set(passing.flatMap((d) => d.commitment_indices));
     const uncovered = input.commitments
@@ -2067,15 +2117,30 @@ export async function draftAssumptionsFromCommitments(input: {
       if (!d) continue;
       const [check] = await verifyBatch([d]);
       if (check.consistent) passing.push({ ...d, commitment_indices: [idx] });
+      else refusals.push({ draft: d.text, reason: check.reason });
     }
     const verified = await verifyDraftClusters(passing, input.commitments);
-    return verified.map(({ slots: _slots, ...rest }) => rest);
+    const coveredAfterVerify = new Set(verified.flatMap((d) => d.commitment_indices));
+    return {
+      drafts: verified.map(({ slots: _slots, ...rest }) => rest),
+      refusals,
+      uncoveredCommitmentIndices: input.commitments
+        .map((_c, i) => i + 1)
+        .filter((i) => !coveredAfterVerify.has(i)),
+    };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.warn(
-      "[itc coach] draftAssumptionsFromCommitments failed: %s",
-      err instanceof Error ? err.message : String(err),
+      "[itc coach] draftAssumptionsOutcome failed (model=%s): %s",
+      mainModelIdOrUnset(),
+      message,
     );
-    return [];
+    return {
+      drafts: [],
+      refusals,
+      uncoveredCommitmentIndices: input.commitments.map((_c, i) => i + 1),
+      error: `${message} (model=${mainModelIdOrUnset()})`,
+    };
   } finally {
     console.warn(
       "[itc timing] draft kind=assumptions ms=%d",

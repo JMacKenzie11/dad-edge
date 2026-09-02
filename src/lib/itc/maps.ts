@@ -115,6 +115,12 @@ export type ItcBehavior = {
    *  content: converts to real worry.text only when the user
    *  explicitly accepts (Use this draft) or types their own. */
   coach_worry_draft: string | null;
+  /** The verdict the drafter's verification produced for
+   *  coach_worry_draft, carried so accepting the draft doesn't score
+   *  the same text a second time (see migration 20260902000001).
+   *  Null when no draft is pending. */
+  coach_worry_draft_depth_score: number | null;
+  coach_worry_draft_rubric_reason: string | null;
   created_at: string;
 };
 
@@ -734,11 +740,19 @@ export async function clearAssumptionDraftsForMap(mapId: string): Promise<void> 
 export async function setBehaviorWorryDraft(
   behaviorId: string,
   draftText: string,
+  /** The verdict the drafter's verification produced for this exact
+   *  text. Carried so the save path can reuse it instead of scoring
+   *  the same words again. */
+  verdict?: { depthScore: number; rubricReason: string } | null,
 ): Promise<void> {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("itc_behaviors")
-    .update({ coach_worry_draft: draftText.trim() })
+    .update({
+      coach_worry_draft: draftText.trim(),
+      coach_worry_draft_depth_score: verdict?.depthScore ?? null,
+      coach_worry_draft_rubric_reason: verdict?.rubricReason ?? null,
+    })
     .eq("id", behaviorId);
   if (error) throw new Error(`setBehaviorWorryDraft: ${error.message}`);
 }
@@ -772,7 +786,11 @@ export async function clearWorryDraftsForMap(mapId: string): Promise<void> {
   if (clearIds.length === 0) return;
   const { error: upErr } = await supabase
     .from("itc_behaviors")
-    .update({ coach_worry_draft: null })
+    .update({
+      coach_worry_draft: null,
+      coach_worry_draft_depth_score: null,
+      coach_worry_draft_rubric_reason: null,
+    })
     .in("id", clearIds);
   if (upErr) throw new Error(`clearWorryDraftsForMap update: ${upErr.message}`);
 }

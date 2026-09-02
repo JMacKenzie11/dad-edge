@@ -1182,6 +1182,29 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(shapes).not.toMatch(/"she'd|she\\'d|\bher\b/);
   });
 
+  it("a draft is scored once: the verdict travels with it and the save reuses it", () => {
+    // Scoring the same words twice (drafter, then save) is two samples
+    // of a model, and any difference shows up to the coachee as the
+    // coach contradicting a draft it just offered.
+    expect(block("draftWorryForBehavior")).toMatch(/verdict/);
+    const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
+    const saveWorry = actions.slice(actions.indexOf("export async function saveWorry"), actions.indexOf("const worryRemoveSchema"));
+    expect(saveWorry).toMatch(/acceptedDraftUnchanged/);
+    expect(saveWorry).toMatch(/coach_worry_draft_depth_score/);
+    // Any edit falls through to a fresh score.
+    expect(saveWorry).toMatch(/row\.text\.trim\(\) === behavior\.coach_worry_draft\.trim\(\)/);
+  });
+
+  it("the assumption batch drafter reports refusals and uncovered commitments", () => {
+    expect(coach).toMatch(/export type AssumptionDraftsOutcome/);
+    expect(block("draftAssumptionsOutcome")).toMatch(/uncoveredCommitmentIndices/);
+    const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
+    const fn = actions.slice(actions.indexOf("async function draftAssumptionsAfterAdvance"));
+    expect(fn).toMatch(/kind: "assumption_drafts"/);
+    expect(fn).toMatch(/uncovered_commitments/);
+    expect(fn).toMatch(/refusals/);
+  });
+
   it("a failed model call is retried, not counted as a shape that didn't fit", () => {
     // Production 2026-09-02: nine of ten worry-draft calls returned
     // "No object generated", and each one burned a Kegan shape, so the
