@@ -57,14 +57,27 @@ What makes a good competing commitment:
 
 Under each worry, the coach has drafted a starting point. Review it, tap to use, edit, or write your own.`,
   assumptions: () =>
-    `The beliefs you hold about how the world works that make every competing commitment above feel necessary. You don't experience these as beliefs. You experience them as TRUTH. That's exactly why the whole system runs on autopilot. Start with "I assume that if I…, then…" and follow the "then" all the way to what would make it devastating.
+    // Each bullet is one criterion the system actually scores, in
+    // plain words: makes-the-vow-necessary (judgeAssumptionUnderwrites,
+    // Appendix A criterion 1), has_finished_then, is_first_person_felt,
+    // lands_in_identity_or_big_time_bad. A structural test in
+    // units.test.ts holds that mapping so the intro can never promise
+    // a bar the judge doesn't hold, or hide one it does.
+    //
+    // No "start with I assume that if I…" instruction any more: the
+    // guides' own Big Assumptions take several shapes and many are
+    // not if-then, and Vol 1 p 4 asks only that at least one be.
+    `Look at the vows above. Each one only makes sense if something is true. That something is the Big Assumption: the belief the vow rests on. You don't hold it as a belief, you hold it as how things are, which is why the whole system runs without you deciding anything.
+
+For one of those vows to feel that necessary, what has to be true?
 
 What makes a good Big Assumption:
-• A finished "then". You followed it through to why it would actually hurt, not just what would happen ("the money might not show up" isn't done, keep going).
-• Feels true when you say it out loud. Not abstract, not somebody else's belief.
-• Ends somewhere devastating. "I'd be the kind of man who…" or "I'd never recover from that."
+• It makes the vow make sense. If this were true, protecting yourself that way would be the only move you had.
+• You finished the thought. "The money might not show up" isn't finished. Keep going until you reach what that would mean about you.
+• It feels true when you say it out loud, even if on paper you know it isn't.
+• It ends somewhere you can't come back from.
 
-One assumption usually holds up several commitments, so link each one to every commitment it underwrites.`,
+Written as "I assume that if…, then…" more often than not, though not always. One belief usually holds up several vows, so tick every commitment it explains.`,
   review: () =>
     `Take a beat and look at the whole map before we go test anything. Anything jumping out? A worry that feels off, a commitment that could be sharper, a Big Assumption that's not quite right? Edit whatever you want to change. If it all lands, hit Continue.`,
   immune_system: () =>

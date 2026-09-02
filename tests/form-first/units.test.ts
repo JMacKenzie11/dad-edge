@@ -1347,14 +1347,26 @@ describe("stage intros name the same criteria the rubrics score (structural)", (
     expect(rubric).toMatch(/is_first_person_never_vow/);
   });
 
-  it("assumptions: finished then / feels true / ends somewhere devastating", () => {
+  it("assumptions: makes the vow necessary / finished thought / feels true / no way back", () => {
     const intro = STAGE_INTROS.assumptions!(ctx);
-    expect(intro).toMatch(/A finished "then"/i);
+    // Appendix A criterion 1, enforced by judgeAssumptionUnderwrites.
+    expect(intro).toMatch(/It makes the vow make sense/i);
+    const assumptionChecks = readFileSync(
+      resolve(__dirname, "../../src/lib/itc/criteria/assumptions.ts"),
+      "utf8",
+    );
+    expect(assumptionChecks).toMatch(/judgeAssumptionUnderwrites/);
+    expect(intro).toMatch(/You finished the thought/i);
     expect(rubric).toMatch(/has_finished_then/);
-    expect(intro).toMatch(/Feels true when you say it out loud/i);
+    expect(intro).toMatch(/feels true when you say it out loud/i);
     expect(rubric).toMatch(/is_first_person_felt: First-person, present-tense, feels true/);
-    expect(intro).toMatch(/Ends somewhere devastating/i);
+    expect(intro).toMatch(/ends somewhere you can't come back from/i);
     expect(rubric).toMatch(/lands_in_identity_or_big_time_bad/);
+    // It must not instruct one shape: the guides' Big Assumptions
+    // take several, and Vol 1 p 4 asks only that at least one be
+    // if-then.
+    expect(intro).not.toMatch(/Start with "I assume that if/i);
+    expect(intro).toMatch(/though not always/i);
   });
 });
 
@@ -1412,21 +1424,25 @@ describe("STAGE_INTROS", () => {
     expect(/practical|"she'd get upset"|"we'd fall behind"/i.test(rendered)).toBe(true);
   });
 
-  it("assumptions intro names the ITC 'I assume that if…then…' shape and the many-to-many linking", () => {
+  it("assumptions intro offers the ITC shape without mandating it, and names the many-to-many linking", () => {
     const rendered = STAGE_INTROS["assumptions"]!(ctx(null));
-    // Big Assumptions in ITC are "I assume that if I…, then …" beliefs
-    // — the "I assume that" stem makes the epistemic status explicit
-    // (testable belief, not fact) which is what unlocks the immunity.
-    // The intro must model that canonical form for the coachee.
+    // The canonical form is offered ("I assume that if…, then…") but
+    // not mandated: the guides' own Big Assumptions take several
+    // shapes and many are not if-then (Vol 1 p 19's quiz list), and
+    // p 4 asks only that at least one be.
     expect(rendered.toLowerCase()).toContain("i assume");
     expect(/if.*then/i.test(rendered)).toBe(true);
+    expect(rendered).toMatch(/though not always/i);
     // Many-to-many is the whole reason assumptions has an add form
     // separate from the 1:1 worries/commitments — call it out.
     expect(/underwrite|link|holds up|hold up/i.test(rendered)).toBe(true);
-    // Must connect back to the immune system framing (why they run
-    // the system on autopilot).
-    expect(/immunity|immune|autopilot|feels?\s+like\s+truth/i.test(rendered))
-      .toBe(true);
+    // Must connect back to the immune system framing (why the system
+    // runs without him deciding anything).
+    expect(
+      /immunity|immune|autopilot|without you deciding|feels?\s+like\s+truth/i.test(
+        rendered,
+      ),
+    ).toBe(true);
   });
 
   it("no intro accidentally hard-codes an entry-shaped quote (no stale-quote reintroduction)", () => {
