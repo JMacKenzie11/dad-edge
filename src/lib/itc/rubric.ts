@@ -21,11 +21,12 @@ const RubricSchema = z.object({
   opposite_move: z.string().max(160),
   feared_result_of_opposite: z.string().max(240),
   feared_result_is_the_behavior_restated: z.boolean(),
-  // The discriminator. "does the behavior make sense as protection?"
-  // was a judgment call, and tuning it strict rejected real fears
-  // while tuning it lenient passed outright contradictions. This
-  // question has a determinate answer for both.
-  which_produces_the_feared_result: z.enum(["the behavior", "the opposite"]),
+  // Self-protection is a RELATION with two directions, and every
+  // earlier version of this criterion encoded only one of them, so
+  // each caught one failure shape and missed another. Both halves,
+  // stated once. See the system prompt for what each asks.
+  behavior_prevents_the_feared_result: z.boolean(),
+  opposite_brings_the_feared_result_about: z.boolean(),
   reason: z.string().min(1).max(400),
 });
 
@@ -75,11 +76,19 @@ You score four BINARY criteria. Be strict. When in doubt, score false.
    - opposite_move: the opposite of the paired behavior (in the prompt), in his words.
    - feared_result_of_opposite: in one line, what the worry says would happen or be exposed if he did the opposite.
    - feared_result_is_the_behavior_restated: true if that feared result is the behavior itself described as a fault. "I've been the guy who never listens to anybody" for the behavior "I don't ask what the prospect needs"; "I've been choosing my reputation over serving them" for the behavior "I hedge my recommendations". A worry that accuses the behavior does not explain it.
-   - which_produces_the_feared_result: is the feared result more likely to come about because he DOES the behavior, or because he does THE OPPOSITE? Only "the opposite" is a worry; "the behavior" means the worry is backwards, blaming the behavior for the very thing it protects him from.
-     "the opposite": behavior "I don't ask what the client needs", feared "they'd see me as unsure". ASKING is what would look unsure; not asking hides it. A worry.
-     "the opposite": behavior "I bring up things she did in the past", feared "I'd prove I'm the man who can never be enough for her". LISTENING is what would expose it; bringing up her past keeps it off the table. A worry. (The mechanism is unstated, and it doesn't need to be; take the worry's if-then at face value.)
-     "the behavior": behavior "I agree to terms I know are bad just to close the deal", feared "they'd see me as desperate to keep the deal". AGREEING to bad terms is what looks desperate; holding firm is the opposite of desperate. Backwards.
-     "the behavior": behavior "I oversell and pile on promises", feared "they'd think I'm pushy". OVERSELLING is what looks pushy. Backwards.
+   Then judge SELF-PROTECTION. Kegan/Lahey's Column 3 criterion is that the worry "shows why the Column 2 behaviors make good sense": the behavior is the coachee's protection against this exact fear. That is a relation with TWO directions, and both must hold. Judge them separately.
+
+   - behavior_prevents_the_feared_result: does DOING the behavior keep the feared result from happening? Ask it as: while he keeps doing this, is he safe from that?
+     TRUE: behavior "I don't ask what the client needs", feared "they'd see me as unsure". While he pitches instead of asking, they never see him unsure. Protected.
+     TRUE: behavior "I bring up things she did in the past", feared "I'd prove I'm the man who can never be enough for her". While her past is on the table, his inadequacy stays off it. Protected. (The mechanism is unstated, which is fine; take the worry's if-then at face value.)
+     FALSE: behavior "I don't ask the client what's driving their decision", feared "I'd be the one who sold them something they never needed". NOT asking makes that MORE likely, not less. It protects him from nothing here, so this fear cannot be what the behavior is for.
+     FALSE: behavior "I agree to terms I know are bad just to close", feared "they'd see me as desperate". Agreeing is what looks desperate. It causes the fear rather than preventing it.
+
+   - opposite_brings_the_feared_result_about: if he did the opposite, could the feared result follow? Read it as one chain: he does the opposite, it goes the way he dreads, then this.
+     TRUE: opposite "ask what the client needs", feared "seen as unsure". Asking is exactly what could look unsure.
+     FALSE: opposite "hold firm on the terms", feared "seen as desperate". Holding firm cannot produce that impression; it is the opposite of desperate.
+
+   Both TRUE is a worry. Either FALSE is not: the fear may be real, but it is not the one this behavior protects him from, and building a commitment on it produces a vow that explains nothing.
    Passing example: "if I stood behind my recommendation and it failed, I'd be the expert who got it wrong with nowhere to hide" (hedging protects him from exactly that). "if I let her past rest and listened, it'd be my mistakes we were talking about and I'd be the man who's been the problem" (bringing up her past keeps his off the table).
 
    Do not require the extra "and that means I'm unworthy" step for role identity — once the role and predicate are named ("the coach who couldn't help her when she needed me"), that IS identity. But bare failure verbs without a role noun ("I'd have failed to help her") don't clear the bar.
@@ -378,8 +387,10 @@ export async function scoreWorryDepth(input: {
       temperature: 0.1,
     });
 
+    // Self-protection in both directions, per Appendix A Column 3.
     const explainsBehavior =
-      object.which_produces_the_feared_result === "the opposite" &&
+      object.behavior_prevents_the_feared_result &&
+      object.opposite_brings_the_feared_result_about &&
       !object.feared_result_is_the_behavior_restated;
     const score =
       (object.is_fear ? 1 : 0) +

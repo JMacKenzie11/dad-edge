@@ -1082,7 +1082,10 @@ describe("scoreWorryDepth prompt (structural)", () => {
     expect(worrySystem).toMatch(/feared_result_is_the_behavior_restated/);
     // The discriminator that replaced the lenient boolean: a worry
     // whose feared result is produced by the BEHAVIOR is backwards.
-    expect(worrySystem).toMatch(/which_produces_the_feared_result/);
+    // Self-protection is a relation with two directions; both halves
+    // are judged, and explains_behavior needs both.
+    expect(worrySystem).toMatch(/behavior_prevents_the_feared_result/);
+    expect(worrySystem).toMatch(/opposite_brings_the_feared_result_about/);
     // The assumption rubric carries the same discriminator: a "then"
     // that the antecedent could not produce is backwards.
     const assumptionSystem = src.slice(src.indexOf("const ASSUMPTION_SYSTEM = `"), src.indexOf("export async function scoreAssumptionDepth"));
@@ -1090,7 +1093,7 @@ describe("scoreWorryDepth prompt (structural)", () => {
     const assumptionFn = src.slice(src.indexOf("export async function scoreAssumptionDepth"));
     expect(assumptionFn).toMatch(/object\.lands_in_identity_or_big_time_bad && consequentFollows \? 1 : 0/);
     const scoreFnBody = src.slice(src.indexOf("export async function scoreWorryDepth"));
-    expect(scoreFnBody).toMatch(/object\.which_produces_the_feared_result === "the opposite" &&\s*!object\.feared_result_is_the_behavior_restated/);
+    expect(scoreFnBody).toMatch(/object\.behavior_prevents_the_feared_result &&\s*object\.opposite_brings_the_feared_result_about &&\s*!object\.feared_result_is_the_behavior_restated/);
     expect(scoreFnBody).toMatch(/object\.touches_identity && explainsBehavior \? 1 : 0/);
     const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);
