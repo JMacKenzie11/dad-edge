@@ -712,11 +712,33 @@ export function trimAssembledDraft(assembled: string, cap: number): string {
  * the template already provides, lowercases first char unless it's a
  * pronoun "I".
  */
+/**
+ * The server writes "if I " in front of the antecedent slot, so a
+ * second "if" inside the slot doubles it: "if I brought up the harder
+ * truth if it costs me the deal" (observed on a live draft
+ * 2026-09-02). Strips a leading "if I " / "if " the drafter wrote
+ * redundantly, and a trailing subordinate "if …" clause.
+ *
+ * "when …" and "while …" conditions are left alone: they duplicate
+ * nothing the server wrote, and the guides treat a named moment as
+ * part of the counter-move ("stay in the room while she's angry").
+ * Server-owned sentence shape, per Form-First: the slot carries
+ * content, the server owns every connective.
+ */
+export function stripRedundantIf(slot: string): string {
+  return slot
+    .replace(/^\s*if\s+(i\s+)?/i, "")
+    // Trailing "… if X" with no further clause boundary. Conservative:
+    // a comma after the "if" means the clause continues, so leave it.
+    .replace(/,?\s+if\s+[^,]*$/i, "")
+    .trim();
+}
+
 export function assembleWorry(slots: {
   opposite_move: string;
   identity_landing: string;
 }): string {
-  const move = normalizeSlot(slots.opposite_move);
+  const move = normalizeSlot(stripRedundantIf(slots.opposite_move));
   const landing = normalizeSlot(slots.identity_landing);
   // "I" pronoun after the comma stays capital (normalizeSlot handles that).
   return `I worry that if I ${move}, ${landing}.`;
@@ -1610,7 +1632,9 @@ export function assembleAssumption(slots: {
   consequent_tell: string;
   consequent_identity: string;
 }): string {
-  const act = normalizeSlot(slots.antecedent_act);
+  // Same doubled-"if" guard the worry assembler uses: the server
+  // writes "if I " and the slot must not write its own.
+  const act = normalizeSlot(stripRedundantIf(slots.antecedent_act));
   const tell = normalizeSlot(slots.consequent_tell);
   const identity = normalizeSlot(slots.consequent_identity);
   return `I assume that if I ${act}, then ${tell} ${buildIdentityPredicate(tell, identity)}.`;

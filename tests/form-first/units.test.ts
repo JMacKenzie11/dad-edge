@@ -327,6 +327,54 @@ describe("assembleAssumption (structured slots → canonical sentence)", () => {
   });
 });
 
+describe("stripRedundantIf (server owns the 'if', the slot must not repeat it)", () => {
+  it("strips a trailing 'if …' clause that doubles the server's own", async () => {
+    const { stripRedundantIf, assembleWorry } = await import("@/lib/itc/coach");
+    expect(
+      stripRedundantIf("brought up the harder truth if it costs me the deal"),
+    ).toBe("brought up the harder truth");
+    // The live draft that exposed this.
+    expect(
+      assembleWorry({
+        opposite_move: "brought up the harder truth if it costs me the deal",
+        identity_landing: "they'd have seen me as someone who tells them what they want to hear",
+      }),
+    ).toBe(
+      "I worry that if I brought up the harder truth, they'd have seen me as someone who tells them what they want to hear.",
+    );
+  });
+
+  it("strips a leading 'if I ' the drafter wrote redundantly", async () => {
+    const { stripRedundantIf } = await import("@/lib/itc/coach");
+    expect(stripRedundantIf("if I stayed in the room")).toBe("stayed in the room");
+    expect(stripRedundantIf("If she pushed back")).toBe("she pushed back");
+  });
+
+  it("leaves 'when' / 'while' conditions alone (they duplicate nothing)", async () => {
+    const { stripRedundantIf } = await import("@/lib/itc/coach");
+    for (const move of [
+      "stay in the room while she's angry",
+      "quoted my price when they push back",
+      "asked what they need if they're unsure, and listened",
+    ]) {
+      expect(stripRedundantIf(move)).toBe(move);
+    }
+  });
+
+  it("the assumption assembler applies the same guard", async () => {
+    const { assembleAssumption } = await import("@/lib/itc/coach");
+    expect(
+      assembleAssumption({
+        antecedent_act: "if I let the work speak if the money is low",
+        consequent_tell: "the money wouldn't come",
+        consequent_identity: "the father who was passive",
+      }),
+    ).toBe(
+      "I assume that if I let the work speak, then the money wouldn't come and I'd be the father who was passive.",
+    );
+  });
+});
+
 describe("assembleCommitment (single slot → introductory-form sentence)", () => {
   // Kegan Vol 1 pp 26-27 introductory form:
   //   "I'm also committed to never <vow>."
