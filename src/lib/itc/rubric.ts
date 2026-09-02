@@ -403,7 +403,8 @@ export type ConsistencyResult = {
 
 /**
  * Deterministic replacement for the earlier LLM-based worry-consistency
- * verifier. The LLM verifier was fragile — asking Haiku to detect
+ * verifier. Two layers: interior scaffolding (banned verbs) and framing
+ * (exposure or consequence, never bare present tense). The LLM verifier was fragile — asking Haiku to detect
  * subtle semantic inversion is a judgment call, and the model kept
  * reading bare present-tense identity claims two valid ways
  * ("I'm the husband who weaponizes" could mean current-state or
@@ -492,70 +493,13 @@ const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
 ];
 
 /**
- * Kegan-canonical identity-landing markers. Drawn verbatim from the
- * Coach's Guide Vol 1 pp 13-14 and p 27, which enumerate valid
- * Column-3 identity landing shapes:
- *
- *   - Role/relational noun claim ("the husband who X", "someone who
- *     let people down") — Vol 1 p 14.
- *   - Self-label ("I'd be a fraud", "not enough", "the kind of
- *     husband who chose ego over her") — Vol 1 p 14.
- *   - "Seen as" / "looking like" / "appeared like" — Vol 1 p 13,
- *     p 27. These are Kegan's own operative vocabulary for the
- *     external-witness frame.
- *   - Role failure named by a role-implicating relational verb
- *     ("failed her", "let her down", "chose myself over her",
- *     "abandoned her", "hurt her", "brought dishonor to my family").
- *     Vol 1 p 14 and p 27.
- *
- * If none of these markers is present, the landing is likely a
- * STRATEGY description ("using her mistakes to avoid hearing mine"),
- * not an identity landing. Strategy descriptions preserve some yuck
- * but fail Kegan's identity-rung bar (p 13: "keeping the yuk in it
- * from the fear box"; p 27: "avoid being/looking like someone").
- * Retry with feedback pointing at the four valid categories.
+ * The identity-rung whitelist that used to sit here as "layer 3"
+ * (role nouns, self-labels, seen-as, role-failure verbs) was removed
+ * 2026-09-01. It was a hand-rolled approximation of the rubric's own
+ * touches_identity criterion, and it refused landings the rubric
+ * scores 3/3 ("they'd have seen me as someone who doesn't belong in
+ * this room"). One judge for "is this an identity": scoreWorryDepth.
  */
-const WORRY_IDENTITY_MARKERS: RegExp[] = [
-  // Role/relational noun — Vol 1 p 14 shape
-  /\b(the|a)\s+(husband|wife|father|dad|mother|mom|man|woman|guy|gal|person|kind|type|one|someone|somebody|parent|partner|spouse|son|daughter|brother|sister)\b/i,
-  // Any role rendered as "the [role] who …" / "a [role] who …": the
-  // canonical shape works for work roles too (the expert who, the
-  // coach who, the leader who). Added 2026-09-01 so consequence
-  // drafts on work maps aren't rejected as strategy descriptions.
-  /\b(the|a|an)\s+[a-z\-]+\s+(who|that)\b/i,
-  // Self-label — Vol 1 p 14 shape
-  /\b(a|the)\s+(fraud|fake|phony|coward|failure|liar|loser|monster|villain|cheat|hypocrite|fool|weakling)\b/i,
-  /\bnot\s+(enough|good\s+enough|worthy|the\s+\w+|a\s+real|a\s+true)\b/i,
-  // "Seen as" / "looking like" / "appeared like" — Vol 1 p 13, p 27.
-  // Include pronoun-inserted variants "see me/him/her/them as" which
-  // are semantically identical to "seen as" (the Kegan-canonical
-  // form) — just active voice with subject "she'd".
-  /\bseen\s+as\b/i,
-  /\bbe\s+seen\b/i,
-  /\b(see|sees|seeing|saw)\s+(me|him|her|them|us)\s+as\b/i,
-  /\bappeared?\s+(as|like)\b/i,
-  /\blooking\s+like\b/i,
-  /\blook\s+like\b/i,
-  // Role failure — Vol 1 p 14, p 27
-  /\bfailed\s+(as|her|him|them|my|the|at)\b/i,
-  /\blet\s+(her|him|them|down|my)\b/i,
-  /\bbrought\s+dishonor\b/i,
-  // Self-over-other pattern (any verb tense: chose/choosing/chosen,
-  // put/putting, picked/picking) — matches the semantic "putting
-  // myself ahead of her" that Kegan p 14 names as canonical role
-  // failure ("chose ego over her"). Decoupled from verb so tense
-  // doesn't matter.
-  /\b(myself|me)\s+(over|before|ahead\s+of)\s+(her|him|them|my)\b/i,
-  /\babandon(ed|ing)?\s+(her|him|them|my)\b/i,
-  /\bbetray(ed|ing)?\s+(her|him|them|my)\b/i,
-  /\bhurt(ing)?\s+(her|him|them|my)\b/i,
-  /\bdisappoint(ed|ing)?\s+(her|him|them|my)\b/i,
-  /\bneglect(ed|ing)?\s+(her|him|them|my)\b/i,
-  /\bignor(ed|ing)\s+(her|him|them|my)\b/i,
-  // Relational-role verbs directed at a person (any tense + "from/on
-  // her/him/them")
-  /\b(running|walking\s+out|hiding|checking\s+out|shutting\s+down|shutting\s+her\s+out)\s+(from|on)\s+(her|him|them|my)\b/i,
-];
 
 export function checkWorryLogicalConsistency(input: {
   behaviorText: string;
@@ -587,25 +531,11 @@ export function checkWorryLogicalConsistency(input: {
     };
   }
 
-  // Layer 3: identity-rung whitelist. Catches strategy-level
-  // landings ("using her mistakes to avoid hearing mine") that
-  // preserve some yuck but don't reach role/self-label/seen-as
-  // identity per Kegan Vol 1 pp 13-14, p 27.
-  const hasIdentityMarker = WORRY_IDENTITY_MARKERS.some((re) =>
-    re.test(input.identityLanding),
-  );
-  if (!hasIdentityMarker) {
-    return {
-      consistent: false,
-      reason:
-        "Identity landing describes a strategy or maneuver, not an identity. Per Kegan/Lahey Vol 1 pp 13-14 and p 27, Column-3 landings must reach one of four canonical shapes: (a) a role/relational noun claim (\"she'd see I've been the husband who never let a word she said land\"), (b) a self-label (\"she'd know I'm a fraud\", \"the truth would come out that I've never been enough\"), (c) a \"seen as\" / \"looking like\" framing (\"she'd have seen me as the man who chose ego over her\"), or (d) an explicit role-failure verb toward her/him/them (\"she'd see I've been choosing myself over her\", \"I've been the man who let her down all along\"). Rewrite so the landing names WHO he'd be judged as, not the tactical maneuver he's been running.",
-    };
-  }
-
+  // Whether the landing reaches the identity rung is the rubric's
+  // call (scoreWorryDepth.touches_identity), not a regex's.
   return {
     consistent: true,
-    reason:
-      "past-tense revealer + identity-rung markers detected (Kegan-canonical shape)",
+    reason: "exposure or consequence framing detected (Kegan-canonical shape)",
   };
 }
 

@@ -681,17 +681,16 @@ describe("checkWorryLogicalConsistency (three-layer deterministic worry check)",
     expect(out.reason).toMatch(/bare present tense/i);
   });
 
-  it("layer 3 fails on strategy-level landing without identity marker", () => {
-    // "Using her mistakes to avoid hearing mine" is a strategy
-    // description, not an identity landing. Passes layer 1 (no
-    // scaffolding) and layer 2 ("I've been"), but layer 3 catches
-    // the missing role-noun / self-label / seen-as / role-failure.
+  it("leaves the identity-rung call to the rubric (no regex whitelist)", () => {
+    // "they'd have seen me as someone who doesn't belong in this
+    // room" is a canonical seen-as landing the rubric scores 3/3; the
+    // old layer-3 whitelist refused it. Framing is the only structural
+    // requirement here; whether it's an identity is scoreWorryDepth's.
     const out = checkWorryLogicalConsistency({
       ...baseInput,
-      identityLanding: "I've been using her mistakes to avoid hearing mine",
+      identityLanding: "they'd have seen me as someone who doesn't belong in this room",
     });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/strategy|identity/i);
+    expect(out.consistent).toBe(true);
   });
 
   it("passes the consequence shape (Vol 1 p 13: who he'd be if the opposite went badly)", () => {

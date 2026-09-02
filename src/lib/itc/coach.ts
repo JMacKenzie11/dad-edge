@@ -945,7 +945,24 @@ function worryShapeInstruction(
  *      is worse than no draft: the coachee writes his own and the
  *      row's coach box does the coaching.
  */
-export async function draftWorryForBehavior(input: {
+export type WorryDraftOutcome = {
+  /** The verified draft, or null when nothing cleared every check. */
+  text: string | null;
+  /** Every draft the checks refused, with the checks' own lines. Lands
+   *  in turn events so a missing draft is explainable after the fact. */
+  refusals: Array<{ draft: string; feedback: string[] }>;
+  /** Set when the drafter threw (model error, schema mismatch). */
+  error?: string;
+};
+
+/** See draftWorryOutcome. Kept for callers that only need the text. */
+export async function draftWorryForBehavior(
+  input: Parameters<typeof draftWorryOutcome>[0],
+): Promise<string | null> {
+  return (await draftWorryOutcome(input)).text;
+}
+
+export async function draftWorryOutcome(input: {
   goalText: string;
   behaviorText: string;
   pillar: PillarCode;
@@ -963,8 +980,9 @@ export async function draftWorryForBehavior(input: {
    *  the draft (pronouns, relational nouns) must trace to this text
    *  plus the goal and behavior. */
   mapTexts?: string[];
-}): Promise<string | null> {
+}): Promise<WorryDraftOutcome> {
   const started = Date.now();
+  const refusals: WorryDraftOutcome["refusals"] = [];
   const pillar = PILLAR_BY_CODE[input.pillar];
   const mapTexts = [input.goalText, input.behaviorText, ...(input.mapTexts ?? [])];
   const witness = witnessFromMap(mapTexts);
@@ -1079,9 +1097,10 @@ export async function draftWorryForBehavior(input: {
 
   try {
     const first = await generateDraft(basePromptLines);
-    if (!first) return null;
+    if (!first) return { text: null, refusals };
     const firstVerdict = await verifyDraft(first);
-    if (firstVerdict.ok) return first.assembled;
+    if (firstVerdict.ok) return { text: first.assembled, refusals };
+    refusals.push({ draft: first.assembled, feedback: firstVerdict.feedback });
 
     // One retry with all failing reasons fed back.
     const retry = await generateDraft([
@@ -1094,23 +1113,22 @@ export async function draftWorryForBehavior(input: {
     // Only a draft that clears every check is offered, in draft mode
     // and rewrite mode alike. Anything the system offers has already
     // passed the judge that scores it on save.
-    if (!retry) return null;
+    if (!retry) return { text: null, refusals };
     const retryVerdict = await verifyDraft(retry);
     if (!retryVerdict.ok) {
+      refusals.push({ draft: retry.assembled, feedback: retryVerdict.feedback });
       console.warn(
         "[itc coach] worry draft refused after retry: draft=%o feedback=%o",
         retry.assembled,
         retryVerdict.feedback,
       );
-      return null;
+      return { text: null, refusals };
     }
-    return retry.assembled;
+    return { text: retry.assembled, refusals };
   } catch (err) {
-    console.warn(
-      "[itc coach] draftWorryForBehavior failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[itc coach] draftWorryOutcome failed: %s", message);
+    return { text: null, refusals, error: message };
   } finally {
     console.warn(
       "[itc timing] draft kind=worry ms=%d",

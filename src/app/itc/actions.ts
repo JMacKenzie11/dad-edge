@@ -14,7 +14,7 @@ import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   draftTestForAssumption,
-  draftWorryForBehavior,
+  draftWorryOutcome,
   generateImmuneSystemWalkthrough,
   generateMapCloseSummary,
   generateSuggestions,
@@ -1427,26 +1427,49 @@ async function draftMissingWorriesAfterAdvance(
   // across regenerations.
   const drafted = await Promise.all(
     needsDraft.map(async (b, index) => {
-      // Server-owned rotation across the four Kegan shapes. A shape
-      // that can't fit this behavior (its draft failed verification)
-      // falls back to the next shape once; only a verified draft is
-      // ever offered, so a behavior can end up with none.
-      const shapeIndex = index % WORRY_IDENTITY_SHAPES.length;
-      const shapes = [
-        WORRY_IDENTITY_SHAPES[shapeIndex],
-        WORRY_IDENTITY_SHAPES[(shapeIndex + 1) % WORRY_IDENTITY_SHAPES.length],
-      ];
+      // Server-owned rotation across the four Kegan shapes, starting
+      // at this behavior's slot so the map's set varies. A shape that
+      // can't fit this behavior (its draft failed verification) falls
+      // through to the next; only a verified draft is ever offered,
+      // so a behavior can end up with none. Every refusal and error
+      // lands in turn events so "no draft" is explainable after the
+      // fact, not just in a server log.
+      const n = WORRY_IDENTITY_SHAPES.length;
+      const shapes = Array.from({ length: n }, (_v, k) => WORRY_IDENTITY_SHAPES[(index + k) % n]);
       let draft: string | null = null;
+      const tried: Array<{ shape: string; refusals: Array<{ draft: string; feedback: string[] }>; error?: string }> = [];
       for (const identityShape of shapes) {
-        draft = await draftWorryForBehavior({
+        const outcome = await draftWorryOutcome({
           goalText: map.improvement_goal ?? "",
           behaviorText: b.text,
           pillar: map.pillar_code,
           identityShape,
           mapTexts: behaviors.map((x) => x.text),
         });
-        if (draft) break;
+        tried.push({ shape: identityShape, refusals: outcome.refusals, error: outcome.error });
+        if (outcome.text) {
+          draft = outcome.text;
+          break;
+        }
       }
+      events.record(
+        "llm_attempt",
+        {
+          kind: "worry_draft",
+          behavior_id: b.id,
+          ok: draft !== null,
+          shapes_tried: tried.map((t) => t.shape),
+          refusals: tried.flatMap((t) =>
+            t.refusals.map((r) => ({
+              shape: t.shape,
+              draft: r.draft,
+              feedback: r.feedback.map((f) => f.slice(0, 300)),
+            })),
+          ),
+          errors: tried.filter((t) => t.error).map((t) => `${t.shape}: ${t.error}`),
+        },
+        { stage: "worries" },
+      );
       return { behaviorId: b.id, draft };
     }),
   );
