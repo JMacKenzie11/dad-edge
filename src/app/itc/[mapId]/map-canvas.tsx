@@ -26,6 +26,7 @@ import { RegenerateWalkthroughButton } from "./regenerate-walkthrough-button";
 import { CommitmentsRow } from "./commitments-row";
 import { EntryThread } from "./entry-thread";
 import { GoalRow } from "./goal-row";
+import { GuideExamples } from "./guide-examples";
 import { PrioritizePicker } from "./prioritize-picker";
 import { ResultsForm } from "./results-form";
 import { TestDesignForm } from "./test-design-form";
@@ -389,6 +390,7 @@ export function MapCanvas({
             threads={worryThreads}
             isLocked={isLocked("worries")}
           />
+          <GuideExamples column="worries" />
         </Section>
 
         {advanceGate && map.current_stage === "worries" ? (
@@ -455,6 +457,7 @@ export function MapCanvas({
             threads={assumptionThreads}
             isLocked={isLocked("assumptions")}
           />
+          <GuideExamples column="assumptions" />
         </Section>
 
         {stageIndex(map.current_stage) >= stageIndex("immune_system") ? (

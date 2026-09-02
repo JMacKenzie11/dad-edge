@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { depthSeverity } from "../criteria/types";
+import { ASSUMPTION_EXAMPLES, WORRY_EXAMPLES } from "../guide-examples";
 import { worryPassesDepth } from "../rules";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -133,6 +134,48 @@ describe("the assumption box shows the stem it is going to save", () => {
     // worry one column up. A stem carries no content.
     //
     expect(rowCode).not.toMatch(/I assume that if I/);
+  });
+});
+
+describe("guide examples", () => {
+  it("every pair carries the citation that makes it checkable", () => {
+    // These are quoted from the guides, not written by us. The
+    // citation is what lets a coachee (or the next maintainer) go
+    // verify a line rather than trust it.
+    for (const p of [...WORRY_EXAMPLES, ...ASSUMPTION_EXAMPLES]) {
+      expect(p.source, `missing source: ${p.to}`).toMatch(/Coach's Guide Vol [12] p \d+/);
+      expect(p.from.length).toBeGreaterThan(10);
+      expect(p.to.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("keeps a flat, non-if-then Big Assumption among the examples", () => {
+    // Showing only if-thens would teach the requirement we removed
+    // from the rubric. Vol 1 p 4 asks that at least one assumption on
+    // a map be if-then, not every one.
+    const flat = ASSUMPTION_EXAMPLES.filter(
+      (p) => !/\bif\b/i.test(p.to),
+    );
+    expect(
+      flat.length,
+      "at least one assumption example must be a flat belief, not an if-then",
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps an if-then one too, since the guides lead with that shape", () => {
+    expect(
+      ASSUMPTION_EXAMPLES.filter((p) => /\bif\b/i.test(p.to)).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("stays short enough to be a thought jogger", () => {
+    // The panel is collapsed by default; the pairs still have to read
+    // as a line or two, not a page. Longer spans are trimmed with an
+    // ellipsis rather than reworded.
+    for (const p of [...WORRY_EXAMPLES, ...ASSUMPTION_EXAMPLES]) {
+      expect(p.from.length, `too long, trim it: ${p.from}`).toBeLessThan(160);
+      expect(p.to.length, `too long, trim it: ${p.to}`).toBeLessThan(200);
+    }
   });
 });
 
