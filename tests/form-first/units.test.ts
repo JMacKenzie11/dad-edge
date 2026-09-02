@@ -990,6 +990,24 @@ describe("worryPassesDepth (the actual depth gate rule)", () => {
   });
 });
 
+describe("scoreWorryDepth prompt (structural)", () => {
+  // The map takes the direct fear-box → Column 3 route (Vol 1 p 13), so
+  // a worry whose identity is the behavior said back produces a noble
+  // commitment by construction. The worry rubric is the ONLY place
+  // that can stop it, and it has the behavior in its prompt. Lock both
+  // facts so a prompt edit can't quietly drop the guard.
+  it("rejects the behavior said back as self-criticism and sees the paired behavior", () => {
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { resolve } = require("node:path") as typeof import("node:path");
+    const src = readFileSync(resolve(__dirname, "../../src/lib/itc/rubric.ts"), "utf8");
+    const worrySystem = src.slice(src.indexOf("const SYSTEM = `"), src.indexOf("export async function scoreCommitmentDepth"));
+    expect(worrySystem).toMatch(/THE BEHAVIOR SAID BACK AS SELF-CRITICISM/);
+    expect(worrySystem).toMatch(/what the behavior PROTECTS him from/);
+    const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
+    expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);
+  });
+});
+
 describe("STAGE_INTROS", () => {
   const requiredStages = [
     "behaviors",
