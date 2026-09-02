@@ -186,7 +186,7 @@ export async function scoreCommitmentDepth(input: {
 }
 
 const AssumptionSchema = z.object({
-  has_finished_then: z.boolean(),
+  is_a_finished_belief: z.boolean(),
   is_first_person_felt: z.boolean(),
   lands_in_identity_or_big_time_bad: z.boolean(),
   // Same extract-then-decide shape as the worry rubric's criterion 4.
@@ -197,17 +197,32 @@ const AssumptionSchema = z.object({
   which_produces_the_consequent: z.enum([
     "the act named in the if",
     "the opposite of that act",
+    // A flat belief ("I'm not good enough to charge high prices")
+    // names no act, so there is no backwards direction to catch.
+    // Without this option the model had to pick one of two answers
+    // to a question the assumption never asked, and a false reading
+    // silently zeroed criterion 3.
+    "no act is named",
   ]),
   reason: z.string().min(1).max(400),
 });
 
 export type AssumptionRubricResult = {
   score: 0 | 1 | 2 | 3;
-  has_finished_then: boolean;
+  /** The assumption states something he takes as true, not a forecast
+   *  of an event. If-then form is one way to do that and the guides'
+   *  most common one, but not the only one: their own list includes
+   *  "My self-worth is based on how others view me" and "I don't
+   *  believe I can ever be skillful at managing my anger", and Vol 1
+   *  p 4 asks only that AT LEAST ONE assumption on a map be in
+   *  if-then form. Requiring it of every one rejected real Big
+   *  Assumptions (2026-09-02). */
+  is_a_finished_belief: boolean;
   is_first_person_felt: boolean;
   lands_in_identity_or_big_time_bad: boolean;
   /** The "then" is produced by the act in the "if", not by its
-   *  opposite. False on a backwards assumption ("if I hold firm on
+   *  opposite. True by default for a flat belief that names no act:
+   *  nothing to be backwards about. False on a backwards assumption ("if I hold firm on
    *  the terms, then they'd see me as desperate" — caving is what
    *  looks desperate, holding firm is not). Folded into
    *  lands_in_identity_or_big_time_bad for the score: an ending the
@@ -217,15 +232,19 @@ export type AssumptionRubricResult = {
 };
 
 const ASSUMPTION_SYSTEM = `
-You are a strict rubric for column-4 Big Assumptions in an Immunity to Change map. A real Big Assumption is a first-person belief in if-then form whose "then" lands somewhere genuinely bad — the Big Time Bad conclusion, a contracted world. Not a forecast, not a strategy note.
+You are a strict rubric for column-4 Big Assumptions in an Immunity to Change map. A real Big Assumption is a first-person belief he holds as true that lands somewhere genuinely bad — the Big Time Bad conclusion, a contracted world. Not a forecast, not a strategy note.
 
 Score three binary criteria. When in doubt, false.
 
-1. has_finished_then: The assumption states "If X, then Y" and the Y half is followed through to its actual identity-level or existential end. "If I only rely on service energy, the money might not show up" is a forecast — the "then" hasn't finished. "If I only rely on service energy, then I'll fail as a provider and prove I never had it in me" has finished.
+1. is_a_finished_belief: The assumption states something he holds AS TRUE about himself or about how the world works. It is not a forecast of an event.
+   Two shapes are both fine, and the guides use both:
+   - If-then: "If I only rely on service energy, then I'll fail as a provider and prove I never had it in me." Here the "then" must be followed through to what it means about him. "If I only rely on service energy, the money might not show up" FAILS: that stops at an event.
+   - Flat statement of the belief: "I'm not good enough to charge high prices." "My self-worth is based on how others view me." "I don't believe I can ever be skillful at managing my anger." These are the guides' own Big Assumptions (Vol 1 p 19) and they PASS. Do not ask them for an "if". Do not reject them for lacking a "then".
+   Vol 1 p 4 asks only that at least one assumption on a map be in if-then form, not every one. Score false only for a forecast, a strategy note, or an if-then whose "then" stops at an event.
 
 2. is_first_person_felt: First-person, present-tense, feels true when he says it. Not third-person, not abstract, not about anyone else.
 
-4. Whether the "then" actually follows from the "if". Work it in order and write each step down:
+4. Whether the "then" actually follows from the "if". This catches a backwards assumption, and it applies ONLY to if-then assumptions. When the assumption is a flat belief with no "if" ("I'm not good enough to charge high prices"), leave antecedent_act empty and answer "no act is named" — there is no direction to get backwards. Otherwise work it in order and write each step down:
    - antecedent_act: the act named in the "if", in his words.
    - consequent: what the "then" says would happen or be true.
    - which_produces_the_consequent: read the "then" as one chain — he does the act, it goes the way he dreads, and THEN this. Ask whether that chain is coherent, not whether every word of it is directly caused by the act. Answer "the opposite of that act" ONLY when the consequent is plainly what his OTHER, current behavior produces. When the chain hangs together, answer "the act named in the if".
@@ -234,7 +253,9 @@ Score three binary criteria. When in doubt, false.
      "the opposite of that act": "if I hold firm on the terms, then they'd see me as desperate". CAVING on terms is what looks desperate; holding firm cannot produce that impression. Backwards.
      "the opposite of that act": "if I stopped rewriting the message ten times, then they'd think I fuss over every word". FUSSING is what the rewriting produces, not what stopping produces. Backwards.
 
-3. lands_in_identity_or_big_time_bad: The "then" names an identity ("I'd be the coach who talked a great game and couldn't deliver", "I'm the kind of man who...", "the fraud") or a Big Time Bad conclusion that can't be recovered from ("I can't be trusted when the people who depend on me need me most"). "It'd take longer" or "we'd lose the deal" doesn't land here.
+3. lands_in_identity_or_big_time_bad: Where the belief ends up. For an if-then, that is the "then". For a flat belief the STATEMENT ITSELF is the landing, and if it names an identity or a Big Time Bad it passes on its own ("I'm not good enough to charge high prices" lands on not-good-enough; "my self-worth is based on how others view me" lands on a contracted world). Read the rest of this criterion with that in mind: it describes what the ending must contain, not that there must be a separate "then" clause.
+
+   The "then" names an identity ("I'd be the coach who talked a great game and couldn't deliver", "I'm the kind of man who...", "the fraud") or a Big Time Bad conclusion that can't be recovered from ("I can't be trusted when the people who depend on me need me most"). "It'd take longer" or "we'd lose the deal" doesn't land here.
 
    STRICTLY REJECT these, the same way the worry rubric does. They gesture at identity without naming it:
    - Comparative hedges: "I may not be as capable / valuable as they think", "I'm not as good as they believe", "I might not be enough for them". The hedge ("may", "might", "not as … as") is the immune system softening it. Would need the named identity ("I'd be the fraud who's been talking a great game").
@@ -270,9 +291,9 @@ export async function scoreAssumptionDepth(input: {
       temperature: 0.1,
     });
     const consequentFollows =
-      object.which_produces_the_consequent === "the act named in the if";
+      object.which_produces_the_consequent !== "the opposite of that act";
     const score =
-      (object.has_finished_then ? 1 : 0) +
+      (object.is_a_finished_belief ? 1 : 0) +
       (object.is_first_person_felt ? 1 : 0) +
       // An ending the antecedent could not produce is not this
       // belief's Big Time Bad. Score stays 0-3 so every gate keeps
@@ -281,7 +302,7 @@ export async function scoreAssumptionDepth(input: {
     scoreForLog = score;
     return {
       score: score as 0 | 1 | 2 | 3,
-      has_finished_then: object.has_finished_then,
+      is_a_finished_belief: object.is_a_finished_belief,
       is_first_person_felt: object.is_first_person_felt,
       lands_in_identity_or_big_time_bad:
         object.lands_in_identity_or_big_time_bad && consequentFollows,

@@ -1,0 +1,118 @@
+/**
+ * Guards on the Big Assumption bar, both drifting halves of it.
+ *
+ * Kegan & Lahey Vol 1 p 19 runs a quiz of twelve assumptions and
+ * answers it: "items 6, 7 and 10 are not yet testable." Everything
+ * else passes, including three that carry no "if" and no "then" at
+ * all (1, 2, 9), and Appendix D lists worked tests for each. Item 7,
+ * "If I were to fail, I would lose all my self-respect", is a clean
+ * if-then landing on identity and they reject it. So if-then shape
+ * is not the bar.
+ *
+ * scoreAssumptionDepth used to require it anyway, which scored the
+ * guides' own Big Assumptions 0-1/3 while the stage intro shipped
+ * copy saying if-then was usual "though not always". One judge, one
+ * answer: these tests hold the prompt and the copy to the same rule.
+ *
+ * If these fail, do not loosen the test — fix the prompt or the copy.
+ */
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { depthSeverity } from "../criteria/types";
+import { worryPassesDepth } from "../rules";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const rubricSource = readFileSync(resolve(here, "..", "rubric.ts"), "utf8");
+
+/** The three flat, non-if-then Big Assumptions the guide passes. */
+const GUIDE_FLAT_ASSUMPTIONS = [
+  "I don't believe I can ever be skillful at managing my anger",
+  "My self-worth is based on how others view me",
+  "I need to feel overfull in order to feel full enough",
+];
+
+describe("assumption rubric prompt", () => {
+  it("does not define a Big Assumption as requiring if-then form", () => {
+    // The old header: "a first-person belief in if-then form whose
+    // 'then' lands somewhere genuinely bad". That single clause is
+    // what drove the model to fail every flat belief.
+    expect(rubricSource).not.toMatch(/Big Assumption is a first-person belief in if-then form/);
+  });
+
+  it("tells the model in so many words that a flat belief passes", () => {
+    expect(rubricSource).toMatch(/Do not ask them for an "if"/);
+    expect(rubricSource).toMatch(/Do not reject them for lacking a "then"/);
+  });
+
+  it("carries the guide's own flat examples so the model has them by name", () => {
+    // At least two of the three, quoted in the prompt. Verbatim
+    // examples are what stopped the model reading "flat belief" as
+    // "vague belief" and failing them anyway.
+    const present = GUIDE_FLAT_ASSUMPTIONS.filter((a) =>
+      rubricSource.includes(a.replace(/^I don't/, "I don't")),
+    );
+    expect(present.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("still rejects a forecast, which is the thing the criterion is for", () => {
+    expect(rubricSource).toMatch(/the money might not show up.*FAILS|FAILS.*stops at an event/s);
+  });
+
+  it("exempts a flat belief from the backwards-direction check", () => {
+    // A belief that names no act has no direction to get backwards.
+    // Without the third enum option the model had to answer a
+    // question the assumption never asked, and a false reading
+    // silently zeroed the identity criterion.
+    expect(rubricSource).toMatch(/"no act is named"/);
+    expect(rubricSource).toMatch(
+      /which_produces_the_consequent !== "the opposite of that act"/,
+    );
+  });
+});
+
+describe("the stage intro and the rubric agree on shape", () => {
+  it("intro copy does not promise if-then is required", () => {
+    const intro = readFileSync(resolve(here, "..", "stage-intros.ts"), "utf8");
+    // Copy shipped 2026-09-01 says if-then is common "though not
+    // always". The rubric must not contradict it.
+    const claimsRequired = /must be written as "?I assume that if/i.test(intro);
+    expect(claimsRequired).toBe(false);
+  });
+});
+
+describe("depth badge severity", () => {
+  it("separates a 2 from a 0, because the guides do", () => {
+    expect(depthSeverity(0)).toBe("critical");
+    expect(depthSeverity(1)).toBe("critical");
+    expect(depthSeverity(2)).toBe("moderate");
+  });
+
+  it("a 2 clears the gate on the second attempt, so it is not a wall", () => {
+    expect(worryPassesDepth(2, 1)).toBe(false);
+    expect(worryPassesDepth(2, 2)).toBe(true);
+    expect(worryPassesDepth(1, 5)).toBe(false);
+  });
+});
+
+describe("coach prose obeys the interior-witness ban it enforces", () => {
+  it("scrubs 'have to face' out of its own reasons", async () => {
+    const { scrubBannedCoachWords } = await import("../coach");
+    const out = scrubBannedCoachWords(
+      "The finished version would say who you'd be, the identity you'd have to face about yourself.",
+    );
+    expect(out).not.toMatch(/have to face/i);
+    expect(out).toMatch(/would be seen as/i);
+  });
+
+  it("scrubs the rest of the family", async () => {
+    const { scrubBannedCoachWords } = await import("../coach");
+    for (const bad of ["have to admit", "have to confront", "have to reckon with"]) {
+      expect(scrubBannedCoachWords(`You'd ${bad} being the guy who folds.`)).not.toMatch(
+        new RegExp(bad, "i"),
+      );
+    }
+  });
+});

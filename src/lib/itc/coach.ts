@@ -3686,6 +3686,16 @@ export function scrubBannedCoachWords(text: string): string {
     // the emphasized word.
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/\*([^*\s][^*\n]*[^*\s]|[^*\s])\*/g, "$1")
+    // "have to face/see/know/admit" — the interior-witness family
+    // from the voice doc's Column-4 section (docs/coach-voice-and-tone.md
+    // "Concrete over abstract"). The check functions catch these inside
+    // map entries; the coach's own prose was exempt, and shipped "the
+    // identity you'd have to face about yourself" to a coachee. Same
+    // rule, same words, both directions: name the observable
+    // consequence, not the self-witnessing.
+    .replace(/\b(?:you'?d\s+)?have\s+to\s+face\s+(?:up\s+to\s+)?(?:about\s+)?(?:yourself|myself|himself)\b/gi, "would be seen as")
+    .replace(/\b(?:you'?d\s+)?have\s+to\s+(?:face|admit|confront|reckon\s+with)\b/gi, "would be seen as")
+    .replace(/\bface\s+(?:yourself|myself|himself)\b/gi, "hear it said out loud")
     // "own up to" family — banned interior-witness verb per the
     // voice doc's Column-4 section. When the coach uses it in audit
     // prose reacting to the coachee's map, it's the same violation

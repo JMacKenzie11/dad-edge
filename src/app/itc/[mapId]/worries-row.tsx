@@ -7,6 +7,7 @@ import { removeWorry, saveWorry } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { CoachFixBox } from "./coach-fix-box";
+import { DepthBadge, depthBorderClass } from "./depth-badge";
 import { SavingIndicator } from "./form-field";
 import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "@/components/ui/use-confirm";
@@ -246,7 +247,7 @@ function WorryItem({
       className={
         "rounded-md border bg-black/20 px-4 py-3 " +
         (needsMoreDepth
-          ? "border-[color:var(--color-danger)]/50 "
+          ? depthBorderClass(worry?.depth_score ?? null)
           : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
@@ -267,12 +268,11 @@ function WorryItem({
           <span className="text-sm">{behavior.text}</span>
           <span className="text-[color:var(--color-text-muted)]/50">→</span>
           {needsMoreDepth ? (
-            <span
-              className="ml-auto rounded-full border border-[color:var(--color-danger)]/60 bg-[color:var(--color-danger)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-danger)]"
-              title="This worry hasn't reached the depth needed to advance. Sharpen it (or wait for a second attempt to pass) to clear the gate."
-            >
-              Needs more depth
-            </span>
+            <DepthBadge
+              score={worry?.depth_score ?? null}
+              column="worry"
+              className="ml-auto"
+            />
           ) : null}
           {worry ? (
             <button

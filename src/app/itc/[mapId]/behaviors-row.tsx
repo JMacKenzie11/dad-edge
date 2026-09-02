@@ -11,6 +11,7 @@ import {
 } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { CoachFixBox } from "./coach-fix-box";
+import { DepthBadge, depthBorderClass } from "./depth-badge";
 import { EntryThread } from "./entry-thread";
 import { SavingIndicator } from "./form-field";
 import { useConfirm } from "@/components/ui/use-confirm";
@@ -391,7 +392,7 @@ function BehaviorItem({
       className={
         "rounded-md border bg-black/20 px-3 py-2 " +
         (needsMoreDepth
-          ? "border-[color:var(--color-danger)]/50 "
+          ? depthBorderClass(behavior.depth_score)
           : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
@@ -421,12 +422,11 @@ function BehaviorItem({
           {index}.
         </span>
         {needsMoreDepth ? (
-          <span
-            className="mt-2 rounded-full border border-[color:var(--color-danger)]/60 bg-[color:var(--color-danger)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-danger)] shrink-0"
-            title="This behavior hasn't reached the depth needed to advance. Sharpen it (or wait for a second attempt to pass) to clear the gate."
-          >
-            Needs more depth
-          </span>
+          <DepthBadge
+            score={behavior.depth_score}
+            column="behavior"
+            className="mt-2"
+          />
         ) : null}
         <AutoTextarea
           ref={textareaRef}

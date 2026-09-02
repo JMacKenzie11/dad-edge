@@ -1488,7 +1488,7 @@ describe("Form-First regression", () => {
   );
 
   it(
-    "regression i: coach reactions never carry a suggestions array (menus are Give-me-ideas's job)",
+    "regression i: entry coaching never offers a menu (menus are Give-me-ideas's job)",
     async () => {
       // Prior bug: on adding behavior #2, the reaction returned 4
       // suggestion chips (inconsistent — didn't happen on #1) and
@@ -1526,8 +1526,13 @@ describe("Form-First regression", () => {
         expect((await addBehavior(fd)).ok).toBe(true);
       }
 
-      // Read every assistant reaction on behavior threads and assert
-      // no fenced chip payload carries a non-empty suggestions array.
+      // The invariant is unchanged: nothing outside Give-me-ideas
+      // hands the coachee a MENU of entry texts. Where it lives moved.
+      // LLM entry_thread reactions were retired for the deterministic
+      // fix box, so there is no chip payload left to inspect. The
+      // guarantee is now structural: a row carries at most ONE
+      // rewrite, in `suggested_fix`, a single column of text that
+      // cannot hold a list.
       const { data: reactions } = await supabase
         .from("itc_messages")
         .select("content")
@@ -1535,20 +1540,27 @@ describe("Form-First regression", () => {
         .eq("role", "assistant")
         .eq("surface", "entry_thread")
         .eq("entry_ref_table", "itc_behaviors");
-      expect((reactions?.length ?? 0) >= 2).toBe(true);
-      for (const m of reactions ?? []) {
-        const content = m.content as string;
-        const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
-        const match = content.match(fence);
-        if (!match) continue; // no chip payload = trivially fine
-        const chips = JSON.parse(match[1]) as {
-          refinement?: string;
-          suggestions?: string[];
-        };
+      expect(
+        reactions?.length ?? 0,
+        "behavior entry_thread reactions were retired 2026-09-01; coaching lives on the row (sharpen_text / suggested_fix). A reaction here means the retired LLM path came back.",
+      ).toBe(0);
+
+      const { data: rows } = await supabase
+        .from("itc_behaviors")
+        .select("text, suggested_fix")
+        .eq("map_id", ctx.mapId);
+      expect(rows?.length ?? 0).toBe(2);
+      for (const r of rows ?? []) {
+        const fix = r.suggested_fix as string | null;
+        if (fix === null) continue;
+        expect(typeof fix, "suggested_fix must be one rewrite, not a list").toBe(
+          "string",
+        );
+        // One sentence, not an enumerated menu smuggled into a string.
         expect(
-          chips.suggestions ?? [],
-          `reaction should not carry suggestions[]; got: ${JSON.stringify(chips.suggestions)}`,
-        ).toEqual([]);
+          /^\s*(?:[-*\u2022]|\d[.)])\s/m.test(fix),
+          `suggested_fix must not be a bulleted or numbered menu; got: ${fix}`,
+        ).toBe(false);
       }
     },
     90_000,
@@ -1645,7 +1657,7 @@ describe("Form-First regression", () => {
   );
 
   it(
-    "regression l: coach rejects identity/aspirational/vague behaviors (Case 2, not Case 3)",
+    "regression l: coach rejects identity/aspirational/vague behaviors, and says why on the row",
     async () => {
       // Behavior-column parallel to regression k. Column 2 requires
       // observable moves that CLEARLY work against the Column 1 goal.
@@ -1690,45 +1702,36 @@ describe("Form-First regression", () => {
             `addBehavior failed for "${text}": ${bRes.ok ? "" : bRes.reason}`,
           ).toBe(true);
 
-          // Read the coach reaction on this behavior.
+          // The judge that catches these moved from an LLM reaction
+          // to scoreBehaviorDepth, whose verdict is persisted on the
+          // row. Same three failure modes, same rejection, one judge:
+          //   "I'm a bad listener"            -> identity label
+          //   "I need to be more patient"     -> aspiration
+          //   "I withdraw"                    -> vague, not observable
           const { data: bs } = await supabase
             .from("itc_behaviors")
-            .select("id")
+            .select("id, depth_score, sharpen_text")
             .eq("map_id", mapId);
           expect(bs?.length).toBe(1);
-          const behaviorId = bs![0].id;
-          const { data: msgs } = await supabase
-            .from("itc_messages")
-            .select("content")
-            .eq("map_id", mapId)
-            .eq("role", "assistant")
-            .eq("surface", "entry_thread")
-            .eq("entry_ref_table", "itc_behaviors")
-            .eq("entry_ref_id", behaviorId);
+          const row = bs![0];
           expect(
-            (msgs?.length ?? 0) > 0,
-            `no reaction landed for bad behavior "${text}"`,
+            row.depth_score as number | null,
+            `no depth verdict landed for bad behavior "${text}"`,
+          ).not.toBeNull();
+          expect(
+            (row.depth_score as number) < 3,
+            `bad behavior "${text}" must not score a clean 3; got ${row.depth_score}`,
           ).toBe(true);
-          const content = (msgs ?? []).map((m) => m.content as string).join("\n");
 
-          // Case 2 shape: refinement chip OR a question mark in prose.
-          const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
-          const match = content.match(fence);
-          let hasRefinement = false;
-          if (match) {
-            try {
-              const chips = JSON.parse(match[1]) as { refinement?: string };
-              hasRefinement = Boolean(
-                chips.refinement && chips.refinement.trim().length > 0,
-              );
-            } catch {
-              hasRefinement = false;
-            }
-          }
+          // And the coachee must be told, in the coach's own words,
+          // on the row itself. A silent low score is the same false
+          // approval this regression was written to catch.
+          const content = (row.sharpen_text as string | null) ?? "";
+          const hasRefinement = content.trim().length > 0;
           const hasQuestion = content.includes("?");
           expect(
             hasRefinement || hasQuestion,
-            `bad behavior "${text}" must trigger Case 2 (refinement chip) or a probing question; got: ${content}`,
+            `bad behavior "${text}" scored low but told the coachee nothing; sharpen_text was empty. Got: ${content}`,
           ).toBe(true);
         } finally {
           await cleanup(participantId);
@@ -1957,81 +1960,46 @@ describe("Form-First regression", () => {
   );
 
   it(
-    "regression k: coach rejects role-identity goals (Case 2, not Case 3)",
+    "regression k: role-identity goals are named as such before the man writes one",
     async () => {
-      // Prior bug: "I'm committed to getting better at being a husband"
-      // was Case-3 approved by the coach with a bare acknowledgment,
-      // even though the goal fails Kegan/Lahey's specificity bar (role
-      // rather than behavioral pattern). Fix: goal-stage criteria now
-      // enumerate role-identity phrasings as banned Case-3 outcomes.
+      // Prior bug: "I'm committed to getting better at being a
+      // husband" sailed through with a bare acknowledgment, even
+      // though it fails Kegan/Lahey's Column 1 specificity bar (a
+      // role, not a way of acting).
       //
-      // Assert: for each of several role-identity goal phrasings, the
-      // coach's reaction on the goal thread carries EITHER a
-      // refinement chip (Case 2) OR a question mark (excavation).
-      // A bare acknowledgment with no chip and no question would
-      // constitute the same false-approval bug.
-      const supabase = createSupabaseServiceClient();
+      // The LLM goal reaction that used to catch this was retired
+      // 2026-08-31 (see saveGoal: "the shared criteria module owns
+      // all goal coaching now"). Nothing scores the goal at save
+      // time any more, so the bar has to be stated BEFORE he writes,
+      // in the goal stage intro, which is the surface that replaced
+      // the reaction. This test holds that surface to the bar.
+      //
+      // If a goal-level judge is ever reintroduced, extend this test
+      // to assert its verdict too rather than replacing this half:
+      // the intro should keep saying it either way.
+      const { STAGE_INTROS } = await import("@/lib/itc/stage-intros");
+      const intro = STAGE_INTROS.goal!({ goal: null, pillarCode: "A" });
 
-      const roleGoals = [
-        "I'm committed to getting better at being a husband",
-        "I'm committed to getting better at being a good father",
-        "I'm committed to getting better at being a leader",
-      ];
-
-      for (let i = 0; i < roleGoals.length; i++) {
-        // Fresh map per test case so the coach doesn't accumulate
-        // context that skews the reaction.
-        const { participantId, mapId } = await seedParticipantAndMap();
-        try {
-          const fd = new FormData();
-          fd.set("map_id", mapId);
-          fd.set("text", roleGoals[i]);
-          expect((await saveGoal(fd)).ok).toBe(true);
-
-          const { data: msgs } = await supabase
-            .from("itc_messages")
-            .select("content")
-            .eq("map_id", mapId)
-            .eq("role", "assistant")
-            .eq("surface", "entry_thread")
-            .eq("entry_ref_table", "itc_maps")
-            .eq("entry_ref_id", mapId);
-          expect(
-            (msgs?.length ?? 0) > 0,
-            `no reaction landed for role goal: ${roleGoals[i]}`,
-          ).toBe(true);
-          const content = (msgs ?? []).map((m) => m.content as string).join("\n");
-
-          // Parse the fenced chip payload (if any) — refinement chip
-          // means Case 2, which is the correct outcome for a role
-          // goal. Question mark in prose is also acceptable (the coach
-          // pushed back with an excavation question).
-          const fence = /\n?```coach-chips\s*\n([\s\S]*?)\n```\s*$/;
-          const match = content.match(fence);
-          let hasRefinement = false;
-          if (match) {
-            try {
-              const chips = JSON.parse(match[1]) as { refinement?: string };
-              hasRefinement = Boolean(
-                chips.refinement && chips.refinement.trim().length > 0,
-              );
-            } catch {
-              hasRefinement = false;
-            }
-          }
-          const hasQuestion = content.includes("?");
-          expect(
-            hasRefinement || hasQuestion,
-            `role goal "${roleGoals[i]}" must trigger Case 2 (refinement chip) or an excavation question; got: ${content}`,
-          ).toBe(true);
-        } finally {
-          await cleanup(participantId);
-        }
-      }
+      expect(
+        /a role/i.test(intro),
+        `goal intro must name the role-vs-way-of-acting distinction; got: ${intro}`,
+      ).toBe(true);
+      // The worked contrast has to be concrete enough to copy, and it
+      // has to use one of the role nouns men actually type.
+      expect(
+        /(husband|father|leader)/i.test(intro),
+        `goal intro must show a real role-goal example; got: ${intro}`,
+      ).toBe(true);
+      expect(
+        /way of acting|you'd know the moment/i.test(intro),
+        `goal intro must say what to write instead of a role; got: ${intro}`,
+      ).toBe(true);
+      // And it must not simply forbid: Appendix A asks for a
+      // behavioral pattern, so the intro shows one.
+      expect(intro).toMatch(/Staying in the room/i);
     },
-    240_000,
+    10_000,
   );
-
   it(
     "regression o: worry input placeholder is polarity-safe for both doing and not-doing behaviors",
     async () => {
@@ -2057,24 +2025,61 @@ describe("Form-First regression", () => {
         /placeholder=["'][^"']*if you stopped/i.test(src),
         "worry placeholder must not use 'if you stopped' (breaks for not-doing behaviors)",
       ).toBe(false);
+
+      // The polarity guarantee moved 2026-09-02. It used to live in
+      // the placeholder, which asked the coachee to imagine "if you
+      // did the opposite". The box is now PRE-FILLED by the server
+      // with "I worry that if I <counter-move>, " (draftWorryOpening),
+      // so the placeholder is a fallback he rarely sees and the
+      // counter-move itself is what has to be polarity-safe. That is
+      // a stronger guarantee than a hint in grey text: the server
+      // writes the affirmative act rather than asking him to invert
+      // a negative in his head.
+      const coachSrc = readFileSync(
+        resolve(repoRoot, "src/lib/itc/coach.ts"),
+        "utf8",
+      );
       expect(
-        /placeholder=["'][^"']*did the opposite/i.test(src),
-        "worry placeholder must ask about 'did the opposite' so it works for both polarities",
+        /For a not-doing behavior[^\n]*affirmative act/i.test(coachSrc),
+        "worry opening drafter must turn a not-doing behavior into an affirmative act",
+      ).toBe(true);
+      expect(
+        /NEVER "stopped not-/i.test(coachSrc),
+        "worry opening drafter must forbid the 'stopped not-asking' double negative",
       ).toBe(true);
     },
     5_000,
   );
 
   it(
-    "regression p: advance to assumptions populates clustered coach drafts covering every commitment",
+    "regression p: advance to assumptions drafts nothing — the man writes his own",
     async () => {
-      // On advance into the assumptions stage, the server pipeline
-      // reads the map's commitments, calls the coach to cluster them,
-      // and persists 2–6 coach-drafted Big Assumptions in itc_assumption_drafts
-      // (with commitment coverage links in itc_assumption_draft_commitments).
-      // Assertion: every commitment gets covered by at least one draft;
-      // every draft has "If I…, then…" shape; the LLM clustered (fewer
-      // drafts than commitments in the typical case).
+      // This regression used to assert the opposite: that advancing
+      // into assumptions clustered the commitments and persisted 2-6
+      // coach-drafted Big Assumptions, each forced into canonical
+      // "I assume that if I …, then …" form.
+      //
+      // Both halves were retired 2026-09-02, for separate reasons
+      // found on live maps:
+      //
+      //   1. Drafting them backfired. Handed a pre-written
+      //      assumption, men edited it into a restatement of the
+      //      worry they had written one column up, which is the one
+      //      thing Column 5 must not be. The coach now offers
+      //      nothing on advance and the man supplies the belief.
+      //
+      //   2. The mandatory if-then shape was never the guides' bar.
+      //      Kegan & Lahey Vol 1 p 19 answer their own quiz: of the
+      //      twelve assumptions listed, only 6, 7 and 10 are not
+      //      testable. Items 1, 2 and 9 carry no "if" and no "then"
+      //      and are fine, with worked tests in Appendix D. Item 7
+      //      is a clean if-then landing on identity and they reject
+      //      it. See src/lib/itc/__tests__/assumption-shape.test.ts.
+      //
+      // The coverage drafter (fixCoverage in src/lib/itc/fixes.ts)
+      // is deliberately still live and is NOT what this locks: it
+      // fires only for a commitment no assumption covers, which is a
+      // gap in his own map rather than a blank column.
       const supabase = createSupabaseServiceClient();
 
       // Schema probe — itc_assumption_drafts table added in migration
@@ -2166,7 +2171,8 @@ describe("Form-First regression", () => {
         expect(error, `seed commitment ${error?.message}`).toBeNull();
       }
 
-      // Advance to assumptions — this triggers the draft pipeline.
+      // Advance to assumptions. This used to trigger the draft
+      // pipeline; it must now leave the column empty.
       const advA = new FormData();
       advA.set("map_id", ctx.mapId);
       advA.set("to", "assumptions");
@@ -2176,77 +2182,60 @@ describe("Form-First regression", () => {
         `advance to assumptions: ${advARes.ok ? "" : advARes.reason}`,
       ).toBe(true);
 
-      // Drafts must exist.
+
+      // The column must be empty. He writes the first one.
       const { data: drafts } = await supabase
         .from("itc_assumption_drafts")
         .select("id, text")
         .eq("map_id", ctx.mapId);
       expect(
-        (drafts?.length ?? 0) >= 1,
-        `at least one coach draft must be persisted after advance to assumptions; got ${drafts?.length ?? 0}`,
-      ).toBe(true);
+        drafts?.length ?? 0,
+        `advance to assumptions must draft nothing; got ${drafts?.length ?? 0}: ${JSON.stringify((drafts ?? []).map((d) => d.text))}`,
+      ).toBe(0);
+
+      const { data: assumptions } = await supabase
+        .from("itc_assumptions")
+        .select("id")
+        .eq("map_id", ctx.mapId);
       expect(
-        (drafts?.length ?? 0) <= 6,
-        `coach must not spam drafts (max 6 per schema); got ${drafts?.length}`,
-      ).toBe(true);
+        assumptions?.length ?? 0,
+        "advance to assumptions must not write assumptions either",
+      ).toBe(0);
 
-      // Every draft must be in canonical Kegan/Lahey form:
-      // "I assume that if I …, then …". Both the "I assume that" stem
-      // (via ensureStem) and the "then" between antecedent and
-      // consequent (via ensureThenAfterIfClause) are enforced
-      // server-side in draftAssumptionsFromCommitments, so even a
-      // compliant model that drops either token still lands here in
-      // canonical form. The "then" is what makes the consequent
-      // testable-as-prediction rather than diagnostic-as-fact.
-      for (const d of drafts ?? []) {
-        expect(
-          /^i\s+assume\s+that\s+if\s+i\b/i.test((d.text as string).trim()),
-          `draft must start with "I assume that if I": "${d.text}"`,
-        ).toBe(true);
-        // The "then" must appear AFTER the antecedent comma, not just
-        // anywhere in the string. This regex checks the shape.
-        expect(
-          /\bif\s+i\b[^,]*,\s*then\b/i.test(d.text as string),
-          `draft must include "then" after the antecedent comma (predictive frame): "${d.text}"`,
-        ).toBe(true);
-      }
+      // Structural locks so a refactor can't quietly bring the
+      // advance-time pipeline back through another door.
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, resolve } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      const repoRoot = resolve(here, "..", "..");
 
-      // Every commitment must be underwritten by at least one draft
-      // (no orphans — the whole map has coverage).
-      const { data: cs } = await supabase
-        .from("itc_commitments")
-        .select("id")
-        .eq("map_id", ctx.mapId);
-      const draftIds = (drafts ?? []).map((d) => d.id as string);
-      const { data: links } = await supabase
-        .from("itc_assumption_draft_commitments")
-        .select("draft_id, commitment_id")
-        .in("draft_id", draftIds);
-      const coveredCommitmentIds = new Set(
-        (links ?? []).map((l) => l.commitment_id as string),
+      // (a) Column 5 gets no opening either. The worry column gets
+      // one because the counter-move is the half the server is
+      // reliably right about; the belief has no such half.
+      const coachSrc = readFileSync(
+        resolve(repoRoot, "src/lib/itc/coach.ts"),
+        "utf8",
       );
-      for (const c of cs ?? []) {
-        expect(
-          coveredCommitmentIds.has(c.id as string),
-          `commitment ${c.id} must be covered by at least one coach draft`,
-        ).toBe(true);
-      }
+      expect(
+        /export async function draftAssumptionOpening\b/.test(coachSrc),
+        "draftAssumptionOpening was retired; a prefix made men restate the worry",
+      ).toBe(false);
 
-      // Idempotency: advancing again (a hypothetical resume) must not
-      // duplicate drafts. Re-fire and confirm the count is unchanged.
-      const advA2 = new FormData();
-      advA2.set("map_id", ctx.mapId);
-      advA2.set("to", "assumptions");
-      await advanceToStage(advA2);
-      const { data: drafts2 } = await supabase
-        .from("itc_assumption_drafts")
-        .select("id")
-        .eq("map_id", ctx.mapId);
-      expect(drafts2?.length).toBe(drafts?.length);
+      // (b) The row must not render a draft-accept affordance. Match
+      // JSX text between tags so historical doc comments referencing
+      // the retired card don't trip this.
+      const rowSrc = readFileSync(
+        resolve(repoRoot, "src/app/itc/[mapId]/assumptions-row.tsx"),
+        "utf8",
+      );
+      expect(
+        />\s*Use this draft\s*</i.test(rowSrc),
+        "assumptions-row must not render a 'Use this draft' button",
+      ).toBe(false);
     },
     240_000,
   );
-
   it(
     "regression r: commitments are auto-derived, no draft/accept UI",
     async () => {

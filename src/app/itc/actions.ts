@@ -1092,7 +1092,7 @@ export async function saveAssumption(
         entry_id: row.id,
         score,
         attempts: row.attempts,
-        has_finished_then: scored.has_finished_then,
+        is_a_finished_belief: scored.is_a_finished_belief,
         is_first_person_felt: scored.is_first_person_felt,
         lands_in_identity_or_big_time_bad:
           scored.lands_in_identity_or_big_time_bad,

@@ -34,6 +34,7 @@ export const STAGE_INTROS: Partial<
 What a good goal sounds like:
 • One improvement, not two. "Getting better at coaching my team and building my business" is two maps.
 • It implicates you. Something you need to get better at, not something other people need to change.
+• A way of acting, not a role. "Being a better husband" is a role. "Staying in the room when she brings up something hard" is a way of acting, and you'd know the moment you did it.
 • Something you keep failing at even though you keep trying. That's the whole point of this map.
 • It matters to you, in your own words, and it belongs to ${pillar.label} (${pillar.domain}) rather than another part of your life.`;
   },

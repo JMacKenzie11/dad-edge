@@ -1392,7 +1392,12 @@ describe("stage intros name the same criteria the rubrics score (structural)", (
     );
     expect(assumptionChecks).toMatch(/judgeAssumptionUnderwrites/);
     expect(intro).toMatch(/You finished the thought/i);
-    expect(rubric).toMatch(/has_finished_then/);
+    // Renamed from has_finished_then 2026-09-02: the criterion asks
+    // for a finished BELIEF, which the guides write both as an
+    // if-then and as a flat statement (Vol 1 p 19, items 1/2/9).
+    // The old name encoded a shape the guides don't require.
+    expect(rubric).toMatch(/is_a_finished_belief/);
+    expect(rubric).not.toMatch(/has_finished_then/);
     expect(intro).toMatch(/feels true when you say it out loud/i);
     expect(rubric).toMatch(/is_first_person_felt: First-person, present-tense, feels true/);
     expect(intro).toMatch(/ends somewhere you can't come back from/i);

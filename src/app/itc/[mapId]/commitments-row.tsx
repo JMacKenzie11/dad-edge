@@ -12,6 +12,7 @@ import { saveCommitment } from "../actions";
 import { AutoTextarea } from "./auto-textarea";
 import { EntryThread } from "./entry-thread";
 import { CoachFixBox } from "./coach-fix-box";
+import { DepthBadge, depthBorderClass } from "./depth-badge";
 import { SavingIndicator } from "./form-field";
 
 const FRESH_ROW_MS = 15_000;
@@ -199,7 +200,7 @@ function CommitmentItem({
       className={
         "rounded-md border bg-black/20 px-4 py-3 " +
         (needsMoreDepth
-          ? "border-[color:var(--color-danger)]/50 "
+          ? depthBorderClass(commitment?.depth_score ?? null)
           : "border-[color:var(--color-border)] ") +
         (fresh ? "itc-fresh-row" : "")
       }
@@ -221,12 +222,11 @@ function CommitmentItem({
           </span>
           <span className="text-sm italic">{worry.text}</span>
           {needsMoreDepth ? (
-            <span
-              className="ml-auto rounded-full border border-[color:var(--color-danger)]/60 bg-[color:var(--color-danger)]/[0.10] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[color:var(--color-danger)]"
-              title="This commitment hasn't reached the depth needed to advance to Big Assumptions. Sharpen it (or wait for a second attempt to pass) to clear the gate."
-            >
-              Needs more depth
-            </span>
+            <DepthBadge
+              score={commitment?.depth_score ?? null}
+              column="commitment"
+              className="ml-auto"
+            />
           ) : null}
         </div>
         {commitment?.sharpen_text ? (

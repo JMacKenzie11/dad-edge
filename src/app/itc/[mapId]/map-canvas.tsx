@@ -850,8 +850,8 @@ function CompetingCommitmentsReference({
   commitments: ItcCommitment[];
 }) {
   return (
-    <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+    <div className="rounded-md border border-[color:var(--color-primary)]/40 border-l-[3px] border-l-[color:var(--color-primary)] bg-[color:var(--color-primary)]/[0.06] px-4 py-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-primary)]/90">
         Your competing commitments
       </div>
       <ol className="space-y-1.5">
