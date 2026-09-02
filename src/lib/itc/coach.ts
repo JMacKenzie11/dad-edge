@@ -26,7 +26,7 @@
 import { generateObject, generateText } from "ai";
 import type { SystemModelMessage } from "@ai-sdk/provider-utils";
 import { z } from "zod";
-import { mainModel, utilityModel } from "@/lib/model-config";
+import { mainModel, mainModelIdOrUnset, utilityModel } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { normalizeMapText } from "./maps";
 import { buildItcCoachSystemSplit } from "./prompts";
@@ -470,6 +470,39 @@ export type ReviseInput = {
   currentText: string;
   problems: string[];
 };
+
+/**
+ * A model call that comes back with nothing is an infrastructure
+ * blip, not a coaching verdict. Observed in production 2026-09-02:
+ * nine of ten worry-draft calls failed with "No object generated: the
+ * model did not return a response", which the drafter counted as a
+ * Kegan shape that "didn't fit" and burned, so the coachee got no
+ * draft at all.
+ *
+ * Retries the generation once on an error (short backoff). A refusal
+ * by the CHECKS is never routed here: that's a real verdict about the
+ * text, and it already has its own retry with feedback. Only the call
+ * itself failing is retried, and the error is rethrown if it fails
+ * twice so the caller can record it.
+ */
+async function generateWithRetry<T>(
+  label: string,
+  generate: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await generate();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      "[itc coach] %s generation failed (model=%s), retrying once: %s",
+      label,
+      mainModelIdOrUnset(),
+      message,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return generate();
+  }
+}
 
 /**
  * One prompt line naming who the map already has, so the model
@@ -1028,13 +1061,20 @@ export async function draftWorryOutcome(input: {
   };
 
   async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: WorryDraftSchema,
-      system: withVoiceRules(DRAFT_WORRY_SYSTEM),
-      prompt: promptLines.join("\n"),
-      maxOutputTokens: 200,
-    });
+    const { object } = await generateWithRetry("worry draft", () =>
+      generateObject({
+        model: mainModel(),
+        schema: WorryDraftSchema,
+        system: withVoiceRules(DRAFT_WORRY_SYSTEM),
+        prompt: promptLines.join("\n"),
+        // 200 was the tightest budget in this file for a two-field
+        // schema under a very large system prompt. A model that emits
+        // any preamble (or reasoning) before the object hits the cap
+        // and returns nothing. 600 is still small and removes the
+        // whole truncation class.
+        maxOutputTokens: 600,
+      }),
+    );
     const raw = scrubReply(assembleWorry(object));
     if (!raw) return null;
     return {
@@ -1149,8 +1189,12 @@ export async function draftWorryOutcome(input: {
     return { text: retry.assembled, refusals };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn("[itc coach] draftWorryOutcome failed: %s", message);
-    return { text: null, refusals, error: message };
+    console.warn(
+      "[itc coach] draftWorryOutcome failed (model=%s): %s",
+      mainModelIdOrUnset(),
+      message,
+    );
+    return { text: null, refusals, error: `${message} (model=${mainModelIdOrUnset()})` };
   } finally {
     console.warn(
       "[itc timing] draft kind=worry ms=%d",
@@ -1377,13 +1421,17 @@ export async function draftCommitmentForWorry(input: {
   };
 
   async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
-    const { object } = await generateObject({
-      model: mainModel(),
-      schema: CommitmentDraftSchema,
-      system: withVoiceRules(DRAFT_COMMITMENT_SYSTEM),
-      prompt: promptLines.join("\n"),
-      maxOutputTokens: 200,
-    });
+    const { object } = await generateWithRetry("commitment draft", () =>
+      generateObject({
+        model: mainModel(),
+        schema: CommitmentDraftSchema,
+        system: withVoiceRules(DRAFT_COMMITMENT_SYSTEM),
+        prompt: promptLines.join("\n"),
+        // See the worry drafter: 200 leaves no room under a large
+        // system prompt if the model writes anything before the object.
+        maxOutputTokens: 600,
+      }),
+    );
     const raw = scrubReply(assembleCommitment(object));
     if (!raw) return null;
     return {

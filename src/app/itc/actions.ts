@@ -9,6 +9,7 @@ import {
   safeRevalidate,
   type ActionResult,
 } from "@/lib/itc/action-helpers";
+import { mainModelIdOrUnset } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
   draftAssumptionsFromCommitments,
@@ -1458,6 +1459,7 @@ async function draftMissingWorriesAfterAdvance(
           kind: "worry_draft",
           behavior_id: b.id,
           ok: draft !== null,
+          model: mainModelIdOrUnset(),
           shapes_tried: tried.map((t) => t.shape),
           refusals: tried.flatMap((t) =>
             t.refusals.map((r) => ({

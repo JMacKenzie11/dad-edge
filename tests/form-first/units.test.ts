@@ -1144,6 +1144,23 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(shapes).not.toMatch(/"she'd|she\\'d|\bher\b/);
   });
 
+  it("a failed model call is retried, not counted as a shape that didn't fit", () => {
+    // Production 2026-09-02: nine of ten worry-draft calls returned
+    // "No object generated", and each one burned a Kegan shape, so the
+    // coachee got no draft. An infrastructure blip is not a coaching
+    // verdict; only the CHECKS refusing the text is.
+    expect(coach).toMatch(/async function generateWithRetry/);
+    for (const name of ["draftWorryForBehavior", "draftCommitmentForWorry"]) {
+      expect(block(name), `${name} must generate through generateWithRetry`).toMatch(
+        /generateWithRetry\(/,
+      );
+    }
+    // The tightest budgets were 200 for two-field schemas under very
+    // large system prompts; anything the model writes first blows it.
+    const worry = block("draftWorryForBehavior");
+    expect(worry).not.toMatch(/maxOutputTokens: 200\b/);
+  });
+
   it("drafts that fail verification are never offered (worry drafter, assumption batch)", () => {
     const worry = block("draftWorryForBehavior");
     expect(worry).not.toMatch(/\?\?\s*first\.assembled/);
