@@ -1080,11 +1080,40 @@ describe("scoreWorryDepth prompt (structural)", () => {
     // Appendix A, Column 3 as a named criterion, folded into the score.
     expect(worrySystem).toMatch(/4\. explains_behavior/);
     expect(worrySystem).toMatch(/feared_result_is_the_behavior_restated/);
+    // The discriminator that replaced the lenient boolean: a worry
+    // whose feared result is produced by the BEHAVIOR is backwards.
+    expect(worrySystem).toMatch(/which_produces_the_feared_result/);
     const scoreFnBody = src.slice(src.indexOf("export async function scoreWorryDepth"));
-    expect(scoreFnBody).toMatch(/object\.behavior_protects_him_from_this &&\s*!object\.feared_result_is_the_behavior_restated/);
+    expect(scoreFnBody).toMatch(/object\.which_produces_the_feared_result === "the opposite" &&\s*!object\.feared_result_is_the_behavior_restated/);
     expect(scoreFnBody).toMatch(/object\.touches_identity && explainsBehavior \? 1 : 0/);
     const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);
+  });
+});
+
+describe("model middleware (structured-call defaults)", () => {
+  // Measured on claude-sonnet-5 with the worry drafter's real system
+  // prompt: thinking on = 25.4s / 2132 output tokens; thinking off =
+  // 2.3s / 53. The object is ~60 tokens. Deliberation both consumed
+  // budgets sized for the answer (calls returned empty) and made a
+  // man wait 40-80s. Quality here is enforced after generation by the
+  // rubrics and the criteria module, not by the model deliberating.
+  it("disables extended thinking and floors the output budget", async () => {
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { resolve } = require("node:path") as typeof import("node:path");
+    const src = readFileSync(resolve(__dirname, "../../src/lib/model-config.ts"), "utf8");
+    expect(src).toMatch(/thinking: \{ type: "disabled" \}/);
+    expect(src).toMatch(/MIN_OUTPUT_TOKEN_BUDGET/);
+    // Both tiers go through it, so a new call site can't opt out by
+    // forgetting to.
+    const main = src.slice(src.indexOf("export function mainModel"), src.indexOf("export function utilityModel"));
+    const utility = src.slice(src.indexOf("export function utilityModel"));
+    expect(main).toMatch(/withStructuredCallDefaults\(/);
+    expect(utility).toMatch(/withStructuredCallDefaults\(/);
+    // Test seams stay untouched: a stub installed by a test must be
+    // the exact model the test installed.
+    expect(main).toMatch(/if \(mainModelOverride\) return mainModelOverride;/);
+    expect(utility).toMatch(/if \(utilityModelOverride\) return utilityModelOverride;/);
   });
 });
 

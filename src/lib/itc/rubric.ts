@@ -21,7 +21,11 @@ const RubricSchema = z.object({
   opposite_move: z.string().max(160),
   feared_result_of_opposite: z.string().max(240),
   feared_result_is_the_behavior_restated: z.boolean(),
-  behavior_protects_him_from_this: z.boolean(),
+  // The discriminator. "does the behavior make sense as protection?"
+  // was a judgment call, and tuning it strict rejected real fears
+  // while tuning it lenient passed outright contradictions. This
+  // question has a determinate answer for both.
+  which_produces_the_feared_result: z.enum(["the behavior", "the opposite"]),
   reason: z.string().min(1).max(400),
 });
 
@@ -31,9 +35,11 @@ export type WorryDepthResult = {
   is_first_person_felt: boolean;
   touches_identity: boolean;
   /** Kegan/Lahey Appendix A, Column 3: the worry "shows why the
-   *  Column 2 behaviors make good sense." False when the worry is
-   *  the behavior said back as self-criticism, or when doing the
-   *  opposite wouldn't bring the fear about. Folded into
+   *  Column 2 behaviors make good sense." False when the worry is the
+   *  behavior said back as self-criticism, or when the feared result
+   *  is what the BEHAVIOR produces rather than its opposite (a
+   *  backwards worry: "if I held firm, they'd see me as desperate",
+   *  when agreeing to bad terms is what looks desperate). Folded into
    *  touches_identity for the score: an identity that doesn't explain
    *  the behavior isn't the feared identity. */
   explains_behavior: boolean;
@@ -69,7 +75,11 @@ You score four BINARY criteria. Be strict. When in doubt, score false.
    - opposite_move: the opposite of the paired behavior (in the prompt), in his words.
    - feared_result_of_opposite: in one line, what the worry says would happen or be exposed if he did the opposite.
    - feared_result_is_the_behavior_restated: true if that feared result is the behavior itself described as a fault. "I've been the guy who never listens to anybody" for the behavior "I don't ask what the prospect needs"; "I've been choosing my reputation over serving them" for the behavior "I hedge my recommendations". A worry that accuses the behavior does not explain it.
-   - behavior_protects_him_from_this: does DOING the behavior keep that feared result from happening, so the behavior makes sense as protection? Take the worry's own if-then at face value; most real worries don't spell out the mechanism and don't need to ("if I listened instead of bringing up her past, I'd prove I'm the man who can never be enough for her" is TRUE: keeping her past in play keeps his inadequacy off the table). False ONLY in two cases: the feared result is the behavior restated, or the opposite plainly could not bring the feared result about (a non-sequitur). For this one criterion, when in doubt, TRUE: a false rejection blocks a real fear, while a loose pass is still caught when the commitment and the assumption get built on it.
+   - which_produces_the_feared_result: is the feared result more likely to come about because he DOES the behavior, or because he does THE OPPOSITE? Only "the opposite" is a worry; "the behavior" means the worry is backwards, blaming the behavior for the very thing it protects him from.
+     "the opposite": behavior "I don't ask what the client needs", feared "they'd see me as unsure". ASKING is what would look unsure; not asking hides it. A worry.
+     "the opposite": behavior "I bring up things she did in the past", feared "I'd prove I'm the man who can never be enough for her". LISTENING is what would expose it; bringing up her past keeps it off the table. A worry. (The mechanism is unstated, and it doesn't need to be; take the worry's if-then at face value.)
+     "the behavior": behavior "I agree to terms I know are bad just to close the deal", feared "they'd see me as desperate to keep the deal". AGREEING to bad terms is what looks desperate; holding firm is the opposite of desperate. Backwards.
+     "the behavior": behavior "I oversell and pile on promises", feared "they'd think I'm pushy". OVERSELLING is what looks pushy. Backwards.
    Passing example: "if I stood behind my recommendation and it failed, I'd be the expert who got it wrong with nowhere to hide" (hedging protects him from exactly that). "if I let her past rest and listened, it'd be my mistakes we were talking about and I'd be the man who's been the problem" (bringing up her past keeps his off the table).
 
    Do not require the extra "and that means I'm unworthy" step for role identity — once the role and predicate are named ("the coach who couldn't help her when she needed me"), that IS identity. But bare failure verbs without a role noun ("I'd have failed to help her") don't clear the bar.
@@ -337,7 +347,7 @@ export async function scoreWorryDepth(input: {
     });
 
     const explainsBehavior =
-      object.behavior_protects_him_from_this &&
+      object.which_produces_the_feared_result === "the opposite" &&
       !object.feared_result_is_the_behavior_restated;
     const score =
       (object.is_fear ? 1 : 0) +

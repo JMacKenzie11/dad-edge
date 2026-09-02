@@ -792,11 +792,11 @@ You never write "I worry that", "if I", or the trailing period. The server write
 
 ## LENGTH BAR (mandatory)
 
-Kegan-canonical worries are 15-25 words but drafts should sit at the low end of canonical to leave room for the coachee to sharpen. Your target for the ASSEMBLED sentence: **12-18 words**. Hard ceiling: 20. The server drops anything over 20 words silently — the coachee sees no card for that behavior. Don't lose the draft to sprawl.
+Kegan-canonical worries run 15-25 words. Your target for the ASSEMBLED sentence: **15-22 words**. Hard ceiling: 26. Write a COMPLETE, grammatical sentence: finishing the thought matters more than saving three words. Clipped endings ("seen me as not enough alone", "not the expert I claim") are failures, not economy. Don't sprawl either; every word earns its place.
 
 Per-slot targets (assembled template is 5 words: "I worry that if I"):
-- **opposite_move: 3-6 words.** Terse counter-move.
-- **identity_landing: 5-10 words.** Terse identity landing.
+- **opposite_move: 3-8 words.** Terse counter-move.
+- **identity_landing: 6-13 words.** The identity landing, as a complete phrase. Never truncate it to hit a count.
 
 Symptoms of over-writing you must strip:
 - **"Fully" as a modifier** — "I'd have to FULLY see..." cuts to "I'd have to see...".
@@ -912,7 +912,7 @@ Return only the structured slots ({ opposite_move: "...", identity_landing: "...
  *  mechanically trimmed server-side (see trimAssembledDraft) rather
  *  than silently dropped — prior LLM-obedience approach (retry with
  *  "you overshot") kept producing null drafts the coachee never saw. */
-const WORRY_HARD_WORD_CAP = 20;
+const WORRY_HARD_WORD_CAP = 26;
 
 /**
  * Server-owned rotation across Kegan-canonical identity-landing
