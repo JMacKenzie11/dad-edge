@@ -11,8 +11,14 @@ import {
  * Thought joggers, not a reading assignment. Shut by default, one
  * line of prose per side, and it sits BELOW the input so a man who
  * already knows what he wants to write never has to travel past it.
- * The pairs themselves live in src/lib/itc/guide-examples.ts with
- * their citations; this file only lays them out.
+ * The pairs themselves live in src/lib/itc/guide-examples.ts; this
+ * file only lays them out.
+ *
+ * The citations are deliberately NOT rendered. They are provenance
+ * for whoever maintains the list, not something the coachee needs
+ * while he is trying to write a sentence, and a page reference under
+ * every example made the panel read like a textbook. GuidePair.source
+ * stays on the data, and a test still requires it.
  *
  * Uses the native <details> disclosure rather than useState, so the
  * open/shut behavior needs no JavaScript of its own and is keyboard
@@ -75,9 +81,6 @@ export function GuideExamples({
                 {toLabel}
               </div>
               <p className="text-sm text-white/90">{p.to}</p>
-              <p className="text-[10px] italic text-[color:var(--color-text-muted)]/50">
-                {p.source}
-              </p>
             </div>
           </div>
         ))}

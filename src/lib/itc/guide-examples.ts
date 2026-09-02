@@ -48,7 +48,10 @@ export type GuidePair = {
   from: string;
   /** The entry it produced: the worry, or the Big Assumption. */
   to: string;
-  /** Whose map, and where to find it. */
+  /** Whose map, and where to find it. Provenance for maintainers,
+   *  not shown to the coachee: a page reference under every example
+   *  made the panel read like a textbook when what he needs is a
+   *  nudge. Required by test, so a pair can't be added without one. */
   source: string;
 };
 
