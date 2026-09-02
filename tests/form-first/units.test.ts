@@ -1232,41 +1232,34 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(saveWorry).toMatch(/row\.text\.trim\(\) === behavior\.coach_worry_draft\.trim\(\)/);
   });
 
-  it("both columns offer only the opening, never the fear or the belief", () => {
+  it("the worry column offers only the opening; Column 5 offers none at all", () => {
     // Kegan Vol 1 p 12: the coach asks "what's the worst that could
     // happen if you did the opposite?", the client answers. The
     // server writes the counter-move (right every time on live maps)
     // and stops; authoring the identity ending was wrong about one
     // time in three and no amount of judge tuning moved it.
-    for (const name of ["draftWorryOpening", "draftAssumptionOpening"]) {
-      const b = block(name);
-      expect(b, `${name} must exist`).toBeTruthy();
-      // It writes an opening, not a finished sentence.
-      expect(b).toMatch(/I (worry that if I|assume that if) \$\{/);
-      expect(b).toMatch(/checkPeopleFromMap\(/);
-    }
-    // The assumption's "if" is the COMMITMENT being violated, never a
-    // behavior's counter-move: an opening built from a behavior gives
-    // the coachee nowhere to go but restate his worry, which is what
-    // a live map produced. The guides' worked maps always take the
-    // "if" from the broken vow ("if I am bragging, I am just like
-    // Kurt").
-    const assumptionOpening = block("draftAssumptionOpening");
-    expect(assumptionOpening).toMatch(/commitmentText/);
-    expect(assumptionOpening).not.toMatch(/behaviorText/);
-    expect(assumptionOpening).toMatch(/vow_failing/);
+    const b = block("draftWorryOpening");
+    expect(b).toMatch(/I worry that if I \$\{/);
+    expect(b).toMatch(/checkPeopleFromMap\(/);
+    // Column 5 gets no prefilled stem at all: the guides' Big
+    // Assumptions take several shapes and many are not if-then, and a
+    // stem built from his own commitment mostly hands back what he
+    // already wrote.
+    expect(coach).not.toMatch(/draftAssumptionOpening/);
     const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
     expect(actions).toMatch(/draftWorryOpening\(/);
-    expect(actions).toMatch(/buildAssumptionOpenings\(/);
+    expect(actions).not.toMatch(/buildAssumptionOpenings/);
     // The accept-a-whole-draft affordances are gone from both rows.
     const worries = readFileSync(resolve(__dirname, "../../src/app/itc/[mapId]/worries-row.tsx"), "utf8");
     const assumptions = readFileSync(resolve(__dirname, "../../src/app/itc/[mapId]/assumptions-row.tsx"), "utf8");
     expect(/>\s*Use this draft\s*</.test(worries)).toBe(false);
     expect(/>\s*Use this draft\s*</.test(assumptions)).toBe(false);
     expect(assumptions).not.toMatch(/function DraftCard/);
-    // The boxes open with the coach's opening instead.
+    // The worry box opens with the coach's opening; the assumption
+    // box opens empty, with his commitments on screen above it.
     expect(worries).toMatch(/behavior\.coach_worry_draft \?\? ""/);
-    expect(assumptions).toMatch(/opening\?\.text \?\? ""/);
+    const canvas = readFileSync(resolve(__dirname, "../../src/app/itc/[mapId]/map-canvas.tsx"), "utf8");
+    expect(canvas).toMatch(/CompetingCommitmentsReference/);
   });
 
   it("a failed model call is retried, not counted as a shape that didn't fit", () => {

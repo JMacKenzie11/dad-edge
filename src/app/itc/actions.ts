@@ -12,7 +12,6 @@ import {
 import { mainModelIdOrUnset } from "@/lib/model-config";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import {
-  draftAssumptionOpening,
   draftCommitmentForWorry,
   draftCommitmentOutcome,
   draftTestForAssumption,
@@ -1370,13 +1369,10 @@ export async function advanceToStage(
   if (target === "commitments") {
     await autoDeriveCommitmentsAfterAdvance(loaded.map.id, events);
   }
-  // On entry to the assumptions stage, cluster the commitments and
-  // draft a small set of Big Assumptions with commitment coverage.
-  // Same architectural class as commitment drafts: metadata only,
-  // becomes map state via saveAssumption when the user acts.
-  if (target === "assumptions") {
-    await draftAssumptionsAfterAdvance(loaded.map.id, events);
-  }
+  // Nothing is drafted on entry to the assumptions stage. See the
+  // note above draftAssumptionsAfterAdvance's former home: the belief
+  // is the coachee's to write, and he arrives with his commitments on
+  // screen and the coach's question under the box.
   // On entry to the immune-system stage, generate the three-movement
   // Kegan/Lahey walkthrough of the coachee's own map and persist it
   // as a stage-note message. Also flips walkthrough_delivered so the
@@ -1621,102 +1617,17 @@ async function autoDeriveCommitmentsAfterAdvance(
 }
 
 /**
- * On advance to assumptions, cluster the map's commitments and
- * persist a small set of coach-drafted Big Assumptions. Skips
- * cleanly if drafts already exist (idempotent — user coming back to
- * a resumed map shouldn't see the drafts multiply). Runs one LLM
- * call for the whole map (not per commitment) since clustering is
- * the whole point.
+ * Column 5 gets no coach-authored opening. The guides' Big
+ * Assumptions take several shapes and many are not if-then at all
+ * ("I assume that saying anything about my accomplishments is
+ * bragging"), and Vol 1 p 4 asks only that AT LEAST ONE be in
+ * if-then form. A prefilled stem picks one shape for him, and one
+ * built from his own commitment mostly hands back what he already
+ * wrote. He gets his commitments on screen (the reference box above
+ * Column 5) and the coach's question under the box; the sentence is
+ * his. Coverage is carried by honing's assumption_uncovered_commitment
+ * finding, which is where the guide puts it (Vol 1 p 17).
  */
-/**
- * One opening per commitment, each being that commitment's vow
- * failing: "I assume that if I were the closer who can't sell value,
- * then ". The coachee writes the Big Time Bad.
- *
- * Anchored to the COMMITMENT, never to a behavior. An opening built
- * from a Column 2 counter-move leaves him nowhere to go but restate
- * his worry, which is what a live map produced on 2026-09-02; the
- * guides' own worked maps always take the "if" from the commitment
- * being violated.
- *
- * One per commitment for coverage, not because assumptions are 1:1
- * with commitments: the guide wants FEWER assumptions than
- * commitments, each underwriting several (Vol 1 p 3). The link chips
- * let one saved assumption cover several, and consuming an opening
- * surfaces the next uncovered one.
- *
- * Openings are generated in parallel; ones that come back null are
- * simply absent, since an empty box beats a wrong opening.
- */
-async function buildAssumptionOpenings(
-  mapId: string,
-): Promise<Array<{ text: string; commitment_ids: string[] }>> {
-  const [map, commitments, worries, behaviors] = await Promise.all([
-    getMapById(mapId),
-    listCommitments(mapId),
-    listWorries(mapId),
-    listBehaviors(mapId),
-  ]);
-  if (!map || commitments.length === 0) return [];
-  const mapTexts = [
-    map.improvement_goal ?? "",
-    ...behaviors.filter((b) => b.selected).map((b) => b.text),
-    ...worries.map((w) => w.text),
-    ...commitments.map((c) => c.text),
-  ];
-  const openings = await Promise.all(
-    commitments.map(async (c) => {
-      const text = await draftAssumptionOpening({
-        goalText: map.improvement_goal ?? "",
-        commitmentText: c.text,
-        mapTexts,
-      });
-      return text ? { text, commitment_ids: [c.id] } : null;
-    }),
-  );
-  return openings.filter(
-    (o): o is { text: string; commitment_ids: string[] } => o !== null,
-  );
-}
-
-async function draftAssumptionsAfterAdvance(
-  mapId: string,
-  events: TurnEventLog,
-): Promise<void> {
-  const [map, commitments, worries, existingDrafts, existingAssumptions] =
-    await Promise.all([
-      getMapById(mapId),
-      listCommitments(mapId),
-      listWorries(mapId),
-      listAssumptionDrafts(mapId),
-      listAssumptions(mapId),
-    ]);
-  if (!map) return;
-  if (commitments.length === 0) return;
-  // Don't re-draft if the user already has drafts pending review OR
-  // has authored any of their own assumptions.
-  if (existingDrafts.length > 0 || existingAssumptions.length > 0) return;
-
-  const worryById = new Map(worries.map((w) => [w.id, w]));
-  const orderedCommitments = commitments.map((c) => ({
-    id: c.id,
-    text: c.text,
-    worry_text: worryById.get(c.worry_id)?.text ?? "(worry)",
-  }));
-  const toPersist = await buildAssumptionOpenings(mapId);
-  events.record(
-    "llm_attempt",
-    {
-      kind: "assumption_openings",
-      model: mainModelIdOrUnset(),
-      commitment_count: commitments.length,
-      drafted_count: toPersist.length,
-    },
-    { stage: "assumptions" },
-  );
-  if (toPersist.length === 0) return;
-  await saveAssumptionDrafts(mapId, toPersist);
-}
 
 const regenerateDraftsSchema = z.object({
   map_id: z.string().uuid(),
@@ -1749,18 +1660,9 @@ export async function redriveAssumptionFromCommitment(
   if (!loaded.ok) return { ok: false, reason: loaded.reason };
   try {
     await clearAssumptionDraftsForMap(loaded.map.id);
-    const [map, commitments, worries] = await Promise.all([
-      getMapById(loaded.map.id),
-      listCommitments(loaded.map.id),
-      listWorries(loaded.map.id),
-    ]);
-    if (!map) return { ok: false, reason: "Map not found." };
+    const commitments = await listCommitments(loaded.map.id);
     if (commitments.length === 0) {
       return { ok: false, reason: "No commitments to draft from." };
-    }
-    const toPersist = await buildAssumptionOpenings(loaded.map.id);
-    if (toPersist.length > 0) {
-      await saveAssumptionDrafts(loaded.map.id, toPersist);
     }
   } catch (err) {
     return {
@@ -1842,12 +1744,6 @@ export async function regenerateAssumptionDrafts(
   let draftsWritten = 0;
   try {
     await clearAssumptionDraftsForMap(loaded.map.id);
-    // Build openings directly (not via draftAssumptionsAfterAdvance,
-    // which short-circuits when assumptions already exist).
-    const toPersist = await buildAssumptionOpenings(loaded.map.id);
-    if (toPersist.length > 0) {
-      draftsWritten = await saveAssumptionDrafts(loaded.map.id, toPersist);
-    }
   } catch (err) {
     return {
       ok: false,

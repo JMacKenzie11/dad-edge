@@ -433,21 +433,24 @@ export function MapCanvas({
           unattachedCoachNotes={
             map.current_stage === "assumptions" ? unattachedForCurrentStage : []
           }
+          // The vows themselves, on screen while he writes the belief
+          // underneath them. Column 4 sits far enough up the page that
+          // he was scrolling back to read what #1 and #2 even were,
+          // and the numbers here are the same ones the link chips use.
+          // Server-rendered from current commitments, so an edit (and
+          // the coach's re-derive after a worry changes) shows up on
+          // the next render with no extra wiring.
+          beforeNotes={
+            commitments.length > 0 ? (
+              <CompetingCommitmentsReference commitments={commitments} />
+            ) : null
+          }
         >
           <AssumptionsRow
             mapId={map.id}
             assumptions={assumptions}
             commitments={commitments}
             links={assumptionLinks}
-            // Drafts render whenever they exist — the assumptions
-            // section is only ever mounted at stageIndex >= assumptions
-            // (see the parent conditional), and AssumptionsRow's
-            // isLocked short-circuit still covers the never-hit case
-            // where the column is locked. Gating on current_stage ===
-            // "assumptions" was a construction-time leftover that hid
-            // freshly regenerated honing drafts because the coachee
-            // had advanced past this column.
-            drafts={assumptionDrafts}
             nowMs={renderedAt}
             threads={assumptionThreads}
             isLocked={isLocked("assumptions")}
@@ -827,6 +830,43 @@ function ColumnReviewNote({ content }: { content: string }) {
       <div className="px-4 py-3 text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
         {content}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Read-only list of the competing commitments, shown above Column 5.
+ * A Big Assumption is the belief that makes one of these vows feel
+ * necessary (Kegan/Lahey Vol 1, Appendix A), so he needs them in
+ * front of him to write one. Numbered to match the "holds up
+ * competing commitment #N" chips on the assumption rows.
+ *
+ * Muted and compact on purpose: it is a reference, not another thing
+ * to act on.
+ */
+function CompetingCommitmentsReference({
+  commitments,
+}: {
+  commitments: ItcCommitment[];
+}) {
+  return (
+    <div className="rounded-md border border-[color:var(--color-border)] bg-black/20 px-4 py-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+        Your competing commitments
+      </div>
+      <ol className="space-y-1.5">
+        {commitments.map((c, i) => (
+          <li
+            key={c.id}
+            className="flex gap-2 text-sm leading-relaxed text-white/80"
+          >
+            <span className="shrink-0 text-[color:var(--color-text-muted)]">
+              #{i + 1}
+            </span>
+            <span>{c.text}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

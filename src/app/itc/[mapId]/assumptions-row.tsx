@@ -4,13 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type {
   ItcAssumption,
   ItcAssumptionCommitment,
-  ItcAssumptionDraft,
   ItcCommitment,
   ItcMessage,
 } from "@/lib/itc/maps";
 import { worryPassesDepth } from "@/lib/itc/rules";
 import {
-  dismissAssumptionDraft,
   redriveAssumptionFromCommitment,
   removeAssumption,
   saveAssumption,
@@ -19,7 +17,6 @@ import { AutoTextarea } from "./auto-textarea";
 import { CoachFixBox } from "./coach-fix-box";
 import { EntryThread } from "./entry-thread";
 import { InlineSpinner, SavingIndicator } from "./form-field";
-import { RegenerateDraftsButton } from "./regenerate-drafts-button";
 import { useConfirm } from "@/components/ui/use-confirm";
 
 const FRESH_ROW_MS = 15_000;
@@ -44,7 +41,6 @@ export function AssumptionsRow({
   assumptions,
   commitments,
   links,
-  drafts,
   nowMs,
   threads,
   isLocked,
@@ -53,10 +49,6 @@ export function AssumptionsRow({
   assumptions: ItcAssumption[];
   commitments: ItcCommitment[];
   links: ItcAssumptionCommitment[];
-  /** Coach-drafted Big Assumptions offered as suggestion cards. Empty
-   *  when the section is locked, when drafts have all been used or
-   *  dismissed, or when the LLM produced nothing. */
-  drafts: ItcAssumptionDraft[];
   nowMs: number;
   /** Per-assumption coach reaction threads. Non-empty only on the
    *  assumptions stage. Rendered above each assumption's input. */
@@ -106,30 +98,24 @@ export function AssumptionsRow({
         </p>
       ) : (
         <>
+          {/*
+            No prefilled opening here, deliberately. The guides' own
+            Big Assumptions take several shapes and many are not
+            if-then at all ("I assume that saying anything about my
+            accomplishments is bragging", "My self-worth is based on
+            how others view me"), and Vol 1 p 4 only asks that AT
+            LEAST ONE be in if-then form. A prefix picks one shape for
+            him and, when it is built from his own commitment, mostly
+            hands back what he already wrote. The commitments are on
+            screen above; the question under the box is the coach's
+            job here, and the sentence is his.
+          */}
           <AddAssumptionForm
             mapId={mapId}
             commitments={commitments}
-            // The next pending opening: the server wrote the act
-            // ("I assume that if I named my price and held it, then ")
-            // and pre-picked the commitment it was anchored to. He
-            // finishes the belief. Consuming one surfaces the next,
-            // so the form walks him across uncovered commitments.
-            opening={drafts[0] ?? null}
-            initiallyExpanded={assumptions.length === 0 || drafts.length > 0}
+            initiallyExpanded={assumptions.length === 0}
           />
-          {/*
-            Single persistent regenerate affordance for the column.
-            Renders in the same place regardless of whether drafts or
-            accepted assumptions exist — during honing (after
-            behaviors / worries / commitments have shifted) the
-            coachee needs to be able to ask for fresh drafts against
-            the new map state. Backing action bypasses the "existing
-            assumptions" guard, so accepted assumption rows stay
-            untouched while a new draft set gets written.
-          */}
-          <div className="pt-1">
-            <RegenerateDraftsButton mapId={mapId} kind="assumptions" />
-          </div>
+
         </>
       )}
     </div>
@@ -139,47 +125,18 @@ export function AssumptionsRow({
 function AddAssumptionForm({
   mapId,
   commitments,
-  opening,
   initiallyExpanded,
 }: {
   mapId: string;
   commitments: ItcCommitment[];
-  /** The coach's opening for the next commitment with no assumption
-   *  on it, or null when there is none pending. Text and links are
-   *  seeded from it; there is no accept button because the server
-   *  only wrote the half it can be right about. */
-  opening: ItcAssumptionDraft | null;
   initiallyExpanded: boolean;
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [pending, startTransition] = useTransition();
-  const [text, setText] = useState(opening?.text ?? "");
-  const [linkedIds, setLinkedIds] = useState<string[]>(
-    opening?.commitment_ids ?? [],
-  );
+  const [text, setText] = useState("");
+  const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // A new opening arrives when the previous one is consumed or the
-  // coachee regenerates. Seed the box with it, but never over words
-  // he typed: replace only when the box is empty or still holds the
-  // opening exactly as it was seeded. Regenerating used to look
-  // broken for this reason ("3 fresh drafts added" while the box kept
-  // the old sentence).
-  const seededFor = useRef(opening?.id ?? null);
-  const seededText = useRef(opening?.text ?? "");
-  useEffect(() => {
-    const id = opening?.id ?? null;
-    if (id === seededFor.current) return;
-    const untouched =
-      text.trim().length === 0 || text === seededText.current;
-    seededFor.current = id;
-    if (untouched) {
-      seededText.current = opening?.text ?? "";
-      setText(opening?.text ?? "");
-      setLinkedIds(opening?.commitment_ids ?? []);
-    }
-  }, [opening?.id, opening?.text, opening?.commitment_ids, text]);
 
   function toggleLink(id: string) {
     setLinkedIds((prev) =>
@@ -207,13 +164,6 @@ function AddAssumptionForm({
       if (!res.ok) {
         setError(res.reason ?? "Could not add.");
         return;
-      }
-      // Consume the opening so the next one surfaces on re-render.
-      if (opening) {
-        const dfd = new FormData();
-        dfd.set("map_id", mapId);
-        dfd.set("draft_id", opening.id);
-        await dismissAssumptionDraft(dfd);
       }
       setText("");
       setLinkedIds([]);
@@ -244,7 +194,7 @@ function AddAssumptionForm({
         onChange={(e) => setText(e.target.value)}
         minRows={2}
         disabled={pending}
-        placeholder="I assume that if I…, then…"
+        placeholder="What has to be true for that vow to feel necessary?"
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -261,9 +211,8 @@ function AddAssumptionForm({
         from the vow failing, and the half he writes is the cost.
       */}
       <p className="text-[11px] italic text-[color:var(--color-text-muted)]/70">
-        {opening
-          ? "Finish it: if that vow failed, what would it cost you? That's the belief holding the whole thing in place."
-          : "For a vow above to feel that necessary, what has to be true? Write it as \u201cI assume that if\u2026, then\u2026\u201d."}
+        For one of those vows to feel that necessary, what has to be true? That
+        belief is what holds the whole thing in place.
       </p>
       <div className="flex flex-wrap gap-2">
         {commitments.map((c, i) => {
