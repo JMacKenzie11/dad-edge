@@ -28,10 +28,8 @@ export function GuideExamples({
   const worries = column === "worries";
   const pairs: GuidePair[] = worries ? WORRY_EXAMPLES : ASSUMPTION_EXAMPLES;
   const fromLabel = worries ? "The behavior" : "The competing commitment";
-  const toLabel = worries ? "What he feared about doing the opposite" : "The Big Assumption underneath it";
-  const summary = worries
-    ? "Three worries from the guides' own maps"
-    : "Three Big Assumptions from the guides' own maps";
+  const toLabel = worries ? "The worry" : "The Big Assumption underneath it";
+  const summary = "Examples";
 
   return (
     <details className="group mt-4 rounded-md border border-[color:var(--color-border)] bg-black/10">
@@ -42,9 +40,23 @@ export function GuideExamples({
         {summary}
       </summary>
       <div className="space-y-3 border-t border-[color:var(--color-border)] px-3 py-3">
-        {pairs.map((p) => (
-          <div key={p.to} className="space-y-1">
+        {pairs.map((p, i) => (
+          <div
+            key={p.to}
+            className={
+              "space-y-1 " +
+              // A rule between examples, not around them: three boxed
+              // cards read as three things to get through. The number
+              // and the divider are enough to tell them apart.
+              (i > 0
+                ? "border-t border-[color:var(--color-border)]/60 pt-3"
+                : "")
+            }
+          >
             <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-text-muted)]/60">
+              <span className="text-[color:var(--color-text-muted)]/80">
+                {i + 1}.
+              </span>{" "}
               {fromLabel}
             </div>
             <p className="text-sm text-[color:var(--color-text-muted)]">

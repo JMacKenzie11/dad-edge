@@ -149,12 +149,32 @@ describe("guide examples", () => {
     }
   });
 
+  it("every example opens with the prefix its own box uses", () => {
+    // The guides write Column 3 as a fear box of fragments ("Being a
+    // jerk, selfish..."), not sentences. Shown that way, a man copies
+    // the shape he sees and the coach then flags it: the example
+    // would teach the wrong thing and the judge would punish him for
+    // learning it. So the worries carry the guides' fear words in
+    // this app's sentence form. Assumptions needed no change.
+    for (const p of WORRY_EXAMPLES) {
+      expect(p.to, `worry example must open "I worry that": ${p.to}`).toMatch(
+        /^I worry that\b/,
+      );
+    }
+    for (const p of ASSUMPTION_EXAMPLES) {
+      expect(
+        p.to,
+        `assumption example must open "I assume that": ${p.to}`,
+      ).toMatch(/^I assume that\b/);
+    }
+  });
+
   it("keeps a flat, non-if-then Big Assumption among the examples", () => {
     // Showing only if-thens would teach the requirement we removed
     // from the rubric. Vol 1 p 4 asks that at least one assumption on
     // a map be if-then, not every one.
     const flat = ASSUMPTION_EXAMPLES.filter(
-      (p) => !/\bif\b/i.test(p.to),
+      (p) => !/^I assume that if\b/i.test(p.to),
     );
     expect(
       flat.length,
@@ -164,7 +184,8 @@ describe("guide examples", () => {
 
   it("keeps an if-then one too, since the guides lead with that shape", () => {
     expect(
-      ASSUMPTION_EXAMPLES.filter((p) => /\bif\b/i.test(p.to)).length,
+      ASSUMPTION_EXAMPLES.filter((p) => /^I assume that if\b/i.test(p.to))
+        .length,
     ).toBeGreaterThanOrEqual(1);
   });
 
