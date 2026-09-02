@@ -9,19 +9,21 @@ export function StartMapButton() {
       type="submit"
       disabled={pending}
       aria-busy={pending}
+      // Filled primary blue, the app's one look for a primary action
+      // (ContinueBar, message send, goal review). It was amber-outline,
+      // which reads as a secondary or warning action next to them.
       className={
-        "w-full h-10 rounded-md border border-[color:var(--color-warning)] " +
-        "bg-transparent text-[color:var(--color-warning)] " +
+        "w-full h-10 rounded-md bg-[color:var(--color-primary)] text-white " +
         "font-heading text-xs tracking-widest uppercase " +
-        "hover:bg-[color:var(--color-warning)]/10 " +
-        "active:scale-[0.98] transition " +
+        "hover:bg-[color:var(--color-primary)]/90 " +
+        "active:scale-[0.98] transition cursor-pointer " +
         "disabled:opacity-50 disabled:cursor-not-allowed"
       }
     >
       <span className="inline-flex items-center justify-center gap-2">
         {pending ? (
           <>
-            <span className="inline-block w-3 h-3 rounded-full border-2 border-[color:var(--color-warning)]/40 border-t-[color:var(--color-warning)] animate-spin" />
+            <span className="inline-block w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
             STARTING…
           </>
         ) : (

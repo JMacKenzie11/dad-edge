@@ -301,7 +301,7 @@ function NoImprovementMapCard() {
       </p>
       <Link
         href="/itc"
-        className="inline-flex items-center mt-4 h-10 px-4 rounded-md border border-[color:var(--color-warning)] bg-transparent text-[color:var(--color-warning)] font-heading text-xs tracking-widest uppercase hover:bg-[color:var(--color-warning)]/10 cursor-pointer transition"
+        className="inline-flex items-center mt-4 h-10 px-4 rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest uppercase hover:bg-[color:var(--color-primary)]/90 cursor-pointer transition"
       >
         START AN IMPROVEMENT MAP
       </Link>

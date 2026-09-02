@@ -89,17 +89,25 @@ export function FormField({
 }
 
 /**
- * Two-phase saving indicator. The row-based save actions block on
- * (a) the DB write and (b) an inline coach reaction LLM call. A
+ * Three-phase saving indicator. The row-based save actions block on
+ * (a) the DB write and (b) the coach's rubric + rewrite calls. A
  * fast typist reads "Saving..." for 3-5 seconds after a one-line
  * entry and it feels wrong — the write took milliseconds.
  *
- * This component shows "Saving..." for the first ~700ms of pending
- * state, then swaps to "Saved · coach is reading..." — honest about
- * what the app is actually doing. The threshold is a heuristic
- * (the actual DB write completion isn't observable client-side)
- * but it's close enough that the perceived-latency story matches
- * reality.
+ * Phases (thresholds are heuristics; the DB write completing isn't
+ * observable client-side, but the story matches reality closely):
+ *   0-700ms    "Saving…"
+ *   0.7-6s     "Saved · coach is reading…"
+ *   6s+        "Saved · coach is still reading…"
+ *
+ * The spinner and the third phase exist for the same reason: the
+ * coach's calls can run several seconds, and a label that never
+ * changes reads as frozen. Something moving, plus text that updates
+ * once on a long wait, says the app is still working without
+ * claiming anything untrue.
+ *
+ * Uses the shared InlineSpinner so every "something is happening"
+ * affordance in the map is the same mark.
  *
  * When pending resets to false, the label clears with the pending
  * state.
@@ -111,20 +119,31 @@ export function SavingIndicator({
   pending: boolean;
   className?: string;
 }) {
-  const [phase, setPhase] = useState<"saving" | "reading">("saving");
+  const [phase, setPhase] = useState<"saving" | "reading" | "still">("saving");
   useEffect(() => {
     if (!pending) {
       setPhase("saving");
       return;
     }
     setPhase("saving");
-    const t = setTimeout(() => setPhase("reading"), 700);
-    return () => clearTimeout(t);
+    const toReading = setTimeout(() => setPhase("reading"), 700);
+    const toStill = setTimeout(() => setPhase("still"), 6000);
+    return () => {
+      clearTimeout(toReading);
+      clearTimeout(toStill);
+    };
   }, [pending]);
   if (!pending) return null;
+  const label =
+    phase === "saving"
+      ? "Saving…"
+      : phase === "reading"
+        ? "Saved · coach is reading…"
+        : "Saved · coach is still reading…";
   return (
-    <p className={className}>
-      {phase === "saving" ? "Saving…" : "Saved · coach is reading…"}
+    <p role="status" aria-live="polite" className={`inline-flex items-center gap-1.5 ${className}`}>
+      <InlineSpinner className="h-3 w-3 shrink-0" />
+      {label}
     </p>
   );
 }
