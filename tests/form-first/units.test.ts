@@ -334,13 +334,16 @@ describe("stripRedundantIf (server owns the 'if', the slot must not repeat it)",
       stripRedundantIf("brought up the harder truth if it costs me the deal"),
     ).toBe("brought up the harder truth");
     // The live draft that exposed this.
+    // The tense normalizer also collapses "they'd have seen" here:
+    // the "if" half is a present counterfactual, so the result half
+    // must be "would + base verb".
     expect(
       assembleWorry({
         opposite_move: "brought up the harder truth if it costs me the deal",
         identity_landing: "they'd have seen me as someone who tells them what they want to hear",
       }),
     ).toBe(
-      "I worry that if I brought up the harder truth, they'd have seen me as someone who tells them what they want to hear.",
+      "I worry that if I brought up the harder truth, they'd see me as someone who tells them what they want to hear.",
     );
   });
 
@@ -372,6 +375,40 @@ describe("stripRedundantIf (server owns the 'if', the slot must not repeat it)",
     ).toBe(
       "I assume that if I let the work speak, then the money wouldn't come and I'd be the father who was passive.",
     );
+  });
+});
+
+describe("normalizeConditionalTense (server owns the sentence's grammar)", () => {
+  it("collapses a past-counterfactual result into the present counterfactual the 'if' half sets up", async () => {
+    const { normalizeConditionalTense, assembleWorry } = await import("@/lib/itc/coach");
+    expect(normalizeConditionalTense("they'd have seen me as unsure")).toBe(
+      "they'd see me as unsure",
+    );
+    expect(normalizeConditionalTense("she'd have known I've been faking it")).toBe(
+      "she'd know I've been faking it",
+    );
+    expect(
+      assembleWorry({
+        opposite_move: "held the price I actually believe in",
+        identity_landing: "they'd have seen me as unsure of my own worth",
+      }),
+    ).toBe(
+      "I worry that if I held the price I actually believe in, they'd see me as unsure of my own worth.",
+    );
+  });
+
+  it("leaves a participle it doesn't know alone rather than mangling the verb", async () => {
+    const { normalizeConditionalTense } = await import("@/lib/itc/coach");
+    expect(normalizeConditionalTense("they'd have absconded with the deal")).toBe(
+      "they'd have absconded with the deal",
+    );
+  });
+
+  it("leaves a correct conditional untouched", async () => {
+    const { normalizeConditionalTense } = await import("@/lib/itc/coach");
+    for (const s of ["they'd see I've been faking it", "I'd be the guy who folds"]) {
+      expect(normalizeConditionalTense(s)).toBe(s);
+    }
   });
 });
 
@@ -1084,7 +1121,7 @@ describe("scoreWorryDepth prompt (structural)", () => {
     // whose feared result is produced by the BEHAVIOR is backwards.
     // Self-protection is a relation with two directions; both halves
     // are judged, and explains_behavior needs both.
-    expect(worrySystem).toMatch(/behavior_prevents_the_feared_result/);
+    expect(worrySystem).toMatch(/continuing_the_behavior_makes_the_feared_result/);
     expect(worrySystem).toMatch(/opposite_brings_the_feared_result_about/);
     // The assumption rubric carries the same discriminator: a "then"
     // that the antecedent could not produce is backwards.
@@ -1093,7 +1130,7 @@ describe("scoreWorryDepth prompt (structural)", () => {
     const assumptionFn = src.slice(src.indexOf("export async function scoreAssumptionDepth"));
     expect(assumptionFn).toMatch(/object\.lands_in_identity_or_big_time_bad && consequentFollows \? 1 : 0/);
     const scoreFnBody = src.slice(src.indexOf("export async function scoreWorryDepth"));
-    expect(scoreFnBody).toMatch(/object\.behavior_prevents_the_feared_result &&\s*object\.opposite_brings_the_feared_result_about &&\s*!object\.feared_result_is_the_behavior_restated/);
+    expect(scoreFnBody).toMatch(/object\.continuing_the_behavior_makes_the_feared_result === "less likely" &&\s*object\.opposite_brings_the_feared_result_about &&\s*!object\.feared_result_is_the_behavior_restated/);
     expect(scoreFnBody).toMatch(/object\.touches_identity && explainsBehavior \? 1 : 0/);
     const scoreFn = src.slice(src.indexOf("export async function scoreWorryDepth"));
     expect(scoreFn).toMatch(/Behavior it pairs to: \$\{input\.behaviorText\}/);

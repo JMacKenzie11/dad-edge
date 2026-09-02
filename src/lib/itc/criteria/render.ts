@@ -103,8 +103,10 @@ export function findingLine(f: Finding): string {
 
 function renderEmptyState(context: RenderContext): string {
   if (context.mode === "column_review") {
-    const label = context.columnLabel ?? "This column";
-    return `${capitalize(label)} holds up. Nothing here needs work.`;
+    // Phrased so grammatical number never matters: the labels are a
+    // mix of singular ("Your goal") and plural ("Your worries"), and
+    // the old wording produced "Your worries holds up."
+    return `Nothing to work on in ${columnPhrase(context.columnLabel)} before you move on.`;
   }
   const holds =
     context.goalText.trim().length > 0
@@ -136,18 +138,21 @@ function renderOpening(groups: EntryGroup[], context: RenderContext): string {
         : ` Start with the first ${countWordLower(criticals)}; the map under them moves once they're finished.`;
 
   if (context.mode === "column_review") {
-    // Column labels arrive as "Your worries"; the sentence supplies
-    // its own "your".
-    const label = (context.columnLabel ?? "this column")
-      .replace(/^your\s+/i, "")
-      .toLowerCase();
-    return `${things} to work on in your ${label} before you move on.${startFirst}`;
+    return `${things} to work on in ${columnPhrase(context.columnLabel)} before you move on.${startFirst}`;
   }
 
   // mode === "hone"
   const map = `Your ${context.pillarLabel} map`;
   const standing = criticals > 0 ? `${map} is close.` : `${map} holds up.`;
   return `${standing} ${things} to work on before you pick what to test.${startFirst}`;
+}
+
+/** "Your worries" / "Your goal" → "your worries" / "your goal", and a
+ *  sane fallback. One place, so every column sentence reads the same. */
+function columnPhrase(columnLabel: string | undefined): string {
+  if (!columnLabel) return "this column";
+  const bare = columnLabel.replace(/^your\s+/i, "").trim();
+  return bare.length > 0 ? `your ${bare.toLowerCase()}` : "this column";
 }
 
 function renderTrailer(hidden: number): string {

@@ -767,12 +767,52 @@ export function stripRedundantIf(slot: string): string {
     .trim();
 }
 
+/**
+ * Past participles the drafters actually reach for, mapped to their
+ * base form. Used only to collapse "would have SEEN" into "would
+ * SEE". Anything not listed is left alone rather than guessed at: an
+ * odd tense is survivable, a mangled verb is not.
+ */
+const PARTICIPLE_TO_BASE: Record<string, string> = {
+  seen: "see", known: "know", thought: "think", felt: "feel",
+  found: "find", been: "be", become: "become", heard: "hear",
+  told: "tell", said: "say", got: "get", gotten: "get",
+  taken: "take", made: "make", lost: "lose", written: "write",
+  given: "give", shown: "show", spoken: "speak",
+  understood: "understand", watched: "watch", noticed: "notice",
+  called: "call", treated: "treat", judged: "judge", walked: "walk",
+  asked: "ask", looked: "look", realized: "realize",
+};
+
+/**
+ * The server writes the "if I" frame, so it owns the sentence's
+ * grammar, and the two slots have to agree in tense. The drafters
+ * kept producing "if I held the price, they'd HAVE SEEN me as…": a
+ * present counterfactual in the "if" half, a past counterfactual in
+ * the result. Observed on live drafts 2026-09-02.
+ *
+ * Collapses "would have <participle>" to "would <base>", which is the
+ * mismatch that actually reads as broken. The other direction (a
+ * present-tense move, "if I ask … they'd see") is handled by the
+ * slot spec instead of here, because converting present to past
+ * needs a full conjugator and would mangle irregular verbs.
+ */
+export function normalizeConditionalTense(landing: string): string {
+  return landing.replace(
+    /\b(\w+['\u2019]d|would)\s+have\s+([a-z]+)\b/gi,
+    (whole: string, subject: string, participle: string) => {
+      const base = PARTICIPLE_TO_BASE[participle.toLowerCase()];
+      return base ? `${subject} ${base}` : whole;
+    },
+  );
+}
+
 export function assembleWorry(slots: {
   opposite_move: string;
   identity_landing: string;
 }): string {
   const move = normalizeSlot(stripRedundantIf(slots.opposite_move));
-  const landing = normalizeSlot(slots.identity_landing);
+  const landing = normalizeSlot(normalizeConditionalTense(slots.identity_landing));
   // "I" pronoun after the comma stays capital (normalizeSlot handles that).
   return `I worry that if I ${move}, ${landing}.`;
 }
@@ -818,6 +858,16 @@ The methodology (Vol 1 p. 13-14) is explicit: to find the worry, picture yoursel
   - Not-doing behavior "I don't apologize when I'm wrong" → opposite_move: "admitted I was wrong".
 
 3-6 words. Specific enough that he can picture himself doing it in a real moment. Don't over-qualify (skip "in the moment", "when she's upset" — the behavior implies the moment).
+
+### TENSE (the two slots must agree)
+
+The server writes "I worry that if I <opposite_move>, <identity_landing>." That frame is a present counterfactual, so:
+
+  - opposite_move: PAST tense. "stayed quiet", "asked what they needed", "held the price", "let the silence sit". Not "stay", not "asking".
+  - identity_landing: WOULD + base verb. "they'd see…", "I'd be…", "they'd know…". NEVER "would have seen" or "would have known": that is a past counterfactual and clashes with the "if" half.
+
+  Right: "if I held the price, they'd see me as unsure of my own worth."
+  Wrong: "if I hold the price, they'd have seen me as unsure of my own worth."
 
 ### identity_landing
 The felt fear that lands when he pictures doing opposite_move. This is the whole point. If this slot is shallow, the map is shallow.

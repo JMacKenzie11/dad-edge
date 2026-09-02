@@ -25,7 +25,14 @@ const RubricSchema = z.object({
   // earlier version of this criterion encoded only one of them, so
   // each caught one failure shape and missed another. Both halves,
   // stated once. See the system prompt for what each asks.
-  behavior_prevents_the_feared_result: z.boolean(),
+  // "Does the behavior prevent this?" was answerable with a story
+  // ("doing the opposite would reveal the past pattern"), and that
+  // story fits ANY behavior, so the question had no teeth. Asked as a
+  // direction of change it cannot be talked around.
+  continuing_the_behavior_makes_the_feared_result: z.enum([
+    "more likely",
+    "less likely",
+  ]),
   opposite_brings_the_feared_result_about: z.boolean(),
   reason: z.string().min(1).max(400),
 });
@@ -78,11 +85,14 @@ You score four BINARY criteria. Be strict. When in doubt, score false.
    - feared_result_is_the_behavior_restated: true if that feared result is the behavior itself described as a fault. "I've been the guy who never listens to anybody" for the behavior "I don't ask what the prospect needs"; "I've been choosing my reputation over serving them" for the behavior "I hedge my recommendations". A worry that accuses the behavior does not explain it.
    Then judge SELF-PROTECTION. Kegan/Lahey's Column 3 criterion is that the worry "shows why the Column 2 behaviors make good sense": the behavior is the coachee's protection against this exact fear. That is a relation with TWO directions, and both must hold. Judge them separately.
 
-   - behavior_prevents_the_feared_result: does DOING the behavior keep the feared result from happening? Ask it as: while he keeps doing this, is he safe from that?
-     TRUE: behavior "I don't ask what the client needs", feared "they'd see me as unsure". While he pitches instead of asking, they never see him unsure. Protected.
-     TRUE: behavior "I bring up things she did in the past", feared "I'd prove I'm the man who can never be enough for her". While her past is on the table, his inadequacy stays off it. Protected. (The mechanism is unstated, which is fine; take the worry's if-then at face value.)
-     FALSE: behavior "I don't ask the client what's driving their decision", feared "I'd be the one who sold them something they never needed". NOT asking makes that MORE likely, not less. It protects him from nothing here, so this fear cannot be what the behavior is for.
-     FALSE: behavior "I agree to terms I know are bad just to close", feared "they'd see me as desperate". Agreeing is what looks desperate. It causes the fear rather than preventing it.
+   - continuing_the_behavior_makes_the_feared_result: picture him doing the behavior for another year. Does the feared result become MORE likely or LESS likely? Protection makes it LESS likely. If it becomes MORE likely, the fear is a COST of the behavior, not what the behavior guards against, and it cannot be the fear underneath it.
+     Do not accept the reasoning "doing the opposite would reveal the pattern". That story can be told about any behavior, and it is how a cost gets mistaken for a protection. Judge only the direction of change.
+     LESS likely: behavior "I don't ask what the client needs", feared "they'd see me as unsure". Another year of pitching without asking, and they still never see him unsure. Protected.
+     LESS likely: behavior "I bring up things she did in the past", feared "I'd prove I'm the man who can never be enough for her". Another year of her past on the table, and his inadequacy stays off it. Protected. (The mechanism is unstated, which is fine; take the worry's if-then at face value.)
+     LESS likely: behavior "I avoid naming my price", feared "they'd see me as a fraud never worth the price". If he never names it, they never judge it. Protected.
+     MORE likely: behavior "I over-promise on scope to keep the client happy", feared "they'd see I can't back up what I promise". Another year of over-promising and they see it MORE, not less. Over-promising is what makes promises unbackable. A cost.
+     MORE likely: behavior "I don't ask what the client needs before pitching", feared "they'd see I've been selling myself, not serving them". Another year of pitching without asking and that is exactly what they see. The behavior IS the thing feared. A cost.
+     MORE likely: behavior "I agree to terms I know are bad just to close", feared "they'd see me as desperate". Agreeing is what looks desperate. A cost.
 
    - opposite_brings_the_feared_result_about: if he did the opposite, could the feared result follow? Read it as one chain: he does the opposite, it goes the way he dreads, then this.
      TRUE: opposite "ask what the client needs", feared "seen as unsure". Asking is exactly what could look unsure.
@@ -389,7 +399,7 @@ export async function scoreWorryDepth(input: {
 
     // Self-protection in both directions, per Appendix A Column 3.
     const explainsBehavior =
-      object.behavior_prevents_the_feared_result &&
+      object.continuing_the_behavior_makes_the_feared_result === "less likely" &&
       object.opposite_brings_the_feared_result_about &&
       !object.feared_result_is_the_behavior_restated;
     const score =

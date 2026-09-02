@@ -73,10 +73,17 @@ describe("renderFindings — empty state", () => {
   });
 
   it("column_review: names the column", () => {
-    expect(renderColumn([], "Your worries")).toMatch(/^Your worries holds up/);
-    expect(
-      renderFindings([], { ...CTX, mode: "column_review" }),
-    ).toMatch(/^This column holds up/);
+    // Number-neutral: the labels are a mix of singular ("Your goal")
+    // and plural ("Your worries"), and "Your worries holds up" shipped.
+    expect(renderColumn([], "Your worries")).toBe(
+      "Nothing to work on in your worries before you move on.",
+    );
+    expect(renderColumn([], "Your goal")).toBe(
+      "Nothing to work on in your goal before you move on.",
+    );
+    expect(renderFindings([], { ...CTX, mode: "column_review" })).toBe(
+      "Nothing to work on in this column before you move on.",
+    );
   });
 });
 
