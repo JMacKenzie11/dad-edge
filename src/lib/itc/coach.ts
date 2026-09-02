@@ -1454,7 +1454,26 @@ const COMMITMENT_HARD_WORD_CAP = 24;
  * sharpen" from the moment the row lands — same signal the hone
  * audit would surface, no contradiction between the two surfaces.
  */
-export async function draftCommitmentForWorry(input: {
+export type CommitmentDraftOutcome = {
+  text: string | null;
+  /** The verdict verification produced for `text`. Reused by the
+   *  caller instead of scoring the same words again; see
+   *  WorryDraftOutcome.verdict for why that matters. */
+  verdict?: {
+    depthScore: number;
+    rubricReason: string;
+    mirrorsWorryIdentity: boolean;
+  } | null;
+};
+
+/** See draftCommitmentOutcome. Kept for callers that only need text. */
+export async function draftCommitmentForWorry(
+  input: Parameters<typeof draftCommitmentOutcome>[0],
+): Promise<string | null> {
+  return (await draftCommitmentOutcome(input)).text;
+}
+
+export async function draftCommitmentOutcome(input: {
   goalText: string;
   behaviorText: string;
   worryText: string;
@@ -1463,7 +1482,7 @@ export async function draftCommitmentForWorry(input: {
   revise?: ReviseInput;
   /** See draftWorryForBehavior.mapTexts. */
   mapTexts?: string[];
-}): Promise<string | null> {
+}): Promise<CommitmentDraftOutcome> {
   const started = Date.now();
   const mapTexts = [
     input.goalText,
@@ -1486,6 +1505,7 @@ export async function draftCommitmentForWorry(input: {
     ok: boolean;
     failures: string[];
     depthScore: number | null;
+    carried: CommitmentDraftOutcome["verdict"];
   };
 
   async function generateDraft(promptLines: string[]): Promise<DraftShape | null> {
@@ -1577,15 +1597,28 @@ export async function draftCommitmentForWorry(input: {
     const people = checkPeopleFromMap({ draftText: assembled, mapTexts });
     if (!people.ok) failures.push(people.reason);
 
-    return { ok: failures.length === 0, failures, depthScore };
+    return {
+      ok: failures.length === 0,
+      failures,
+      depthScore,
+      carried: depthResult
+        ? {
+            depthScore: depthResult.score,
+            rubricReason: depthResult.reason,
+            mirrorsWorryIdentity: depthResult.mirrors_worry_identity,
+          }
+        : null,
+    };
   }
 
   try {
     const first = await generateDraft(basePromptLines);
-    if (!first) return null;
+    if (!first) return { text: null };
 
     const firstVerdict = await verifyDraft(first.assembled);
-    if (firstVerdict.ok) return first.assembled;
+    if (firstVerdict.ok) {
+      return { text: first.assembled, verdict: firstVerdict.carried };
+    }
 
     const retry = await generateDraft([
       ...basePromptLines,
@@ -1603,7 +1636,7 @@ export async function draftCommitmentForWorry(input: {
     // tie → later attempt, and never silent-drops: the persisted row
     // still carries its own sharpen box.
     if (input.revise) {
-      if (!retry) return null;
+      if (!retry) return { text: null };
       const retryVerdict = await verifyDraft(retry.assembled);
       if (!retryVerdict.ok) {
         console.warn(
@@ -1611,22 +1644,22 @@ export async function draftCommitmentForWorry(input: {
           retry.assembled,
           retryVerdict.failures,
         );
-        return null;
+        return { text: null };
       }
-      return retry.assembled;
+      return { text: retry.assembled, verdict: retryVerdict.carried };
     }
-    if (!retry) return first.assembled;
+    if (!retry) return { text: first.assembled, verdict: firstVerdict.carried };
     const retryVerdict = await verifyDraft(retry.assembled);
     if (retryVerdict.failures.length <= firstVerdict.failures.length) {
-      return retry.assembled;
+      return { text: retry.assembled, verdict: retryVerdict.carried };
     }
-    return first.assembled;
+    return { text: first.assembled, verdict: firstVerdict.carried };
   } catch (err) {
     console.warn(
-      "[itc coach] draftCommitmentForWorry failed: %s",
+      "[itc coach] draftCommitmentOutcome failed: %s",
       err instanceof Error ? err.message : String(err),
     );
-    return null;
+    return { text: null };
   } finally {
     console.warn(
       "[itc timing] draft kind=commitment ms=%d",

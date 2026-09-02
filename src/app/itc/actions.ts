@@ -15,6 +15,7 @@ import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
   draftAssumptionsOutcome,
+  draftCommitmentOutcome,
   draftTestForAssumption,
   draftWorryOutcome,
   generateImmuneSystemWalkthrough,
@@ -1551,11 +1552,12 @@ async function autoDeriveCommitmentForWorry(input: {
   behavior: { text: string };
 }): Promise<{ commitmentId: string; ok: true } | { ok: false; reason: string }> {
   try {
-    const drafted = await draftCommitmentForWorry({
+    const outcome = await draftCommitmentOutcome({
       goalText: input.goalText,
       behaviorText: input.behavior.text,
       worryText: input.worry.text,
     });
+    const drafted = outcome.text;
     if (!drafted) return { ok: false, reason: "drafter returned no text" };
     const stemmed = ensureCommitmentStem(drafted);
     const { row } = await upsertCommitmentForWorry(
@@ -1563,15 +1565,27 @@ async function autoDeriveCommitmentForWorry(input: {
       input.worry.id,
       stemmed,
     );
-    // Score + sharpen the freshly-derived commitment on the same
-    // pipeline saveCommitment uses. Keeps the depth pill + sharpen
-    // box populated from the start rather than after the coachee
-    // touches the row.
-    const scored = await scoreCommitmentDepth({
-      goalText: input.goalText,
-      worryText: input.worry.text,
-      commitmentText: row.text,
-    });
+    // The drafter's verification already scored these exact words.
+    // Reuse that verdict rather than taking a second sample of the
+    // same judge, which is what made a freshly derived commitment
+    // land with a red box on it. Only re-score when the stem changed
+    // the text (ensureCommitmentStem) so the verdict no longer
+    // belongs to what's on the row.
+    const carried =
+      outcome.verdict && row.text.trim() === drafted.trim()
+        ? outcome.verdict
+        : null;
+    const scored = carried
+      ? {
+          score: carried.depthScore,
+          reason: carried.rubricReason,
+          mirrors_worry_identity: carried.mirrorsWorryIdentity,
+        }
+      : await scoreCommitmentDepth({
+          goalText: input.goalText,
+          worryText: input.worry.text,
+          commitmentText: row.text,
+        });
     const coach = await coachTextForCommitment({
       goalText: input.goalText,
       behaviorText: input.behavior.text,

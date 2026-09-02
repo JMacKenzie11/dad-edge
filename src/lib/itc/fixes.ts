@@ -154,6 +154,20 @@ export async function coachTextForCommitment(input: {
   mirrorsWorryIdentity: boolean | null;
 }): Promise<RowCoachText> {
   const rubricReason = rubricReasonFor(input.score, input.depthReason);
+  // The waterfall, applied to the row and not just the hone banner.
+  // A competing commitment is a mirror of its worry, and a worry that
+  // still needs work produces a commitment that needs work: the
+  // coachee would be asked to fix a sentence that gets rewritten the
+  // moment he fixes the worry above it (saveWorry re-derives it).
+  // Stay quiet here and let the worry's own box do the coaching.
+  // Same rationale as runHoneWaterfall stopping at the first broken
+  // column (Kegan/Lahey Vol 1 p 4).
+  if (
+    input.worry.depth_score !== null &&
+    input.worry.depth_score < DEPTH_THRESHOLD
+  ) {
+    return { rubricReason, sharpenText: null, suggestedFix: null };
+  }
   const commitment: ItcCommitment = {
     ...input.commitment,
     depth_score: input.score,
