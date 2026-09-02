@@ -39,6 +39,13 @@ export type RenderContext = {
   /** Max entries to print. Defaults per mode (hone 1, column_review
    *  3). Pass Infinity to print everything (admin preview). */
   limit?: number;
+  /** True when every entry in this column carries its own coach box
+   *  on the row (behaviors, worries, commitments, assumptions). The
+   *  column review then reports on the SET and points at the rows,
+   *  instead of reprinting per-entry paragraphs the coachee is
+   *  already reading a few pixels above. The goal column has no row
+   *  box, so it passes false and gets the full detail here. */
+  entriesCarryTheirOwnBox?: boolean;
 };
 
 export const DEFAULT_LIMIT: Record<RenderMode, number> = {
@@ -64,6 +71,19 @@ export function renderFindings(
   const hidden = groups.length - shown.length;
 
   const opening = renderOpening(groups, context);
+
+  // One thing said once. When each entry has its own box on its row,
+  // reprinting the same quote, the same line and the same rewrite
+  // directly underneath is the coach repeating himself; the review's
+  // job is the set.
+  if (context.mode === "column_review" && context.entriesCarryTheirOwnBox) {
+    return `${opening} ${
+      groups.length === 1
+        ? "It's marked on its row above."
+        : "Each one is marked on its row above."
+    }`;
+  }
+
   const paragraphs = shown.map((g) => renderEntryParagraph(g));
   const trailer = hidden > 0 ? renderTrailer(hidden) : null;
 

@@ -289,6 +289,61 @@ describe("renderFindings — dynamic lines", () => {
 // Budget: one entry on hone, three on column review, rest counted
 // ---------------------------------------------------------------------------
 
+describe("renderFindings — column review reports on the set, not each entry", () => {
+  const two = [1, 2].map((i) =>
+    finding({
+      issueType: "depth_shortfall_worry",
+      severity: "critical",
+      entryRef: { table: "worries", id: `w-${i}` },
+      actualText: `worry ${i}`,
+      detail: "This stops at what would happen.",
+      suggestedFix: `sharper ${i}`,
+    }),
+  );
+
+  it("points at the rows instead of reprinting what their boxes already say", () => {
+    const prose = renderFindings(two, {
+      ...CTX,
+      mode: "column_review",
+      columnLabel: "Your worries",
+      entriesCarryTheirOwnBox: true,
+    });
+    expect(prose).toContain("Each one is marked on its row above.");
+    // None of the per-entry detail is repeated.
+    expect(prose).not.toContain('"worry 1"');
+    expect(prose).not.toContain("This stops at what would happen.");
+    expect(prose).not.toMatch(/Sharper:/);
+    // It still says how much there is and where to start.
+    expect(prose).toMatch(/Two things to work on in your worries/);
+  });
+
+  it("uses the singular pointer for one entry", () => {
+    const prose = renderFindings([two[0]], {
+      ...CTX,
+      mode: "column_review",
+      columnLabel: "Your worries",
+      entriesCarryTheirOwnBox: true,
+    });
+    expect(prose).toContain("It's marked on its row above.");
+  });
+
+  it("still prints the detail for a column whose rows have no box (the goal)", () => {
+    const prose = renderFindings(
+      [
+        finding({
+          issueType: "bundled_goal",
+          severity: "critical",
+          entryRef: { table: "goal", id: "map-1" },
+          actualText: "getting better at coaching my team and building my business",
+        }),
+      ],
+      { ...CTX, mode: "column_review", columnLabel: "Your goal", entriesCarryTheirOwnBox: false },
+    );
+    expect(prose).toContain('"getting better at coaching my team and building my business"');
+    expect(prose).toContain(ADVICE.bundled_goal);
+  });
+});
+
 describe("renderFindings — budget", () => {
   const four = [1, 2, 3, 4].map((i) =>
     finding({

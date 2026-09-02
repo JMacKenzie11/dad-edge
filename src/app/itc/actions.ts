@@ -2146,6 +2146,10 @@ export async function ensureColumnReviewDelivered(
       pillarLabel,
       mode: "column_review",
       columnLabel,
+      // Every column but the goal renders a coach box on each row, so
+      // the review reports on the set and points at the rows rather
+      // than saying the same thing twice.
+      entriesCarryTheirOwnBox: column !== "goal",
     });
     if (!prose) return { ok: true, delivered: false };
 
