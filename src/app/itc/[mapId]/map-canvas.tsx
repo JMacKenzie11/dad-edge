@@ -479,9 +479,24 @@ export function MapCanvas({
                 The map has moved. Regenerate to refresh the walkthrough.
               </div>
             ) : null}
-            {immuneSystemNotes.length > 0 ? (
-              <RegenerateWalkthroughButton mapId={map.id} />
+            {/*
+              The regenerate button used to render only when a
+              walkthrough already existed, so the one case that needed
+              it most, the coach having failed to write one, was the
+              one case that couldn't reach it. It renders either way
+              now, with a line saying what happened when there is
+              nothing above it: the intro promises a walkthrough, and
+              an empty section under that promise reads as broken
+              rather than as something to retry.
+            */}
+            {immuneSystemNotes.length === 0 ? (
+              <p className="mt-3 text-sm text-[color:var(--color-text-muted)]">
+                The coach didn&apos;t manage to write this one. Your map is
+                fine and you can carry on; ask for it again whenever you want
+                it.
+              </p>
             ) : null}
+            <RegenerateWalkthroughButton mapId={map.id} />
           </Section>
         ) : null}
 

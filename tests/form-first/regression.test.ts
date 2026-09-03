@@ -2410,6 +2410,13 @@ describe("Form-First regression", () => {
       // was ripped out under Form-First and never re-plumbed. This
       // regression locks the new server-orchestrated delivery so it
       // can't silently regress.
+      //
+      // The gate half of that story is gone as of 2026-09-03:
+      // Continue-to-Prioritize no longer waits on walkthrough_delivered,
+      // because a model call failing twice on advance left a man stuck
+      // with no way to retry. Delivery still has to work, which is what
+      // this test is for; it just isn't load-bearing for progress any
+      // more. See the structural guard in units.test.ts.
       const supabase = createSupabaseServiceClient();
 
       // Advancing to assumptions requires the assumption drafts schema

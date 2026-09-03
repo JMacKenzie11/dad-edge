@@ -105,6 +105,45 @@ describe("a missing commitment says why", () => {
   });
 });
 
+describe("progress never waits on a model call", () => {
+  const actions = read("../../app/itc/actions.ts");
+  const coach = read("coach.ts");
+  const canvas = read("../../app/itc/[mapId]/map-canvas.tsx");
+
+  it("Continue out of immune_system is not gated on walkthrough_delivered", () => {
+    // 2026-09-03: the walkthrough generator failed twice on advance
+    // (4s and 7s apart), so Continue sat disabled on "Deliver the
+    // walkthrough first" with no way to make that happen, because the
+    // regenerate button only rendered once a walkthrough existed.
+    const gate = actions.slice(
+      actions.indexOf('case "immune_system": {'),
+      actions.indexOf('case "prioritize"'),
+    );
+    expect(gate).not.toMatch(/enabled: false/);
+    expect(gate).not.toMatch(/Deliver the walkthrough first/);
+  });
+
+  it("the regenerate button renders even when nothing was delivered", () => {
+    expect(canvas).toMatch(/immuneSystemNotes\.length === 0 \?/);
+    expect(canvas).not.toMatch(
+      /immuneSystemNotes\.length > 0 \? \(\s*<RegenerateWalkthroughButton/,
+    );
+  });
+
+  it("the walkthrough generation retries like every other model call", () => {
+    const block = coach.slice(
+      coach.indexOf("export async function generateImmuneSystemWalkthrough"),
+      coach.indexOf("recommendAssumptionToTest"),
+    );
+    expect(block).toMatch(/generateWithRetry\("immune-system walkthrough"/);
+  });
+
+  it("a failed walkthrough records why, not just that it was null", () => {
+    expect(actions).toMatch(/takeLastWalkthroughError\(\)/);
+    expect(actions).not.toMatch(/LLM returned null; walkthrough_delivered stays false/);
+  });
+});
+
 describe("the depth bar is one constant", () => {
   it("coach.ts compares against DEPTH_THRESHOLD, never a bare 3", () => {
     // Nine hardcoded 3s meant changing the constant would move the

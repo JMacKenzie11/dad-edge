@@ -2215,6 +2215,18 @@ export async function reviseAssumption(input: {
  * This helper returns prose; the server writes the message + flips
  * walkthrough_delivered.
  */
+/** Why the last walkthrough attempt returned null. Read straight
+ *  after a null so the turn event can say what actually happened
+ *  instead of "LLM returned null", which is what it recorded for both
+ *  failures on 2026-09-03 and told nobody anything. */
+let lastWalkthroughError: string | null = null;
+
+export function takeLastWalkthroughError(): string | null {
+  const e = lastWalkthroughError;
+  lastWalkthroughError = null;
+  return e;
+}
+
 export async function generateImmuneSystemWalkthrough(input: {
   goalText: string;
   /** Selected Column 2 behaviors, in on-map order. */
@@ -2262,7 +2274,20 @@ export async function generateImmuneSystemWalkthrough(input: {
       "./prompts/stages/immune-system"
     );
 
-    const { text } = await generateText({
+    // Through generateWithRetry: a failed call is a blip, not a
+    // verdict. This was the last model call in the file still going
+    // out bare, and it cost the coachee the whole section. On
+    // 2026-09-03 an advance produced two "LLM returned null" errors
+    // four and seven seconds apart, so the immune-system stage showed
+    // its intro ("Now I'll walk you through how the pieces
+    // interlock"), then the diagram, then nothing. It only appeared
+    // 100 seconds later when a page load happened to retry it.
+    //
+    // This is the one generation with no fallback surface: a worry
+    // with no draft still has a box to type in, but a missing
+    // walkthrough leaves a promise the page never keeps.
+    const { text } = await generateWithRetry("immune-system walkthrough", () =>
+      generateText({
       model: mainModel(),
       system: withVoiceRules(IMMUNE_SYSTEM_STAGE),
       prompt: [
@@ -2280,7 +2305,8 @@ export async function generateImmuneSystemWalkthrough(input: {
         `Deliver the three-movement walkthrough now. Return only the walkthrough prose — no meta, no headings, no scaffolding.`,
       ].join("\n"),
       maxOutputTokens: 3000,
-    });
+      }),
+    );
     // Use the light scrub — the full scrubReply's advance-cut would
     // truncate at the first mention of "big assumptions", "worry box",
     // "competing commitments", etc., which the walkthrough is
@@ -2290,10 +2316,9 @@ export async function generateImmuneSystemWalkthrough(input: {
     // three movements even though the prompt tells it to.
     return ensureParagraphs(scrubReplyLight(text));
   } catch (err) {
-    console.warn(
-      "[itc coach] generateImmuneSystemWalkthrough failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[itc coach] generateImmuneSystemWalkthrough failed: %s", message);
+    lastWalkthroughError = message;
     return null;
   } finally {
     console.warn(

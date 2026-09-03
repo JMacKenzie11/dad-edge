@@ -17,6 +17,7 @@ import {
   draftTestForAssumption,
   draftWorryOpening,
   generateImmuneSystemWalkthrough,
+  takeLastWalkthroughError,
   generateMapCloseSummary,
   generateSuggestions,
   recommendAssumptionToTest,
@@ -1755,7 +1756,11 @@ export async function deliverWalkthroughAfterAdvance(
       "error",
       {
         where: "deliverWalkthroughAfterAdvance",
-        message: "LLM returned null; walkthrough_delivered stays false",
+        // Was the constant string "LLM returned null", which told
+        // nobody anything: two of them on 2026-09-03 and the only way
+        // to learn the cause was to reproduce it.
+        message: takeLastWalkthroughError() ?? "generator returned null",
+        model: mainModelIdOrUnset(),
       },
       { stage: "immune_system" },
     );
@@ -4320,15 +4325,18 @@ async function computeAdvanceGate(
     }
     case "review":
     case "immune_system": {
-      if (from === "immune_system" && !map.walkthrough_delivered) {
-        return {
-          from,
-          to,
-          label,
-          enabled: false,
-          reason: "Deliver the walkthrough first.",
-        };
-      }
+      // Deliberately ungated. This used to require
+      // walkthrough_delivered, so a model call that failed twice on
+      // advance left Continue disabled with "Deliver the walkthrough
+      // first" and no way to make that happen: the regenerate button
+      // only renders once a walkthrough exists, so the one affordance
+      // that could have fixed it was hidden by the same failure.
+      //
+      // The walkthrough is coaching, not data. Nothing downstream
+      // reads it, and prioritizing needs assumptions, which he has.
+      // Blocking a man's progress on whether an API call succeeded is
+      // never right; the section itself now says when it is missing
+      // and offers to write it (map-canvas.tsx).
       return { from, to, label, enabled: true, reason: null };
     }
     case "prioritize": {
