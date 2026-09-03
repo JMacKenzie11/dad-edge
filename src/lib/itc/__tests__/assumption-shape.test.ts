@@ -132,6 +132,46 @@ describe("Column 4 is scored on Appendix A's criteria, not on identity", () => {
     expect(advice).toMatch(/what would it cost you/);
   });
 
+  it("no coach advice tells him to rewrite an \"if\" he may not have", () => {
+    // "clients won't hire me unless I agree to whatever they want"
+    // has no if-clause. The underwrite advice told him to rewrite one
+    // anyway, and so did the renderer, which duplicates the sentence
+    // to fill in the "#N" positions.
+    const advice = readFileSync(resolve(here, "..", "criteria", "advice.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const render = readFileSync(resolve(here, "..", "criteria", "render.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    for (const [name, src] of [["advice.ts", advice], ["render.ts", render]] as const) {
+      expect(src, `${name} still asks him to rewrite the "if"`).not.toMatch(
+        /rewrite the \\?"if\\?"/,
+      );
+    }
+    // And the enactable advice must not send him back to the Column 2
+    // counter-move, which is what made assumptions restate the worry
+    // (de376db).
+    expect(advice).not.toMatch(/doing the opposite of one of your behaviors/);
+  });
+
+  it("the coverage note stays in the assumptions column", () => {
+    // "No Big Assumption holds this one up yet" was rendering as a
+    // red box on a COMMITMENT row (2026-09-03). It is a note about
+    // Column 5, and he read it beside his commitments where there is
+    // nothing to do about it.
+    const fixes = readFileSync(resolve(here, "..", "fixes.ts"), "utf8");
+    expect(fixes).toMatch(/const ownFindings = findings\.filter\(/);
+    expect(fixes).toMatch(/f\.issueType !== "assumption_uncovered_commitment"/);
+    // And a commitment whose only finding was the coverage note must
+    // have its box cleared, not left showing a stale line.
+    expect(fixes).toMatch(/ownFindings\.length > 0 \? renderRowSharpen\(ownFindings\) : null/);
+    // The review still carries it: columnRank routes it to Column 5.
+    const render = readFileSync(resolve(here, "..", "criteria", "render.ts"), "utf8");
+    expect(render).toMatch(
+      /assumption_uncovered_commitment"\) return COLUMN_RANK\.assumptions/,
+    );
+  });
+
   it("the intro he reads first agrees", () => {
     const intro = readFileSync(resolve(here, "..", "stage-intros.ts"), "utf8");
     expect(intro).not.toMatch(/what that would mean about you/);

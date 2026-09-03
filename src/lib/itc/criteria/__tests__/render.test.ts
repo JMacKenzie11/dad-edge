@@ -240,7 +240,11 @@ describe("renderFindings — dynamic lines", () => {
     });
     const line = findingLine(f);
     expect(line).toBe(
-      'Believing this doesn\'t make #2 and #4 feel necessary. Drop #2 and #4 from it, or rewrite the "if" so doing it would break those vows too.',
+      // Shape-neutral since 2026-09-03: a Big Assumption need not have
+      // an "if" (Vol 1 p 4 asks only that ONE on a map does), and a
+      // man whose belief read "clients won't hire me unless I agree to
+      // whatever they want" was told to rewrite one that wasn't there.
+      "Believing this doesn't make #2 and #4 feel necessary. Take #2 and #4 off this one, or say what you'd have to believe for those vows to matter this much.",
     );
     // No rewrite is offered for a link problem.
     expect(renderHone([f])).not.toMatch(/Sharper:/);

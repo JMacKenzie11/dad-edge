@@ -77,11 +77,32 @@ export function renderFindings(
   // directly underneath is the coach repeating himself; the review's
   // job is the set.
   if (context.mode === "column_review" && context.entriesCarryTheirOwnBox) {
-    return `${opening} ${
-      groups.length === 1
-        ? "It's marked on its row above."
-        : "Each one is marked on its row above."
-    }`;
+    // Not every finding HAS a row to be marked on. A coverage finding
+    // is about Column 5 but points at a Column 4 entry, and since
+    // 2026-09-03 it deliberately writes no box onto that commitment
+    // row (the coaching for a column belongs in that column). So
+    // pointing at "its row above" sent him to a row with nothing on
+    // it. Those get printed here; everything else still points.
+    const homeless = shown.filter((g) =>
+      g.findings.some((f) => NO_ROW_BOX.has(f.issueType)),
+    );
+    const pointed = groups.length - homeless.length;
+    const parts = [opening, ...homeless.map((g) => renderEntryParagraph(g))];
+    if (pointed > 0) {
+      parts.push(
+        pointed === 1
+          ? "The other one is marked on its row above."
+          : `The other ${pointed} are marked on their rows above.`,
+      );
+    }
+    if (homeless.length === 0) {
+      return `${opening} ${
+        groups.length === 1
+          ? "It's marked on its row above."
+          : "Each one is marked on its row above."
+      }`;
+    }
+    return parts.join("\n\n");
   }
 
   const paragraphs = shown.map((g) => renderEntryParagraph(g));
@@ -218,7 +239,10 @@ function renderUnderwriteLine(f: Finding): string {
   if (positions.length === 0) return f.detail;
   const list = joinList(positions.map((p) => `#${p}`));
   const those = positions.length === 1 ? "that vow" : "those vows";
-  return `Believing this doesn't make ${list} feel necessary. Drop ${list} from it, or rewrite the "if" so doing it would break ${those} too.`;
+  // Same sentence as ADVICE.assumption_doesnt_underwrite with the
+  // positions filled in. It said "rewrite the if" until 2026-09-03,
+  // which a belief with no "if" in it cannot be asked to do.
+  return `Believing this doesn't make ${list} feel necessary. Take ${list} off this one, or say what you'd have to believe for ${those} to matter this much.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +276,23 @@ const TYPE_RANK: Partial<Record<IssueType, number>> = {
   assumption_doesnt_underwrite: 10,
   assumption_uncovered_commitment: 11,
 };
+
+/**
+ * Issue types that put NO box on the entry's own row, so the column
+ * review has to say them itself or they are said nowhere.
+ *
+ * Listed explicitly rather than derived: an allow-list keyed off
+ * TYPE_RANK would silently treat any type missing from that table as
+ * homeless and print it twice.
+ *
+ * assumption_uncovered_commitment points at a commitment but is about
+ * the assumptions column, so it deliberately writes no box on the
+ * commitment row (fixes.ts, fixCoverage): the coaching for a column
+ * belongs in that column.
+ */
+const NO_ROW_BOX: ReadonlySet<IssueType> = new Set<IssueType>([
+  "assumption_uncovered_commitment",
+]);
 
 function columnRank(f: Finding): number {
   if (f.issueType === "assumption_uncovered_commitment") return COLUMN_RANK.assumptions;

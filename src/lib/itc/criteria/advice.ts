@@ -70,11 +70,22 @@ export const ADVICE: Record<IssueType, string> = {
   // Fallback only. The renderer builds the real sentence from
   // Finding.unfitCommitmentPositions ("Believing this makes #1 and #3
   // feel necessary, not #2…").
+  // Both of these used to tell him to rewrite "the if". A Big
+  // Assumption does not need one: Vol 1 p 4 asks only that at least
+  // one on a map be in if-then form, and Appendix A never mentions
+  // it. A man whose belief reads "clients won't hire me unless I
+  // agree to whatever they want" was told to rewrite an "if" that
+  // wasn't there (2026-09-03).
   assumption_doesnt_underwrite:
-    "Believing this doesn't make every commitment it's tied to feel necessary. Drop the ones it doesn't hold up, or rewrite the \"if\" so doing it would break those vows too.",
+    "Believing this doesn't make every vow it's tied to feel necessary. Take the ones it doesn't hold up off this one, or say what you'd have to believe for those vows to matter this much.",
 
+  // Also dropped the "start it with you doing the opposite of one of
+  // your behaviors" instruction: anchoring the belief on a Column 2
+  // counter-move is what produced assumptions that restated the
+  // worry, fixed in de376db. What this check actually wants is
+  // something testable.
   assumption_not_enactable:
-    "The \"if\" isn't a move you could make yourself this week. Start it with you doing the opposite of one of your behaviors, so you can test it.",
+    "There's nothing here you could put to the test this week. Name something you could actually do differently, so you can find out whether the belief holds.",
 
   test_coverage_gap:
     "This one has no test yet. Without one you've got no data to hold it up against.",

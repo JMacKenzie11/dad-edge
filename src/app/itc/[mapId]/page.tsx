@@ -112,6 +112,33 @@ export default async function ItcMapPage({
     getAdvanceGate(map.id),
   ]);
 
+  // ONE ordering for competing commitments, everywhere they are
+  // numbered.
+  //
+  // listCommitments returns them by their own created_at, while
+  // Column 4's rows are laid out one per worry in worry order. Those
+  // two agree only if the commitments happened to be written in the
+  // same order as their worries, and on a real map they don't: the
+  // advance derives them in parallel, and one that fails is written
+  // later when the coachee edits its worry. On the map that surfaced
+  // this, two landed 0.3s apart and the third thirteen minutes later.
+  //
+  // That mismatch is not cosmetic. The reference box above Column 5
+  // numbers them #1..#N and the link chips on each assumption use the
+  // same numbers, so a coachee reading "#2" in the box and ticking
+  // "#2" on a chip could be pointing at two different vows.
+  //
+  // Worry order wins because the map reads down: a behavior has a
+  // worry, a worry has a vow. Anything with no worry (should not
+  // happen; the pairing is enforced on save) sorts last rather than
+  // being dropped.
+  const worryOrder = new Map(worries.map((w, i) => [w.id, i]));
+  const orderedCommitments = [...commitments].sort(
+    (a, b) =>
+      (worryOrder.get(a.worry_id) ?? Number.MAX_SAFE_INTEGER) -
+      (worryOrder.get(b.worry_id) ?? Number.MAX_SAFE_INTEGER),
+  );
+
   return (
     <main className="flex flex-col">
       {/* In-page utility strip. Clear map + Admin moved into the
@@ -144,7 +171,7 @@ export default async function ItcMapPage({
           map={map}
           behaviors={behaviors}
           worries={worries}
-          commitments={commitments}
+          commitments={orderedCommitments}
           assumptions={assumptions}
           assumptionLinks={assumptionLinks}
           assumptionDrafts={assumptionDrafts}

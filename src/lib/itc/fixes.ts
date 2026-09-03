@@ -574,8 +574,25 @@ async function fixCoverage(findings: Finding[], ctx: FixContext): Promise<Findin
   }
 
   if (ctx.persist) {
+    // "No Big Assumption holds this one up yet" is a note about
+    // Column 5, and it was landing in a red box on a Column 4 row.
+    // The coaching for a column belongs in that column: he reads it
+    // beside his commitments, where there is nothing to do about it,
+    // and the thing to do is one section down.
+    //
+    // renderFindings already routes coverage findings to the
+    // assumptions column (columnRank in render.ts), so the review and
+    // the hone banner still carry it. Only the row box drops it.
+    //
+    // The group can also hold this commitment's OWN findings (a depth
+    // shortfall, say), and those do belong on the row. So render what
+    // is left after the coverage notes come out, and clear the box
+    // when nothing is left rather than leaving a stale line behind.
+    const ownFindings = findings.filter(
+      (f) => f.issueType !== "assumption_uncovered_commitment",
+    );
     await updateRowCoachText("itc_commitments", commitment.id, {
-      sharpenText: renderRowSharpen(findings),
+      sharpenText: ownFindings.length > 0 ? renderRowSharpen(ownFindings) : null,
       suggestedFix: null,
     });
   }
