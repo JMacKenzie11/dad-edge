@@ -1045,6 +1045,15 @@ export type CommitmentDraftOutcome = {
     rubricReason: string;
     mirrorsWorryIdentity: boolean;
   } | null;
+  /** Why nothing was offered, when `text` is null. Either the checks
+   *  refused the draft (with their own lines) or the model call
+   *  failed. Carried so a missing commitment is explainable from the
+   *  admin view instead of a server log: on 2026-09-03 an advance
+   *  derived 2 of 3 and recorded only the counts, so the third row
+   *  came up blank with no way to find out why. */
+  refusal?: { draft: string; feedback: string[] } | null;
+  /** Set when the drafter threw (model error, schema mismatch). */
+  error?: string;
 };
 
 /** See draftCommitmentOutcome. Kept for callers that only need text. */
@@ -1217,7 +1226,7 @@ export async function draftCommitmentOutcome(input: {
         text,
         v.failures,
       );
-      return { text: null };
+      return { text: null, refusal: { draft: text, feedback: v.failures } };
     }
     return { text, verdict: v.carried };
   }
@@ -1282,11 +1291,9 @@ export async function draftCommitmentOutcome(input: {
     }
     return offerable(firstVerdict, first.assembled);
   } catch (err) {
-    console.warn(
-      "[itc coach] draftCommitmentOutcome failed: %s",
-      err instanceof Error ? err.message : String(err),
-    );
-    return { text: null };
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[itc coach] draftCommitmentOutcome failed: %s", message);
+    return { text: null, error: message };
   } finally {
     console.warn(
       "[itc timing] draft kind=commitment ms=%d",

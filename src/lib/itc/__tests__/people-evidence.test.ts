@@ -82,6 +82,29 @@ describe("mapTexts is required, not optional", () => {
   });
 });
 
+describe("a missing commitment says why", () => {
+  const actions = read("../../app/itc/actions.ts");
+  const coach = read("coach.ts");
+
+  it("the advance-time derive records failures, not just a count", () => {
+    // 2026-09-03: an advance recorded worry_count 3 / derived_count 2
+    // and the coachee got a blank row. Nothing anywhere said why, so
+    // the only way to find out was to query the database by hand.
+    expect(actions).toMatch(/kind: "commitment_auto_derived"/);
+    expect(actions).toMatch(/failures,/);
+    expect(actions).toMatch(/worry_id: r\.worryId/);
+  });
+
+  it("the drafter distinguishes a refusal from a model error", () => {
+    // "drafter returned no text" was true and useless: a check
+    // refusing the words is a verdict about the text, a failed call
+    // is a blip, and they need different responses.
+    expect(coach).toMatch(/refusal\?: \{ draft: string; feedback: string\[\] \} \| null;/);
+    expect(actions).toMatch(/model call failed:/);
+    expect(actions).toMatch(/checks refused it:/);
+  });
+});
+
 describe("the depth bar is one constant", () => {
   it("coach.ts compares against DEPTH_THRESHOLD, never a bare 3", () => {
     // Nine hardcoded 3s meant changing the constant would move the

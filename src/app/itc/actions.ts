@@ -1509,7 +1509,16 @@ async function autoDeriveCommitmentForWorry(input: {
       worryText: input.worry.text,
     });
     const drafted = outcome.text;
-    if (!drafted) return { ok: false, reason: "drafter returned no text" };
+    if (!drafted) {
+      // Say WHICH: the checks refused it, or the model call failed.
+      // "drafter returned no text" was true and useless.
+      const reason = outcome.error
+        ? `model call failed: ${outcome.error}`
+        : outcome.refusal
+          ? `checks refused it: ${outcome.refusal.feedback.join(" | ")}`
+          : "drafter returned no text";
+      return { ok: false, reason };
+    }
     const stemmed = ensureCommitmentStem(drafted);
     const { row } = await upsertCommitmentForWorry(
       input.mapId,
@@ -1600,16 +1609,29 @@ async function autoDeriveCommitmentsAfterAdvance(
         worry: w,
         behavior: { text: behavior.text },
       });
-      return { worryId: w.id, ok: res.ok };
+      return {
+        worryId: w.id,
+        ok: res.ok,
+        reason: res.ok ? null : res.reason,
+      };
     }),
   );
 
+  // Counts alone made a missing commitment unexplainable. On
+  // 2026-09-03 an advance recorded worry_count 3 / derived_count 2
+  // and the coachee got a blank row; nothing anywhere said why, so
+  // the only way to find out was to query the database by hand.
+  // Same diagnostics the worry drafter has carried since 0689006.
+  const failures = results
+    .filter((r) => !r.ok)
+    .map((r) => ({ worry_id: r.worryId, reason: r.reason }));
   events.record(
     "coach_reaction_sent",
     {
       kind: "commitment_auto_derived",
       worry_count: needsDerive.length,
       derived_count: results.filter((r) => r.ok).length,
+      failures,
     },
     { stage: "commitments" },
   );
