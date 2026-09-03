@@ -1,4 +1,8 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import {
+  COACH_TEXT_VERSION,
+  coachTextIsCurrent,
+} from "./coach-text-version";
 import type { PillarCode } from "@/lib/pillars";
 import { canTransitionTo, hasGoalStem, stageIndex, type ItcStage } from "./stage";
 
@@ -40,6 +44,13 @@ export type ItcCommitment = {
   /** See ItcWorry.sharpen_text / suggested_fix. */
   sharpen_text: string | null;
   suggested_fix: string | null;
+  /** Criteria version that wrote the coach text above. Older or null
+   *  means stale: hidden on read, rewritten on the next score.
+   *  Optional because it is absent from a row read before the
+   *  migration runs, and from the in-memory rows the drafters build
+   *  to run a check against un-persisted text.
+   *  See src/lib/itc/coach-text-version.ts. */
+  coach_text_version?: number | null;
   /** Per-criterion boolean from scoreCommitmentDepth: does the vow
    *  name the identity/outcome the paired worry fears? Persisted so
    *  the criteria module can fire a mirror-broken finding without a
@@ -62,6 +73,13 @@ export type ItcAssumption = {
   /** See ItcWorry.sharpen_text / suggested_fix. */
   sharpen_text: string | null;
   suggested_fix: string | null;
+  /** Criteria version that wrote the coach text above. Older or null
+   *  means stale: hidden on read, rewritten on the next score.
+   *  Optional because it is absent from a row read before the
+   *  migration runs, and from the in-memory rows the drafters build
+   *  to run a check against un-persisted text.
+   *  See src/lib/itc/coach-text-version.ts. */
+  coach_text_version?: number | null;
   attempts: number;
   selected_for_testing: boolean;
   created_at: string;
@@ -107,6 +125,13 @@ export type ItcBehavior = {
   /** See ItcWorry.sharpen_text / suggested_fix. */
   sharpen_text: string | null;
   suggested_fix: string | null;
+  /** Criteria version that wrote the coach text above. Older or null
+   *  means stale: hidden on read, rewritten on the next score.
+   *  Optional because it is absent from a row read before the
+   *  migration runs, and from the in-memory rows the drafters build
+   *  to run a check against un-persisted text.
+   *  See src/lib/itc/coach-text-version.ts. */
+  coach_text_version?: number | null;
   /** Number of times this behavior has been saved (add + every edit).
    *  Powers the 2/3-with-attempts>=2 escape hatch in the gate. */
   attempts: number;
@@ -146,6 +171,13 @@ export type ItcWorry = {
    *  or the drafter couldn't clear every check. The row shows a
    *  "Use this" button for it. */
   suggested_fix: string | null;
+  /** Criteria version that wrote the coach text above. Older or null
+   *  means stale: hidden on read, rewritten on the next score.
+   *  Optional because it is absent from a row read before the
+   *  migration runs, and from the in-memory rows the drafters build
+   *  to run a check against un-persisted text.
+   *  See src/lib/itc/coach-text-version.ts. */
+  coach_text_version?: number | null;
   attempts: number;
   created_at: string;
   updated_at: string;
@@ -334,7 +366,7 @@ export async function listBehaviors(mapId: string): Promise<ItcBehavior[]> {
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listBehaviors: ${error.message}`);
-  return (data ?? []) as ItcBehavior[];
+  return ((data ?? []) as ItcBehavior[]).map(withFreshCoachText);
 }
 
 /**
@@ -531,7 +563,7 @@ export async function listWorries(mapId: string): Promise<ItcWorry[]> {
     .eq("map_id", mapId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listWorries: ${error.message}`);
-  return (data ?? []) as ItcWorry[];
+  return ((data ?? []) as ItcWorry[]).map(withFreshCoachText);
 }
 
 /**
@@ -650,17 +682,61 @@ export type RowCoachText = {
   suggestedFix?: string | null;
 };
 
+/**
+ * Hide coach text that an older version of the criteria wrote.
+ *
+ * Applied on every read of a row that carries coach text. Stale text
+ * is nulled rather than deleted: the row is untouched in the
+ * database, the coachee simply doesn't see a box, and the next time
+ * that row is scored the text is rewritten with the current stamp.
+ *
+ * This is what stops a reworded advice string or a retired check
+ * leaving boxes up on maps the coachee has moved past. Before it,
+ * each such change needed a hand-written cleanup that had to know the
+ * exact wording it was hunting, and three of those were needed in one
+ * day (2026-09-03).
+ *
+ * rubric_reason goes with the other two. It is the raw reason behind
+ * a score, it renders to the coachee in the same box, and it comes
+ * from the same rubrics.
+ */
+function withFreshCoachText<
+  T extends {
+    coach_text_version?: number | null;
+    rubric_reason?: string | null;
+    sharpen_text?: string | null;
+    suggested_fix?: string | null;
+  },
+>(row: T): T {
+  if (coachTextIsCurrent(row.coach_text_version)) return row;
+  return {
+    ...row,
+    rubric_reason: null,
+    sharpen_text: null,
+    suggested_fix: null,
+  };
+}
+
 function coachTextPatch(coach?: RowCoachText): {
   rubric_reason?: string | null;
   sharpen_text?: string | null;
   suggested_fix?: string | null;
+  coach_text_version?: number;
 } {
   if (!coach) return {};
   const patch: {
     rubric_reason?: string | null;
     sharpen_text?: string | null;
     suggested_fix?: string | null;
-  } = {};
+    coach_text_version?: number;
+  } = {
+    // Stamp every write. Text written by an older version of the
+    // criteria is treated as absent on read and regenerated on the
+    // next score, so a reworded advice string or a retired check
+    // can't leave a coachee reading something the app no longer
+    // says. See src/lib/itc/coach-text-version.ts.
+    coach_text_version: COACH_TEXT_VERSION,
+  };
   if (coach.rubricReason !== undefined) {
     patch.rubric_reason = coach.rubricReason?.trim() || null;
   }
@@ -765,7 +841,7 @@ export async function listCommitments(mapId: string): Promise<ItcCommitment[]> {
     .eq("map_id", mapId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listCommitments: ${error.message}`);
-  return (data ?? []) as ItcCommitment[];
+  return ((data ?? []) as ItcCommitment[]).map(withFreshCoachText);
 }
 
 /**
@@ -862,7 +938,7 @@ export async function listAssumptions(mapId: string): Promise<ItcAssumption[]> {
     .eq("map_id", mapId)
     .order("sort_order", { ascending: true });
   if (error) throw new Error(`listAssumptions: ${error.message}`);
-  return (data ?? []) as ItcAssumption[];
+  return ((data ?? []) as ItcAssumption[]).map(withFreshCoachText);
 }
 
 /**
