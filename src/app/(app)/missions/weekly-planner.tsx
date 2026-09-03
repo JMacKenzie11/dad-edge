@@ -119,7 +119,12 @@ function BucketSection({
           <p className="text-sm mt-1 text-[color:var(--color-text-muted)]">{bucket.subtitle}</p>
         ) : null}
       </header>
-      <div className="px-4 py-2 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)] flex items-center gap-3 text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+      {/* Column headers only from `sm` up. Below that each row stacks
+          (mission-slot.tsx), so labels sitting in a single line above
+          them would name columns that are no longer side by side, and
+          the header's own 436px of fixed widths is what squeezed the
+          mission text to one word per line on a phone. */}
+      <div className="hidden sm:flex px-4 py-2 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)] items-center gap-3 text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
         <span className="flex-1">MISSION</span>
         <span className="shrink-0 w-[152px] text-center">DAY YOU&rsquo;LL DO IT</span>
         <span className="shrink-0 w-[92px] text-center">COACH</span>

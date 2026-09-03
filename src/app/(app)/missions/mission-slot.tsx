@@ -20,14 +20,23 @@ const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 // state (with or without coach pill, with or without action buttons,
 // completed with just a "TUE" span vs. editable with a full day picker).
 // Kept in sync with the column-header widths in weekly-planner.tsx.
-const COL_DAY_WIDTH = "w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
-const COL_COACH_WIDTH = "w-[92px]"; // fits "SHARPEN 10/10"
+// Column widths apply from `sm` up only. Below that the row stacks:
+// the three fixed columns total 436px, which does not fit a 390px
+// phone, so the mission text was being squeezed to one word per line
+// while the actions ran off the right edge entirely.
+//
+// On mobile each column sizes to its content and the group wraps
+// under the title. From `sm` the fixed widths return and the row is
+// exactly as it was, which is what keeps the columns aligned with
+// the header in weekly-planner.tsx.
+const COL_DAY_WIDTH = "sm:w-[152px]"; // 7 buttons × 20px + 6 gaps × 2px
+const COL_COACH_WIDTH = "sm:w-[92px]"; // fits "SHARPEN 10/10"
 // Actions column = fixed sub-slots so each button holds its x-position
 // even when siblings are hidden (e.g. COMPLETE + × are gone on completed
 // rows — without fixed slots, → NEXT WEEK would slide right).
-const COL_ACTIONS_WIDTH = "w-[192px]"; // COMPLETE(68) + NEXT WEEK(92) + ×(24) + 2×gap(4)
+const COL_ACTIONS_WIDTH = "sm:w-[192px]"; // COMPLETE(68) + NEXT WEEK(92) + ×(24) + 2×gap(4)
 const COL_COMPLETE_SLOT = "w-[68px]";
-const COL_NEXT_WEEK_SLOT = "w-[92px]";
+const COL_NEXT_WEEK_SLOT = "sm:w-[92px]";
 const COL_DELETE_SLOT = "w-[24px]";
 
 /**
@@ -183,7 +192,7 @@ function EmptySlot({
 
   return (
     <li className="bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <textarea
           ref={inputRef}
           rows={1}
@@ -206,8 +215,11 @@ function EmptySlot({
             }
           }}
           placeholder="Behavior + how you'll know it's done."
-          className="flex-1 min-w-0 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
+          className="w-full min-w-0 sm:flex-1 p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
         />
+        {/* Same stacking as the filled row: controls group under
+            the input on a phone, dissolve back into columns at sm. */}
+        <div className="flex flex-wrap items-center gap-3 sm:contents">
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
           <DayPicker
             weekDates={weekDates}
@@ -231,6 +243,7 @@ function EmptySlot({
           ) : null}
         </div>
         <div className={`shrink-0 ${COL_ACTIONS_WIDTH}`} aria-hidden="true" />
+        </div>
       </div>
       {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
       {pending ? (
@@ -407,8 +420,8 @@ function FilledSlot({
   return (
     <li className="group bg-[color:var(--color-bg)] px-4 py-3 space-y-2">
       {confirmDialog}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="w-full min-w-0 sm:flex-1">
           {readOnly || isDone ? (
             <p
               className={
@@ -446,6 +459,12 @@ function FilledSlot({
             </p>
           ) : null}
         </div>
+        {/* Mobile: the three control columns sit together under the
+            mission text and wrap if they must. `sm:contents` dissolves
+            this wrapper from `sm` up, so they become direct children
+            of the row again and line up with the header exactly as
+            before. */}
+        <div className="flex flex-wrap items-center gap-3 sm:contents">
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
           {readOnly || isDone ? (
             <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
@@ -553,6 +572,7 @@ function FilledSlot({
               </button>
             ) : null}
           </div>
+        </div>
         </div>
       </div>
       {saveError ? (
