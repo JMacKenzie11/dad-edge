@@ -23,6 +23,23 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, "..", rel), "utf8");
+
+/**
+ * Source with comments stripped.
+ *
+ * Every "X is gone" assertion here reads real source, and the code
+ * that removed X almost always leaves a comment SAYING it removed X,
+ * so a naive match finds the note documenting the absence and calls
+ * it a presence. That has now cost three debugging rounds in one day
+ * (the coverage note, the identity advice, and RE-DERIVE), so it is a
+ * helper rather than a per-test workaround. Use `read` when the
+ * comments are the thing under test, `code` when the behaviour is.
+ */
+const code = (rel: string) =>
+  read(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
 const coach = read("coach.ts");
 const fixes = read("fixes.ts");
 
@@ -144,6 +161,27 @@ describe("progress never waits on a model call", () => {
   });
 });
 
+describe("an assumption is told when its vow moves", () => {
+  const row = code("../../app/itc/[mapId]/assumptions-row.tsx");
+
+  it("shows a notice when a linked commitment is newer than the assumption", () => {
+    // saveWorry re-derives the paired commitment and invalidates the
+    // assumptions review, but the review speaks about the set. Nothing
+    // said "the vow this belief was built on has changed" after the
+    // RE-DERIVE banner went with its no-op button (2026-09-03).
+    expect(row).toMatch(/const upstreamMoved = commitments/);
+    expect(row).toMatch(/has changed since you/);
+  });
+
+  it("carries no button, because the rewrite is his", () => {
+    // The button it used to sit beside cleared assumption drafts and
+    // returned ok without calling a drafter. Reinstating it would put
+    // assumption drafting back through a side door.
+    expect(row).not.toMatch(/RE-DERIVE/);
+    expect(row).not.toMatch(/redriveAssumptionFromCommitment/);
+  });
+});
+
 describe("the depth bar is one constant", () => {
   it("coach.ts compares against DEPTH_THRESHOLD, never a bare 3", () => {
     // Nine hardcoded 3s meant changing the constant would move the
@@ -155,8 +193,8 @@ describe("the depth bar is one constant", () => {
 
 describe("RE-DERIVE is gone", () => {
   it("no action, no button, no banner", () => {
-    const actions = read("../../app/itc/actions.ts");
-    const row = read("../../app/itc/[mapId]/assumptions-row.tsx");
+    const actions = code("../../app/itc/actions.ts");
+    const row = code("../../app/itc/[mapId]/assumptions-row.tsx");
     expect(actions).not.toMatch(/export async function redriveAssumptionFromCommitment/);
     expect(row).not.toMatch(/redriveAssumptionFromCommitment/);
     expect(row).not.toMatch(/StaleUpstreamBanner/);

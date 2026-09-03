@@ -20,7 +20,6 @@ vi.mock("@/lib/model-config", () => ({
 
 import {
   checkAssumptionEnactable,
-  checkAssumptionsHaveAnEnactableIf,
   checkAssumptionUnderwritesCommitments,
   judgeAssumptionUnderwrites,
 } from "../assumptions";
@@ -216,53 +215,35 @@ describe("checkAssumptionEnactable", () => {
   });
 });
 
-describe("checkAssumptionsHaveAnEnactableIf (hone: map-level, Vol 1 p 4)", () => {
-  const b1 = behavior("b-1", "I walk out when she raises her voice.");
-  const root = assumption({
-    id: "a-root",
-    text: "I assume that if something important goes badly, then I can't be trusted.",
-  });
-  const child = assumption({
-    id: "a-child",
-    text: "I assume that if I stay in the room while she's angry, then I'd lose it and be the husband who hurts her.",
-  });
-
-  it("stays quiet when at least one assumption is enactable, even if the root isn't", async () => {
-    generateObject.mockImplementation(async ({ prompt }: { prompt: string }) => ({
-      object: prompt.includes("stay in the room")
-        ? { enactable: true, reverses_behavior_index: 1, reason: "his move" }
-        : { enactable: false, reverses_behavior_index: null, reason: "an outcome" },
-    }));
-    const findings = await checkAssumptionsHaveAnEnactableIf({
-      assumptions: [root, child],
-      behaviors: [b1],
-    });
-    expect(findings).toEqual([]);
+describe("enactability is asked of the selected assumption, not the column", () => {
+  // checkAssumptionsHaveAnEnactableIf was tested here: a column-wide
+  // check that flagged every assumption when none had an "if" he
+  // could go do. Deleted 2026-09-03, because Appendix D puts the
+  // action in the test rather than the assumption ("I don't believe I
+  // can ever be skillful at managing my anger" -> "So I Will: Take an
+  // anger management course"). See the note where it lived.
+  it("the assumptions column criteria no longer run it", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const orch = readFileSync(resolve(here, "..", "orchestrator.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(orch).not.toMatch(/checkAssumptionsHaveAnEnactableIf/);
   });
 
-  it("fires on every assumption when none is enactable", async () => {
-    generateObject.mockResolvedValue({
-      object: { enactable: false, reverses_behavior_index: null, reason: "an outcome" },
-    });
-    const findings = await checkAssumptionsHaveAnEnactableIf({
-      assumptions: [root, child],
-      behaviors: [b1],
-    });
-    expect(findings.map((f) => f.entryRef.id)).toEqual(["a-root", "a-child"]);
-    expect(findings.every((f) => f.issueType === "assumption_not_enactable")).toBe(true);
-  });
-
-  it("treats a judge error as enactable (fail open)", async () => {
-    generateObject.mockRejectedValue(new Error("boom"));
-    expect(
-      await checkAssumptionsHaveAnEnactableIf({ assumptions: [root], behaviors: [b1] }),
-    ).toEqual([]);
-  });
-
-  it("empty column: nothing to say", async () => {
-    expect(
-      await checkAssumptionsHaveAnEnactableIf({ assumptions: [], behaviors: [b1] }),
-    ).toEqual([]);
-    expect(generateObject).not.toHaveBeenCalled();
+  it("but the selected-for-testing path still does", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const fixes = readFileSync(resolve(here, "..", "..", "fixes.ts"), "utf8");
+    const sel = fixes.slice(
+      fixes.indexOf("export async function coachTextForSelectedAssumption"),
+      fixes.indexOf("async function attachFixes"),
+    );
+    expect(sel).toMatch(/checkAssumptionEnactable\(/);
   });
 });
+

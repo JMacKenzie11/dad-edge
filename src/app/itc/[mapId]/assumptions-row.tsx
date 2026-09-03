@@ -467,6 +467,27 @@ function AssumptionItem({
     assumption.attempts,
   );
 
+  // A linked commitment moving out from under an assumption is the one
+  // upstream change nothing tells him about. saveWorry re-derives the
+  // paired commitment and invalidates the assumptions REVIEW, but the
+  // review speaks about the set; nothing says "the vow this belief was
+  // built on has changed".
+  //
+  // A banner used to say exactly that, with a RE-DERIVE button beside
+  // it. The button was a no-op, so both went on 2026-09-03. Removing
+  // the button was right; removing the notice was not. This is the
+  // half that was doing a job, and it comes back without a button:
+  // the assumption is his to re-read, which is the shape of Column 5.
+  //
+  // The 1s slack absorbs the write ordering when an edit touches both
+  // rows in the same request.
+  const assumptionUpdatedMs = new Date(assumption.updated_at).getTime();
+  const upstreamMoved = commitments
+    .filter((c) => linkedCommitmentIds.includes(c.id))
+    .some(
+      (c) => new Date(c.updated_at).getTime() > assumptionUpdatedMs + 1_000,
+    );
+
   return (
     <li
       className={
@@ -499,6 +520,12 @@ function AssumptionItem({
           />
         ) : null}
         <div className="flex-1 min-w-0 space-y-2">
+          {upstreamMoved ? (
+            <p className="rounded-md border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning)]/[0.08] px-3 py-2 text-xs text-[color:var(--color-warning)]">
+              A competing commitment this one holds up has changed since you
+              wrote it. Worth re-reading to see if it still fits.
+            </p>
+          ) : null}
           {assumption.sharpen_text ? (
             <CoachFixBox
               text={assumption.sharpen_text}

@@ -41,7 +41,6 @@ import {
 import {
   checkAssumptionCoverage,
   checkAssumptionDepth,
-  checkAssumptionsHaveAnEnactableIf,
   checkAssumptionUnderwritesCommitments,
   checkVagueAssumptionThenClause,
 } from "./assumptions";
@@ -127,10 +126,32 @@ async function runAssumptionsCriteria(
       commitments: input.commitments,
       links: input.assumptionLinks,
     }),
-    checkAssumptionsHaveAnEnactableIf({
-      assumptions: input.assumptions,
-      behaviors: input.behaviors,
-    }),
+    // No enactability check here. It used to run
+    // checkAssumptionsHaveAnEnactableIf over the whole column and, if
+    // it judged that no assumption had an "if" he could go do, flag
+    // every one of them.
+    //
+    // The guides don't ask that of Column 5. Appendix D's test-design
+    // table has four columns, and the action sits in the SECOND one,
+    // invented at test-design time: "I don't believe I can ever be
+    // skillful at managing my anger" -> "So I Will: Take an anger
+    // management course". The assumption carries no "if" and no
+    // action, and the guides treat it as testable. Same for "My
+    // self-worth is based on how others view me" -> "I will engage in
+    // some thought experiments". Requiring the assumption to carry
+    // what the guides put in the test is the same category error as
+    // the identity bar removed in f5a89cb.
+    //
+    // Enactability still runs where the guides ask it: on the
+    // assumption he SELECTS for testing (checkAssumptionEnactable via
+    // coachTextForSelectedAssumption, Vol 1 p 18 Checkpoint 2), which
+    // is the moment the question is live.
+    //
+    // It was also the flakiest judge in the app. Being an LLM call in
+    // the audit path only, it passed a column on "Hone this map" and
+    // failed the same text on the next page load 100 seconds later
+    // (2026-09-03), because a reload regenerates the review and takes
+    // a fresh sample.
   ]);
   return sortFindings(results.flat());
 }

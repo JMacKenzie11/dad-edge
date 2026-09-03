@@ -410,51 +410,29 @@ export async function checkAssumptionEnactable(input: {
   return findings;
 }
 
-/**
- * Hone-time enactability, at the level the guide asks it (Vol 1 p 4):
- * is there at least one assumption whose "if" he could go do? If yes,
- * nothing fires; the broad roots stay untouched. If none, every
- * assumption gets the finding, because every one would need the same
- * conversion before a test could be designed. Judge errors count as
- * enactable (fail open), so a transient model failure can never make
- * a clean column look untestable.
- */
-export async function checkAssumptionsHaveAnEnactableIf(input: {
-  assumptions: ItcAssumption[];
-  behaviors: ItcBehavior[];
-}): Promise<Finding[]> {
-  if (input.assumptions.length === 0) return [];
-  const behaviors = input.behaviors
-    .filter((b) => b.selected)
-    .map((b, i) => ({ index: i + 1, text: b.text }));
-  const verdicts = await Promise.all(
-    input.assumptions.map(async (assumption) => {
-      try {
-        const v = await judgeAssumptionEnactable({
-          assumptionText: assumption.text,
-          behaviors,
-        });
-        return v.enactable;
-      } catch (err) {
-        console.warn(
-          "[itc criteria] checkAssumptionsHaveAnEnactableIf failed (assumption=%s): %s",
-          assumption.id,
-          err instanceof Error ? err.message : String(err),
-        );
-        return true;
-      }
-    }),
-  );
-  if (verdicts.some(Boolean)) return [];
-  return input.assumptions.map((assumption) => ({
-    entryRef: { table: "assumptions", id: assumption.id },
-    issueType: "assumption_not_enactable",
-    severity: "moderate",
-    actualText: assumption.text,
-    detail: ADVICE.assumption_not_enactable,
-    suggestedFix: assumption.suggested_fix ?? undefined,
-  }));
-}
+// checkAssumptionsHaveAnEnactableIf lived here: a column-wide check
+// that flagged EVERY assumption when it judged that none had an "if"
+// he could go do. Removed 2026-09-03.
+//
+// Appendix D puts the action in the TEST, not in the assumption. Its
+// test-design table reads "My Big Assumption Says" / "So I Will
+// (Change my Behavior This Way)", and the worked rows are "I don't
+// believe I can ever be skillful at managing my anger" -> "Take an
+// anger management course", and "My self-worth is based on how others
+// view me" -> "I will engage in some thought experiments". Neither
+// assumption carries an "if" or an action, and the guides treat both
+// as testable. Holding Column 5 to a bar the guides set in Chapter 6
+// is the same category error as the identity bar removed in f5a89cb.
+//
+// checkAssumptionEnactable above asks the same question where the
+// guides ask it: of the ONE assumption he has selected for testing
+// (Vol 1 p 18, Checkpoint 2), which is the moment it is live.
+//
+// It was also the least stable judge here. As an LLM call on the
+// audit path only, it passed a column on "Hone this map" and failed
+// the same text on a page load 100 seconds later, because a reload
+// regenerates the review and takes a fresh sample.
+
 
 // ---------------------------------------------------------------------------
 // Identity carried from the commitments — drafter verification bar
