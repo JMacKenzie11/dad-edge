@@ -1,4 +1,27 @@
 /**
+ * LIVE tests. Every case in this file seeds a real map and makes real
+ * model calls, so the file takes ~5 minutes while the other 444 tests
+ * in the repo take ~4 seconds together.
+ *
+ * `npm run test:itc` EXCLUDES this file, and that is the right default
+ * while iterating. Run `npm run test:itc:live` (or `test:itc:all`)
+ * when you have touched something these actually exercise:
+ *
+ *   - src/app/itc/actions.ts       (save / advance / gate paths)
+ *   - src/lib/itc/coach.ts         (drafters and revisers)
+ *   - src/lib/itc/rubric.ts        (the judges' behaviour, not just
+ *                                   their prompt text)
+ *   - the advance pipeline, or anything that writes to the database
+ *
+ * A prompt-only edit, a copy change, or a UI change does not need
+ * them: the structural guards in units.test.ts and src/lib/itc/
+ * __tests__ read the same source files and run instantly.
+ *
+ * They are also the only flaky tests here, because a real model
+ * sometimes answers a borderline case the other way. A single failure
+ * on re-run is usually that, not a regression.
+ */
+/**
  * Form-First Checkpoint A regression tests (Section 9 of the spec):
  *
  *   1. An entry added via the form appears on the map 100% of the
