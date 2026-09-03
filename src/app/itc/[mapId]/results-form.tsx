@@ -11,7 +11,7 @@ import type {
 } from "@/lib/itc/maps";
 import { advanceAfterResults, saveTestResult, supersedeTest } from "../actions";
 import { EntryThread } from "./entry-thread";
-import { FormErrorSummary, FormField } from "./form-field";
+import { FormErrorSummary, FormField, InlineSpinner } from "./form-field";
 
 /**
  * Results form — the coachee's post-test debrief. Kegan/Lahey four
@@ -203,9 +203,14 @@ export function ResultsForm({
             type="button"
             onClick={onSupersede}
             disabled={superseding || pending || advancing}
-            className="rounded-md border border-[color:var(--color-warning)]/60 px-3 py-1.5 text-xs font-semibold text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
+            aria-busy={superseding ? "true" : undefined}
+            className="inline-flex items-center gap-2 rounded-md border border-[color:var(--color-warning)]/60 px-3 py-1.5 text-xs font-semibold text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning)]/10 disabled:opacity-50"
           >
-            {superseding ? "…" : "Mark superseded, design new test"}
+            {/* Waits on a model call; a bare "…" gave no sign anything
+                was happening. Same spinner as the other in-flight
+                buttons (CoachFixBox "Use this", the assumption "Add"). */}
+            {superseding ? <InlineSpinner className="h-3 w-3" /> : null}
+            Mark superseded, design new test
           </button>
         </div>
       ) : (

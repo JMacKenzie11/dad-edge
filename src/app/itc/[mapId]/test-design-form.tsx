@@ -15,7 +15,7 @@ import {
   runTest,
 } from "../actions";
 import { EntryThread } from "./entry-thread";
-import { FormErrorSummary, FormField } from "./form-field";
+import { FormErrorSummary, FormField, InlineSpinner } from "./form-field";
 import { useConfirm } from "@/components/ui/use-confirm";
 
 /**
@@ -494,10 +494,15 @@ export function TestDesignForm({
           type="button"
           onClick={runIt}
           disabled={pending || regenPending}
-          className="rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-50"
+          aria-busy={pending ? "true" : undefined}
+          className="inline-flex items-center gap-2 rounded-md bg-[color:var(--color-primary)] px-4 py-3 text-base font-semibold disabled:opacity-50"
           title="Save this design; the coach reviews it against SMART. If it clears, you'll advance to running the test. If not, you'll see what to tighten."
         >
-          {pending ? "…" : "Run the Test"}
+          {/* Waits on a model call; a bare "…" gave no sign anything
+              was happening. Same spinner as the other in-flight
+              buttons (CoachFixBox "Use this", the assumption "Add"). */}
+          {pending ? <InlineSpinner className="h-4 w-4" /> : null}
+          Run the Test
         </button>
         <button
           type="button"

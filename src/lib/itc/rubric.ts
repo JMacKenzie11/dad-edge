@@ -265,14 +265,20 @@ Score three binary criteria. When in doubt, false.
 
 3. lands_in_identity_or_big_time_bad: Where the belief ends up. For an if-then, that is the "then". For a flat belief the STATEMENT ITSELF is the landing, and if it names an identity or a Big Time Bad it passes on its own ("I'm not good enough to charge high prices" lands on not-good-enough; "my self-worth is based on how others view me" lands on a contracted world). Read the rest of this criterion with that in mind: it describes what the ending must contain, not that there must be a separate "then" clause.
 
-   The "then" names an identity ("I'd be the coach who talked a great game and couldn't deliver", "I'm the kind of man who...", "the fraud") or a Big Time Bad conclusion that can't be recovered from ("I can't be trusted when the people who depend on me need me most"). "It'd take longer" or "we'd lose the deal" doesn't land here.
+   Appendix A gives Column 4 exactly four criteria, and IDENTITY IS NOT ONE OF THEM: "Makes Column 3 commitment absolutely necessary", "Has a Big Time Bad conclusion for you", "Displays a contracted world", "Feels real". This criterion scores the middle two. The first is judged separately (judgeAssumptionUnderwrites); the fourth is criterion 2.
 
-   STRICTLY REJECT these, the same way the worry rubric does. They gesture at identity without naming it:
-   - Comparative hedges: "I may not be as capable / valuable as they think", "I'm not as good as they believe", "I might not be enough for them". The hedge ("may", "might", "not as … as") is the immune system softening it. Would need the named identity ("I'd be the fraud who's been talking a great game").
-   - Bare failure events: "I have failed at the thing I claim to be great at", "I'll have failed to help them", "it won't have worked". Failure is an event; who he'd be after it is the identity. Would need "…and I'd be the coach who talked a great game but couldn't help them transform".
-   - Outcomes about others with no landing on him: "they'll leave", "she'd be upset", "the deal falls through".
+   Do NOT require that the belief name who he would BE. Column 3 is already the identity-level fear, so demanding identity here too leaves him nowhere to go but restate his worry with a different opening, which is the most common way this column goes wrong. The guides' own Big Assumptions mostly name no identity: "I assume that saying anything about my accomplishments is bragging", "I need to feel overfull in order to feel full enough", "My self-worth is based on how others view me", "I don't believe I can ever be skillful at managing my anger or frustration". All four are theirs, all four are testable, none says who he'd become. All four PASS.
 
-   Self-check before scoring true: can you finish "the identity he's afraid of being is: ___" using words FROM the "then" itself? If you have to infer it, score false.
+   BIG TIME BAD: the consequence is catastrophic TO HIM, not merely inconvenient. "I'd be the fraud" qualifies, and so do "life will be bleak", "I'll be alone in it", "the money won't come and I can't provide", "I can never be good at this". Score false for a practical cost carrying no weight.
+
+   CONTRACTED WORLD: the belief leaves him one move. It admits no alternative, no middle, no version where he is fine. "I need to feel overfull in order to feel full enough" contracts the world to overfull-or-empty. "My self-worth is based on how others view me" leaves no way to be worth anything on his own. A belief with obvious room in it ("clients sometimes prefer a lower price") displays no contracted world.
+
+   Score TRUE when EITHER holds. They usually arrive together; the guides list them separately rather than as a pair.
+
+   STRICTLY REJECT:
+   - Outcomes about other people with nothing at stake for him: "they'll leave", "she'd be upset", "the deal falls through".
+   - Practical costs: "it'd take longer", "I'd lose the sale", "we'd have to redo it".
+   - Anything hedged into harmlessness: "it might be a bit awkward", "I may not do quite as well".
 
 REASON: one sentence, spoken TO the coachee ("you", "your"), the way a coach would say it across a kitchen table. It shows in his map under the entry. Plain words, contractions, ONE sentence, under 40 words. Name what the entry stops at and what the finished version would need to reach. Do NOT write out a replacement entry. A rewrite is offered separately, in its own box under this text, and a second and different one here reads as the coach arguing with itself in front of him. Say what is missing; let the rewrite say it in words. Never third person ("he", "the coachee"), never scoring words ("criterion", "rubric", "score", "passes", "fails"), never jargon ("visceral", "identity-level", "outcome-focused"), no dashes. Example: "This stops at the conversation running long. If you let her finish and she still walked away, who would that make you?"
 `.trim();

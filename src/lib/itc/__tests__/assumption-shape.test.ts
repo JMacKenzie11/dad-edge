@@ -74,6 +74,72 @@ describe("assumption rubric prompt", () => {
   });
 });
 
+describe("Column 4 is scored on Appendix A's criteria, not on identity", () => {
+  // Appendix A p 43 lists exactly four criteria for Big Assumptions:
+  // "Makes Column 3 commitment absolutely necessary", "Has a Big Time
+  // Bad conclusion for you", "Displays a contracted world", "Feels
+  // real". Identity is not among them.
+  //
+  // The rubric demanded it anyway, via a self-check that asked the
+  // model to finish "the identity he's afraid of being is: ___" using
+  // words from the assumption itself. Column 3 is ALREADY the
+  // identity-level fear, so requiring it again here left nowhere to
+  // go but restate the worry under a new opening — the failure this
+  // column keeps producing. Four of the guides' own five worked Big
+  // Assumptions failed the bar we were holding them to.
+  it("does not ask the model to find a named identity", () => {
+    expect(rubricSource).not.toMatch(
+      /the identity he's afraid of being is/,
+    );
+  });
+
+  it("says outright that identity is not one of the criteria", () => {
+    expect(rubricSource).toMatch(/IDENTITY IS NOT ONE OF THEM/);
+    expect(rubricSource).toMatch(/Do NOT require that the belief name who he would BE/);
+  });
+
+  it("names why: Column 3 already carries the identity", () => {
+    expect(rubricSource).toMatch(
+      /Column 3 is already the identity-level fear/,
+    );
+    expect(rubricSource).toMatch(/restate his worry with a different opening/);
+  });
+
+  it("scores the two Appendix A criteria it is responsible for", () => {
+    expect(rubricSource).toMatch(/BIG TIME BAD:/);
+    expect(rubricSource).toMatch(/CONTRACTED WORLD:/);
+    expect(rubricSource).toMatch(/Score TRUE when EITHER holds/);
+  });
+
+  it("carries the guides' own identity-free assumptions as passing examples", () => {
+    for (const ex of [
+      "saying anything about my accomplishments is bragging",
+      "I need to feel overfull in order to feel full enough",
+      "My self-worth is based on how others view me",
+    ]) {
+      expect(rubricSource, `prompt must cite: ${ex}`).toContain(ex);
+    }
+  });
+
+  it("the coach's advice no longer asks who it would make him", () => {
+    // Comments stripped: the note above the entry quotes the old
+    // wording in order to record why it changed, and a naive match
+    // finds the very explanation that documents its removal.
+    const advice = readFileSync(resolve(here, "..", "criteria", "advice.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(advice).not.toMatch(/who would it make you\?/);
+    expect(advice).toMatch(/what would it cost you/);
+  });
+
+  it("the intro he reads first agrees", () => {
+    const intro = readFileSync(resolve(here, "..", "stage-intros.ts"), "utf8");
+    expect(intro).not.toMatch(/what that would mean about you/);
+    expect(intro).toMatch(/what it would cost you/);
+    expect(intro).toMatch(/leaves you no other move/);
+  });
+});
+
 describe("the stage intro and the rubric agree on shape", () => {
   it("intro copy does not promise if-then is required", () => {
     const intro = readFileSync(resolve(here, "..", "stage-intros.ts"), "utf8");

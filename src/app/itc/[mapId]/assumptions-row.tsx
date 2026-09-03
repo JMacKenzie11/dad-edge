@@ -287,9 +287,17 @@ function AddAssumptionForm({
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          aria-busy={pending ? "true" : undefined}
+          className="inline-flex items-center gap-2 rounded-md bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
-          {pending ? "…" : "Add"}
+          {/* Saving an assumption runs the depth rubric and then the
+              coach text, so this button waits on two model calls. A
+              "…" gave no sign anything was happening; same spinner
+              the CoachFixBox "Use this" button uses. The label stays
+              put rather than swapping to "Adding…" so the button
+              doesn't change width under the cursor. */}
+          {pending ? <InlineSpinner className="h-3 w-3" /> : null}
+          Add
         </button>
         {error ? (
           <p className="text-sm text-[color:var(--color-danger)]">{error}</p>

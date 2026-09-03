@@ -41,8 +41,13 @@ export const ADVICE: Record<IssueType, string> = {
   depth_shortfall_commitment:
     "This stops short of who you're protecting. Name the guy you're vowing never to be, in the same words as the worry.",
 
+  // Was "Finish it: if that happened, who would it make you?" That
+  // asked for an identity. Appendix A does not ask that of Column 4,
+  // and Column 3 has already named it, so following this advice
+  // produced the worry again under a new opening (2026-09-03).
+  // Appendix A wants a Big Time Bad conclusion and a contracted world.
   depth_shortfall_assumption:
-    "The \"then\" stops at what would happen. Finish it: if that happened, who would it make you?",
+    "This stops at something you could live with. If it were true, what would it cost you, and what would you have left?",
 
   // Agrees with scoreWorryDepth.is_first_person_felt, which rejects
   // worries that center on the other person's reaction. The fix stays

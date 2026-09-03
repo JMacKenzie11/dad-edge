@@ -87,9 +87,9 @@ For one of those vows to feel that necessary, what has to be true?
 
 What makes a good Big Assumption:
 • It makes the vow make sense. If this were true, protecting yourself that way would be the only move you had.
-• You finished the thought. "The money might not show up" isn't finished. Keep going until you reach what that would mean about you.
+• You finished the thought. "The money might not show up" isn't finished. Keep going until you reach what it would cost you.
 • It feels true when you say it out loud, even if on paper you know it isn't.
-• It ends somewhere you can't come back from.
+• It ends somewhere you can't come back from, and it leaves you no other move.
 
 Written as "I assume that if…, then…" more often than not, though not always. One belief usually holds up several vows, so tick every commitment it explains.`,
   review: () =>
