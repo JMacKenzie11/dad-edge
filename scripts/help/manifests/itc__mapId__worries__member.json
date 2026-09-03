@@ -8,31 +8,29 @@
       "label": "Remove"
     },
     {
-      "kind": "button",
-      "label": "Use this draft"
-    },
-    {
       "kind": "field",
       "label": "I worry that if I…"
     }
   ],
-  "source_hash": "1e81e3e5fa52b84c",
+  "source_hash": "8d3df9d08c0683c9",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/assumptions-row.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/auto-textarea.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/behaviors-row.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/coach-fix-box.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/commitments-row.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/current-stage-broadcaster.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/depth-badge.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/entry-thread.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/form-field.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/goal-row.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/guide-examples.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/hone-button.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/hone-diagnostic-banner.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/immune-system-diagram.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/map-canvas.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/prioritize-picker.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/regenerate-drafts-button.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/regenerate-walkthrough-button.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/reset-map-button.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/itc/[mapId]/results-form.tsx",

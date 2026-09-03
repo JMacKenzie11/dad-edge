@@ -491,143 +491,15 @@ export type ConsistencyResult = {
   reason: string;
 };
 
-/**
- * Deterministic replacement for the earlier LLM-based worry-consistency
- * verifier. Two layers: interior scaffolding (banned verbs) and framing
- * (exposure or consequence, never bare present tense). The LLM verifier was fragile — asking Haiku to detect
- * subtle semantic inversion is a judgment call, and the model kept
- * reading bare present-tense identity claims two valid ways
- * ("I'm the husband who weaponizes" could mean current-state or
- * revealed-pattern depending on generous reading).
- *
- * The concrete failure mode is syntactic, not semantic: the drafter
- * produces bare present-tense "I'm the [X-er]" that reads as the
- * opposite_move creating the X-er identity. That's impossible — Y is
- * the opposite of X, Y cannot create X's identity.
- *
- * The fix is a mechanical check for revealer-framing markers. The
- * identity landing must contain at least ONE marker indicating the
- * identity is presented as pre-existing pattern being witnessed /
- * revealed:
- *
- *   - Past-perfect first-person: "I've" (been, never, kept, etc.)
- *   - External witness: "she'd", "he'd", "they'd", "she'll", "she would"
- *   - Truth-frame: "the truth" (would come out / is)
- *   - Denial-of-hiding: "couldn't pretend/hide/deny"
- *
- * Zero LLM cost. Fully deterministic. Same outcome contract as the
- * previous LLM verifier ({ consistent, reason }) so the drafter's
- * existing retry loop consumes it unchanged. If it fails, the reason
- * gives the drafter the specific pattern it violated and the whitelist
- * to try instead.
- */
-const WORRY_REVEALER_MARKERS: RegExp[] = [
-  // Past-perfect construction with any subject (contracted or full form).
-  // Catches "I've been", "who's been", "he's been", "she's been",
-  // "there's been", "we've been", "you've been".
-  /['\u2019](s|ve)\s+been\b/i,
-  /\b(has|have|had)\s+been\b/i,
-  // Past-perfect negations
-  /['\u2019](s|ve)\s+never\b/i,
-  /\b(has|have|had)\s+never\b/i,
-  // Simple past that names an event-level reveal ("I knew the truth and lied")
-  /\bi\s+(knew|lied|chose|failed|hid|walked|left|ignored)\b/i,
-  // External witness contractions + full form: she/he/they + would/will
-  /\bshe['\u2019]d\b/i,
-  /\bhe['\u2019]d\b/i,
-  /\bthey['\u2019]d\b/i,
-  /\bshe['\u2019]ll\b/i,
-  /\bshe\s+would\b/i,
-  /\bthey\s+would\b/i,
-  /\bmy\s+(wife|kids|family)\s+would\b/i,
-  // Truth-frame
-  /\bthe\s+truth\b/i,
-  // Denial-of-hiding (the current behavior no longer works to hide)
-  /\bcouldn['\u2019]t\s+(pretend|hide|deny)\b/i,
-  // CONSEQUENCE framing (Kegan Vol 1 p 13, "seen as incompetent"):
-  // who he'd be, or be seen as, if the opposite went the way he
-  // dreads. "I'd be the expert who got it wrong", "I'd end up the guy
-  // selling what nobody asked for", "I'd have proven I can't deliver".
-  // Added 2026-09-01: requiring only revealer framing forced every
-  // draft into "I've been the guy who…", which on a work map
-  // degenerates into the behavior said back. The behavior-said-back
-  // inversion is now caught semantically by scoreWorryDepth.
-  /\bi['\u2019]d\s+(?:be|become|end\s+up|turn\s+out|come\s+off|look)\b/i,
-  /\bi['\u2019]d\s+have\s+(?:proven|proved|shown|become)\b/i,
-  /\bi\s+would\s+(?:be|become|have\s+proven)\b/i,
-];
-
-/**
- * Interior-witness scaffolding patterns that must NOT appear in
- * identity_landing regardless of whether a revealer marker is present.
- * Observed failure: drafter reaches for "I'd have to admit I've been
- * running" — the past-perfect passes the whitelist but "I'd have to
- * admit" is exactly the interior-witness verb the voice rules ban.
- * Stripping "I'd have to admit" leaves "I've been running" which is
- * perfect. So the blacklist is a strip-this-scaffolding directive to
- * the drafter, not a reveal-check.
- */
-const WORRY_INTERIOR_SCAFFOLDING_BANS: Array<{
-  pattern: RegExp;
-  label: string;
-}> = [
-  {
-    pattern: /\bi['\u2019]d\s+have\s+to\s+(see|face|feel|know|admit|be|become)\b/i,
-    label:
-      "interior-witness scaffolding 'I'd have to see/face/feel/know/admit/be/become'",
-  },
-  {
-    pattern: /\badmit\s+to\s+myself\b/i,
-    label: "'admit to myself' (banned in voice rules)",
-  },
-];
-
-/**
- * The identity-rung whitelist that used to sit here as "layer 3"
- * (role nouns, self-labels, seen-as, role-failure verbs) was removed
- * 2026-09-01. It was a hand-rolled approximation of the rubric's own
- * touches_identity criterion, and it refused landings the rubric
- * scores 3/3 ("they'd have seen me as someone who doesn't belong in
- * this room"). One judge for "is this an identity": scoreWorryDepth.
- */
-
-export function checkWorryLogicalConsistency(input: {
-  behaviorText: string;
-  oppositeMove: string;
-  identityLanding: string;
-}): ConsistencyResult {
-  // Layer 1: interior scaffolding blacklist. "I'd have to admit
-  // I've been running" has the "I've been" marker but the "I'd have
-  // to admit" scaffolding is exactly what the voice rules ban.
-  for (const ban of WORRY_INTERIOR_SCAFFOLDING_BANS) {
-    if (ban.pattern.test(input.identityLanding)) {
-      return {
-        consistent: false,
-        reason: `Identity landing contains ${ban.label}. Strip the interior verb and let the reveal stand alone (e.g., "she'd see I've been X" or "I've been the man who X" — no "I'd have to admit/see/face/feel").`,
-      };
-    }
-  }
-
-  // Layer 2: past-tense revealer whitelist. Catches bare
-  // present-tense "I'm the [X-er]" / "I'm a [X]" inversions.
-  const hasRevealerMarker = WORRY_REVEALER_MARKERS.some((re) =>
-    re.test(input.identityLanding),
-  );
-  if (!hasRevealerMarker) {
-    return {
-      consistent: false,
-      reason:
-        "Identity landing is bare present tense. Frame it as what the counter-move would EXPOSE (\"I've been [X]\", \"they'd see I've been [X]\", \"the truth would come out that [X]\") or as its CONSEQUENCE (\"I'd be the [role] who [X]\", \"I'd be seen as [X]\", \"I'd have proven [X]\"). NOT bare present-tense \"I'm the [X-er]\" / \"I'm a [X]\".",
-    };
-  }
-
-  // Whether the landing reaches the identity rung is the rubric's
-  // call (scoreWorryDepth.touches_identity), not a regex's.
-  return {
-    consistent: true,
-    reason: "exposure or consequence framing detected (Kegan-canonical shape)",
-  };
-}
+// checkWorryLogicalConsistency and its revealer/scaffolding tables
+// lived here. They existed to catch one failure of the worry
+// drafter: a bare present-tense identity landing that read as the
+// counter-move creating the CURRENT behavior's identity. Removed
+// 2026-09-03 with the drafter itself — the app no longer authors an
+// identity landing for Column 3, so there is nothing to invert.
+//
+// The assumption equivalent below is still live; Column 5 rewrites
+// still assemble slots.
 
 /**
  * Deterministic consistency check for Big Assumption drafts. Same

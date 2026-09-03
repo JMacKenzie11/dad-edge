@@ -241,6 +241,22 @@ function CommitmentItem({
           <span>behavior:</span>
           <span className="italic">{behaviorText}</span>
         </div>
+        {/*
+          A blank box on one row while its neighbours filled in reads
+          as a bug. It isn't: the drafter withholds a commitment its
+          own judge would flag on arrival (draftCommitmentOutcome,
+          2026-09-02), so nothing is written and the row comes up
+          empty. Say so, and say what to write, or he is left guessing
+          why the coach skipped him.
+        */}
+        {!commitment ? (
+          <p className="pl-6 text-xs text-[color:var(--color-text-muted)]/80">
+            The coach didn&apos;t have a good one for this row, so this
+            one&apos;s yours. Take the worry above and turn it into a vow:
+            &ldquo;I&apos;m also committed to never&nbsp;…&rdquo; and name what
+            you&apos;re protecting yourself from being.
+          </p>
+        ) : null}
         <AutoTextarea
           ref={inputRef}
           value={draft}

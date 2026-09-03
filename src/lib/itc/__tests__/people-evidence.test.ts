@@ -36,7 +36,9 @@ describe("mapTexts is required, not optional", () => {
 
   it("every drafter and reviser that emits coachee-facing text takes it", () => {
     for (const fn of [
-      "draftWorryOutcome",
+      // draftWorryOutcome was on this list until 2026-09-03, when the
+      // worry drafter was deleted. draftWorryOpening is checked in
+      // units.test.ts; it takes mapTexts too.
       "draftCommitmentOutcome",
       "reviseBehavior",
       "reviseAssumption",

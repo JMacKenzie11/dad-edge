@@ -25,26 +25,6 @@
     },
     {
       "kind": "button",
-      "label": "Done"
-    },
-    {
-      "kind": "field",
-      "label": "Behavior + day. e.g. Take my wife to dinner Thursday, phone in the car."
-    },
-    {
-      "kind": "button",
-      "label": "SEE EXAMPLES"
-    },
-    {
-      "kind": "button",
-      "label": "SAVE MISSION"
-    },
-    {
-      "kind": "button",
-      "label": "USE"
-    },
-    {
-      "kind": "button",
       "label": "+ ADD MISSION"
     },
     {
@@ -66,24 +46,13 @@
     {
       "kind": "button",
       "label": "HIDE"
-    },
-    {
-      "kind": "field",
-      "label": "Take Sarah on a date night."
-    },
-    {
-      "kind": "button",
-      "label": "Lock it in"
     }
   ],
-  "source_hash": "b410a3d05c8ab370",
+  "source_hash": "8dc92d41d8089f0f",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/complete-button.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/mission-composer.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/mission-slot.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/new-mission-form.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/target-dates.ts",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/weekly-planner.tsx"
   ]

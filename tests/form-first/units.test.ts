@@ -329,22 +329,15 @@ describe("assembleAssumption (structured slots → canonical sentence)", () => {
 
 describe("stripRedundantIf (server owns the 'if', the slot must not repeat it)", () => {
   it("strips a trailing 'if …' clause that doubles the server's own", async () => {
-    const { stripRedundantIf, assembleWorry } = await import("@/lib/itc/coach");
+    const { stripRedundantIf } = await import("@/lib/itc/coach");
+    // The live draft that exposed this. It used to be asserted through
+    // assembleWorry; that assembler went with the worry drafter
+    // (2026-09-03), and the guard now matters for draftWorryOpening,
+    // which pastes the counter-move straight into "I worry that if I
+    // <move>, " and would otherwise produce two "if"s in one sentence.
     expect(
       stripRedundantIf("brought up the harder truth if it costs me the deal"),
     ).toBe("brought up the harder truth");
-    // The live draft that exposed this.
-    // The tense normalizer also collapses "they'd have seen" here:
-    // the "if" half is a present counterfactual, so the result half
-    // must be "would + base verb".
-    expect(
-      assembleWorry({
-        opposite_move: "brought up the harder truth if it costs me the deal",
-        identity_landing: "they'd have seen me as someone who tells them what they want to hear",
-      }),
-    ).toBe(
-      "I worry that if I brought up the harder truth, they'd see me as someone who tells them what they want to hear.",
-    );
   });
 
   it("strips a leading 'if I ' the drafter wrote redundantly", async () => {
@@ -375,40 +368,6 @@ describe("stripRedundantIf (server owns the 'if', the slot must not repeat it)",
     ).toBe(
       "I assume that if I let the work speak, then the money wouldn't come and I'd be the father who was passive.",
     );
-  });
-});
-
-describe("normalizeConditionalTense (server owns the sentence's grammar)", () => {
-  it("collapses a past-counterfactual result into the present counterfactual the 'if' half sets up", async () => {
-    const { normalizeConditionalTense, assembleWorry } = await import("@/lib/itc/coach");
-    expect(normalizeConditionalTense("they'd have seen me as unsure")).toBe(
-      "they'd see me as unsure",
-    );
-    expect(normalizeConditionalTense("she'd have known I've been faking it")).toBe(
-      "she'd know I've been faking it",
-    );
-    expect(
-      assembleWorry({
-        opposite_move: "held the price I actually believe in",
-        identity_landing: "they'd have seen me as unsure of my own worth",
-      }),
-    ).toBe(
-      "I worry that if I held the price I actually believe in, they'd see me as unsure of my own worth.",
-    );
-  });
-
-  it("leaves a participle it doesn't know alone rather than mangling the verb", async () => {
-    const { normalizeConditionalTense } = await import("@/lib/itc/coach");
-    expect(normalizeConditionalTense("they'd have absconded with the deal")).toBe(
-      "they'd have absconded with the deal",
-    );
-  });
-
-  it("leaves a correct conditional untouched", async () => {
-    const { normalizeConditionalTense } = await import("@/lib/itc/coach");
-    for (const s of ["they'd see I've been faking it", "I'd be the guy who folds"]) {
-      expect(normalizeConditionalTense(s)).toBe(s);
-    }
   });
 });
 
@@ -679,144 +638,6 @@ describe("withVoiceRules (drafter → voice-doc single source of truth)", () => 
       "UNIQUE_DRAFTER_BODY_MARKER_that_must_appear_verbatim_in_output";
     const wrapped = withVoiceRules(uniqueBody);
     expect(wrapped).toContain(uniqueBody);
-  });
-});
-
-describe("WORRY_IDENTITY_SHAPES (server-owned rotation across Kegan-canonical shapes)", () => {
-  // Server rotates one shape per behavior via index modulo, same
-  // architectural pattern as ANOTHER_ROTATION / SAFER_LADDER in
-  // test-design. Any reorder or truncation of this array silently
-  // shifts every worry drafter's shape assignment across the map.
-
-  it("contains exactly four Kegan-canonical shapes", () => {
-    expect(WORRY_IDENTITY_SHAPES.length).toBe(4);
-  });
-
-  it("contains the four shape names in canonical order", () => {
-    // Order matters: behaviors are indexed by sort_order and mapped
-    // to shape via index modulo. Reordering this array changes
-    // which behavior gets which shape.
-    expect(WORRY_IDENTITY_SHAPES).toEqual([
-      "role_noun",
-      "role_failure_verb",
-      "seen_as",
-      "self_label",
-    ]);
-  });
-
-  it("rotates deterministically via index modulo", () => {
-    // Simulates draftMissingWorriesAfterAdvance's rotation logic.
-    // Ensures behavior 5 loops back to role_noun, behavior 6 to
-    // role_failure_verb, etc.
-    const shapeFor = (index: number): WorryIdentityShape =>
-      WORRY_IDENTITY_SHAPES[index % WORRY_IDENTITY_SHAPES.length];
-    expect(shapeFor(0)).toBe("role_noun");
-    expect(shapeFor(1)).toBe("role_failure_verb");
-    expect(shapeFor(2)).toBe("seen_as");
-    expect(shapeFor(3)).toBe("self_label");
-    expect(shapeFor(4)).toBe("role_noun");
-    expect(shapeFor(5)).toBe("role_failure_verb");
-  });
-});
-
-describe("checkWorryLogicalConsistency (three-layer deterministic worry check)", () => {
-  // Layer 1: interior-scaffolding blacklist ("I'd have to see/face/feel/
-  //          know/admit/be/become", "admit to myself")
-  // Layer 2: past-tense revealer whitelist ("I've been", "'s been",
-  //          "she'd", "the truth", etc.)
-  // Layer 3: Kegan-canonical identity-rung whitelist (role-noun,
-  //          self-label, seen-as/see-me-as, role-failure toward
-  //          her/him/them, self-over-other)
-  //
-  // A draft must pass ALL THREE. Feeds into the drafter retry loop
-  // via the "reason" string.
-
-  const baseInput = {
-    behaviorText: "I bring up things she did in the past instead of listening",
-    oppositeMove: "listen to her without bringing up her past",
-  };
-
-  it("layer 1 fails on interior scaffolding 'I'd have to admit'", () => {
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "I'd have to admit I've been running from her",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/interior-witness scaffolding/i);
-  });
-
-  it("layer 1 fails on 'I'd have to be' state-of-being interior verb", () => {
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "I'd have to be the husband who caused this distance",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/interior-witness scaffolding/i);
-  });
-
-  it("layer 2 fails on bare present-tense 'I'm the [X-er]' inversion", () => {
-    // Behavior = bringing up her past; opposite = listening. Bare
-    // "I'm the man who ignores her" reads as if listening creates
-    // the ignorer identity (impossible — listening is the opposite).
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "I'm the man who ignores her",
-    });
-    expect(out.consistent).toBe(false);
-    expect(out.reason).toMatch(/bare present tense/i);
-  });
-
-  it("leaves the identity-rung call to the rubric (no regex whitelist)", () => {
-    // "they'd have seen me as someone who doesn't belong in this
-    // room" is a canonical seen-as landing the rubric scores 3/3; the
-    // old layer-3 whitelist refused it. Framing is the only structural
-    // requirement here; whether it's an identity is scoreWorryDepth's.
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "they'd have seen me as someone who doesn't belong in this room",
-    });
-    expect(out.consistent).toBe(true);
-  });
-
-  it("passes the consequence shape (Vol 1 p 13: who he'd be if the opposite went badly)", () => {
-    for (const identityLanding of [
-      "I'd be the expert who got it wrong with nowhere to hide",
-      "I'd be seen as the guy who can't back up what he sells",
-      "I'd have proven I'm the coach who can't deliver when it counts",
-    ]) {
-      const out = checkWorryLogicalConsistency({
-        behaviorText: "I hedge my recommendations with caveats",
-        oppositeMove: "stood behind what I believe will work",
-        identityLanding,
-      });
-      expect(out.consistent, identityLanding).toBe(true);
-    }
-  });
-
-  it("passes Kegan-canonical role-noun landing (she'd see I've been the husband who X)", () => {
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding:
-        "she'd see I've been the husband who never let a word she said land",
-    });
-    expect(out.consistent).toBe(true);
-  });
-
-  it("passes Kegan-canonical role-failure landing (chose myself over her)", () => {
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "she'd see I've been choosing myself over her all along",
-    });
-    expect(out.consistent).toBe(true);
-  });
-
-  it("passes Kegan-canonical seen-as variant (she'd see me as [X])", () => {
-    // Vol 1 p 13 canonical framing.
-    const out = checkWorryLogicalConsistency({
-      ...baseInput,
-      identityLanding: "she'd see me as the man I always feared I was",
-    });
-    expect(out.consistent).toBe(true);
   });
 });
 
@@ -1197,13 +1018,16 @@ describe("coaching text is verified by the judge that scores it on save (structu
     expect(block("reviseBehavior")).toMatch(/scoreBehaviorDepth\(/);
     expect(block("reviseAssumption")).toMatch(/scoreAssumptionDepth\(/);
     expect(block("reviseAssumption")).toMatch(/judgeAssumptionUnderwrites\(/);
-    expect(block("draftWorryForBehavior")).toMatch(/scoreWorryDepth\(/);
     expect(block("draftCommitmentForWorry")).toMatch(/scoreCommitmentDepth\(/);
+    // Column 3 has no rewrite path to verify: the coach names what is
+    // missing and the man writes the sentence (2026-09-03).
+    const fixes = readFileSync(resolve(__dirname, "../../src/lib/itc/fixes.ts"), "utf8");
+    expect(fixes).toMatch(/no rewrite for Column 3/i);
   });
 
   it("every drafter, reviser and suggester holds people to the map (checkPeopleFromMap)", () => {
     for (const name of [
-      "draftWorryForBehavior",
+      "draftWorryOpening",
       "draftCommitmentForWorry",
       "draftAssumptionsFromCommitments",
       "reviseAssumption",
@@ -1213,17 +1037,16 @@ describe("coaching text is verified by the judge that scores it on save (structu
     }
     const v = coach.slice(coach.indexOf("async function verifySuggestion("), coach.indexOf("export async function generateSuggestions("));
     expect(v).toMatch(/checkPeopleFromMap\(/);
-    // No shape instruction hard-codes a witness.
-    const shapeStart = coach.indexOf("function worryShapeInstruction(");
-    const shapes = coach.slice(shapeStart, coach.indexOf("\n}\n", shapeStart));
-    expect(shapes).not.toMatch(/"she'd|she\\'d|\bher\b/);
+    // worryShapeInstruction used to be checked here for a hard-coded
+    // witness. It went with the worry drafter; the opening names no
+    // people at all, which is a stronger guarantee than a regex.
   });
 
   it("a draft is scored once: the verdict travels with it and the save reuses it", () => {
     // Scoring the same words twice (drafter, then save) is two samples
     // of a model, and any difference shows up to the coachee as the
     // coach contradicting a draft it just offered.
-    expect(block("draftWorryForBehavior")).toMatch(/verdict/);
+    expect(block("draftCommitmentOutcome")).toMatch(/verdict/);
     const actions = readFileSync(resolve(__dirname, "../../src/app/itc/actions.ts"), "utf8");
     const saveWorry = actions.slice(actions.indexOf("export async function saveWorry"), actions.indexOf("const worryRemoveSchema"));
     expect(saveWorry).toMatch(/acceptedDraftUnchanged/);
@@ -1268,32 +1091,38 @@ describe("coaching text is verified by the judge that scores it on save (structu
     // coachee got no draft. An infrastructure blip is not a coaching
     // verdict; only the CHECKS refusing the text is.
     expect(coach).toMatch(/async function generateWithRetry/);
-    for (const name of ["draftWorryForBehavior", "draftCommitmentForWorry"]) {
+    for (const name of ["draftWorryOpening", "draftCommitmentForWorry"]) {
       expect(block(name), `${name} must generate through generateWithRetry`).toMatch(
         /generateWithRetry\(/,
       );
     }
     // The tightest budgets were 200 for two-field schemas under very
     // large system prompts; anything the model writes first blows it.
-    const worry = block("draftWorryForBehavior");
-    expect(worry).not.toMatch(/maxOutputTokens: 200\b/);
+    // (MIN_OUTPUT_TOKEN_BUDGET in model-config raises every structured
+    // call to 4000 regardless; this stays as a second line of defence
+    // on the drafters with large prompts.)
+    expect(block("draftCommitmentForWorry")).not.toMatch(/maxOutputTokens: 200\b/);
   });
 
-  it("drafts that fail verification are never offered (worry drafter, assumption batch)", () => {
-    const worry = block("draftWorryForBehavior");
-    expect(worry).not.toMatch(/\?\?\s*first\.assembled/);
-    expect(worry).toMatch(/worry draft refused after retry/);
+  it("drafts that fail verification are never offered (assumption batch, commitment)", () => {
+    // The commitment drafter withholds rather than offering the
+    // less-bad failing attempt (2026-09-02).
+    expect(block("draftCommitmentOutcome")).toMatch(/hardFailure/);
     const batch = block("draftAssumptionsFromCommitments");
     expect(batch).toMatch(/const passing = chosen\.filter/);
     expect(batch).toMatch(/verifyDraftClusters\(passing/);
   });
 
-  it("the worry drafter names both Kegan shapes and forbids the behavior said back", () => {
-    const sys = coach.slice(coach.indexOf("const DRAFT_WORRY_SYSTEM = `"), coach.indexOf("const WORRY_HARD_WORD_CAP"));
-    expect(sys).toMatch(/\*\*Exposure\*\*/);
-    expect(sys).toMatch(/\*\*Consequence\*\*/);
-    expect(sys).toMatch(/NEVER the behavior itself said back/);
-    expect(sys).toMatch(/what the behavior PROTECTS him from/);
+  it("the worry drafter and its prompt stay deleted", () => {
+    // DRAFT_WORRY_SYSTEM, the four identity shapes and their rotation
+    // went with draftWorryOutcome on 2026-09-03. The app writes the
+    // counter-move and stops; the fear is his.
+    expect(coach).not.toMatch(/const DRAFT_WORRY_SYSTEM/);
+    expect(coach).not.toMatch(/export async function draftWorryOutcome/);
+    expect(coach).not.toMatch(/export async function draftWorryForBehavior/);
+    expect(coach).not.toMatch(/WORRY_IDENTITY_SHAPES/);
+    expect(coach).not.toMatch(/function worryShapeInstruction/);
+    expect(coach).not.toMatch(/export function assembleWorry/);
   });
 
   it("the per-entry LLM reaction and chat paths stay deleted", () => {

@@ -24,7 +24,6 @@ import {
   reviewTestResult,
   reviseTestFromReview,
   scrubReply,
-  WORRY_IDENTITY_SHAPES,
   type ReactionOutput,
   type SmartReview,
 } from "@/lib/itc/coach";
@@ -1435,18 +1434,11 @@ async function draftMissingWorriesAfterAdvance(
   );
   if (needsDraft.length === 0) return 0;
 
-  // Server-owned shape rotation. Each behavior's drafter call gets
-  // a hard identity-shape constraint from WORRY_IDENTITY_SHAPES,
-  // rotated by index. Guarantees the map's worry set varies across
-  // Kegan-canonical shapes (role-noun, role-failure verb, seen-as,
-  // self-label) instead of the LLM's default clustering on
-  // "she'd see I've been the man who X" for every behavior.
+  // The identity-shape rotation this comment used to describe went
+  // with the drafter it constrained (2026-09-03). Nothing rotates
+  // now because nothing writes an identity: the opening carries the
+  // counter-move and stops.
   //
-  // Rotation uses the behavior's ORDINAL POSITION on the map
-  // (needsDraft is already ordered by sort_order via listBehaviors)
-  // so re-drafts land on the same shape for the same behavior on
-  // retry, keeping the pattern stable rather than churning shape
-  // across regenerations.
   // The server writes the half of a worry it is reliably right about
   // (the counter-move) and stops. The fear is his to supply: Kegan
   // Vol 1 p 12 has the coach ask "what are the worst things that

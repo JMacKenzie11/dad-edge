@@ -2323,22 +2323,25 @@ describe("Form-First regression", () => {
         "draftCommitmentForWorry's verify loop must check mirrors_worry_identity (same check the hone auditor uses)",
       ).toBe(true);
 
-      // (e) Same alignment invariant on the WORRIES drafter: its
-      // verify loop must run checkInteriorWitnessInWorries — the
-      // exact regex the hone auditor runs on the column. Without this
-      // the drafter can produce "I'd have to see I…" text that passes
-      // depth but the auditor later flags. Same class of coach-talks-
-      // at-cross-purposes bug the commitments fix resolved.
-      const worryDrafterBlock = coachSrc.match(
-        /export async function draftWorryForBehavior[\s\S]*?(?=\n\/\/ ---)/,
-      );
+      // (e) The same alignment invariant used to be asserted on the
+      // WORRIES drafter: its verify loop had to run
+      // checkInteriorWitnessInWorries, the exact regex the hone
+      // auditor runs, so it could not produce "I'd have to see I…"
+      // text that passed depth and got flagged later.
+      //
+      // That drafter was deleted 2026-09-03. The app no longer writes
+      // an identity landing for Column 3 at all — draftWorryOpening
+      // writes "I worry that if I <counter-move>, " and stops — so
+      // there is no generated text for the auditor to disagree with.
+      // The invariant is satisfied by absence, which is stronger than
+      // by agreement, and the absence is what this now asserts.
       expect(
-        worryDrafterBlock,
-        "draftWorryForBehavior must exist",
-      ).toBeTruthy();
+        /export async function draftWorryForBehavior/.test(coachSrc),
+        "the worry drafter was deleted; nothing should author a Column 3 identity again",
+      ).toBe(false);
       expect(
-        /checkInteriorWitnessInWorries/.test(worryDrafterBlock![0]),
-        "draftWorryForBehavior's verify loop must run checkInteriorWitnessInWorries (same check the hone auditor uses)",
+        /export async function draftWorryOpening/.test(coachSrc),
+        "draftWorryOpening is what replaced it",
       ).toBe(true);
     },
     5_000,
