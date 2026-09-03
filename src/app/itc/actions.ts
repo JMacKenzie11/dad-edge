@@ -122,6 +122,7 @@ import {
   STAGE_LABELS,
   ensureCommitmentStem,
   ensureStem,
+  ensureGoalStem,
   hasGoalStem,
   type ItcStage,
 } from "@/lib/itc/stage";
@@ -255,9 +256,10 @@ export async function saveGoal(formData: FormData): Promise<ActionResult> {
       reason: `Keep "${GOAL_STEM}" at the start and write the rest after it.`,
     };
   }
-  const withStem = hasGoalStem(rawTrimmed)
-    ? rawTrimmed
-    : `${GOAL_STEM} ${rawTrimmed}`;
+  // Collapses a stem he typed on top of the one the box pre-fills,
+  // as well as adding it when absent. hasGoalStem alone only checked
+  // the prefix, so a doubled stem passed straight through.
+  const withStem = ensureGoalStem(rawTrimmed);
   const priorGoal = loaded.map.improvement_goal;
   const isEdit = Boolean(priorGoal && priorGoal.trim() !== withStem.trim());
   try {

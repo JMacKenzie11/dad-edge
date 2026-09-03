@@ -738,6 +738,83 @@ describe("ensureStem", () => {
   });
 });
 
+describe("ensureGoalStem (a stem he typed on top of the pre-filled one)", () => {
+  // hasGoalStem only answered "does this START with the stem", and
+  // saveGoal used it to decide whether to prepend. That stops the
+  // SERVER adding a second one; it never noticed a second already in
+  // the text. The goal box pre-fills with the stem, so typing or
+  // pasting the whole sentence after it saved "I'm committed to
+  // getting better at I'm committed to getting better at trusting
+  // myself…" verbatim. Live map, 2026-09-03.
+  const stemCount = (t: string) =>
+    t.toLowerCase().split("committed to getting better at").length - 1;
+
+  it("collapses a doubled stem", async () => {
+    const { ensureGoalStem, GOAL_STEM } = await import("@/lib/itc/stage");
+    const out = ensureGoalStem(`${GOAL_STEM} ${GOAL_STEM} trusting myself`);
+    expect(stemCount(out)).toBe(1);
+    expect(out).toBe(`${GOAL_STEM} trusting myself`);
+  });
+
+  it("collapses however many he typed", async () => {
+    const { ensureGoalStem, GOAL_STEM } = await import("@/lib/itc/stage");
+    expect(
+      stemCount(ensureGoalStem(`${GOAL_STEM} ${GOAL_STEM} ${GOAL_STEM} listening first`)),
+    ).toBe(1);
+  });
+
+  it("catches the variants: 'I am', a curly apostrophe", async () => {
+    const { ensureGoalStem } = await import("@/lib/itc/stage");
+    expect(
+      stemCount(
+        ensureGoalStem(
+          "I am committed to getting better at I'm committed to getting better at holding my price",
+        ),
+      ),
+    ).toBe(1);
+    expect(
+      stemCount(
+        ensureGoalStem(
+          "I\u2019m committed to getting better at I\u2019m committed to getting better at saying no",
+        ),
+      ),
+    ).toBe(1);
+  });
+
+  it("still adds the stem when there isn't one", async () => {
+    const { ensureGoalStem, GOAL_STEM } = await import("@/lib/itc/stage");
+    expect(ensureGoalStem("trusting myself")).toBe(`${GOAL_STEM} trusting myself`);
+  });
+
+  it("leaves a correctly stemmed goal alone", async () => {
+    const { ensureGoalStem, GOAL_STEM } = await import("@/lib/itc/stage");
+    const good = `${GOAL_STEM} trusting myself and staying grounded`;
+    expect(ensureGoalStem(good)).toBe(good);
+  });
+
+  it("does not double the bare stem, which has nothing to peel after it", async () => {
+    const { ensureGoalStem, GOAL_STEM } = await import("@/lib/itc/stage");
+    expect(stemCount(ensureGoalStem(GOAL_STEM))).toBe(1);
+  });
+
+  it("saveGoal normalizes through it rather than checking the prefix", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const actions = readFileSync(
+      resolve(here, "../../src/app/itc/actions.ts"),
+      "utf8",
+    );
+    const save = actions.slice(
+      actions.indexOf("export async function saveGoal"),
+      actions.indexOf("// Behaviors (Column 2)"),
+    );
+    expect(save).toMatch(/ensureGoalStem\(rawTrimmed\)/);
+    expect(save).not.toMatch(/hasGoalStem\(rawTrimmed\)\n?\s*\? rawTrimmed/);
+  });
+});
+
 describe("hasAssumptionStem", () => {
   it("accepts the exact stem", () => {
     expect(hasAssumptionStem(`${ASSUMPTION_STEM} if I fail`)).toBe(true);

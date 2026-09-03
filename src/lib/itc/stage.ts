@@ -138,6 +138,39 @@ export function hasAssumptionStem(text: string): boolean {
 }
 
 /**
+ * Collapse the improvement-goal stem to exactly one, then guarantee it.
+ *
+ * hasGoalStem only ever answered "does this text START with the
+ * stem", and saveGoal used it to decide whether to prepend. That
+ * stops the SERVER adding a second stem; it never noticed a second
+ * one already in the text. The goal box pre-fills with the stem
+ * (goal-row.tsx), so a man who typed or pasted the whole sentence
+ * after it produced "I'm committed to getting better at I'm committed
+ * to getting better at trusting myself…", hasGoalStem said true, and
+ * it saved verbatim. Seen on a live map 2026-09-03.
+ *
+ * Strips repeats and the common variants ("I am committed to", a
+ * curly apostrophe) rather than rejecting, because the text is
+ * otherwise exactly what he meant. Same approach as
+ * ensureCommitmentStem below.
+ */
+export function ensureGoalStem(text: string): string {
+  // Trailing whitespace optional: the bare stem with nothing after it
+  // has to peel too, or it falls through and gets a second one
+  // prepended.
+  const stemPattern = /^i\s*(?:'|\u2019|\u02BC)?\s*(?:m|am)\s+committed\s+to\s+getting\s+better\s+at\s*/i;
+  let rest = text.trim().replace(/[\u2018\u2019\u02BC]/g, "'");
+  // Peel every leading stem, however many he typed.
+  let peeled = 0;
+  while (stemPattern.test(rest) && peeled < 10) {
+    rest = rest.replace(stemPattern, "").trim();
+    peeled += 1;
+  }
+  if (rest.length === 0) return text.trim();
+  return `${GOAL_STEM} ${rest.replace(/^./, (c) => c.toLowerCase())}`;
+}
+
+/**
  * Normalize commitment text to the canonical "I'm also committed to
  * ..." form. The "also" is load-bearing — it names this as the
  * SECOND commitment sitting next to the Column 1 improvement goal, so
