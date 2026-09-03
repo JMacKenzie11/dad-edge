@@ -2673,8 +2673,13 @@ const SAFER_LADDER: Record<
  * On-demand test-draft regeneration. Called by the TestDesignForm
  * when the coachee:
  *   - changes the test_type dropdown (mode="initial" with new type)
- *   - clicks "Give me another draft" (mode="another")
- *   - clicks "Give me a safer version" (mode="safer")
+ *   - "another" and "safer" modes are still wired but their buttons
+ *     are behind flags in test-design-form.tsx and off by default.
+ *     "another" went 2026-09-03: the drafts it returned were close
+ *     enough to the previous one that the reroll wasn't a choice,
+ *     while the dropdown right above it regenerates and changes
+ *     something real. Flip SHOW_ANOTHER_DRAFT_BUTTON back on if a
+ *     better prompt makes the drafts genuinely different.
  *
  * For "another" and "safer", the server rotates/steps the type
  * (see tables above) — client's `test_type` is treated as the

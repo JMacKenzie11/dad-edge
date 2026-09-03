@@ -30,6 +30,26 @@ import { useConfirm } from "@/components/ui/use-confirm";
 const SHOW_SAFER_BUTTON = false;
 
 /**
+ * Feature flag, same treatment. "Give me another draft" asks for a
+ * different test on the same assumption, and what comes back is close
+ * enough to the last one that the choice isn't a choice: a reroll that
+ * returns near-identical output implies the first draft was one of
+ * many when it wasn't, and costs a model call to prove it.
+ *
+ * The type dropdown directly above it already regenerates ("Changing
+ * the type gets you a fresh draft of that kind"), and that one changes
+ * something real, so the useful half of this affordance is still on
+ * screen.
+ *
+ * Hidden rather than deleted: regenerate("another") and the server
+ * action behind it stay wired and are still used by the dropdown, so
+ * flipping this back is a one-line change if a better prompt makes the
+ * drafts genuinely different. Same reasoning that retired "Rewrite
+ * openings" on Column 3 (4c4a228).
+ */
+const SHOW_ANOTHER_DRAFT_BUTTON = false;
+
+/**
  * Test design form. Renders three of the four Kegan/Lahey worksheet
  * fields (So I Will / And Collect the Following Data / In Order to
  * Find Out Whether) plus test_type + target_date. The fourth field
@@ -388,21 +408,31 @@ export function TestDesignForm({
         </span>
       </label>
 
-      {/* Regenerate row — sit right under the type dropdown so the
+      {/* Regenerate row — sits right under the type dropdown so the
           coachee sees the "get another draft" affordances at the top
           of the form, not buried after the fields. Safer button is
-          hidden when the coachee is already at data_mining (nothing
-          to step down to). */}
+          also hidden when the coachee is already at data_mining
+          (nothing to step down to).
+          
+          With both buttons behind flags the row usually holds only the
+          spinner, so it renders only when it has something in
+          it: an empty flex row still takes its gap and leaves a band
+          of dead space under the dropdown. */}
+      {SHOW_ANOTHER_DRAFT_BUTTON ||
+      (SHOW_SAFER_BUTTON && canGoSafer) ||
+      regenPending ? (
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => regenerate("another")}
-          disabled={pending || regenPending}
-          className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
-          title="Ask the coach for a different kind of test on the same assumption"
-        >
-          Give me another draft
-        </button>
+        {SHOW_ANOTHER_DRAFT_BUTTON ? (
+          <button
+            type="button"
+            onClick={() => regenerate("another")}
+            disabled={pending || regenPending}
+            className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-xs text-[color:var(--color-text-muted)] hover:text-white disabled:opacity-50"
+            title="Ask the coach for a different kind of test on the same assumption"
+          >
+            Give me another draft
+          </button>
+        ) : null}
         {SHOW_SAFER_BUTTON && canGoSafer ? (
           <button
             type="button"
@@ -421,6 +451,7 @@ export function TestDesignForm({
           </span>
         ) : null}
       </div>
+      ) : null}
 
       {/* Form fields — dim + block interaction during regeneration
           AND during Run the Test so the coachee can visibly see
