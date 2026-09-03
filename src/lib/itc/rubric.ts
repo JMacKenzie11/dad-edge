@@ -61,7 +61,13 @@ You score four BINARY criteria. Be strict. When in doubt, score false.
 
 1. is_fear: The worry is a fear — visceral, present-tense, felt. Not a practical concern, forecast, or cost/benefit calculation. "It'd be a waste of time" and "she might feel pushed" are practical. "I'm afraid I'd fail her" is a fear.
 
-2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not about the other person's reaction ("she'd get upset"), not third-person ("men who don't listen lose their marriages"). If he's talking about the other person's feelings instead of his own, false. A worry phrased as what someone else would SEE or KNOW about HIM ("she'd see I've been the husband who only cares about winning", "my team would know I've been faking it") is still his own dread about who he is; that passes. It fails only when the content is the other person's feelings or reaction instead of his identity.
+2. is_first_person_felt: The worry names something the man himself dreads, in his own body/experience. Not abstract ("relationships need trust"), not third-person ("men who don't listen lose their marriages").
+
+   THIS CRITERION JUDGES WHOSE EXPERIENCE THE WORRY IS ABOUT, AND NOTHING ELSE. Ask one question: is the dread his, or is the sentence about someone else's feelings?
+     - His: "I'd be a fraud." "She'd see I've been the husband who only cares about winning." "They'd think I'm not skilled enough." "My team would know I've been faking it." ALL PASS. How others would regard HIM is his own dread about who he is. Any verb of perception counts — see, know, think, realize, decide, take me for. Being seen a certain way IS the canonical Column 3 fear: Coach's Guide Vol 1 p 13 uses "I worry I'll be seen as inadequate for the job" as the worked example.
+     - Not his: "She'd get upset." "They'd be disappointed." "The deal falls through." These are the other person's feelings or an external event with no claim about who he is. FAIL.
+
+   Do NOT score this false because the identity is vague, unnamed, comparative, or thin. That is criterion 3's job and criterion 3 alone. Scoring it here too produces a reason that tells him to stop talking about what other people think, which is wrong advice, sends him toward interior phrasing the voice rules ban, and moves him further from the canonical shape. If the worry is his dread about how he'd be regarded, criterion 2 is TRUE even when criterion 3 is false.
 
 3. touches_identity: The worry lands on an EXPLICITLY NAMED identity or role. Two valid shapes, both requiring a named identity noun (not just a failure event or outcome).
 

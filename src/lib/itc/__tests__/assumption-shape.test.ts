@@ -137,6 +137,32 @@ describe("the assumption box shows the stem it is going to save", () => {
   });
 });
 
+describe("criterion 2 judges whose dread it is, and nothing else", () => {
+  it("says so explicitly, because overlapping it with criterion 3 gave wrong advice", () => {
+    // Live case 2026-09-03. Worry: "if I told the client the honest,
+    // limited outcome, they'd think I'm not skilled enough". The real
+    // shortfall was criterion 3 (no named identity, and the rubric
+    // rejects comparatives). But the model ALSO failed criterion 2
+    // and wrote the reason from that: "This is about what they'd
+    // think of you, not what you'd feel about yourself." That is
+    // wrong per the guides, whose worked Column 3 example is "I worry
+    // I'll be seen as inadequate for the job" (Vol 1 p 13), and it
+    // pushes him toward interior phrasing the voice rules ban.
+    expect(rubricSource).toMatch(/THIS CRITERION JUDGES WHOSE EXPERIENCE THE WORRY IS ABOUT, AND NOTHING ELSE/);
+    expect(rubricSource).toMatch(/That is criterion 3's job and criterion 3 alone/);
+  });
+
+  it("names the guides' own worked example so 'seen as' can't be read as failing", () => {
+    expect(rubricSource).toMatch(/seen as inadequate for the job/);
+  });
+
+  it("accepts any verb of perception, not a hand-picked two", () => {
+    // It used to list "SEE or KNOW", which invited the model to treat
+    // "they'd think" as a different, failing shape.
+    expect(rubricSource).toMatch(/see, know, think, realize, decide, take me for/);
+  });
+});
+
 describe("the reason and the rewrite don't compete", () => {
   it("no rubric asks its reason to write a replacement entry", () => {
     // Observed 2026-09-02: a commitment's coach text ended with a
