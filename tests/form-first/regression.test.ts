@@ -116,6 +116,38 @@ async function ensureDeepCommitments(
 
 async function cleanup(participantId: string) {
   const supabase = createSupabaseServiceClient();
+
+  // Delete the bridged AUTH user first, not just the participant row.
+  //
+  // Several paths under test (saveGoal -> syncItcGoalToTracker,
+  // runTest -> createMissionForItcTest) call the participant-to-user
+  // bridge, which creates a Supabase Auth user; a trigger then
+  // inserts the users row and the bridge patches it to comped. None
+  // of that is reachable from itc_participants once that row is
+  // deleted, so for months every test left an orphan behind: 778 of
+  // them by 2026-09-03, against 25 real users, filling the admin
+  // members list with formfirst-<uuid>@test.local.
+  //
+  // Deleting the auth user cascades to public.users. Best-effort:
+  // a failure here must not fail the test that just passed, but it
+  // is logged rather than swallowed so a recurrence is visible.
+  const { data: participant } = await supabase
+    .from("itc_participants")
+    .select("user_id")
+    .eq("id", participantId)
+    .maybeSingle();
+  const userId = participant?.user_id as string | null | undefined;
+  if (userId) {
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) {
+      console.warn(
+        "[test cleanup] could not delete auth user %s: %s",
+        userId,
+        error.message,
+      );
+    }
+  }
+
   await supabase.from("itc_participants").delete().eq("id", participantId);
   delete process.env.ITC_TEST_PARTICIPANT_ID;
   setMainModelOverride(null);
