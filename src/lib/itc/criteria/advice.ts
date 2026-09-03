@@ -84,8 +84,14 @@ export const ADVICE: Record<IssueType, string> = {
   // counter-move is what produced assumptions that restated the
   // worry, fixed in de376db. What this check actually wants is
   // something testable.
+  // Asked only for an ACTION until 2026-09-03, which is narrower than
+  // the guides' own standard (Vol 1 p 19: "what data, if they existed,
+  // could call the assumption into doubt"). Appendix D tests one Big
+  // Assumption with a thought experiment and no behaviour change at
+  // all. A man who couldn't name an act was told he was stuck when he
+  // wasn't.
   assumption_not_enactable:
-    "There's nothing here you could put to the test this week. Name something you could actually do differently, so you can find out whether the belief holds.",
+    "Nothing here could show you whether this is true. What would you have to see, hear, or try before you'd doubt it?",
 
   test_coverage_gap:
     "This one has no test yet. Without one you've got no data to hold it up against.",

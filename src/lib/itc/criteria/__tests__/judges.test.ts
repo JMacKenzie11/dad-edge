@@ -174,44 +174,30 @@ describe("checkAssumptionUnderwritesCommitments", () => {
   });
 });
 
-describe("checkAssumptionEnactable", () => {
-  const b1 = behavior("b-1", "I walk out when she raises her voice.");
-  const b2 = behavior("b-2", "I don't ask what she needs.", false);
+describe("checkAssumptionEnactable is turned off", () => {
+  const a1 = assumption({ id: "a-1", text: "I assume that I can never be good at this." });
+  const a2 = assumption({ id: "a-2", text: "I assume that if I say no, they leave." });
+  const beh = behavior("b-1", "I say yes to everything");
 
-  it("fires a moderate finding when the 'if' isn't his move, and only sends selected behaviors", async () => {
-    generateObject.mockResolvedValue({
-      object: { enactable: false, reverses_behavior_index: null, reason: "an outcome, not an act" },
-    });
+  // Turned off 2026-09-03 at the user's request: the flag never
+  // fires. It asked for an ACT he could take, while the guides' bar
+  // is data ("what data, if they existed, could call the assumption
+  // into doubt", Vol 1 p 19) and Appendix D tests one Big Assumption
+  // with a thought experiment and no behaviour change at all. It was
+  // also a dead end: nothing blocks on it, so the red box could
+  // neither be cleared nor acted on.
+  it("returns nothing, whatever it is given", async () => {
     const findings = await checkAssumptionEnactable({
-      assumptions: [
-        assumption({
-          text: "I assume that if something important goes badly, then I can't be trusted.",
-        }),
-      ],
-      behaviors: [b1, b2],
+      assumptions: [a1, a2],
+      behaviors: [beh],
     });
-    expect(findings).toHaveLength(1);
-    expect(findings[0].issueType).toBe("assumption_not_enactable");
-    expect(findings[0].severity).toBe("moderate");
-    const prompt = generateObject.mock.calls[0][0].prompt as string;
-    expect(prompt).toContain("I walk out when she raises her voice.");
-    expect(prompt).not.toContain("I don't ask what she needs.");
+    expect(findings).toEqual([]);
   });
 
-  it("no finding when the 'if' is his move", async () => {
-    generateObject.mockResolvedValue({
-      object: { enactable: true, reverses_behavior_index: 1, reason: "his move" },
-    });
-    expect(
-      await checkAssumptionEnactable({ assumptions: [assumption({})], behaviors: [b1] }),
-    ).toEqual([]);
-  });
-
-  it("fails open when the model errors", async () => {
-    generateObject.mockRejectedValue(new Error("boom"));
-    expect(
-      await checkAssumptionEnactable({ assumptions: [assumption({})], behaviors: [b1] }),
-    ).toEqual([]);
+  it("makes no model call", async () => {
+    generateObject.mockClear();
+    await checkAssumptionEnactable({ assumptions: [a1], behaviors: [beh] });
+    expect(generateObject).not.toHaveBeenCalled();
   });
 });
 

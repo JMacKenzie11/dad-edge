@@ -311,20 +311,27 @@ export type EnactableVerdict = {
 };
 
 const ENACTABLE_SYSTEM = `
-You check whether a Big Assumption's "if" half is something the coachee could go do himself, in a small dose, this week. Kegan/Lahey (Coach's Guide Vol 1 p 21): a testable assumption is one where the "if" condition has degrees to it so it can be enacted safely.
+You check whether a Big Assumption can be TESTED. The guides' standard is Vol 1 p 19: "ask yourself what data, if they existed, could call the assumption into doubt. If you can't think of any, then it will be impossible to test it."
 
-You receive the assumption and a numbered list of the coachee's own behaviors (the moves he makes that work against his goal). The strongest "if" is him doing the opposite of one of those behaviors.
+Data, not necessarily action. That is the whole bar, and it is wider than it sounds. Appendix D's worked tests include a course taken ("Take an anger management course"), a thing said ("I tell my husband about my concerns"), and a thought experiment with no behaviour change at all ("I will engage in some thought experiments, to imagine situations where others might possibly view me negatively that would actually not lead me to have low self-worth"). All three are real tests of real Big Assumptions.
 
-enactable = true when the "if" names an act he would take (stay in the room, send it without rewriting it, let the client answer first, tell her no). Conditions attached to the act are fine ("when money is low", "while she's angry"). Degrees are fine ("one message", "for ten minutes").
+You receive the assumption and a numbered list of the coachee's own behaviors. Doing the opposite of one of them is ONE way to gather the data and often the sharpest, but it is not required, and an assumption that names no behaviour at all is not thereby untestable.
 
-enactable = false when the "if" is:
-- an outcome, not an act ("if I fail", "if something important goes badly", "if I'm not perfect")
-- someone else's move ("if they don't make the change", "if my team pushes back")
-- all-or-nothing with no small dose ("if I never sold again")
+enactable = true when you can name, in one line, something he could do, say, watch for, or imagine that would produce evidence bearing on this belief. Examples that PASS:
+- an act he would take: "stay in the room", "send it without rewriting it", "tell her no"
+- something observable he could watch for: "notice what actually happens the next three times a client hesitates"
+- a thought experiment: "imagine a client who thinks the price is fair, and see whether he can picture it"
+- a flat belief with no "if" at all: "I don't believe I can ever be skillful at managing my anger" — he could take a course, or watch for a single moment where he handled it. PASSES.
 
-reverses_behavior_index: when enactable and the act is the opposite of one listed behavior, give that behavior's number. Otherwise null.
+enactable = false ONLY when nothing could count as evidence either way:
+- someone else's move with nothing for him to observe ("if they don't make the change")
+- a claim so total that no single instance could bear on it AND nothing observable follows from it ("I don't deserve to feel happy" — the guides name this one as not yet testable, Vol 1 p 19)
 
-reason: under 25 words, plain words, naming what the "if" is (an outcome, someone else's move) when not enactable.
+When in doubt, TRUE. A wrong "not testable" sends him back to rewrite an assumption that was fine, and the guides are explicit that the assumption does not need to be sharp yet: "You don't need to have the exact assumption yet, because that is likely to get sharpened through his engaging it."
+
+reverses_behavior_index: when the data would come from him doing the opposite of one listed behavior, give that behavior's number. Otherwise null. Null is common and fine; it does not mean not testable.
+
+reason: under 25 words, plain words. When not testable, name what could not be observed rather than telling him to pick an action.
 
 === WORKED EXAMPLES ===
 
@@ -374,40 +381,38 @@ export async function judgeAssumptionEnactable(input: {
   };
 }
 
-export async function checkAssumptionEnactable(input: {
+/**
+ * TURNED OFF 2026-09-03. Returns [] unconditionally; the flag never
+ * fires and no coachee sees it.
+ *
+ * Why it is off rather than deleted: the question it asks is real and
+ * belongs here (Vol 1 p 18, Checkpoint 2, asked of the assumption he
+ * has SELECTED for testing), but the bar it was applying was the
+ * wrong one and it was the least stable judge in the app.
+ *
+ * Wrong bar: it required the "if" to name an ACT he could take in a
+ * small dose this week. The guides' standard is data, not action
+ * (Vol 1 p 19: "what data, if they existed, could call the assumption
+ * into doubt"), and Appendix D tests one Big Assumption with a
+ * thought experiment and no behaviour change at all. So a man could
+ * hold a perfectly testable belief, be unable to name an act, and be
+ * told he was stuck.
+ *
+ * Worse, it was a dead end with no exit. Nothing downstream blocks on
+ * it, so the red box could not be cleared and could not be acted on,
+ * and if he carried on to test design the SMART review then critiqued
+ * his TEST while the flagged assumption sat unmentioned one column up.
+ *
+ * The prompt below (ENACTABLE_SYSTEM) has been rewritten to the data
+ * standard for whenever this is revived, and judgeAssumptionEnactable
+ * still works if called directly. Turning it back on is deleting the
+ * early return.
+ */
+export async function checkAssumptionEnactable(_input: {
   assumptions: ItcAssumption[];
   behaviors: ItcBehavior[];
 }): Promise<Finding[]> {
-  const behaviors = input.behaviors
-    .filter((b) => b.selected)
-    .map((b, i) => ({ index: i + 1, text: b.text }));
-  const findings: Finding[] = [];
-  await Promise.all(
-    input.assumptions.map(async (assumption) => {
-      try {
-        const verdict = await judgeAssumptionEnactable({
-          assumptionText: assumption.text,
-          behaviors,
-        });
-        if (verdict.enactable) return;
-        findings.push({
-          entryRef: { table: "assumptions", id: assumption.id },
-          issueType: "assumption_not_enactable",
-          severity: "moderate",
-          actualText: assumption.text,
-          detail: ADVICE.assumption_not_enactable,
-          suggestedFix: assumption.suggested_fix ?? undefined,
-        });
-      } catch (err) {
-        console.warn(
-          "[itc criteria] checkAssumptionEnactable failed (assumption=%s): %s",
-          assumption.id,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }),
-  );
-  return findings;
+  return [];
 }
 
 // checkAssumptionsHaveAnEnactableIf lived here: a column-wide check

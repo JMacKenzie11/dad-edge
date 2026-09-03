@@ -2022,7 +2022,12 @@ export async function reviseAssumption(input: {
     `Competing commitments (Column 4) this assumption holds up, with their paired worries:`,
     commitmentBlock,
     ``,
-    `Return the three slots for ONE rewritten assumption. antecedent_act must be the coachee doing the OPPOSITE of one of his behaviors above (a move he could make in a small dose this week), and the assumption must keep holding up every commitment listed. Ignore the batch-drafting instructions about commitment_indices and draft counts; there is exactly one assumption here.`,
+    `Return the three slots for ONE rewritten assumption.`,
+    ``,
+    `antecedent_act must name the COMMITMENT BEING BROKEN: him letting go of the protection one of the vows above buys him. NOT the opposite of a Column 2 behavior. That distinction is why Column 5 is a different sentence from Column 3: the worry already says what he fears if he reverses the behavior, so an "if" built on that same act can only arrive back at the same dread, and he gets his worry handed back with the stem swapped.`,
+    `The guides anchor it on the vow every time: "not becoming my brother (Kurt)" gives "I assume that if I am bragging, I am just like Kurt"; "always feeling the freedom of having lots of options" gives "I assume that if I don't have lots of options, I will feel resentful, angry, impotent, and stressed."`,
+    `It must still be TESTABLE, which per Vol 1 p 19 means there is data that could call it into doubt: something he could do, say, watch for, or imagine. Often that is him doing the opposite of one of his behaviors, and that is fine when it follows from the vow being broken. It is not required.`,
+    `The assumption must keep holding up every commitment listed. Ignore the batch-drafting instructions about commitment_indices and draft counts; there is exactly one assumption here.`,
     ...reviseLines(
       { currentText: input.currentText, problems: input.problems },
       "Big Assumption",
@@ -2134,6 +2139,20 @@ export async function reviseAssumption(input: {
       commitmentTexts: linkedTexts,
     });
     if (!identity.kept) feedback.push(identity.reason);
+    // Never hand back the worry with the stem swapped. Checked against
+    // every paired worry, since one assumption can hold up several
+    // commitments and only needs to duplicate one to be a restatement.
+    for (const c of input.linkedCommitments) {
+      if (!c.worry_text) continue;
+      const restate = checkAssumptionRestatesWorry({
+        assumptionText: draft.text,
+        worryText: c.worry_text,
+      });
+      if (restate.restates) {
+        feedback.push(restate.reason);
+        break;
+      }
+    }
     const people = checkPeopleFromMap({
       draftText: draft.text,
       mapTexts: [

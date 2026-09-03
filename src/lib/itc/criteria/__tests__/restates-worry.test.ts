@@ -80,3 +80,41 @@ describe("checkAssumptionRestatesWorry", () => {
     expect(v.restates).toBe(false);
   });
 });
+
+describe("the guard is actually wired, not just written", () => {
+  // de376db's message said this guard was wired into
+  // reviseAssumption's verify loop and that the "if" was re-anchored
+  // on the vow. Neither landed: the edit script asserted on a bad
+  // anchor and died before writing, and only the import was re-run.
+  // The commit added one line to coach.ts. Applied for real
+  // 2026-09-03; these tests exist so a claim like that fails loudly
+  // instead of sitting in a commit message.
+  it("reviseAssumption calls it in verify", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const coach = readFileSync(
+      resolve(here, "..", "..", "coach.ts"),
+      "utf8",
+    );
+    const revise = coach.slice(coach.indexOf("export async function reviseAssumption"));
+    expect(revise).toMatch(/checkAssumptionRestatesWorry\(\{/);
+  });
+
+  it("the rewrite anchors the \"if\" on the vow, not the behavior", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const coach = readFileSync(resolve(here, "..", "..", "coach.ts"), "utf8");
+    const revise = coach.slice(
+      coach.indexOf("export async function reviseAssumption"),
+      coach.indexOf("export async function draftTestForAssumption"),
+    );
+    expect(revise).toMatch(/COMMITMENT BEING BROKEN/);
+    expect(revise).not.toMatch(
+      /antecedent_act must be the coachee doing the OPPOSITE of one of his behaviors/,
+    );
+  });
+});
