@@ -485,3 +485,54 @@ describe("renderFindings — exhaustiveness and voice hygiene", () => {
     expect(honeBody).toContain(renderRowSharpen([shared])!);
   });
 });
+
+describe("a finding with no row box is said, not pointed at", () => {
+  // The column review says "it's marked on its row above" whenever
+  // entries carry their own boxes. Coverage findings don't: they are
+  // about Column 5 but point at a Column 4 entry, and since
+  // 2026-09-03 they deliberately write no box on the commitment row.
+  // Pointing at a row with nothing on it told the coachee to go look
+  // at something that wasn't there.
+  const cover = finding({
+    issueType: "assumption_uncovered_commitment",
+    entryRef: { table: "commitments", id: "c-1" },
+    actualText: "I'm also committed to never letting a client see me hesitate.",
+  });
+  const depth = finding({
+    issueType: "depth_shortfall_assumption",
+    severity: "critical",
+    entryRef: { table: "assumptions", id: "a-1" },
+    actualText: "I assume that I have to be certain before I speak.",
+  });
+  const review = (fs: Finding[]) =>
+    renderFindings(fs, {
+      ...CTX,
+      mode: "column_review",
+      stage: "assumptions",
+      entriesCarryTheirOwnBox: true,
+    } as Parameters<typeof renderFindings>[1]);
+
+  it("prints the coverage line instead of pointing at a row", () => {
+    const out = review([cover]);
+    expect(out).toContain(ADVICE.assumption_uncovered_commitment);
+    expect(out).not.toContain("marked on its row above");
+  });
+
+  it("quotes the commitment it is about, so he knows which one", () => {
+    expect(review([cover])).toContain(
+      "I'm also committed to never letting a client see me hesitate.",
+    );
+  });
+
+  it("still points at the ones that DO have a row box", () => {
+    const out = review([cover, depth]);
+    expect(out).toContain(ADVICE.assumption_uncovered_commitment);
+    expect(out).toMatch(/marked on its row above/);
+  });
+
+  it("points at everything when none are homeless", () => {
+    const out = review([depth]);
+    expect(out).toContain("marked on its row above");
+    expect(out).not.toContain(ADVICE.depth_shortfall_assumption);
+  });
+});
