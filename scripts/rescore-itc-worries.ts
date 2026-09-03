@@ -134,7 +134,6 @@ async function main() {
     const coach = await coachTextForWorry({
       mapTexts: await loadMapTexts(map.id, map.improvement_goal ?? ""),
       goalText: map.improvement_goal ?? "",
-      pillar: map.pillar_code,
       behavior,
       worry,
       score: scored.score,

@@ -666,7 +666,6 @@ export async function saveWorry(formData: FormData): Promise<ActionResult> {
     const coach = await coachTextForWorry({
       mapTexts: await loadMapTexts(loaded.map.id, loaded.map.improvement_goal ?? ""),
       goalText: loaded.map.improvement_goal ?? "",
-      pillar: loaded.map.pillar_code,
       behavior,
       worry: row,
       score,

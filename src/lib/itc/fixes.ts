@@ -32,7 +32,6 @@ import type { PillarCode } from "@/lib/pillars";
 import {
   draftAssumptionsFromCommitments,
   draftCommitmentForWorry,
-  draftWorryForBehavior,
   reviseAssumption,
   reviseBehavior,
   scrubBannedCoachWords,
@@ -124,7 +123,6 @@ export async function coachTextForWorry(input: {
    *  hone path applies. */
   mapTexts: string[];
   goalText: string;
-  pillar: PillarCode;
   behavior: ItcBehavior;
   worry: ItcWorry;
   score: number;
@@ -144,17 +142,11 @@ export async function coachTextForWorry(input: {
   if (findings.length === 0) {
     return { rubricReason, sharpenText: null, suggestedFix: null };
   }
-  const suggestedFix = await draftWorryForBehavior({
-    mapTexts: input.mapTexts,
-    goalText: input.goalText,
-    behaviorText: input.behavior.text,
-    pillar: input.pillar,
-    revise: { currentText: worry.text, problems: problemsOf(findings) },
-  }).catch(() => null);
+  // See the note on reviseWorry below: no rewrite for Column 3.
   return {
     rubricReason,
     sharpenText: renderRowSharpen(findings),
-    suggestedFix,
+    suggestedFix: null,
   };
 }
 
@@ -394,7 +386,10 @@ async function fixEntry(
   } else if (ref.table === "behaviors") {
     fix = await reviseBehaviorEntry(findings, ctx);
   } else if (ref.table === "worries") {
-    fix = await reviseWorry(findings, ctx);
+    // No rewrite for Column 3, on either surface. Offering one here
+    // and not on the row is the coach-contradicts-itself split this
+    // codebase keeps closing.
+    fix = null;
   } else if (ref.table === "commitments") {
     fix = await reviseCommitment(findings, ctx);
   } else if (ref.table === "assumptions") {
@@ -424,19 +419,38 @@ async function reviseBehaviorEntry(findings: Finding[], ctx: FixContext): Promis
   }).catch(() => null);
 }
 
-async function reviseWorry(findings: Finding[], ctx: FixContext): Promise<string | null> {
-  const worry = ctx.worries.find((w) => w.id === findings[0].entryRef.id);
-  if (!worry) return null;
-  const behavior = ctx.behaviors.find((b) => b.id === worry.behavior_id);
-  if (!behavior) return null;
-  return draftWorryForBehavior({
-    goalText: ctx.goalText,
-    behaviorText: behavior.text,
-    pillar: ctx.pillar,
-    revise: { currentText: worry.text, problems: problemsOf(findings) },
-    mapTexts: mapTextsOf(ctx),
-  }).catch(() => null);
-}
+/**
+ * Column 3 rewrites: the coach says what is missing, the man writes
+ * the sentence.
+ *
+ * The system used to author the whole worry here, counter-move and
+ * fear together, and the fear is the half it cannot get right. It
+ * offered "if I told the client the honest, limited outcome, I'd be
+ * the guy selling confidence he doesn't actually have" against a
+ * behavior of over-promising: selling confidence he doesn't have IS
+ * over-promising, so the sentence reads "if I stopped overselling I'd
+ * be an overseller". Backwards.
+ *
+ * The check that exists to catch that (scoreWorryDepth criterion 4,
+ * "does this worry explain the behavior as self-protection") was
+ * measured on six fresh cases and got four, missing only in the
+ * permissive direction. Pulling the question out into its own
+ * isolated judge scored zero of four, and the main model failed it
+ * identically to the utility model, so the difficulty is in the
+ * question rather than the model. To answer "does this habit protect
+ * him from this fear or cause it" you have to know what is true
+ * inside one particular man's head, and both readings are
+ * constructible from the text every time.
+ *
+ * That is the same wall that made fresh drafts openings-only: the
+ * counter-move is mechanical and the server is right about it every
+ * time; the fear is his. This was the last path still authoring it.
+ * Detecting bad fears kept leaking; not generating them does not.
+ *
+ * The row still gets sharpenText, which names precisely what is
+ * missing. CoachFixBox renders the lines alone when there is no
+ * rewrite (it has always handled a null fix).
+ */
 
 async function reviseCommitment(findings: Finding[], ctx: FixContext): Promise<string | null> {
   const commitment = ctx.commitments.find((c) => c.id === findings[0].entryRef.id);

@@ -137,6 +137,41 @@ describe("the assumption box shows the stem it is going to save", () => {
   });
 });
 
+describe("seen-by-others is a valid worry, on every surface that mentions it", () => {
+  // Coach's Guide Vol 1 p 13 asks the coachee, twice, in one
+  // sentence each: "How would doing the opposite damage the way you
+  // most like to SEE YOURSELF OR BE SEEN?" and "...cause you to SEE
+  // YOURSELF OR BE SEEN the way you would least like?" Both halves,
+  // joined by "or". Their worked maps lean on the second: "Fears:
+  // I'll be seen...", "being seen as arrogant", "My self-worth is
+  // based on how others view me".
+  //
+  // The app had three surfaces and two positions. The intro he reads
+  // BEFORE writing said "not what they'd feel or how it'd look to
+  // someone else"; the rubric required a predicate naming who he'd
+  // be SEEN AS; the drafter's canonical shapes are "they'd see..."
+  // and "I'd be seen as...". So he was told not to write the thing
+  // the app then required of him and generated for him.
+  const intro = readFileSync(resolve(here, "..", "stage-intros.ts"), "utf8");
+
+  it("the worries intro does not rule out how he'd be seen", () => {
+    expect(intro).not.toMatch(/how it'?d look to someone else/i);
+  });
+
+  it("the worries intro says being seen a certain way counts", () => {
+    expect(intro).toMatch(/[Bb]eing seen a certain way counts/);
+  });
+
+  it("it still rules out the other person's feelings, which is the real exclusion", () => {
+    expect(intro).toMatch(/not what they'?d feel/i);
+  });
+
+  it("the rubric agrees rather than contradicting the intro", () => {
+    expect(rubricSource).toMatch(/SEEN AS/);
+    expect(rubricSource).toMatch(/seen as inadequate for the job/);
+  });
+});
+
 describe("criterion 2 judges whose dread it is, and nothing else", () => {
   it("says so explicitly, because overlapping it with criterion 3 gave wrong advice", () => {
     // Live case 2026-09-03. Worry: "if I told the client the honest,

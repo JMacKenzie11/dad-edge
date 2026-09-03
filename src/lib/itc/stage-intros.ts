@@ -57,7 +57,7 @@ What makes a good behavior:
 
 What makes a good worry:
 • A real gut-level fear, not a practical concern ("they'd be annoyed" or "we'd fall behind" don't count)
-• About what YOU dread, not what they'd feel or how it'd look to someone else
+• About what YOU dread, not what they'd feel. Being seen a certain way counts, and is the most common shape: "they'd see I'm a fraud" is a fear about you. "They'd be annoyed" is about them
 • Says something about WHO YOU ARE. A label about you ("I'd be a fraud"), or a role you'd have failed at ("the coach who couldn't deliver")
 • The behavior protects you from it. Doing the behavior is what keeps this fear from coming true. If the behavior is what causes the thing you named, that's a price you pay, not the fear underneath.`,
   commitments: () =>
