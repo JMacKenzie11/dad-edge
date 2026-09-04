@@ -1,3 +1,16 @@
+/**
+ * LIVE test: every case here calls the real model.
+ *
+ * That means it can fail for no reason, because the model words a
+ * title slightly differently each run. It sat in the fast suite until
+ * 2026-09-04 and flaked there, which is worse than it sounds: once a
+ * fast suite cries wolf you stop believing it, and a real failure gets
+ * shrugged off and re-run.
+ *
+ * It runs with `npm run test:itc:live` alongside the ITC regressions.
+ * `npm run test:itc` excludes it so that suite stays deterministic:
+ * if the fast one goes red, something is actually broken.
+ */
 import { describe, expect, it } from "vitest";
 import { suggestConversationTitle } from "@/lib/coach/title";
 
