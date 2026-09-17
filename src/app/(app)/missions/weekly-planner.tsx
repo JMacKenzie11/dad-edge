@@ -12,7 +12,6 @@ type Bucket = {
   subtitle: string | null;
   pillarCode: PillarCode;
   goalId: string | null;
-  goalDescription: string | null;
   accentColor: string;
 };
 
@@ -23,6 +22,7 @@ export function WeeklyPlanner({
   activeGoals,
   missions,
   carriedForwardIds,
+  todayISO,
   readOnly,
 }: {
   communityId: string | null;
@@ -34,6 +34,9 @@ export function WeeklyPlanner({
    *  in the wider load window. Used to disable → NEXT WEEK on rows
    *  that have already been carried, so guys don't spawn duplicates. */
   carriedForwardIds: Set<string>;
+  /** Today in the member's own timezone (yyyy-MM-dd). Lets a row tell
+   *  whether its day has actually passed. */
+  todayISO: string;
   readOnly: boolean;
 }) {
   const buckets: Bucket[] = [
@@ -45,7 +48,6 @@ export function WeeklyPlanner({
         subtitle: g.desired_end_state,
         pillarCode: g.focus_area,
         goalId: g.id,
-        goalDescription: g.desired_end_state,
         accentColor: p.colorVar,
       };
     }),
@@ -55,7 +57,6 @@ export function WeeklyPlanner({
       subtitle: "Missions not tied to a quarterly goal.",
       pillarCode: "B" as PillarCode,
       goalId: null,
-      goalDescription: null,
       accentColor: "var(--color-warning)",
     },
   ];
@@ -72,6 +73,7 @@ export function WeeklyPlanner({
             bucket={b}
             missions={bucketMissions}
             carriedForwardIds={carriedForwardIds}
+            todayISO={todayISO}
             readOnly={readOnly}
             weekDates={weekDates}
             communityId={communityId}
@@ -86,6 +88,7 @@ function BucketSection({
   bucket,
   missions,
   carriedForwardIds,
+  todayISO,
   readOnly,
   weekDates,
   communityId,
@@ -93,6 +96,7 @@ function BucketSection({
   bucket: Bucket;
   missions: WeekMission[];
   carriedForwardIds: Set<string>;
+  todayISO: string;
   readOnly: boolean;
   weekDates: string[];
   communityId: string | null;
@@ -139,9 +143,9 @@ function BucketSection({
             slotIndex={i}
             communityId={communityId}
             goalId={bucket.goalId}
-            goalDescription={bucket.goalDescription}
             pillarCode={slotPillar}
             carriedForward={slot ? carriedForwardIds.has(slot.id) : false}
+            todayISO={todayISO}
             readOnly={readOnly}
           />
         ))}

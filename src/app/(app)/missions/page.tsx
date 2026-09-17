@@ -152,6 +152,7 @@ export default async function MissionsPage() {
           activeGoals={activeGoals}
           missions={thisWeekMissions}
           carriedForwardIds={carriedForwardIds}
+          todayISO={todayISO}
           readOnly={readOnly}
         />
       </section>
@@ -172,6 +173,7 @@ export default async function MissionsPage() {
             activeGoals={activeGoals}
             missions={nextWeekMissions}
             carriedForwardIds={carriedForwardIds}
+            todayISO={todayISO}
             readOnly={readOnly}
           />
         </section>

@@ -6,11 +6,12 @@ import { scoreMissionDraft } from "@/lib/coach/mission-quality";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// The scorer judges the wording of the mission and the day it's set
+// for. It is not told which pillar or goal the mission sits under, so
+// it has nothing to form an opinion about beyond the writing itself.
 const BodySchema = z.object({
   description: z.string().min(1).max(400),
-  pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "N"]),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-  goal_description: z.string().max(400).nullable(),
 });
 
 export async function POST(req: NextRequest) {

@@ -19,7 +19,7 @@ const JOBS: Array<{
   { key: "mission-nudges", label: "Mission-day nudges", note: "Morning-of email for missions dated today. Time-gated to 08:00 local.", forceable: true },
   { key: "disengagement", label: "Disengagement scan", note: "Day 3 / 7 / 14 emails." },
   { key: "week-lock", label: "Week lock", note: "Insert current-week rows, lock last week, warn members 2 days before lock (email + bell)." },
-  { key: "mark-missed", label: "Mark missed", note: "Move planned missions past their target date to missed." },
+  { key: "mark-missed", label: "Mark missed", note: "Move planned missions past their target date to missed, and put missions rescheduled for a future day back to planned." },
   { key: "digest", label: "Weekly digest", note: "Generate and email last week's digest to leaders (+ bell notification)." },
   { key: "exemplar-novelty", label: "Exemplar novelty scan", note: "Prune near-duplicate exemplar missions per pillar (weekly)." },
   { key: "mark-goals-for-review", label: "Mark goals for review", note: "Flip active goals to needs_review when quarter is closing; bell notifies each coachee." },

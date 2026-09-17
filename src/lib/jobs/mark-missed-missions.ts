@@ -9,7 +9,25 @@ import type { JobResult } from "@/lib/jobs/utils";
  */
 export async function runMarkMissedMissions(now: Date = new Date()): Promise<JobResult> {
   const svc = createSupabaseServiceClient();
+  const today = format(now, "yyyy-MM-dd");
   const yesterday = format(new Date(now.getTime() - 86400_000), "yyyy-MM-dd");
+
+  // Heal first: a mission whose day hasn't arrived yet is not missed.
+  // Rescheduling a missed mission forward now resets it in the action
+  // itself, but rows written before that fix — and any row whose date
+  // moves by another path — would otherwise stay missed forever,
+  // because the marking pass below only ever writes planned -> missed.
+  // Strictly the inverse condition, so the two passes can't fight.
+  const { data: healed, error: healError } = await svc
+    .from("missions")
+    .update({ status: "planned" })
+    .eq("status", "missed")
+    .gte("target_date", today)
+    .select("id");
+  if (healError) {
+    return { job: "mark-missed", ok: false, errors: [healError.message] };
+  }
+
   const { data, error } = await svc
     .from("missions")
     .update({ status: "missed" })
@@ -19,5 +37,9 @@ export async function runMarkMissedMissions(now: Date = new Date()): Promise<Job
   if (error) {
     return { job: "mark-missed", ok: false, errors: [error.message] };
   }
-  return { job: "mark-missed", ok: true, processed: (data ?? []).length };
+  return {
+    job: "mark-missed",
+    ok: true,
+    processed: (data ?? []).length + (healed ?? []).length,
+  };
 }

@@ -6,6 +6,7 @@ import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { resolveTargetDates, shiftDatesByOneWeek } from "./target-dates";
+import { localDate } from "@/lib/scoring/week";
 import { captureServerEvent } from "@/lib/analytics/server";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
@@ -104,11 +105,12 @@ export async function updateMission(
     patch.target_dates !== undefined || patch.target_date !== undefined;
 
   let resolvedNext: { dates: string[]; deadline: string } | null = null;
+  let currentStatus: "planned" | "completed" | "missed" | "rolled_over" | null = null;
   if (patch.description !== undefined || wantsDateChange) {
     const supabase = await createSupabaseServerClient();
     const { data: existing } = await supabase
       .from("missions")
-      .select("description, target_date, target_dates")
+      .select("description, target_date, target_dates, status")
       .eq("id", mission_id)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -117,7 +119,9 @@ export async function updateMission(
       description: string;
       target_date: string;
       target_dates: string[] | null;
+      status: "planned" | "completed" | "missed" | "rolled_over";
     };
+    currentStatus = row.status;
     const nextDescription = patch.description ?? row.description;
     if (wantsDateChange) {
       resolvedNext = resolveTargetDates({
@@ -150,6 +154,19 @@ export async function updateMission(
     update.target_dates = resolvedNext.dates;
   }
   if (patch.quality_score !== undefined) update.quality_score = patch.quality_score;
+  // Moving a missed mission to a day that hasn't happened yet puts it
+  // back in play. Without this the row kept its `missed` status
+  // forever: the nightly job only ever writes planned -> missed, so a
+  // mission marked missed on Monday still read MISSED after being
+  // rescheduled for Saturday. Only `missed` is reversible here —
+  // completed and rolled_over rows are left alone.
+  if (
+    currentStatus === "missed" &&
+    resolvedNext &&
+    resolvedNext.deadline >= localDate(new Date(), user.timezone)
+  ) {
+    update.status = "planned";
+  }
 
   const { error } = await supabase
     .from("missions")

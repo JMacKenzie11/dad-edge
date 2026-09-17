@@ -62,11 +62,12 @@ type SlotProps = {
   slotIndex: number;
   communityId: string | null;
   goalId: string | null;
-  goalDescription: string | null;
   pillarCode: PillarCode;
   /** True when this mission already has a carry-forward child in next
    *  week's data. Disables → NEXT WEEK so guys don't spawn duplicates. */
   carriedForward: boolean;
+  /** Today in the member's own timezone (yyyy-MM-dd). */
+  todayISO: string;
   readOnly: boolean;
 };
 
@@ -79,7 +80,6 @@ function EmptySlot({
   slotIndex,
   communityId,
   goalId,
-  goalDescription,
   pillarCode,
   readOnly,
 }: SlotProps) {
@@ -118,9 +118,7 @@ function EmptySlot({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             description,
-            pillar_code: pillarCode,
             target_date: weekDates[dayIndexes[dayIndexes.length - 1]],
-            goal_description: goalDescription,
           }),
         });
         if (seq !== scoreSeq.current) return;
@@ -133,7 +131,7 @@ function EmptySlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndexes, weekDates, pillarCode, goalDescription]);
+  }, [description, dayIndexes, weekDates]);
 
   if (readOnly) {
     return (
@@ -195,7 +193,11 @@ function EmptySlot({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <textarea
           ref={inputRef}
-          rows={1}
+          // Two rows, not one: the placeholder wraps at this column
+          // width and a 1-row box clipped its second line behind
+          // `overflow-hidden` before the man had typed anything.
+          // useAutoResize grows from here as he types.
+          rows={2}
           maxLength={280}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -264,8 +266,8 @@ function EmptySlot({
 function FilledSlot({
   mission,
   weekDates,
-  goalDescription,
   carriedForward,
+  todayISO,
   readOnly,
 }: SlotProps & { mission: WeekMission }) {
   const [description, setDescription] = useState(mission.description);
@@ -340,10 +342,8 @@ function FilledSlot({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             description,
-            pillar_code: mission.pillar_code,
             target_date:
               weekDates[dayIndexes[dayIndexes.length - 1]] ?? mission.target_date,
-            goal_description: goalDescription,
           }),
         });
         if (seq !== scoreSeq.current) return;
@@ -356,10 +356,16 @@ function FilledSlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndexes, weekDates, mission.pillar_code, mission.target_date, mission.status, goalDescription]);
+  }, [description, dayIndexes, weekDates, mission.target_date, mission.status]);
 
   const isDone = mission.status === "completed";
-  const isMissed = mission.status === "missed";
+  // A mission only reads as missed once its last day has actually
+  // gone by. The nightly job writes the status and nothing used to
+  // clear it, so a mission marked missed and then rescheduled for
+  // later in the week kept shouting MISSED at a day that hadn't
+  // happened yet. The server now resets those on reschedule; this is
+  // the belt-and-braces for rows written before that fix.
+  const isMissed = mission.status === "missed" && mission.target_date < todayISO;
   const displayDates =
     mission.target_dates && mission.target_dates.length > 0
       ? mission.target_dates
@@ -454,8 +460,16 @@ function FilledSlot({
             />
           )}
           {isMissed && !isDone ? (
-            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-warning)] mt-1">
-              MISSED
+            <p className="text-[10px] mt-1">
+              <span className="font-heading tracking-widest text-[color:var(--color-warning)]">
+                MISSED
+              </span>
+              <span className="text-[color:var(--color-text-muted)]">
+                {" · "}
+                {format(new Date(`${mission.target_date}T00:00:00`), "EEEE")}{" "}
+                came and went without a COMPLETE. You can still complete it —
+                it&rsquo;ll log as late — or send it to next week.
+              </span>
             </p>
           ) : null}
         </div>

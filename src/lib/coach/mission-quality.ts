@@ -1,19 +1,15 @@
 import { z } from "zod";
 import { generateObject } from "ai";
 import { utilityModel } from "@/lib/model-config";
-import type { PillarCode } from "@/lib/pillars";
-import { PILLAR_BY_CODE } from "@/lib/pillars";
 
 /**
  * Live quality gate for missions. Called from the client as the man types
  * (debounced). Uses Haiku with a rubric prompt so it's cheap and fast.
  *
- * The five criteria (each 0/1/2):
- *   Concrete      — you'll know exactly what "done" looks like
- *   Binary        — you either did it or you didn't
- *   High-Leverage — designed to move the needle, not check a box
- *   Aligned       — reinforces the man he's becoming (goal + pillar)
- *   Time-bound    — when you'll do it is clearly defined
+ * The three criteria:
+ *   Concrete   (0-4) — you'll know exactly what "done" looks like
+ *   Binary     (0-4) — you either did it or you didn't
+ *   Time-bound (0-2) — the day you'll do it is picked
  *
  * Total 0-10. Ready = total >= 8 AND no criterion is 0.
  *
@@ -22,29 +18,46 @@ import { PILLAR_BY_CODE } from "@/lib/pillars";
  * about domain choices ("swap sauna for a long walk mission") no
  * matter how many banned phrases we listed. Removed. The LLM now
  * scores only; the client renders a fixed per-criterion sentence for
- * anything under 2. Same principle as the honing rework — deterministic
- * renderer over LLM prose.
+ * anything under full marks. Same principle as the honing rework —
+ * deterministic renderer over LLM prose.
+ *
+ * ARCHITECTURAL NOTE (2026-09-17): the rubric used to carry two more
+ * criteria — "high-leverage" (is this in the pillar's domain?) and
+ * "aligned" (does this serve the quarterly goal?). Both scored the
+ * man's CHOICE of activity, not the quality of his mission wording,
+ * and both leaked out as coach copy telling him a sardine mission was
+ * "off-pillar for Bond". That's his call, not the coach's. Dropped
+ * outright rather than muzzled: the pillar and the goal are no longer
+ * passed to the renderer at all, so there is no code path that can
+ * produce a domain judgement. The remaining weights (4/4/2) keep the
+ * total on the 0-10 scale the pill, the DB column and the exemplar
+ * rule already speak.
  */
 
-export const CRITERIA = ["concrete", "binary", "leverage", "aligned", "time_bound"] as const;
+export const CRITERIA = ["concrete", "binary", "time_bound"] as const;
 export type Criterion = (typeof CRITERIA)[number];
+
+/** Max points per criterion. Sums to 10. */
+export const CRITERION_MAX: Record<Criterion, number> = {
+  concrete: 4,
+  binary: 4,
+  time_bound: 2,
+};
 
 const SchemaZ = z.object({
   scores: z.object({
-    concrete: z.number().int().min(0).max(2),
-    binary: z.number().int().min(0).max(2),
-    leverage: z.number().int().min(0).max(2),
-    aligned: z.number().int().min(0).max(2),
+    concrete: z.number().int().min(0).max(4),
+    binary: z.number().int().min(0).max(4),
     time_bound: z.number().int().min(0).max(2),
   }),
 });
 
 export type MissionScore = {
-  scores: Record<Criterion, 0 | 1 | 2>;
+  scores: Record<Criterion, number>;
   total: number;
   ready: boolean;
-  /** Rendered client-side from the lowest-scoring criterion. Always
-   *  about WORDING SHAPE — never about the activity the man chose. */
+  /** Rendered client-side from the weakest criterion. Always about
+   *  WORDING — never about the activity the man chose. */
   feedback: string;
   /** Kept in the type for callsite compatibility; always null now.
    *  The rewrite feature was an LLM affordance that consistently
@@ -52,26 +65,36 @@ export type MissionScore = {
   rewrite: null;
 };
 
-const SYSTEM = `You are a mission-quality rubric for a men's coaching app. You judge the SHAPE of a mission — is the wording specific, verifiable, on-topic, and dated? You do NOT judge the man's domain choices (which exercise, which training method, which conversation topic, which business tactic). That's HIS call, not yours.
+const SYSTEM = `You are a mission-quality rubric for a men's coaching app. You judge ONE thing: is the mission written so that anyone could tell, at the end of the week, whether it happened?
 
-Score five criteria on a 0-2 scale and return JSON only. Scores only — no feedback prose, no rewrites, no commentary. The client renders any user-facing text.
+You do NOT judge what the man chose to do. Not the activity, not the exercise, not the food, not the training method, not the conversation topic, not the business tactic, and not whether it fits a pillar or serves a goal. That is HIS call. A mission you would never have picked still scores 10/10 if it is written clearly.
 
-- concrete    (0=vague, 1=partial, 2=specific behavior anyone could witness)
-- binary      (0=fuzzy verb, 1=binary but ambiguous, 2=clearly done-or-not)
-- leverage    (0=busywork with no plausible connection to the pillar, 1=plausible connection, 2=obviously in-pillar). Score based on whether the mission is IN-PILLAR at all, not whether it's the optimal path to the goal. "Lift weights 4x" for a Vitality goal is 2 (in-pillar), even if the man's specific goal is a walking goal — the choice of modality is his.
-- aligned     (0=off-theme for the pillar, 1=on-theme for the pillar but doesn't obviously serve THIS goal, 2=on-theme AND obviously serves this goal). "Doesn't obviously serve this goal" is fine — 1 is a pass. Do not push the man toward a different mission because you'd program his training differently.
-- time_bound  Missions are always done within a specific week and the target_date field captures the day. Score from the target_date input line:
-              * target_date is set → time_bound=2
-              * target_date is missing → time_bound=0
-              Do NOT dock time_bound because the description says "on Wednesday" without a date.
+Score three criteria and return JSON only. Scores only — no feedback prose, no rewrites, no commentary. The client renders any user-facing text.
+
+- concrete (0-4): how specific the behavior is.
+    0 = no behavior a witness could name ("be better with money")
+    2 = a real behavior, missing the specifics ("go for a walk")
+    4 = behavior plus the specifics that pin it down — a number, a duration, a distance, a person, a place ("walk 10 km on the river trail with Tanja")
+- binary (0-4): how cleanly done-or-not it reads.
+    0 = fuzzy verb with no end-state ("focus on my marriage")
+    2 = you could argue either way ("spend more time praying")
+    4 = you either did it or you didn't, no argument ("pray before 6 AM every day this week")
+- time_bound (0-2): read this off the target_date input line ONLY.
+    target_date is set -> 2
+    target_date is missing -> 0
+    Do NOT dock time_bound because the description doesn't name a day. The day is picked in the UI, not typed.
 
 Return only the scores object. Nothing else.`;
 
+/**
+ * Deliberately narrow: the description and the day, nothing else. The
+ * pillar and the quarterly goal used to ride along here and were the
+ * only inputs that let the model form an opinion about what the man
+ * chose to do. They are gone from the wire, not just from the prompt.
+ */
 type ScoreInput = {
   description: string;
-  pillar_code: PillarCode;
   target_date: string | null;
-  goal_description: string | null;
 };
 
 export async function scoreMissionDraft(input: ScoreInput): Promise<MissionScore> {
@@ -80,17 +103,11 @@ export async function scoreMissionDraft(input: ScoreInput): Promise<MissionScore
     return emptyScore("Write at least a few words.");
   }
 
-  const pillar = PILLAR_BY_CODE[input.pillar_code];
-  const goalLine = input.goal_description
-    ? `Goal it serves: ${input.goal_description}`
-    : "Goal it serves: (unattached — should reinforce the pillar directly)";
   const dateLine = input.target_date
     ? `Target date: ${input.target_date}`
     : "Target date: (none — auto-fails Time-bound)";
 
-  const userPrompt = `Pillar: ${pillar.label} (${input.pillar_code})
-${goalLine}
-${dateLine}
+  const userPrompt = `${dateLine}
 
 Mission draft:
 """
@@ -107,15 +124,14 @@ Return JSON only.`;
       prompt: userPrompt,
       maxOutputTokens: 200,
     });
-    const scores = object.scores as Record<Criterion, 0 | 1 | 2>;
-    const total =
-      scores.concrete + scores.binary + scores.leverage + scores.aligned + scores.time_bound;
-    const ready = total >= 8 && Object.values(scores).every((s) => s > 0);
+    const scores = object.scores as Record<Criterion, number>;
+    const total = scores.concrete + scores.binary + scores.time_bound;
+    const ready = total >= 8 && CRITERIA.every((c) => scores[c] > 0);
     return {
       scores,
       total,
       ready,
-      feedback: renderMissionFeedback(scores, pillar.label),
+      feedback: renderMissionFeedback(scores),
       rewrite: null,
     };
   } catch (err) {
@@ -126,7 +142,7 @@ Return JSON only.`;
 
 function emptyScore(feedback: string): MissionScore {
   return {
-    scores: { concrete: 0, binary: 0, leverage: 0, aligned: 0, time_bound: 0 },
+    scores: { concrete: 0, binary: 0, time_bound: 0 },
     total: 0,
     ready: false,
     feedback,
@@ -135,57 +151,42 @@ function emptyScore(feedback: string): MissionScore {
 }
 
 /**
- * Deterministic per-criterion feedback. Picks the lowest-scoring
- * criterion (ties broken by CRITERIA order) and returns a fixed
- * shape-only sentence. Never talks about activity choice, training
- * modality, conversation topic, or business tactic — impossible by
- * construction because the sentences are hardcoded.
+ * Deterministic per-criterion feedback. Picks the weakest criterion by
+ * share of its available points (ties broken by CRITERIA order) and
+ * returns a fixed sentence about the WORDING. It takes no pillar and
+ * no goal, so it cannot comment on what the man chose to do.
  */
-export function renderMissionFeedback(
-  scores: Record<Criterion, 0 | 1 | 2>,
-  pillarLabel: string,
-): string {
-  const total = scores.concrete + scores.binary + scores.leverage + scores.aligned + scores.time_bound;
-  const perfect = Object.values(scores).every((s) => s === 2);
+export function renderMissionFeedback(scores: Record<Criterion, number>): string {
+  const total = scores.concrete + scores.binary + scores.time_bound;
+  const perfect = CRITERIA.every((c) => scores[c] === CRITERION_MAX[c]);
   if (perfect) return "Sharp mission. Ready to run.";
-  if (total >= 8 && Object.values(scores).every((s) => s > 0)) {
-    return "Ready to save — every criterion clears. Tighten the wording if you feel it, otherwise ship it.";
+  if (total >= 8 && CRITERIA.every((c) => scores[c] > 0)) {
+    return "Ready to save — it's clear enough to hold you to. Tighten the wording if you feel it, otherwise ship it.";
   }
-  const weakest = CRITERIA.slice().sort((a, b) => scores[a] - scores[b])[0];
-  if (scores[weakest] === 0) return CRITIQUE_ZERO[weakest](pillarLabel);
-  return CRITIQUE_ONE[weakest](pillarLabel);
+  const weakest = CRITERIA.slice().sort(
+    (a, b) => scores[a] / CRITERION_MAX[a] - scores[b] / CRITERION_MAX[b],
+  )[0];
+  return (scores[weakest] === 0 ? CRITIQUE_ZERO : CRITIQUE_PARTIAL)[weakest];
 }
 
-const CRITIQUE_ZERO: Record<Criterion, (pillar: string) => string> = {
-  concrete: () =>
+const CRITIQUE_ZERO: Record<Criterion, string> = {
+  concrete:
     "Wording is vague. Add specifics — a number, a distance, a duration, a person, a place.",
-  binary: () =>
-    "The done-or-not test is fuzzy. Add the observable end-state — reps, time, message sent, etc.",
-  leverage: (pillar) =>
-    `This reads as off-pillar for ${pillar}. Point the mission at something inside the pillar's domain.`,
-  aligned: () =>
-    "This doesn't connect to your goal. Restate so the link is obvious.",
-  time_bound: () =>
-    "Pick a target day on the row.",
+  binary:
+    "The done-or-not test is fuzzy. Add the observable end-state — reps, time, message sent.",
+  time_bound: "Pick a target day on the row.",
 };
 
-const CRITIQUE_ONE: Record<Criterion, (pillar: string) => string> = {
-  concrete: () =>
+const CRITIQUE_PARTIAL: Record<Criterion, string> = {
+  concrete:
     "Add one more specific — a number, a distance, a name — so anyone reading it knows what done looks like.",
-  binary: () =>
+  binary:
     "The done test is close but not binary yet. Name the exact end-state (a count, a threshold, a checkpoint).",
-  leverage: () =>
-    "In-pillar but light. If you want more weight on this mission, tighten the connection to the goal.",
-  aligned: () =>
-    "On-theme for the pillar, connection to THIS goal is loose. Fine to save; tighten the tie if you want the coach to promote it.",
-  time_bound: () =>
-    "Timing is close but not locked. Pick a specific day on the row.",
+  time_bound: "Timing is close but not locked. Pick a specific day on the row.",
 };
 
 export const CRITERION_LABEL: Record<Criterion, string> = {
   concrete: "Concrete",
   binary: "Binary",
-  leverage: "High-leverage",
-  aligned: "Aligned",
   time_bound: "Time-bound",
 };
