@@ -18,11 +18,12 @@ const items = [
 ] as const;
 
 /**
- * Left-nav-only entries. My Braveman (personal analytics) sits at
- * the top; Goals under it. Community follows on the desktop nav per
- * product decision 2026-08-24 — planning and comparison surfaces
- * group together above the daily work items. Messages lives at the
- * bottom of this group since it's peer-driven, not planning.
+ * Left-nav-only entries. Goals and Missions sit together near the
+ * top — a mission is set against a goal, so the goal is the thing
+ * you check just before you plan the week. My Braveman (personal
+ * analytics) and Community follow, grouping the comparison surfaces
+ * below the weekly work. Messages lives at the bottom of the group
+ * since it's peer-driven, not planning.
  */
 const todayItem = { href: "/today", label: "Today", icon: "▣" } as const;
 const missionsItem = { href: "/missions", label: "Missions", icon: "◆" } as const;
@@ -66,18 +67,19 @@ export function BottomNav() {
 
 export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
   const pathname = usePathname();
-  // Desktop order: Today → Missions → My Braveman → Community →
-  // Coach Larry → Goals → Me → Messages → Admin (if platform admin).
-  // Missions sits directly under Today because logging today's pillars
-  // and hitting missions for the week are the two most-frequent
-  // daily jobs; keeping them adjacent shortens the scan.
+  // Desktop order: Today → Goals → Missions → My Braveman →
+  // Community → Coach Larry → Me → Messages → Admin (if platform
+  // admin). Goals moved up from below Coach Larry to sit directly
+  // above Missions (2026-09-17): missions are set against a quarterly
+  // goal, so the two get read together, and Goals was buried far
+  // enough down the list that the link was easy to miss.
   const base = [
     todayItem,
+    goalsItem,
     missionsItem,
     dashboardItem,
     communityItem,
     coachItem,
-    goalsItem,
     meItem,
     messagesItem,
   ];
