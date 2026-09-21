@@ -11,6 +11,7 @@ import {
   carryMissionToNextWeek,
 } from "./actions";
 import type { WeekMission } from "./page";
+import type { PlannerMode } from "./weekly-planner";
 import type { MissionScore } from "@/lib/coach/mission-quality";
 import { useConfirm } from "@/components/ui/use-confirm";
 
@@ -68,6 +69,8 @@ type SlotProps = {
   carriedForward: boolean;
   /** Today in the member's own timezone (yyyy-MM-dd). */
   todayISO: string;
+  /** "catch-up" is last week during the grace period. */
+  mode: PlannerMode;
   readOnly: boolean;
 };
 
@@ -268,6 +271,7 @@ function FilledSlot({
   weekDates,
   carriedForward,
   todayISO,
+  mode,
   readOnly,
 }: SlotProps & { mission: WeekMission }) {
   const [description, setDescription] = useState(mission.description);
@@ -357,6 +361,12 @@ function FilledSlot({
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
   }, [description, dayIndexes, weekDates, mission.target_date, mission.status]);
+
+  // Carrying shifts a mission one week forward from its own dates, so
+  // from last week's catch-up view the copy lands in THIS week, not
+  // next. The button has to say where it's actually going.
+  const catchUpMode = mode === "catch-up";
+  const carryTargetLabel = catchUpMode ? "this week" : "next week";
 
   const isDone = mission.status === "completed";
   // A mission only reads as missed once its last day has actually
@@ -560,11 +570,11 @@ function FilledSlot({
                 className="h-6 px-2 rounded border border-[color:var(--color-border)] text-[9px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] disabled:opacity-40 disabled:hover:text-[color:var(--color-text-muted)] disabled:hover:border-[color:var(--color-border)] disabled:cursor-not-allowed"
                 title={
                   carriedAlready
-                    ? "Already carried to next week"
-                    : "Duplicate this mission for next week (same days)"
+                    ? `Already carried to ${carryTargetLabel}`
+                    : `Duplicate this mission for ${carryTargetLabel} (same days)`
                 }
               >
-                {carriedAlready ? "✓ CARRIED" : "→ NEXT WEEK"}
+                {carriedAlready ? "✓ CARRIED" : catchUpMode ? "→ THIS WEEK" : "→ NEXT WEEK"}
               </button>
             ) : null}
           </div>

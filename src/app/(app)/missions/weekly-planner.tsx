@@ -6,6 +6,16 @@ import type { WeekMission, ActiveGoal } from "./page";
 
 const SLOTS_PER_BUCKET = 5;
 
+/**
+ * "plan" is the normal week: five slots per bucket, empty ones
+ * invite a new mission. "catch-up" is last week during the grace
+ * period — it shows the missions he already set so he can still
+ * close them out, and nothing else. No empty slots, because grace is
+ * for finishing what you committed to, not for backdating new
+ * commitments onto a week that's already been lived.
+ */
+export type PlannerMode = "plan" | "catch-up";
+
 type Bucket = {
   key: string;
   headerLabel: string;
@@ -23,6 +33,7 @@ export function WeeklyPlanner({
   missions,
   carriedForwardIds,
   todayISO,
+  mode = "plan",
   readOnly,
 }: {
   communityId: string | null;
@@ -37,6 +48,7 @@ export function WeeklyPlanner({
   /** Today in the member's own timezone (yyyy-MM-dd). Lets a row tell
    *  whether its day has actually passed. */
   todayISO: string;
+  mode?: PlannerMode;
   readOnly: boolean;
 }) {
   const buckets: Bucket[] = [
@@ -61,11 +73,20 @@ export function WeeklyPlanner({
     },
   ];
 
+  const goalIds = new Set(activeGoals.map((g) => g.id));
+
   return (
     <div className="space-y-4">
       {buckets.map((b) => {
+        // A mission whose goal has since been completed or archived
+        // matches no goal bucket. In catch-up mode that would make it
+        // vanish from the one screen where he can still close it out,
+        // so the unattached bucket picks up the orphans.
         const bucketMissions = missions.filter((m) =>
-          b.goalId ? m.quarterly_goal_id === b.goalId : m.quarterly_goal_id === null,
+          b.goalId
+            ? m.quarterly_goal_id === b.goalId
+            : m.quarterly_goal_id === null ||
+              (mode === "catch-up" && !goalIds.has(m.quarterly_goal_id)),
         );
         return (
           <BucketSection
@@ -74,6 +95,7 @@ export function WeeklyPlanner({
             missions={bucketMissions}
             carriedForwardIds={carriedForwardIds}
             todayISO={todayISO}
+            mode={mode}
             readOnly={readOnly}
             weekDates={weekDates}
             communityId={communityId}
@@ -89,6 +111,7 @@ function BucketSection({
   missions,
   carriedForwardIds,
   todayISO,
+  mode,
   readOnly,
   weekDates,
   communityId,
@@ -97,14 +120,19 @@ function BucketSection({
   missions: WeekMission[];
   carriedForwardIds: Set<string>;
   todayISO: string;
+  mode: PlannerMode;
   readOnly: boolean;
   weekDates: string[];
   communityId: string | null;
 }) {
   const filled = missions.length;
-  const slots: Array<WeekMission | null> = Array.from({ length: SLOTS_PER_BUCKET }, (_, i) =>
-    missions[i] ?? null,
-  );
+  const catchUp = mode === "catch-up";
+  // Catch-up shows only what's there. A bucket a man never used last
+  // week has nothing to close out, so it doesn't earn a card.
+  if (catchUp && filled === 0) return null;
+  const slots: Array<WeekMission | null> = catchUp
+    ? missions
+    : Array.from({ length: SLOTS_PER_BUCKET }, (_, i) => missions[i] ?? null);
   const slotPillar = bucket.goalId ? bucket.pillarCode : "B";
 
   return (
@@ -117,7 +145,7 @@ function BucketSection({
           className="text-[10px] font-heading tracking-widest"
           style={{ color: bucket.accentColor }}
         >
-          {bucket.headerLabel} · {filled}/{SLOTS_PER_BUCKET}
+          {bucket.headerLabel} · {catchUp ? filled : `${filled}/${SLOTS_PER_BUCKET}`}
         </p>
         {bucket.subtitle ? (
           <p className="text-sm mt-1 text-[color:var(--color-text-muted)]">{bucket.subtitle}</p>
@@ -146,6 +174,7 @@ function BucketSection({
             pillarCode={slotPillar}
             carriedForward={slot ? carriedForwardIds.has(slot.id) : false}
             todayISO={todayISO}
+            mode={mode}
             readOnly={readOnly}
           />
         ))}

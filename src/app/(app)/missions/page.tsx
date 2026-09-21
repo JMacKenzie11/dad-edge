@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { localMonday, localDate, weekDates } from "@/lib/scoring/week";
+import { getEditWindow, weekDates } from "@/lib/scoring/week";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { WeeklyPlanner } from "./weekly-planner";
@@ -53,16 +53,34 @@ export default async function MissionsPage() {
 
   const communityId = (membership as { community_id: string } | null)?.community_id ?? null;
 
-  const monday = localMonday(new Date(), user.timezone);
+  // One source of truth for "how far back can this man still go" —
+  // shared with /today so the two surfaces never disagree about
+  // whether last week is open.
+  const editWindow = await getEditWindow(user.id);
+  const monday = editWindow.thisMonday;
   const week = weekDates(monday);
   const weekEnd = week[6];
+
+  // Last week stays visible while the grace period is open so a man
+  // can still close out missions he finished over the weekend. It
+  // renders in the planner's catch-up mode — existing missions only,
+  // no empty slots to backdate new ones into.
+  const lastMonday = editWindow.lastMonday;
+  const lastWeek = weekDates(lastMonday);
+  const showLastWeek = editWindow.lastWeekOpen;
+  // The week locks ON lastWeekLocksOn, so the last day he can still
+  // touch it is the day before.
+  const lastWeekOpenThrough = format(
+    addDays(new Date(`${editWindow.lastWeekLocksOn}T00:00:00`), -1),
+    "EEEE MMM d",
+  );
 
   // Sunday planning: once it's Sunday (last day of this week), also render
   // next week so guys can front-load Monday. Independent of that: we
   // always LOAD through next week — the extra rows let us detect
   // carry-forward children of this-week missions and disable the
   // → NEXT WEEK button on a mission that's already been carried.
-  const todayISO = localDate(new Date(), user.timezone);
+  const todayISO = editWindow.today;
   const isSunday = todayISO === weekEnd;
   const nextMonday = format(addDays(new Date(`${monday}T00:00:00`), 7), "yyyy-MM-dd");
   const nextWeek = weekDates(nextMonday);
@@ -84,7 +102,7 @@ export default async function MissionsPage() {
         "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id",
       )
       .eq("user_id", user.id)
-      .gte("target_date", monday)
+      .gte("target_date", showLastWeek ? lastMonday : monday)
       .lte("target_date", rangeEnd)
       .neq("status", "rolled_over")
       // Insertion order — newest at the bottom. Ordering by
@@ -96,7 +114,12 @@ export default async function MissionsPage() {
 
   const activeGoals = ((goals ?? []) as ActiveGoal[]).slice(0, 2);
   const allMissions = (missions ?? []) as WeekMission[];
-  const thisWeekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
+  const lastWeekMissions = showLastWeek
+    ? allMissions.filter((m) => m.target_date < monday)
+    : [];
+  const thisWeekMissions = allMissions.filter(
+    (m) => m.target_date >= monday && m.target_date <= weekEnd,
+  );
   const nextWeekMissions = allMissions.filter((m) => m.target_date >= nextMonday);
   const carriedForwardIds = new Set(
     allMissions
@@ -138,6 +161,30 @@ export default async function MissionsPage() {
             SET A GOAL
           </Link>
         </div>
+      ) : null}
+
+      {showLastWeek && lastWeekMissions.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">
+            LAST WEEK · {format(new Date(`${lastMonday}T00:00:00`), "MMM d")}–
+            {format(new Date(`${lastWeek[6]}T00:00:00`), "MMM d")}
+          </h2>
+          <p className="text-[11px] text-[color:var(--color-text-muted)]">
+            Open through {lastWeekOpenThrough}. Mark anything you finished over
+            the weekend — it logs as late, but it counts.
+          </p>
+          <WeeklyPlanner
+            communityId={communityId}
+            weekMonday={lastMonday}
+            weekDates={lastWeek}
+            activeGoals={activeGoals}
+            missions={lastWeekMissions}
+            carriedForwardIds={carriedForwardIds}
+            todayISO={todayISO}
+            mode="catch-up"
+            readOnly={readOnly}
+          />
+        </section>
       ) : null}
 
       <section className="space-y-3">

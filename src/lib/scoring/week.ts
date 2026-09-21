@@ -79,67 +79,119 @@ export function missionScore(
 }
 
 /**
- * Earliest date the user can still edit on `/today` when navigating back
- * in time. Returns YYYY-MM-DD in the user's community timezone.
+ * The member's edit window: how far back they can still go to fix
+ * last week's numbers, and whether last week is still open at all.
  *
- * Rule: users can edit any day up through today, back to the day AFTER
- * their community's most recent locked week. Fully-locked weeks are
- * immutable — the score would otherwise drift after the fact and
- * digests / leaderboards would silently rewrite.
+ * Rule: a week stays editable until `week_lock_days` have passed
+ * since it ended — the same arithmetic the week-lock job uses. Only
+ * last week and this week are ever in play; anything older is closed.
  *
- * Multi-community users get the MOST RESTRICTIVE boundary — if any of
- * their communities has locked a week, that week is off-limits
- * everywhere. Rare edge case in practice but the alternative (per-
- * community edit windows) would need per-day UI, not worth it.
+ * Multi-community members get the MOST PERMISSIVE window — last week
+ * stays open until the grace period of EVERY community they're in has
+ * run out. It used to be the most restrictive, which meant joining a
+ * community with a tight lock silently shortened the member's window
+ * everywhere: a man in a 3-day community and a 1-day community lost
+ * his weekend on Monday morning, with nothing in the UI explaining
+ * why (2026-09-21). Check-ins and missions are user-level rows, not
+ * community-level, so there is one window per man, and the community
+ * that gave him the most room is the one that should decide it.
  *
- * Falls back to the current week's Monday when nothing is locked yet
- * (fresh app, dev DB, etc.).
+ * Computed from the calendar and the lock config rather than read off
+ * `weeks.locked_at`, so the window is correct whether or not the
+ * nightly job has run, and an admin's change to EDIT GRACE takes
+ * effect immediately instead of next lock.
+ */
+export type EditWindow = {
+  /** The member's primary community timezone (UTC with no membership). */
+  timezone: string;
+  /** Today, in that timezone. */
+  today: string;
+  /** Monday of the current week. */
+  thisMonday: string;
+  /** Monday of the week before. */
+  lastMonday: string;
+  /** True while last week can still be edited. */
+  lastWeekOpen: boolean;
+  /** The date last week closes for good — for UI copy. */
+  lastWeekLocksOn: string;
+  /** Earliest editable date: lastMonday while open, else thisMonday. */
+  earliest: string;
+};
+
+export async function getEditWindow(
+  userId: string,
+  now: Date = new Date(),
+): Promise<EditWindow> {
+  const supabase = await createSupabaseServerClient();
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("communities:community_id(timezone, week_lock_days)")
+    .eq("user_id", userId)
+    .eq("status", "active");
+  const communities = ((memberships ?? []) as Array<{
+    communities:
+      | { timezone: string; week_lock_days: number }
+      | { timezone: string; week_lock_days: number }[]
+      | null;
+  }>)
+    .map((m) => (Array.isArray(m.communities) ? m.communities[0] : m.communities))
+    .filter((c): c is { timezone: string; week_lock_days: number } => Boolean(c));
+
+  const timezone = communities[0]?.timezone ?? "UTC";
+  // No membership: fall back to the schema default rather than zero,
+  // which would slam the window shut on a man between memberships.
+  const graceDays = communities.length
+    ? Math.max(...communities.map((c) => c.week_lock_days))
+    : 3;
+
+  return resolveEditWindow(now, timezone, graceDays);
+}
+
+/**
+ * The calendar half of {@link getEditWindow}, with the membership
+ * lookup already done. Pure — exported so the arithmetic can be
+ * tested directly against a fixed `now`.
+ */
+export function resolveEditWindow(
+  now: Date,
+  timezone: string,
+  graceDays: number,
+): EditWindow {
+  const today = localDate(now, timezone);
+  const thisMonday = localMonday(now, timezone);
+  // Parsed WITHOUT the Z: addDays and format below both work in the
+  // runtime's own timezone, so the anchor has to be read the same
+  // way. Parsing as UTC and formatting as local slides the result a
+  // day backwards on any host west of UTC — right on Vercel, wrong
+  // on a developer's laptop, which is the worst kind of wrong.
+  const thisMondayDate = new Date(`${thisMonday}T00:00:00`);
+  const lastMonday = format(addDays(thisMondayDate, -7), "yyyy-MM-dd");
+  // Last week ended on the Sunday before this Monday. It locks
+  // `graceDays` later — the job's own `daysAfterEnd >= week_lock_days`.
+  const lastWeekEnd = addDays(thisMondayDate, -1);
+  const lastWeekLocksOn = format(addDays(lastWeekEnd, graceDays), "yyyy-MM-dd");
+  const lastWeekOpen = today < lastWeekLocksOn;
+
+  return {
+    timezone,
+    today,
+    thisMonday,
+    lastMonday,
+    lastWeekOpen,
+    lastWeekLocksOn,
+    earliest: lastWeekOpen ? lastMonday : thisMonday,
+  };
+}
+
+/**
+ * Earliest date the user can still edit on `/today` when navigating
+ * back in time. Thin wrapper over {@link getEditWindow}.
  */
 export async function getEarliestEditableDate(
   userId: string,
   now: Date = new Date(),
 ): Promise<string> {
-  const supabase = await createSupabaseServerClient();
-  const { data: memberships } = await supabase
-    .from("memberships")
-    .select("community_id, communities:community_id(timezone)")
-    .eq("user_id", userId)
-    .eq("status", "active");
-  const rows = ((memberships ?? []) as Array<{
-    community_id: string;
-    communities:
-      | { timezone: string }
-      | { timezone: string }[]
-      | null;
-  }>);
-  const communityIds = rows.map((r) => r.community_id);
-  const timezone =
-    (Array.isArray(rows[0]?.communities)
-      ? rows[0]?.communities[0]?.timezone
-      : rows[0]?.communities?.timezone) ?? "UTC";
-
-  const fallback = localMonday(now, timezone);
-  if (communityIds.length === 0) return fallback;
-
-  const { data: locked } = await supabase
-    .from("weeks")
-    .select("start_date")
-    .in("community_id", communityIds)
-    .not("locked_at", "is", null)
-    .order("start_date", { ascending: false })
-    .limit(1);
-  const latestLockedStart = ((locked ?? []) as Array<{ start_date: string }>)[0]?.start_date;
-  if (!latestLockedStart) return fallback;
-
-  // Locked week runs latestLockedStart..+6. Earliest editable = +7 (next Monday).
-  const earliest = format(
-    addDays(new Date(`${latestLockedStart}T00:00:00Z`), 7),
-    "yyyy-MM-dd",
-  );
-  // Guard against a future-dated week row somehow being "locked" — the
-  // earliest editable should never be later than today.
-  const todayLocal = localDate(now, timezone);
-  return earliest > todayLocal ? todayLocal : earliest;
+  return (await getEditWindow(userId, now)).earliest;
 }
 
 /**
