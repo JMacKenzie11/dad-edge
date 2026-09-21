@@ -5,7 +5,10 @@ import { getEditWindow, weekDates } from "@/lib/scoring/week";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { WeeklyPlanner } from "./weekly-planner";
+import { WeekNavigator } from "./week-navigator";
+import { resolveMissionWeek } from "./week-nav";
 import type { PillarCode } from "@/lib/pillars";
+import { redirect } from "next/navigation";
 import { format, addDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +42,16 @@ export type ActiveGoal = {
   quarter_start: string;
 };
 
-export default async function MissionsPage() {
+/** Shift a yyyy-MM-dd Monday by whole weeks. */
+function shiftWeek(monday: string, weeks: number): string {
+  return format(addDays(new Date(`${monday}T00:00:00`), weeks * 7), "yyyy-MM-dd");
+}
+
+export default async function MissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
   const { user, readOnly } = await requireAccess();
   const supabase = await createSupabaseServerClient();
 
@@ -57,36 +69,44 @@ export default async function MissionsPage() {
   // shared with /today so the two surfaces never disagree about
   // whether last week is open.
   const editWindow = await getEditWindow(user.id);
-  const monday = editWindow.thisMonday;
-  const week = weekDates(monday);
+  const thisMonday = editWindow.thisMonday;
+  const lastMonday = editWindow.lastMonday;
+  const nextMonday = shiftWeek(thisMonday, 1);
+  const todayISO = editWindow.today;
+  const thisWeekEnd = weekDates(thisMonday)[6];
+  // Sunday planning: on the last day of the week, next week opens up
+  // so guys can front-load Monday.
+  const isSunday = todayISO === thisWeekEnd;
+
+  // Which weeks the arrows can reach. Back only while the community
+  // grace period is still open; forward only on a Sunday.
+  const canGoBack = editWindow.lastWeekOpen;
+  const canGoForward = isSunday;
+
+  // Resolve ?week=. Anything out of range or malformed drops back to
+  // the canonical /missions, so a stale bookmark pointing at a
+  // since-locked week still lands somewhere useful.
+  const params = await searchParams;
+  const resolved = resolveMissionWeek({
+    requested: params.week,
+    thisMonday,
+    lastMonday,
+    nextMonday,
+    canGoBack,
+    canGoForward,
+  });
+  if ("redirect" in resolved) redirect("/missions");
+  const { viewMonday, isLastWeek, isNextWeek, prevMonday } = resolved;
+  const nextWeekMonday = resolved.nextMonday;
+  const week = weekDates(viewMonday);
   const weekEnd = week[6];
 
-  // Last week stays visible while the grace period is open so a man
-  // can still close out missions he finished over the weekend. It
-  // renders in the planner's catch-up mode — existing missions only,
-  // no empty slots to backdate new ones into.
-  const lastMonday = editWindow.lastMonday;
-  const lastWeek = weekDates(lastMonday);
-  const showLastWeek = editWindow.lastWeekOpen;
-  // The week locks ON lastWeekLocksOn, so the last day he can still
-  // touch it is the day before.
-  const lastWeekOpenThrough = format(
-    addDays(new Date(`${editWindow.lastWeekLocksOn}T00:00:00`), -1),
-    "EEEE MMM d",
-  );
-
-  // Sunday planning: once it's Sunday (last day of this week), also render
-  // next week so guys can front-load Monday. Independent of that: we
-  // always LOAD through next week — the extra rows let us detect
-  // carry-forward children of this-week missions and disable the
-  // → NEXT WEEK button on a mission that's already been carried.
-  const todayISO = editWindow.today;
-  const isSunday = todayISO === weekEnd;
-  const nextMonday = format(addDays(new Date(`${monday}T00:00:00`), 7), "yyyy-MM-dd");
-  const nextWeek = weekDates(nextMonday);
-  const rangeEnd = nextWeek[6];
-
   const q = getCurrentQuarter();
+
+  // Load the viewed week plus the one after it. The trailing week is
+  // never rendered — it's there so a mission that's already been
+  // carried forward can disable its own → NEXT WEEK button.
+  const loadEnd = weekDates(shiftWeek(viewMonday, 1))[6];
 
   const [{ data: goals }, { data: missions }] = await Promise.all([
     supabase
@@ -102,8 +122,8 @@ export default async function MissionsPage() {
         "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id",
       )
       .eq("user_id", user.id)
-      .gte("target_date", showLastWeek ? lastMonday : monday)
-      .lte("target_date", rangeEnd)
+      .gte("target_date", viewMonday)
+      .lte("target_date", loadEnd)
       .neq("status", "rolled_over")
       // Insertion order — newest at the bottom. Ordering by
       // target_date reshuffled the grid every time a coachee added a
@@ -114,25 +134,41 @@ export default async function MissionsPage() {
 
   const activeGoals = ((goals ?? []) as ActiveGoal[]).slice(0, 2);
   const allMissions = (missions ?? []) as WeekMission[];
-  const lastWeekMissions = showLastWeek
-    ? allMissions.filter((m) => m.target_date < monday)
-    : [];
-  const thisWeekMissions = allMissions.filter(
-    (m) => m.target_date >= monday && m.target_date <= weekEnd,
-  );
-  const nextWeekMissions = allMissions.filter((m) => m.target_date >= nextMonday);
+  const weekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
   const carriedForwardIds = new Set(
     allMissions
       .map((m) => m.rolled_over_from_mission_id)
       .filter((id): id is string => id != null),
   );
 
+  // Last week is catch-up: the missions he already set, so he can
+  // close out anything he finished over the weekend. No empty slots —
+  // grace is for finishing what you committed to, not for backdating
+  // new commitments onto a week that's already been lived.
+  const mode = isLastWeek ? "catch-up" : "plan";
+
+  // The week locks ON lastWeekLocksOn, so the last day he can still
+  // touch it is the day before.
+  const lastWeekOpenThrough = format(
+    addDays(new Date(`${editWindow.lastWeekLocksOn}T00:00:00`), -1),
+    "EEE MMM d",
+  ).toUpperCase();
+
+  const note = isLastWeek
+    ? `LAST WEEK · OPEN THROUGH ${lastWeekOpenThrough}`
+    : isNextWeek
+      ? "NEXT WEEK · PLAN IT BEFORE IT STARTS"
+      : null;
+
+  const hrefFor = (monday: string) =>
+    monday === thisMonday ? "/missions" : `/missions?week=${monday}`;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <header className="flex items-baseline justify-between flex-wrap gap-3">
         <div>
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
-            WEEK OF {format(new Date(`${monday}T00:00:00`), "MMM d")} · {q.label}
+            {q.label}
           </p>
           <h1 className="font-heading text-3xl">Missions</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
@@ -147,6 +183,44 @@ export default async function MissionsPage() {
           MANAGE GOALS
         </Link>
       </header>
+
+      <WeekNavigator
+        monday={viewMonday}
+        sunday={weekEnd}
+        prevHref={prevMonday ? hrefFor(prevMonday) : null}
+        nextHref={nextWeekMonday ? hrefFor(nextWeekMonday) : null}
+        note={note}
+      />
+
+      {/* On the current week, say out loud that last week is still
+          reachable. The enabled arrow is the affordance, but a man
+          who's just lost a weekend of logging shouldn't have to
+          discover it. */}
+      {canGoBack && !isLastWeek ? (
+        <p className="text-[11px] text-[color:var(--color-text-muted)] text-center">
+          Last week is open through {lastWeekOpenThrough.toLowerCase()} —{" "}
+          <Link
+            href={hrefFor(lastMonday)}
+            className="text-[color:var(--color-primary)] hover:underline"
+          >
+            go back to close anything out
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      {isSunday && !isNextWeek && !isLastWeek ? (
+        <p className="text-[11px] text-[color:var(--color-text-muted)] text-center">
+          It&rsquo;s Sunday —{" "}
+          <Link
+            href={hrefFor(nextMonday)}
+            className="text-[color:var(--color-primary)] hover:underline"
+          >
+            plan next week
+          </Link>{" "}
+          before it hits.
+        </p>
+      ) : null}
 
       {activeGoals.length === 0 ? (
         <div className="p-6 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-center">
@@ -163,68 +237,25 @@ export default async function MissionsPage() {
         </div>
       ) : null}
 
-      {showLastWeek && lastWeekMissions.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">
-            LAST WEEK · {format(new Date(`${lastMonday}T00:00:00`), "MMM d")}–
-            {format(new Date(`${lastWeek[6]}T00:00:00`), "MMM d")}
-          </h2>
-          <p className="text-[11px] text-[color:var(--color-text-muted)]">
-            Open through {lastWeekOpenThrough}. Mark anything you finished over
-            the weekend — it logs as late, but it counts.
+      {isLastWeek && weekMissions.length === 0 ? (
+        <div className="p-6 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-center">
+          <p className="text-sm text-[color:var(--color-text-muted)]">
+            No missions set last week. Nothing to close out.
           </p>
-          <WeeklyPlanner
-            communityId={communityId}
-            weekMonday={lastMonday}
-            weekDates={lastWeek}
-            activeGoals={activeGoals}
-            missions={lastWeekMissions}
-            carriedForwardIds={carriedForwardIds}
-            todayISO={todayISO}
-            mode="catch-up"
-            readOnly={readOnly}
-          />
-        </section>
-      ) : null}
-
-      <section className="space-y-3">
-        <h2 className="text-xs font-heading tracking-widest text-[color:var(--color-primary)]">
-          THIS WEEK · {format(new Date(`${monday}T00:00:00`), "MMM d")}–
-          {format(new Date(`${weekEnd}T00:00:00`), "MMM d")}
-        </h2>
+        </div>
+      ) : (
         <WeeklyPlanner
           communityId={communityId}
-          weekMonday={monday}
+          weekMonday={viewMonday}
           weekDates={week}
           activeGoals={activeGoals}
-          missions={thisWeekMissions}
+          missions={weekMissions}
           carriedForwardIds={carriedForwardIds}
           todayISO={todayISO}
+          mode={mode}
           readOnly={readOnly}
         />
-      </section>
-
-      {isSunday ? (
-        <section className="space-y-3">
-          <h2 className="text-xs font-heading tracking-widest text-[color:var(--color-primary)]">
-            NEXT WEEK · {format(new Date(`${nextMonday}T00:00:00`), "MMM d")}–
-            {format(new Date(`${nextWeek[6]}T00:00:00`), "MMM d")}
-          </h2>
-          <p className="text-[11px] text-[color:var(--color-text-muted)]">
-            Front-load Monday. It's Sunday — plan the week before it hits.
-          </p>
-          <WeeklyPlanner
-            communityId={communityId}
-            weekMonday={nextMonday}
-            weekDates={nextWeek}
-            activeGoals={activeGoals}
-            missions={nextWeekMissions}
-            carriedForwardIds={carriedForwardIds}
-            todayISO={todayISO}
-            readOnly={readOnly}
-          />
-        </section>
-      ) : null}
+      )}
     </div>
   );
 }
