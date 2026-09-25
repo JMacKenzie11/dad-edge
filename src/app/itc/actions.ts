@@ -82,6 +82,7 @@ import {
   markWalkthroughNotDelivered,
   recordTestResult,
   saveAssumptionDrafts,
+  markMapComplete,
   saveImprovementGoal,
   saveTestDraft,
   setAssumptionSelected,
@@ -110,6 +111,7 @@ import {
   abandonMissionForItcTest,
   cascadeItcMapClear,
   checkMissionCapForItcTest,
+  completeGoalForItcMap,
   createMissionForItcTest,
   markMissionCompletedForItcTest,
   syncItcGoalToTracker,
@@ -1404,8 +1406,12 @@ export async function advanceToStage(
   // On entry to done, generate the Kegan-voice closing summary and
   // persist it as a stage_note. Idempotent — skip if a done stage_note
   // already exists.
+  // Also mark the map complete (frees the one-open-map slot so he can
+  // start another) and close the linked goal as completed.
   if (target === "done") {
     await deliverMapCloseSummaryAfterAdvance(loaded.map.id, events);
+    await markMapComplete(loaded.map.id);
+    await completeGoalForItcMap(loaded.map.id);
   }
   await events.flush();
   safeRevalidate(`/itc/${loaded.map.id}`);

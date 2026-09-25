@@ -484,8 +484,11 @@ export async function cascadeItcMapClear(mapId: string): Promise<void> {
     }
   }
 
-  // 2. Abandon the linked quarterly_goal (if any). Statuses other
-  //    than 'active' (already abandoned / completed) are left alone.
+  // 2. Abandon the linked quarterly_goal (if any). Covers
+  //    'needs_review' too: once the quarter closes, the goal sits there
+  //    with a wrap-up prompt pointing at this map, and clearing the map
+  //    has to close it or the prompt points at nothing. Already
+  //    abandoned / completed goals are left alone.
   const { data: map, error: mapErr } = await supabase
     .from("itc_maps")
     .select("quarterly_goal_id")
@@ -496,10 +499,37 @@ export async function cascadeItcMapClear(mapId: string): Promise<void> {
     .from("quarterly_goals")
     .update({ status: "abandoned" })
     .eq("id", map.quarterly_goal_id)
-    .eq("status", "active");
+    .in("status", ["active", "needs_review"]);
   if (goalErr) {
     console.warn(
       "[itc tracker-link] cascade goal-abandon failed: %s",
+      goalErr.message,
+    );
+  }
+}
+
+/**
+ * Close-out on map finish (advance to Done). Marks the linked
+ * quarterly_goal 'completed': the map is the work behind the goal, and
+ * reaching Done means he ran it through. Covers 'needs_review' so the
+ * quarter wrap-up prompt that points at this map goes away.
+ */
+export async function completeGoalForItcMap(mapId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { data: map, error: mapErr } = await supabase
+    .from("itc_maps")
+    .select("quarterly_goal_id")
+    .eq("id", mapId)
+    .maybeSingle();
+  if (mapErr || !map?.quarterly_goal_id) return;
+  const { error: goalErr } = await supabase
+    .from("quarterly_goals")
+    .update({ status: "completed" })
+    .eq("id", map.quarterly_goal_id)
+    .in("status", ["active", "needs_review"]);
+  if (goalErr) {
+    console.warn(
+      "[itc tracker-link] goal-complete update failed: %s",
       goalErr.message,
     );
   }

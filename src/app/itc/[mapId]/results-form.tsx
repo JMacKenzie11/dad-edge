@@ -320,7 +320,7 @@ export function ResultsForm({
             <option value="new_assumption">
               A different assumption from the map
             </option>
-            <option value="map_complete">Close the map for now</option>
+            <option value="map_complete">Close the map</option>
           </select>
         </label>
       </div>
