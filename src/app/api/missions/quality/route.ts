@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { scoreMissionDraft } from "@/lib/coach/mission-quality";
 
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Bad JSON." }, { status: 400 });
   }
-  const parsed = BodySchema.safeParse(raw);
-  if (!parsed.success) return NextResponse.json({ error: "Bad input." }, { status: 400 });
+  const parsed = parseForm(BodySchema, raw);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const score = await scoreMissionDraft(parsed.data);
   return NextResponse.json(score);
 }

@@ -1,4 +1,4 @@
-import type { ZodErrorMap, ZodType } from "zod";
+import type { ZodErrorMap, ZodTypeAny, output } from "zod";
 
 /**
  * Shown when a check fails that the man can't fix by rewording —
@@ -16,10 +16,10 @@ const staleErrorMap: ZodErrorMap = () => ({ message: STALE_PAGE });
  * show on screen. Schemas carry the copy for anything a man types;
  * everything else falls back to STALE_PAGE.
  */
-export function parseForm<T>(
-  schema: ZodType<T>,
+export function parseForm<S extends ZodTypeAny>(
+  schema: S,
   input: unknown,
-): { ok: true; data: T } | { ok: false; error: string } {
+): { ok: true; data: output<S> } | { ok: false; error: string } {
   const parsed = schema.safeParse(input, { errorMap: staleErrorMap });
   if (parsed.success) return { ok: true, data: parsed.data };
   return { ok: false, error: parsed.error.issues[0]?.message ?? STALE_PAGE };

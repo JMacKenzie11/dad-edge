@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
@@ -52,9 +53,16 @@ export async function createCommunity(formData: FormData) {
 
 const UpdateSchema = z.object({
   id: z.string().uuid(),
-  name: z.string().min(2).max(80),
+  name: z
+    .string()
+    .min(2, "Community name needs at least 2 characters.")
+    .max(80, "Keep the community name under 80 characters."),
   timezone: z.string().min(3).max(64),
-  week_lock_days: z.coerce.number().int().min(0).max(14),
+  week_lock_days: z.coerce
+    .number()
+    .int("Edit grace has to be a whole number of days.")
+    .min(0, "Edit grace can't be negative.")
+    .max(14, "Edit grace can be 14 days at most."),
   leaderboard_enabled: z.enum(["on", "off"]).transform((v) => v === "on"),
   missions_visible: z.enum(["on", "off"]).transform((v) => v === "on"),
   status: z.enum(["active", "archived"]),
@@ -62,7 +70,7 @@ const UpdateSchema = z.object({
 
 export async function updateCommunity(formData: FormData) {
   const admin = await requirePlatformAdmin();
-  const parsed = UpdateSchema.safeParse({
+  const parsed = parseForm(UpdateSchema, {
     id: formData.get("id"),
     name: formData.get("name"),
     timezone: formData.get("timezone"),
@@ -71,8 +79,8 @@ export async function updateCommunity(formData: FormData) {
     missions_visible: formData.get("missions_visible") ? "on" : "off",
     status: formData.get("status") || "active",
   });
-  if (!parsed.success) {
-    redirect(`/admin/communities?error=${encodeURIComponent("Bad input.")}`);
+  if (!parsed.ok) {
+    redirect(`/admin/communities?error=${encodeURIComponent(parsed.error)}`);
   }
   const { id, ...updates } = parsed.data;
   const svc = createSupabaseServiceClient();

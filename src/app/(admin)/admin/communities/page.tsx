@@ -5,8 +5,13 @@ import { CreateCommunityForm } from "./create-community-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommunitiesPage() {
+export default async function CommunitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   await requirePlatformAdmin();
+  const { error } = await searchParams;
   const svc = createSupabaseServiceClient();
 
   const { data: communities } = await svc
@@ -33,6 +38,9 @@ export default async function CommunitiesPage() {
       <header className="flex items-baseline justify-between">
         <h1 className="font-heading text-2xl">Communities</h1>
       </header>
+      {error ? (
+        <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+      ) : null}
 
       <CreateCommunityForm />
 

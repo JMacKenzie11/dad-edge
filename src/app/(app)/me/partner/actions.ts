@@ -2,20 +2,27 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const LovedSchema = z
+  .string()
+  .max(280, "Keep each thing you love under 280 characters.")
+  .optional()
+  .nullable();
+
 const Schema = z.object({
-  partner_name: z.string().max(120).optional().nullable(),
+  partner_name: z.string().max(120, "Keep the name under 120 characters.").optional().nullable(),
   relationship_label: z
     .enum(["wife", "husband", "partner", "girlfriend", "boyfriend", "fiancee"])
     .optional()
     .nullable(),
   partner_birthdate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   relationship_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  loved_1: z.string().max(280).optional().nullable(),
-  loved_2: z.string().max(280).optional().nullable(),
-  loved_3: z.string().max(280).optional().nullable(),
+  loved_1: LovedSchema,
+  loved_2: LovedSchema,
+  loved_3: LovedSchema,
 });
 
 function toStringOrNull(v: FormDataEntryValue | null): string | null {
@@ -27,7 +34,7 @@ function toStringOrNull(v: FormDataEntryValue | null): string | null {
 export async function savePartnerFromMe(formData: FormData) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) redirect("/me");
-  const parsed = Schema.safeParse({
+  const parsed = parseForm(Schema, {
     partner_name: toStringOrNull(formData.get("partner_name")),
     relationship_label: toStringOrNull(formData.get("relationship_label")),
     partner_birthdate: toStringOrNull(formData.get("partner_birthdate")),
@@ -36,7 +43,7 @@ export async function savePartnerFromMe(formData: FormData) {
     loved_2: toStringOrNull(formData.get("loved_2")),
     loved_3: toStringOrNull(formData.get("loved_3")),
   });
-  if (!parsed.success) redirect("/me/partner?error=Bad+input");
+  if (!parsed.ok) redirect(`/me/partner?error=${encodeURIComponent(parsed.error)}`);
 
   const supabase = await createSupabaseServerClient();
   const things_loved = [parsed.data.loved_1, parsed.data.loved_2, parsed.data.loved_3]

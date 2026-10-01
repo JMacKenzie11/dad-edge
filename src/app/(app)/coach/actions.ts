@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,8 +43,8 @@ const ArchiveSchema = z.object({
 export async function archiveConversation(formData: FormData) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) redirect("/coach?error=Read-only+account");
-  const parsed = ArchiveSchema.safeParse({ conversation_id: formData.get("conversation_id") });
-  if (!parsed.success) redirect("/coach?error=Bad+input");
+  const parsed = parseForm(ArchiveSchema, { conversation_id: formData.get("conversation_id") });
+  if (!parsed.ok) redirect(`/coach?error=${encodeURIComponent(parsed.error)}`);
   const supabase = await createSupabaseServerClient();
   await supabase
     .from("coach_conversations")

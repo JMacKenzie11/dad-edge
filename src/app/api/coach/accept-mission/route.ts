@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
@@ -10,7 +11,10 @@ export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
   assistant_message_id: z.string().uuid(),
-  description: z.string().min(1).max(280),
+  description: z
+    .string()
+    .min(1, "Write the mission first.")
+    .max(280, "Keep the mission under 280 characters."),
   pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quarterly_goal_id: z.string().uuid().nullable().optional(),
@@ -31,8 +35,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Bad JSON." }, { status: 400 });
   }
-  const parsed = BodySchema.safeParse(raw);
-  if (!parsed.success) return NextResponse.json({ error: "Bad input." }, { status: 400 });
+  const parsed = parseForm(BodySchema, raw);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const gate = validateMissionConcreteness({
     description: parsed.data.description,

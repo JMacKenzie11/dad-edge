@@ -7,8 +7,13 @@ export const dynamic = "force-dynamic";
 
 const LABELS = ["wife", "partner", "girlfriend", "fiancee", "husband", "boyfriend"] as const;
 
-export default async function PartnerEdit() {
+export default async function PartnerEdit({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { user, readOnly } = await requireAccess();
+  const { error } = await searchParams;
   if (readOnly) redirect("/me");
   const supabase = await createSupabaseServerClient();
   const { data: p } = await supabase
@@ -73,6 +78,9 @@ export default async function PartnerEdit() {
             className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]"
           />
         ))}
+        {error ? (
+          <p className="text-xs text-[color:var(--color-danger)]">{error}</p>
+        ) : null}
         <button
           type="submit"
           className="w-full h-12 rounded-md font-heading bg-[color:var(--color-primary)] text-white"

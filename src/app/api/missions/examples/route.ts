@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getExamplesForPillar } from "@/lib/mission-examples";
@@ -20,8 +21,8 @@ const Query = z.object({
 export async function GET(req: NextRequest) {
   await requireAccess();
   const url = req.nextUrl;
-  const parsed = Query.safeParse({ pillar_code: url.searchParams.get("pillar_code") });
-  if (!parsed.success) return NextResponse.json({ error: "Bad input." }, { status: 400 });
+  const parsed = parseForm(Query, { pillar_code: url.searchParams.get("pillar_code") });
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const supabase = await createSupabaseServerClient();
   const { data: real } = await supabase
