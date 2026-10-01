@@ -8,38 +8,49 @@ import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { resolveTargetDates, shiftDatesByOneWeek } from "./target-dates";
 import { localDate } from "@/lib/scoring/week";
 import { captureServerEvent } from "@/lib/analytics/server";
+import { parseForm } from "@/lib/validation/form-error";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
 const DateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+const DescriptionSchema = z
+  .string()
+  .min(1, "Write the mission first.")
+  .max(280, "Keep the mission under 280 characters.");
+
+const TargetDatesSchema = z
+  .array(DateStringSchema)
+  .min(1, "Pick at least one day.")
+  .max(7, "Pick seven days or fewer.");
+
 const CreateSchema = z.object({
   community_id: z.string().uuid(),
   pillar_code: PillarCodeSchema,
-  description: z.string().min(1).max(280),
+  description: DescriptionSchema,
   // Multi-day missions: array of dates, at least one. Callers that
   // still pass a single target_date get it wrapped into a 1-element
   // array. target_date is written as the max (deadline) of the set
   // for backwards compat with downstream jobs and views.
-  target_dates: z.array(DateStringSchema).min(1).max(7).optional(),
+  target_dates: TargetDatesSchema.optional(),
   target_date: DateStringSchema.optional(),
   quarterly_goal_id: z.string().uuid().nullable(),
   quality_score: z.number().int().min(0).max(10).nullable().optional(),
 }).refine(
   (v) => v.target_dates !== undefined || v.target_date !== undefined,
-  { message: "target_dates or target_date required." },
+  { message: "Pick at least one day." },
 );
 
 const UpdateSchema = z.object({
   mission_id: z.string().uuid(),
   patch: z
     .object({
-      description: z.string().min(1).max(280).optional(),
-      target_dates: z.array(DateStringSchema).min(1).max(7).optional(),
+      description: DescriptionSchema.optional(),
+      target_dates: TargetDatesSchema.optional(),
       target_date: DateStringSchema.optional(),
       quality_score: z.number().int().min(0).max(10).nullable().optional(),
     })
-    .refine((p) => Object.keys(p).length > 0, { message: "Empty patch." }),
+    .refine((p) => Object.keys(p).length > 0, { message: "Nothing changed." }),
 });
 
 // resolveTargetDates moved to ./target-dates.ts — this file is
@@ -51,8 +62,8 @@ export async function createMission(
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
 
-  const parsed = CreateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(CreateSchema, input);
+  if (!parsed.ok) return parsed;
   const data = parsed.data;
 
   const resolved = resolveTargetDates(data);
@@ -97,8 +108,8 @@ export async function updateMission(
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
 
-  const parsed = UpdateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(UpdateSchema, input);
+  if (!parsed.ok) return parsed;
   const { mission_id, patch } = parsed.data;
 
   const wantsDateChange =
@@ -186,8 +197,8 @@ export async function deleteMission(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = DeleteSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(DeleteSchema, input);
+  if (!parsed.ok) return parsed;
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("missions")
@@ -300,8 +311,8 @@ export async function carryMissionToNextWeek(
 > {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = CarryForwardSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(CarryForwardSchema, input);
+  if (!parsed.ok) return parsed;
 
   const supabase = await createSupabaseServerClient();
   const { data: prev, error: fetchErr } = await supabase

@@ -6,20 +6,31 @@ import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { computeMidpointCheckAt, getCurrentQuarter } from "@/lib/scoring/quarters";
 import { captureServerEvent } from "@/lib/analytics/server";
+import { parseForm } from "@/lib/validation/form-error";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
+const CurrentStateSchema = z
+  .string()
+  .min(4, '"Where you are now" needs a few more words.')
+  .max(500, 'Keep "Where you are now" under 500 characters.');
+
+const DesiredEndStateSchema = z
+  .string()
+  .min(4, '"Where you want to be" needs a few more words.')
+  .max(500, 'Keep "Where you want to be" under 500 characters.');
+
 const CreateSchema = z.object({
   focus_area: PillarCodeSchema,
-  current_state: z.string().min(4).max(500),
-  desired_end_state: z.string().min(4).max(500),
+  current_state: CurrentStateSchema,
+  desired_end_state: DesiredEndStateSchema,
 });
 
 export async function createGoal(input: unknown) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = CreateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(CreateSchema, input);
+  if (!parsed.ok) return parsed;
 
   // Quarter is server-computed; client never picks a quarter.
   const q = getCurrentQuarter();
@@ -45,8 +56,8 @@ export async function createGoal(input: unknown) {
 
 const UpdateSchema = z.object({
   goal_id: z.string().uuid(),
-  current_state: z.string().min(4).max(500),
-  desired_end_state: z.string().min(4).max(500),
+  current_state: CurrentStateSchema,
+  desired_end_state: DesiredEndStateSchema,
 });
 
 /**
@@ -57,8 +68,8 @@ const UpdateSchema = z.object({
 export async function updateGoal(input: unknown) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = UpdateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(UpdateSchema, input);
+  if (!parsed.ok) return parsed;
   const supabase = await createSupabaseServerClient();
   const { data: goal, error: lookupErr } = await supabase
     .from("quarterly_goals")
@@ -93,10 +104,16 @@ const ReviewAnswerSchema = z.object({
   goal_id: z.string().uuid(),
   answer: z.enum(["yes", "partially", "no"]),
   /** Concrete story of what actually happened this quarter. */
-  what_happened: z.string().max(2000).optional(),
+  what_happened: z
+    .string()
+    .max(2000, 'Keep "What actually happened" under 2,000 characters.')
+    .optional(),
   /** Extracted lesson — separate field because the learning is
    *  different from the story of what occurred. */
-  what_learned: z.string().max(2000).optional(),
+  what_learned: z
+    .string()
+    .max(2000, 'Keep "What you learned" under 2,000 characters.')
+    .optional(),
 });
 
 /**
@@ -116,8 +133,8 @@ const ReviewAnswerSchema = z.object({
 export async function submitGoalReview(input: unknown) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = ReviewAnswerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(ReviewAnswerSchema, input);
+  if (!parsed.ok) return parsed;
   const supabase = await createSupabaseServerClient();
   const { data: goal, error: lookupErr } = await supabase
     .from("quarterly_goals")
@@ -153,7 +170,10 @@ export async function submitGoalReview(input: unknown) {
 
 const MidpointAnswerSchema = z.object({
   goal_id: z.string().uuid(),
-  answer: z.string().min(1).max(2000),
+  answer: z
+    .string()
+    .min(1, "Write a sentence or two first.")
+    .max(2000, "Keep it under 2,000 characters."),
 });
 
 /**
@@ -166,8 +186,8 @@ const MidpointAnswerSchema = z.object({
 export async function submitMidpointCheck(input: unknown) {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = MidpointAnswerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(MidpointAnswerSchema, input);
+  if (!parsed.ok) return parsed;
   const supabase = await createSupabaseServerClient();
   const { data: goal, error: lookupErr } = await supabase
     .from("quarterly_goals")
