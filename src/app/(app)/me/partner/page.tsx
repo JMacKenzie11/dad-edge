@@ -42,7 +42,7 @@ export default async function PartnerEdit({
         <input
           name="partner_name"
           defaultValue={partner?.partner_name ?? ""}
-          placeholder="Her name"
+          placeholder="Their name"
           className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]"
         />
         <select
@@ -74,7 +74,7 @@ export default async function PartnerEdit({
             key={i}
             name={`loved_${i + 1}`}
             defaultValue={partner?.things_loved?.[i] ?? ""}
-            placeholder="Something you love about her."
+            placeholder="Something you love about them."
             className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]"
           />
         ))}
