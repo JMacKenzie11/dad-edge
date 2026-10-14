@@ -1,6 +1,7 @@
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** "Patience Course: Week 1" → "patience-course-week-1". */
+// Throwaway docs-gate demo; this PR is closed unmerged.
 export function slugify(title: string): string {
   return title
     .normalize("NFKD")
