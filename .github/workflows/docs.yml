@@ -1,0 +1,63 @@
+# Docs gate: a PR that changes source updates the docs in the same PR, or
+# says why not with a `Docs-exempt: <reason>` line in its description.
+#
+# Why it's built this way:
+# - Its own workflow, on pull_request only: the question is about the PR as
+#   a whole (all its commits against its base), which a push doesn't have.
+# - `edited` is in the trigger list so adding a Docs-exempt line to the
+#   description re-runs the gate without a new commit.
+# - Changed files come from `git diff origin/<base>...<head sha>`: the
+#   three-dot form compares against the merge base, so commits that landed
+#   on main after this branch was cut don't count as this PR's changes.
+# - The PR body reaches the script through an env var written to a file. It
+#   is never interpolated into a run block: a description containing
+#   `$(...)` or backticks would otherwise execute on the runner (script
+#   injection).
+# - The decision itself lives in scripts/check-docs-touched.ts as an
+#   exported, unit-tested decide({ files, body }).
+
+name: docs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-touched:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Changed files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "origin/${BASE_REF}...${HEAD_SHA}" > "$RUNNER_TEMP/changed.txt"
+          cat "$RUNNER_TEMP/changed.txt"
+
+      - name: PR description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Docs updated, or exempt with a reason
+        run: npx tsx scripts/check-docs-touched.ts --files "$RUNNER_TEMP/changed.txt" --body "$RUNNER_TEMP/pr-body.md"

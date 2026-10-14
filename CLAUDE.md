@@ -21,6 +21,12 @@ Multi-community accountability app for the BRAVE MAN framework: daily check-ins,
 - **A test that has only ever been green proves little.** For a new regression test or probe, show it failing against the old code first, then passing, and say so in the report.
 - **Never write to a production database from a test, script or seed.** Any script that can write somewhere real refuses unless the target is the dev or test database, checked by project id or host (`assertDevTarget()` in `scripts/lib/target.ts`), never by a flag. The one approved exception: `npm run help:generate` writes unreviewed rows to the production help review queue (Jason, 2026-10-15). Production data fixes ship as migrations.
 
+## Documentation
+
+- **A PR that changes behaviour, permissions or operational procedure updates the docs in the same PR.** The docs gate (`.github/workflows/docs.yml`) fails a PR that changes `src/` with no doc change and no `Docs-exempt: <reason>` line in its description.
+- `PRODUCT_SPEC.md` describes what IS, not plans. Judgment calls go in `DECISIONS.md`; incidents in `docs/failure-modes.md`.
+- User help covers only what a member does on screen, never how it works underneath. It's generated from the page's controls (`npm run help:extract`, then `help:check-stale`), not written by hand.
+
 ## Databases
 
 - Localhost and every script use the dev project ("Brave Man OS Dev") through `.env.local`. Production keys live only in Vercel and in `.env.prod.local` (gitignored, never loaded by Next).
