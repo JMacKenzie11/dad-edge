@@ -32,13 +32,13 @@ One short entry per incident: what happened, why the gates missed it, and the ru
 
 - **What happened:** migrations were applied by hand, so neither database records which ran. The README's `supabase db push` would have tried to rerun all 64 migrations against whatever project was linked.
 - **Why the gates missed it:** nothing ever ran the documented command.
-- **What it produced:** so far, this entry. The migration command with a ledger and `--dry-run` is the next change.
+- **What it produced:** `npm run db:migrate` with a ledger in `supabase_migrations.schema_migrations`, `--dry-run`, and `--baseline` to record what was applied by hand; the README now points there; production runs are approved every time (CLAUDE.md, Migrations).
 
 ## FM-6: Members could open message threads across communities
 
 - **What happened:** the `message_threads` insert policy checked shared community membership with an inline subquery that ran under the caller's own row-level security, so it could never see the other member's rows and the check didn't do what it said (fixed in `20260828000002`).
 - **Why the gates missed it:** no test ran the policy as a real member against a member of another community.
-- **What it produced:** the SECURITY DEFINER rule in PRODUCT_SPEC §4 and the messaging integration test.
+- **What it produced:** the SECURITY DEFINER rule in PRODUCT_SPEC §4, the messaging integration test, and the permission probes (`npm run rls:hazards`, probe T2), with the rule that a widening ships with a probe shown red first.
 
 ## FM-7: Lint had never run
 
@@ -57,3 +57,9 @@ One short entry per incident: what happened, why the gates missed it, and the ru
 - **What happened:** manifests recorded absolute paths from one Mac and depended on filesystem order, so they couldn't be compared across machines, and nothing checked that a UI change re-extracted them. Help could describe buttons that no longer exist.
 - **Why the gates missed it:** staleness was only checked by hand, against the database, after shipping.
 - **What it produced:** repo-relative paths and sorted directory reads in the extractor, and `npm run help:check-manifests` in CI.
+
+## FM-10: A browser test that passed because its selector found nothing
+
+- **What happened:** the first version of "a member with two Bond missions isn't offered a third" asserted zero buttons named "+ ADD A BOND MISSION". The buttons' accessible name is different ("add a bond mission, slot 1"), so the check found zero whether or not the buttons were there.
+- **Why the gates missed it:** a "find nothing" assertion is green by default; it only went red when its partner check (two Raise buttons) failed for the same reason.
+- **What it produced:** every "can't see it" check in a spec or a probe has a control beside it that must find something (docs/e2e.md; `judge()` in scripts/rls-hazards.ts fails a zero whose control is also zero).

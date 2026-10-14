@@ -10,31 +10,21 @@ Decisions log: [`DECISIONS.md`](./DECISIONS.md).
 ```bash
 npm install
 cp .env.example .env.local
-# fill in Supabase URL + anon key (see Migrations below)
-npm run dev
-# open http://localhost:3000/design to see the brand component library
+# fill in the DEV Supabase URL + keys (see CLAUDE.md, Databases)
+TZ=UTC npm run dev
+# open http://localhost:3300/design to see the brand component library
 ```
 
 ## Migrations
 
-Migrations live in [`supabase/migrations/`](./supabase/migrations) as timestamped SQL files.
-They implement the full §3 data model, RLS per §12.4, DB-level mission cap trigger,
-and seed the pillar framework + Partner Connection Survey v1 questions.
-
-Apply against a **local** Supabase (requires Docker):
+Migrations live in [`supabase/migrations/`](./supabase/migrations) as timestamped SQL files. They reach a database only through the migration command, which keeps a ledger of what ran:
 
 ```bash
-npx supabase start
-npx supabase db reset   # runs every migration + seed
-# copy the printed anon key + URL into .env.local
+npm run db:migrate -- --target dev --dry-run   # list what's pending, apply nothing
+npm run db:migrate -- --target dev             # apply it to the dev database
 ```
 
-Apply against a **hosted** Supabase project:
-
-```bash
-npx supabase link --project-ref <ref>
-npx supabase db push
-```
+Production runs are approved by Jason every time; see `CLAUDE.md`, Migrations. Don't use `supabase db push`: these databases were migrated by hand before the ledger existed, so `db push` would try to rerun everything (`docs/failure-modes.md`, FM-5).
 
 ## Repository layout
 
