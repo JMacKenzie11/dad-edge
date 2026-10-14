@@ -20,6 +20,7 @@
     "brand:sync": "tsx scripts/sync-brand-assets.ts",
     "coach:scenario": "tsx scripts/coach-scenario.ts",
     "migrate:itc": "tsx scripts/migrate-itc-participants.ts",
+    "migrate:mission-structure": "tsx scripts/migrate-mission-structure.ts",
     "backfill:itc-goals": "tsx scripts/backfill-itc-quarterly-goals.ts",
     "itc:rescore-worries": "tsx scripts/rescore-itc-worries.ts",
     "itc:rescore-assumptions": "tsx scripts/rescore-itc-assumptions.ts",
