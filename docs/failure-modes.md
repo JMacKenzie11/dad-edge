@@ -63,3 +63,9 @@ One short entry per incident: what happened, why the gates missed it, and the ru
 - **What happened:** the first version of "a member with two Bond missions isn't offered a third" asserted zero buttons named "+ ADD A BOND MISSION". The buttons' accessible name is different ("add a bond mission, slot 1"), so the check found zero whether or not the buttons were there.
 - **Why the gates missed it:** a "find nothing" assertion is green by default; it only went red when its partner check (two Raise buttons) failed for the same reason.
 - **What it produced:** every "can't see it" check in a spec or a probe has a control beside it that must find something (docs/e2e.md; `judge()` in scripts/rls-hazards.ts fails a zero whose control is also zero).
+
+## FM-11: The build downloads fonts from Google, and that download can fail
+
+- **What happened:** a CI build failed in `src/lib/fonts.ts` with `next/font` "Cannot read properties of null (reading '1')": `next/font/google` fetches Archivo and Inter from Google Fonts at build time, and the response it got wasn't the CSS it expected. A rerun of the same commit passed (PR #3, 2026-10-15).
+- **Why the gates missed it:** they didn't; the build step caught it. It's here because it's a flake that isn't about the code, and a red build should first be checked against this entry before anyone debugs the diff.
+- **What it produced:** so far, this entry and a rerun. The lasting fix is to self-host the two fonts (`next/font/local`), which `src/lib/fonts.ts` already anticipates for the Adobe fonts. Open for Jason.

@@ -33,11 +33,13 @@ export async function signIn(page: Page, role: Role): Promise<void> {
   ]);
 }
 
-async function signedInPage(browser: Browser, role: Role, use: (p: Page) => Promise<void>) {
+// The fixture callback is named `provide` rather than Playwright's usual
+// `use`: React's hooks lint rule reads a call to `use()` as React's hook.
+async function signedInPage(browser: Browser, role: Role, provide: (p: Page) => Promise<void>) {
   const context = await browser.newContext();
   const page = await context.newPage();
   await signIn(page, role);
-  await use(page);
+  await provide(page);
   await context.close();
 }
 
