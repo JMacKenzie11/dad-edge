@@ -16,6 +16,8 @@ type StoredAssistantContent = {
     description: string;
     pillar_code: PillarCode;
     target_date: string;
+    quarterly_goal_id?: string | null;
+    goal_label?: string | null;
   } | null;
   prompt_version?: string;
 };

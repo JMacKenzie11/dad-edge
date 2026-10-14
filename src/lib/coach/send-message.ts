@@ -8,10 +8,16 @@ import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
 import { checkCoachReply } from "@/lib/coach/degenerate-reply";
 import { scrubCoachReply } from "@/lib/coach/scrub-reply";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
+import { fitSuggestion, loadCoachMissionPlan, type FitResult } from "@/lib/missions/coach-slots";
+import { weekStartOf } from "@/lib/missions/rules";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { SessionUser } from "@/lib/session";
+import type { PillarCode } from "@/lib/pillars";
 
-const PillarEnum = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
+// Only the five mission domains (2026-10-15). Holding the schema to them
+// means a Movement or Network suggestion can't be generated at all; a goal
+// mission's pillar is replaced with its goal's after generation.
+const PillarEnum = z.enum(["B", "R", "A", "V", "E"]);
 
 const CoachReplySchema = z.object({
   reply: z.string().min(1).max(4000),
@@ -20,11 +26,28 @@ const CoachReplySchema = z.object({
       description: z.string().min(1).max(280),
       pillar_code: PillarEnum,
       target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      /** Number from the "Open goals" list in the context, or null for a
+       *  domain mission. The server maps it to the goal id. */
+      goal_number: z.number().int().min(1).nullable(),
     })
     .nullable(),
 });
 
-export type CoachReply = z.infer<typeof CoachReplySchema>;
+type ModelReply = z.infer<typeof CoachReplySchema>;
+
+/** What the client gets and what's stored: the model's suggestion with the
+ *  goal resolved server-side. */
+export type CoachReply = {
+  reply: string;
+  mission_suggestion:
+    | (Omit<NonNullable<ModelReply["mission_suggestion"]>, "pillar_code"> & {
+        /** The goal's pillar for a goal mission, else the domain chosen. */
+        pillar_code: PillarCode;
+        quarterly_goal_id: string | null;
+        goal_label: string | null;
+      })
+    | null;
+};
 
 export type SendResult = {
   conversationId: string;
@@ -208,7 +231,7 @@ export async function sendCoachMessage(opts: {
   );
 
   // 4. Coach call (Sonnet via AI SDK).
-  let reply: CoachReply = {
+  let reply: ModelReply = {
     reply: "Coach is offline right now. Give it another try in a minute.",
     mission_suggestion: null,
   };
@@ -341,6 +364,73 @@ export async function sendCoachMessage(opts: {
     }
   }
 
+  // 5b. Fit the suggestion to his open slots. Same counting as the
+  // weekly-cap trigger, so a card he can COMMIT is a card that will save.
+  // A suggestion into a full slot (or under a goal that isn't open) gets
+  // one retry with the reason; if it still doesn't fit, the card is
+  // dropped and the reply says which slot is full rather than offering
+  // something the app will refuse.
+  let fit: FitResult | null = null;
+  if (reply.mission_suggestion) {
+    const first = reply.mission_suggestion;
+    const plan = await loadCoachMissionPlan(opts.user.id, opts.user.timezone, [weekStartOf(first.target_date)]);
+    fit = fitSuggestion(plan, first);
+    if (!fit.ok) {
+      const firstNote = fit.note;
+      try {
+        const retry = await generateObject({
+          model: mainModel(),
+          schema: CoachReplySchema,
+          system: systemPrompt,
+          messages: [
+            ...historyMessages,
+            { role: "assistant", content: JSON.stringify(reply) },
+            {
+              role: "user",
+              content: `That mission suggestion doesn't fit his week: ${fit.reason} If a different open slot genuinely fits what he asked for, suggest that instead. Otherwise set mission_suggestion to null and tell him plainly in reply which slot is full. Return the full JSON again.`,
+            },
+          ],
+          maxOutputTokens: 1200,
+        });
+        usageInput += retry.usage?.inputTokens ?? 0;
+        usageOutput += retry.usage?.outputTokens ?? 0;
+        const retryMeta = retry.providerMetadata?.anthropic as
+          | { cacheReadInputTokens?: number; cacheCreationInputTokens?: number }
+          | undefined;
+        usageCacheRead += retryMeta?.cacheReadInputTokens ?? 0;
+        usageCacheWrite += retryMeta?.cacheCreationInputTokens ?? 0;
+        const next = retry.object.mission_suggestion;
+        if (!next) {
+          reply = retry.object;
+          fit = null;
+        } else {
+          const plan2 = await loadCoachMissionPlan(opts.user.id, opts.user.timezone, [weekStartOf(next.target_date)]);
+          const fit2 = fitSuggestion(plan2, next);
+          const gate2 = validateMissionConcreteness({ description: next.description, target_date: next.target_date });
+          if (fit2.ok && gate2.ok && checkCoachReply(retry.object.reply).ok) {
+            reply = retry.object;
+            fit = fit2;
+          }
+        }
+      } catch (err) {
+        console.error("slot-fit retry failed", err);
+      }
+      if (fit && !fit.ok) {
+        reply = { reply: `${reply.reply}\n\n${firstNote} Tell me if you want it in a different week or under a different domain.`, mission_suggestion: null };
+        fit = null;
+      }
+    }
+  }
+  const resolvedSuggestion: CoachReply["mission_suggestion"] =
+    reply.mission_suggestion && fit && fit.ok
+      ? {
+          ...reply.mission_suggestion,
+          pillar_code: fit.pillar_code,
+          quarterly_goal_id: fit.quarterly_goal_id,
+          goal_label: fit.goal_label,
+        }
+      : null;
+
   // Scrub em-dashes / en-dashes out of the reply before persist +
   // return. The prompt bans them but no prompt rule survives every
   // generation; this is the output-boundary guarantee that a coachee
@@ -379,7 +469,7 @@ export async function sendCoachMessage(opts: {
       role: "assistant",
       content: JSON.stringify({
         text: finalReplyText,
-        mission_suggestion: reply.mission_suggestion,
+        mission_suggestion: resolvedSuggestion,
         prompt_version: PROMPT_VERSION,
       }),
       model_used: mainModelIdOrUnset(),
@@ -425,7 +515,7 @@ export async function sendCoachMessage(opts: {
     userMessageId,
     assistantMessageId: (asstMsg as { id: string } | null)?.id ?? "",
     reply: finalReplyText,
-    missionSuggestion: reply.mission_suggestion,
+    missionSuggestion: resolvedSuggestion,
     allowance: allowanceAfter,
     crisis,
   };

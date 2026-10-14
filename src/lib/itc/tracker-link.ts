@@ -1,4 +1,6 @@
-import type { PillarCode } from "@/lib/pillars";
+import { isDomainCode, type PillarCode } from "@/lib/pillars";
+import { friendlyMissionError, missionRuleMessage, weekStartOf } from "@/lib/missions/rules";
+import { loadWeekSlots } from "@/lib/missions/slots";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { ensureUserForItcParticipant } from "./auth-bridge";
@@ -122,9 +124,9 @@ export async function syncItcGoalToTracker(input: {
   }
 
   // Create path: new quarterly_goal in the current quarter, link to map.
-  // source='itc' claims the third slot the split-cap trigger reserves
-  // for ITC-mirrored goals; source='user' claim would fight the trigger
-  // when a coachee already has 2 user-authored goals.
+  // source='itc' keeps the "From your ITC map" badge and the ITC-specific
+  // review flow. There's no goal cap any more (2026-10-15), so this never
+  // competes with his own goals for a slot.
   // The ITC goal text ("I'm committed to getting better at ...") lands
   // in desired_end_state; ITC goals don't have a start line / signal
   // (the ITC map machinery is the accountability layer).
@@ -169,66 +171,45 @@ export type MissionCapCheck =
   | { ok: false; reason: string };
 
 /**
- * Pre-flight cap check for Run the Test. Returns { ok: true } if
- * creating a mission for the test's target_date would fit under the
- * user's weekly caps (15 total / 5 per bucket). Returns a friendly
- * reason on cap-hit. Same math the DB trigger enforces — this is a
- * pre-flight so the coachee gets a clean rejection instead of a
- * generic 500.
+ * Pre-flight cap check for Run the Test, using the same counting as the
+ * weekly-cap trigger (src/lib/missions/rules.ts): a test on a map with a
+ * linked goal is a goal mission (five per week across all goals); one
+ * without is a domain mission on the map's pillar (two per week). Returns
+ * a plain reason on a full slot so the coachee isn't advanced into
+ * test_running with no mission behind it. The trigger stays the backstop.
  */
 export async function checkMissionCapForItcTest(input: {
   userId: string;
   quarterlyGoalId: string | null;
+  pillarCode: PillarCode;
   targetDate: string;
+  today: string;
 }): Promise<MissionCapCheck> {
   const supabase = createSupabaseServiceClient();
-
-  const targetDate = new Date(input.targetDate);
-  // Monday-based week aligned with the DB trigger (date_trunc('week')
-  // returns Monday in Postgres).
-  const dow = targetDate.getUTCDay(); // 0..6, Sunday=0
-  const daysFromMonday = (dow + 6) % 7;
-  const weekStart = new Date(targetDate);
-  weekStart.setUTCDate(targetDate.getUTCDate() - daysFromMonday);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-  const isoStart = weekStart.toISOString().slice(0, 10);
-  const isoEnd = weekEnd.toISOString().slice(0, 10);
-
-  const { data: rows, error } = await supabase
-    .from("missions")
-    .select("id, quarterly_goal_id, status")
-    .eq("user_id", input.userId)
-    .gte("target_date", isoStart)
-    .lte("target_date", isoEnd);
-  if (error) {
-    console.warn(
-      "[itc tracker-link] cap lookup failed: %s",
-      error.message,
-    );
-    // Fail-open: don't block ITC on a lookup error. DB trigger
-    // remains the backstop.
+  const weekStart = weekStartOf(input.targetDate);
+  let slots;
+  try {
+    [slots] = await loadWeekSlots(supabase, input.userId, [weekStart]);
+  } catch (err) {
+    // Fail-open: don't block ITC on a lookup error. The trigger remains
+    // the backstop and its refusal is translated below.
+    console.warn("[itc tracker-link] cap lookup failed: %s", err instanceof Error ? err.message : String(err));
     return { ok: true };
   }
-  const counted = (rows ?? []).filter(
-    (r) => r.status !== "rolled_over" && r.status !== "abandoned",
-  );
-  if (counted.length >= 15) {
-    return {
-      ok: false,
-      reason:
-        "You're at your mission cap for the week (15 total). Complete or postpone a mission on /missions, then try Run the Test again.",
-    };
+  const then = " Move or finish one on your Missions page, then run the test again.";
+  if (input.quarterlyGoalId) {
+    if (slots.goalOpen <= 0) {
+      return { ok: false, reason: missionRuleMessage({ kind: "goal_full", weekStart }, input.today) + then };
+    }
+    return { ok: true };
   }
-  const inBucket = counted.filter(
-    (r) => (r.quarterly_goal_id ?? null) === input.quarterlyGoalId,
-  ).length;
-  if (inBucket >= 5) {
+  if (!isDomainCode(input.pillarCode)) {
+    return { ok: false, reason: missionRuleMessage({ kind: "pillar_retired", pillar: input.pillarCode }, input.today) };
+  }
+  if (slots.domainOpen[input.pillarCode] <= 0) {
     return {
       ok: false,
-      reason: input.quarterlyGoalId
-        ? "You're at your per-goal mission cap for this week (5 per goal). Complete or postpone one on /missions, then try Run the Test again."
-        : "You're at your unattached mission cap for this week (5). Complete or postpone one on /missions, then try Run the Test again.",
+      reason: missionRuleMessage({ kind: "domain_full", pillar: input.pillarCode, weekStart }, input.today) + then,
     };
   }
   return { ok: true };
@@ -313,14 +294,16 @@ export async function createMissionForItcTest(input: {
     return { ok: true, missionId: null };
   }
 
-  // Pre-flight cap check — friendly error if this test would push
-  // the user past their weekly caps (15 total / 5 per bucket). The
-  // DB trigger is the backstop; this check gives a clean rejection
-  // instead of a generic 500 from a trigger raise.
+  // Pre-flight cap check: a plain reason if this test's week has no
+  // open slot. The DB trigger is the backstop, and its refusal is
+  // translated the same way below.
+  const today = new Date().toISOString().slice(0, 10);
   const capCheck = await checkMissionCapForItcTest({
     userId,
     quarterlyGoalId: map.quarterly_goal_id ?? null,
+    pillarCode: input.pillarCode,
     targetDate: input.targetDate,
+    today,
   });
   if (!capCheck.ok) {
     return { ok: false, reason: capCheck.reason };
@@ -343,7 +326,7 @@ export async function createMissionForItcTest(input: {
   if (insertErr || !created) {
     return {
       ok: false,
-      reason: insertErr?.message ?? "Could not create mission.",
+      reason: friendlyMissionError(insertErr, today, "The mission for this test didn't save. Try again."),
     };
   }
 

@@ -72,6 +72,10 @@ type SlotProps = {
   /** "catch-up" is last week during the grace period. */
   mode: PlannerMode;
   readOnly: boolean;
+  /** Text on an empty slot's add button. */
+  addLabel?: string;
+  /** False hides → NEXT WEEK (earlier missions, closed-goal missions). */
+  allowCarry?: boolean;
 };
 
 export function MissionSlot(props: SlotProps) {
@@ -85,6 +89,7 @@ function EmptySlot({
   goalId,
   pillarCode,
   readOnly,
+  addLabel = "+ ADD MISSION",
 }: SlotProps) {
   const [expanded, setExpanded] = useState(false);
   const [description, setDescription] = useState("");
@@ -151,9 +156,9 @@ function EmptySlot({
           type="button"
           onClick={() => setExpanded(true)}
           className="w-full text-left px-4 py-3 text-[11px] font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-          aria-label={`Add mission to slot ${slotIndex + 1}`}
+          aria-label={`${addLabel.replace(/^\+\s*/, "").toLowerCase()}, slot ${slotIndex + 1}`}
         >
-          + ADD MISSION
+          {addLabel}
         </button>
       </li>
     );
@@ -273,6 +278,7 @@ function FilledSlot({
   todayISO,
   mode,
   readOnly,
+  allowCarry = true,
 }: SlotProps & { mission: WeekMission }) {
   const [description, setDescription] = useState(mission.description);
   const [dayIndexes, setDayIndexes] = useState<number[]>(() =>
@@ -288,6 +294,7 @@ function FilledSlot({
   const [deletePending, startDelete] = useTransition();
   const [carryPending, startCarry] = useTransition();
   const [justCarried, setJustCarried] = useState(false);
+  const [carryError, setCarryError] = useState<string | null>(null);
   // Optimistic local flag OR server-derived — either disables the button.
   const carriedAlready = carriedForward || justCarried;
   const [confirmDialog, confirm] = useConfirm();
@@ -557,13 +564,17 @@ function FilledSlot({
             ) : null}
           </div>
           <div className={`shrink-0 flex justify-end ${COL_NEXT_WEEK_SLOT}`}>
-            {!readOnly ? (
+            {!readOnly && allowCarry ? (
               <button
                 type="button"
                 onClick={() =>
                   startCarry(async () => {
+                    setCarryError(null);
                     const res = await carryMissionToNextWeek({ mission_id: mission.id });
+                    // A full slot next week is refused with the slot
+                    // named; this mission stays where it is.
                     if (res.ok) setJustCarried(true);
+                    else setCarryError(res.error);
                   })
                 }
                 disabled={carryPending || carriedAlready}
@@ -602,6 +613,11 @@ function FilledSlot({
       {saveError ? (
         <p className="text-[11px] text-[color:var(--color-danger)] pl-[calc(theme(spacing.3)+1.5rem)]">
           {saveError}
+        </p>
+      ) : null}
+      {carryError ? (
+        <p className="text-[11px] text-[color:var(--color-danger)]" role="alert">
+          {carryError}
         </p>
       ) : null}
       {savePending ? (

@@ -7,8 +7,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { computeMidpointCheckAt, getCurrentQuarter } from "@/lib/scoring/quarters";
 import { captureServerEvent } from "@/lib/analytics/server";
 import { parseForm } from "@/lib/validation/form-error";
+import { friendlyMissionError } from "@/lib/missions/rules";
 
-const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
+// Goals go on the five mission domains only (2026-10-15). There's no cap
+// on how many; the form recommends one or two.
+const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E"], {
+  errorMap: () => ({ message: "Pick Bond, Raise, Amplify, Vitality, or Enjoyment." }),
+});
 
 const CurrentStateSchema = z
   .string()
@@ -45,7 +50,7 @@ export async function createGoal(input: unknown) {
     source: "user",
     midpoint_check_at: midpointCheckAt,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyMissionError(error, q.startIso, "That goal didn't save. Try again.") };
   captureServerEvent(user.id, {
     name: "goal_created",
     props: { pillar_code: parsed.data.focus_area, source: "user" },

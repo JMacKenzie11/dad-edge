@@ -39,3 +39,20 @@ export const PILLAR_BY_CODE: Record<PillarCode, (typeof PILLARS)[number]> = PILL
   (acc, p) => ({ ...acc, [p.code]: p }),
   {} as Record<PillarCode, (typeof PILLARS)[number]>,
 );
+
+/**
+ * The five mission domains (2026-10-15 restructure). Weekly missions with
+ * no goal go under one of these, two per week each, and quarterly goals and
+ * improvement maps can only be set on them. Movement, Action and Network
+ * still count in daily check-ins; they just don't take missions or goals.
+ * The DB triggers in 20261015000001_mission_domains_and_goal_cap.sql hold
+ * the same list.
+ */
+export const DOMAIN_CODES = ["B", "R", "A", "V", "E"] as const;
+export type DomainCode = (typeof DOMAIN_CODES)[number];
+export const DOMAIN_PILLARS = PILLARS.filter((p) =>
+  (DOMAIN_CODES as readonly string[]).includes(p.code),
+);
+export function isDomainCode(code: string): code is DomainCode {
+  return (DOMAIN_CODES as readonly string[]).includes(code);
+}

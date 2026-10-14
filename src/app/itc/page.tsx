@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CHOOSABLE_PILLARS, PILLAR_BY_CODE } from "@/lib/pillars";
+import { DOMAIN_PILLARS, PILLAR_BY_CODE } from "@/lib/pillars";
 import { isItcAdmin } from "@/lib/itc/admin";
 import { listMapsForParticipant } from "@/lib/itc/maps";
 import { STAGE_LABELS } from "@/lib/itc/stage";
@@ -146,8 +146,10 @@ export default async function ItcLandingPage({
             </p>
           </div>
           <form action={startMap} className="space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {CHOOSABLE_PILLARS.map((p) => (
+            {/* Five pillars only: the map's goal mirrors to a quarterly
+                goal, and goals go on the five mission domains. */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {DOMAIN_PILLARS.map((p) => (
                 <label
                   key={p.code}
                   className="flex flex-col items-center gap-1 rounded-md border px-2 py-3 text-xs border-[color:var(--color-border)] bg-black/20 cursor-pointer has-[:checked]:border-[color:var(--color-primary)] has-[:checked]:bg-[color:var(--color-primary)]/20"

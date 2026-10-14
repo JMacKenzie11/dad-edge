@@ -5,6 +5,9 @@ import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { revalidatePath } from "next/cache";
+import { friendlyMissionError } from "@/lib/missions/rules";
+import { localDate } from "@/lib/scoring/week";
+import { isDomainCode } from "@/lib/pillars";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +21,19 @@ const BodySchema = z.object({
   pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quarterly_goal_id: z.string().uuid().nullable().optional(),
+}).refine((v) => Boolean(v.quarterly_goal_id) || isDomainCode(v.pillar_code), {
+  message: "Pick Bond, Raise, Amplify, Vitality, or Enjoyment.",
 });
 
 /**
  * User-accepts a coach-suggested mission. §6: coach suggestions require
  * explicit acceptance and are marked as coach_suggested. We re-validate the
  * concreteness gate server-side (never trust the client's pre-baked suggestion).
+ *
+ * Caps: the insert goes through the same weekly-cap trigger as every other
+ * mission. A goal mission's pillar comes from the goal, and the goal must
+ * be his and still open; the trigger checks both, so a forged goal id is
+ * refused there.
  */
 export async function POST(req: NextRequest) {
   const { user, readOnly } = await requireAccess();
@@ -89,7 +99,12 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    return NextResponse.json(
+      { error: friendlyMissionError(error, localDate(new Date(), user.timezone)) },
+      { status: 400 },
+    );
+  }
 
   revalidatePath("/missions");
   revalidatePath("/today");

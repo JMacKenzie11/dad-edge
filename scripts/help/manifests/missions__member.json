@@ -9,23 +9,11 @@
     },
     {
       "kind": "link",
-      "label": "MANAGE GOALS"
+      "label": "go back to close anything out"
     },
     {
       "kind": "link",
-      "label": "SET A GOAL"
-    },
-    {
-      "kind": "header",
-      "label": "THIS WEEK · –"
-    },
-    {
-      "kind": "header",
-      "label": "NEXT WEEK · –"
-    },
-    {
-      "kind": "button",
-      "label": "+ ADD MISSION"
+      "label": "plan next week"
     },
     {
       "kind": "field",
@@ -46,14 +34,44 @@
     {
       "kind": "button",
       "label": "HIDE"
+    },
+    {
+      "kind": "field",
+      "label": "Previous week"
+    },
+    {
+      "kind": "field",
+      "label": "Next week"
+    },
+    {
+      "kind": "header",
+      "label": "by domain"
+    },
+    {
+      "kind": "header",
+      "label": "Goal missions"
+    },
+    {
+      "kind": "link",
+      "label": "YOUR GOALS →"
+    },
+    {
+      "kind": "link",
+      "label": "SET A GOAL"
+    },
+    {
+      "kind": "header",
+      "label": "Earlier missions"
     }
   ],
-  "source_hash": "8dc92d41d8089f0f",
+  "source_hash": "7b2fe5fcbd38c41f",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/actions.ts",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/mission-slot.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/target-dates.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/week-nav.ts",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/week-navigator.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/missions/weekly-planner.tsx"
   ]
 }

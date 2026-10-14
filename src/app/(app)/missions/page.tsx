@@ -2,8 +2,10 @@ import Link from "next/link";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getEditWindow, weekDates } from "@/lib/scoring/week";
-import { getCurrentQuarter } from "@/lib/scoring/quarters";
+import { daysUntilQuarterEnd, getCurrentQuarter } from "@/lib/scoring/quarters";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
+import { isEarlierUnattached, relativeWeek } from "@/lib/missions/rules";
+import { loadMissionCutover } from "@/lib/missions/slots";
 import { WeeklyPlanner } from "./weekly-planner";
 import { WeekNavigator } from "./week-navigator";
 import { resolveMissionWeek } from "./week-nav";
@@ -33,6 +35,7 @@ export type WeekMission = {
    *  mission ID. Loaded so the source row can detect it's already been
    *  carried forward and disable the → NEXT WEEK button. */
   rolled_over_from_mission_id: string | null;
+  created_at: string;
 };
 
 export type ActiveGoal = {
@@ -40,6 +43,7 @@ export type ActiveGoal = {
   desired_end_state: string;
   focus_area: PillarCode;
   quarter_start: string;
+  source: "user" | "itc";
 };
 
 /** Shift a yyyy-MM-dd Monday by whole weeks. */
@@ -108,18 +112,19 @@ export default async function MissionsPage({
   // carried forward can disable its own → NEXT WEEK button.
   const loadEnd = weekDates(shiftWeek(viewMonday, 1))[6];
 
-  const [{ data: goals }, { data: missions }] = await Promise.all([
+  // Goals that can still take missions: active, or in their quarter-end
+  // review week (the trigger accepts both). No cap on how many.
+  const [{ data: goals }, { data: missions }, cutover] = await Promise.all([
     supabase
       .from("quarterly_goals")
-      .select("id, desired_end_state, focus_area, quarter_start")
+      .select("id, desired_end_state, focus_area, quarter_start, source")
       .eq("user_id", user.id)
-      .eq("status", "active")
-      .eq("quarter_start", q.startIso)
+      .in("status", ["active", "needs_review"])
       .order("created_at"),
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id, created_at",
       )
       .eq("user_id", user.id)
       .gte("target_date", viewMonday)
@@ -130,11 +135,21 @@ export default async function MissionsPage({
       // mission or changed a day; scanning "what did I just enter?"
       // became a hunt.
       .order("created_at", { ascending: true }),
+    loadMissionCutover(supabase),
   ]);
 
-  const activeGoals = ((goals ?? []) as ActiveGoal[]).slice(0, 2);
+  const activeGoals = (goals ?? []) as ActiveGoal[];
   const allMissions = (missions ?? []) as WeekMission[];
   const weekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
+  // Abandoned missions (an ITC test he dropped) don't count and don't show.
+  const shown = weekMissions.filter((m) => (m.status as string) !== "abandoned");
+  const openGoalIds = new Set(activeGoals.map((g) => g.id));
+  const earlierMissions = shown.filter((m) => isEarlierUnattached(m, cutover));
+  const domainMissions = shown.filter((m) => !m.quarterly_goal_id && !isEarlierUnattached(m, cutover));
+  const goalMissions = shown.filter((m) => m.quarterly_goal_id && openGoalIds.has(m.quarterly_goal_id));
+  const closedGoalMissions = shown.filter((m) => m.quarterly_goal_id && !openGoalIds.has(m.quarterly_goal_id));
+  const daysLeft = daysUntilQuarterEnd();
+  const quarterCountdown = `${q.label} ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
   const carriedForwardIds = new Set(
     allMissions
       .map((m) => m.rolled_over_from_mission_id)
@@ -172,16 +187,10 @@ export default async function MissionsPage({
           </p>
           <h1 className="font-heading text-3xl">Missions</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            5 per goal, 5 unattached, max 15 per week.
+            Up to two missions in each domain every week, plus five under your goals.
           </p>
           <QuarterCountdown className="text-sm text-[color:var(--color-text-muted)] mt-1" />
         </div>
-        <Link
-          href="/goals"
-          className="h-10 px-4 rounded-md border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] flex items-center font-heading text-xs tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-        >
-          MANAGE GOALS
-        </Link>
       </header>
 
       <WeekNavigator
@@ -222,21 +231,6 @@ export default async function MissionsPage({
         </p>
       ) : null}
 
-      {activeGoals.length === 0 ? (
-        <div className="p-6 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-center">
-          <p className="font-heading text-lg mb-2">No quarterly goal set.</p>
-          <p className="text-sm text-[color:var(--color-text-muted)] mb-4">
-            Missions serve goals. Set one first — or set an unattached mission below.
-          </p>
-          <Link
-            href="/goals"
-            className="inline-flex h-10 px-4 items-center rounded-md bg-[color:var(--color-primary)] text-white font-heading text-xs tracking-widest"
-          >
-            SET A GOAL
-          </Link>
-        </div>
-      ) : null}
-
       {isLastWeek && weekMissions.length === 0 ? (
         <div className="p-6 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-center">
           <p className="text-sm text-[color:var(--color-text-muted)]">
@@ -246,10 +240,14 @@ export default async function MissionsPage({
       ) : (
         <WeeklyPlanner
           communityId={communityId}
-          weekMonday={viewMonday}
           weekDates={week}
-          activeGoals={activeGoals}
-          missions={weekMissions}
+          weekLabel={relativeWeek(viewMonday, todayISO)}
+          goals={activeGoals}
+          domainMissions={domainMissions}
+          goalMissions={goalMissions}
+          closedGoalMissions={closedGoalMissions}
+          earlierMissions={earlierMissions}
+          quarterCountdown={quarterCountdown}
           carriedForwardIds={carriedForwardIds}
           todayISO={todayISO}
           mode={mode}

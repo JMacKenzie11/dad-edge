@@ -9,6 +9,9 @@ import { resolveTargetDates, shiftDatesByOneWeek } from "./target-dates";
 import { localDate } from "@/lib/scoring/week";
 import { captureServerEvent } from "@/lib/analytics/server";
 import { parseForm } from "@/lib/validation/form-error";
+import { friendlyMissionError, isEarlierUnattached } from "@/lib/missions/rules";
+import { loadMissionCutover } from "@/lib/missions/slots";
+import { isDomainCode } from "@/lib/pillars";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -39,6 +42,11 @@ const CreateSchema = z.object({
 }).refine(
   (v) => v.target_dates !== undefined || v.target_date !== undefined,
   { message: "Pick at least one day." },
+).refine(
+  // A goal mission takes its goal's pillar (the trigger sets it); a
+  // domain mission has to be one of the five domains.
+  (v) => v.quarterly_goal_id !== null || isDomainCode(v.pillar_code),
+  { message: "Pick Bond, Raise, Amplify, Vitality, or Enjoyment." },
 );
 
 const UpdateSchema = z.object({
@@ -92,7 +100,7 @@ export async function createMission(
     .select("id")
     .single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyMissionError(error, localDate(new Date(), user.timezone)) };
   captureServerEvent(user.id, {
     name: "mission_created",
     props: { pillar_code: data.pillar_code, source: "user" },
@@ -184,7 +192,7 @@ export async function updateMission(
     .update(update)
     .eq("id", mission_id)
     .eq("user_id", user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyMissionError(error, localDate(new Date(), user.timezone)) };
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true };
@@ -318,7 +326,7 @@ export async function carryMissionToNextWeek(
   const { data: prev, error: fetchErr } = await supabase
     .from("missions")
     .select(
-      "id, description, pillar_code, community_id, quarterly_goal_id, target_date, target_dates",
+      "id, description, pillar_code, community_id, quarterly_goal_id, target_date, target_dates, created_at",
     )
     .eq("id", parsed.data.mission_id)
     .eq("user_id", user.id)
@@ -332,7 +340,19 @@ export async function carryMissionToNextWeek(
     quarterly_goal_id: string | null;
     target_date: string;
     target_dates: string[] | null;
+    created_at: string;
   };
+
+  // A no-goal mission from before the restructure carries a placeholder
+  // Bond the old planner chose for him. Copying it forward would file a
+  // new mission under a pillar he never picked, so he adds it fresh in
+  // the domain it belongs to instead.
+  if (isEarlierUnattached(p, await loadMissionCutover(supabase))) {
+    return {
+      ok: false,
+      error: "This one is from before missions were sorted by domain. Add it again next week under the domain it belongs to.",
+    };
+  }
 
   const sourceDates =
     p.target_dates && p.target_dates.length > 0 ? p.target_dates : [p.target_date];
@@ -350,7 +370,9 @@ export async function carryMissionToNextWeek(
     created_by: "user",
     rolled_over_from_mission_id: p.id,
   });
-  if (insErr) return { ok: false, error: insErr.message };
+  // A full slot next week is refused by the trigger; the source mission
+  // stays exactly where it is and he's told which slot is full.
+  if (insErr) return { ok: false, error: friendlyMissionError(insErr, localDate(new Date(), user.timezone)) };
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true, new_target_dates: nextDates, new_deadline: deadline };
