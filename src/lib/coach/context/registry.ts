@@ -1,4 +1,5 @@
 import type { ContextProvider } from "./types";
+import { coursesProvider } from "./providers/courses";
 import { familyProvider } from "./providers/family";
 import { goalsProvider } from "./providers/goals";
 import { identityProvider } from "./providers/identity";
@@ -27,4 +28,5 @@ export const CONTEXT_PROVIDERS: ContextProvider[] = [
   reflectionsProvider,
   itcProvider,
   surveyProvider,
+  coursesProvider,
 ];

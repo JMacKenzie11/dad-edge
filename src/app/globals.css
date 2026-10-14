@@ -109,3 +109,23 @@ body {
 .itc-fresh-row {
   animation: itc-fresh-row-highlight 3s ease-out 1;
 }
+
+/*
+ * Admin rich text editor (Tiptap). The member side renders through
+ * RichTextView with its own classes; these only style the editing surface
+ * so what Larry types looks like what members will see.
+ */
+.rte-content h2 { font-family: var(--font-heading); text-transform: uppercase; letter-spacing: var(--letter-spacing-heading); font-size: 1.125rem; margin: 0.75rem 0 0.25rem; }
+.rte-content h3 { font-family: var(--font-heading); text-transform: uppercase; letter-spacing: var(--letter-spacing-heading); font-size: 1rem; margin: 0.5rem 0 0.25rem; }
+.rte-content p { margin: 0.4rem 0; }
+.rte-content ul { list-style: disc; padding-left: 1.25rem; margin: 0.4rem 0; }
+.rte-content ol { list-style: decimal; padding-left: 1.25rem; margin: 0.4rem 0; }
+.rte-content a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.rte-content p.is-editor-empty:first-child::before,
+.rte-content[data-placeholder] > p:only-child:has(br.ProseMirror-trailingBreak:only-child)::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

@@ -6,12 +6,14 @@ import { CurrentHelpViewProvider } from "@/components/help/current-view-context"
 import { getNotificationsForBell } from "@/lib/notifications/read";
 import { getUnreadThreadCount } from "@/lib/messages/threads";
 import { PostHogBridge } from "@/components/analytics/posthog-bridge";
+import { hasVisibleCourses } from "@/lib/resources/queries";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, readOnly } = await requireAccess();
-  const [{ unreadCount, recent }, unreadMessageThreads] = await Promise.all([
+  const [{ unreadCount, recent }, unreadMessageThreads, showResources] = await Promise.all([
     getNotificationsForBell(),
     getUnreadThreadCount(user.id),
+    hasVisibleCourses(),
   ]);
 
   const initials =
@@ -44,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <SideNav
               isPlatformAdmin={user.is_platform_admin}
               unreadMessageThreads={unreadMessageThreads}
+              showResources={showResources}
             />
           </aside>
           <main className="px-4 md:px-6 py-4 md:py-8">{children}</main>
