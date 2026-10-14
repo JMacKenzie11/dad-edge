@@ -30,10 +30,6 @@ export type Goal = {
   total_missions: number;
 };
 
-/** Cap on user-authored active goals per quarter. Mirrors the DB
- *  trigger's split cap (see 20260826000001_goal_source_and_split_cap). */
-const USER_GOAL_SLOTS = 2;
-
 export default async function GoalsPage() {
   const { user, readOnly } = await requireAccess();
   const supabase = await createSupabaseServerClient();
@@ -84,13 +80,12 @@ export default async function GoalsPage() {
   const closed = rows.filter(
     (g) => g.status === "completed" || g.status === "abandoned",
   );
-  const activeUserGoalsThisQuarter = active.filter(
-    (g) => g.source === "user" && g.quarter_start === q.startIso,
+  // No cap on goals (2026-10-15). The count only drives the soft
+  // "one or two" note on the form; ITC goals count too, since they're
+  // just as much a goal he's carrying this quarter.
+  const activeGoalsThisQuarter = active.filter(
+    (g) => g.status === "active" && g.quarter_start === q.startIso,
   ).length;
-  const userSlotsRemaining = Math.max(
-    0,
-    USER_GOAL_SLOTS - activeUserGoalsThisQuarter,
-  );
 
   const activeUserGoals = active.filter((g) => g.source === "user");
   const activeItcGoal = active.find((g) => g.source === "itc") ?? null;
@@ -196,7 +191,7 @@ export default async function GoalsPage() {
       </header>
 
       {!readOnly ? (
-        <NewGoalForm userSlotsRemaining={userSlotsRemaining} />
+        <NewGoalForm activeGoalsThisQuarter={activeGoalsThisQuarter} />
       ) : null}
 
       {active

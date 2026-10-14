@@ -46,7 +46,7 @@ export default async function KidsStep({
       <form action={addKid} className="space-y-3 mb-6">
         <input name="name" placeholder="Name" className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
         <input type="date" name="birthdate" className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
-        <input name="loved" placeholder="Something you love about him or her." className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
+        <input name="loved" placeholder="Something you love about them." className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]" />
         {params.error ? <p className="text-xs text-[color:var(--color-danger)]">{params.error}</p> : null}
         <button
           type="submit"

@@ -152,7 +152,8 @@ const COLUMN_LABELS: Record<ColumnName, string> = {
 // -------------------------------------------------------------------------
 
 const startMapSchema = z.object({
-  pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "N"]),
+  // Same five pillars as quarterly goals, so the mirrored goal always fits.
+  pillar_code: z.enum(["B", "R", "A", "V", "E"]),
 });
 
 export async function startMap(formData: FormData): Promise<void> {

@@ -1,0 +1,65 @@
+{
+  "route_pattern": "/admin/courses/[id]/lessons/[lessonId]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "←"
+    },
+    {
+      "kind": "link",
+      "label": "PREVIEW AS MEMBER ↗"
+    },
+    {
+      "kind": "header",
+      "label": "PDF files"
+    },
+    {
+      "kind": "button",
+      "label": "×"
+    },
+    {
+      "kind": "button",
+      "label": "CHOOSE PDFS"
+    },
+    {
+      "kind": "field",
+      "label": "Choose PDFs"
+    },
+    {
+      "kind": "field",
+      "label": "File name members see"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE"
+    },
+    {
+      "kind": "field",
+      "label": "title"
+    },
+    {
+      "kind": "field",
+      "label": "https://vimeo.com/123456789"
+    },
+    {
+      "kind": "button",
+      "label": "CHECK LINK"
+    },
+    {
+      "kind": "field",
+      "label": "Optional notes that show under the video."
+    },
+    {
+      "kind": "button",
+      "label": "SAVE LESSON"
+    }
+  ],
+  "source_hash": "a110e7ade05c2fd3",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-files.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-form.tsx"
+  ]
+}

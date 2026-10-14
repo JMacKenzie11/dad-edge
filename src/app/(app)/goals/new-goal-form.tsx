@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { PILLARS, type PillarCode } from "@/lib/pillars";
+import { DOMAIN_PILLARS, type DomainCode } from "@/lib/pillars";
 import { Button } from "@/components/ui/button";
 import { createGoal } from "./actions";
 
@@ -14,22 +14,21 @@ import { createGoal } from "./actions";
  * "how you'll know" field.
  */
 export function NewGoalForm({
-  userSlotsRemaining,
+  activeGoalsThisQuarter,
 }: {
-  /** How many user-authored goal slots remain this quarter. 0 disables
-   *  the form with an explanatory line. Third slot is reserved for an
-   *  ITC map goal per the split-cap trigger. */
-  userSlotsRemaining: number;
+  /** Active goals he already has this quarter. There's no cap; at two or
+   *  more the form shows a note recommending one or two, and he can
+   *  still set the goal. */
+  activeGoalsThisQuarter: number;
 }) {
-  const [pillar, setPillar] = useState<PillarCode>("V");
+  const [pillar, setPillar] = useState<DomainCode>("V");
   const [currentState, setCurrentState] = useState("");
   const [desiredEndState, setDesiredEndState] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const noSlots = userSlotsRemaining <= 0;
+  const pastRecommended = activeGoalsThisQuarter >= 2;
 
   const submit = () => {
-    if (noSlots) return;
     setError(null);
     start(async () => {
       const res = await createGoal({
@@ -55,13 +54,12 @@ export function NewGoalForm({
         NEW GOAL
       </p>
       <div className="flex flex-wrap gap-2">
-        {PILLARS.map((p) => (
+        {DOMAIN_PILLARS.map((p) => (
           <button
             type="button"
             key={p.code}
-            onClick={() => setPillar(p.code)}
-            disabled={noSlots}
-            className="h-8 px-3 rounded-[var(--radius-chip)] text-[10px] font-heading tracking-widest border disabled:opacity-50"
+            onClick={() => setPillar(p.code as DomainCode)}
+            className="h-8 px-3 rounded-[var(--radius-chip)] text-[10px] font-heading tracking-widest border"
             style={{
               background: pillar === p.code ? p.colorVar : "transparent",
               borderColor: pillar === p.code ? p.colorVar : "var(--color-border)",
@@ -80,7 +78,6 @@ export function NewGoalForm({
         onChange={setCurrentState}
         placeholder="I'm hitting the gym 2 days a week when I mean to hit 4."
         rows={2}
-        disabled={noSlots}
       />
 
       <FormField
@@ -90,19 +87,16 @@ export function NewGoalForm({
         onChange={setDesiredEndState}
         placeholder="Deadlift 350 by end of quarter."
         rows={2}
-        disabled={noSlots}
       />
 
-      {noSlots ? (
-        <p className="text-xs text-[color:var(--color-text-muted)]">
-          You already have 2 goals this quarter, which is the cap. Close
-          or complete one above to free up a slot. The third slot is held
-          for an improvement map goal if you build one.
+      {pastRecommended ? (
+        <p className="text-xs text-[color:var(--color-warning)]" role="note">
+          We recommend one or two goals a quarter. Focus is what gets them done.
         </p>
       ) : null}
       {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
       <div className="flex justify-end">
-        <Button type="submit" disabled={pending || noSlots}>
+        <Button type="submit" disabled={pending}>
           {pending ? "Setting…" : "Set the goal"}
         </Button>
       </div>
@@ -117,7 +111,6 @@ function FormField({
   onChange,
   placeholder,
   rows,
-  disabled,
 }: {
   label: string;
   hint: string;
@@ -125,7 +118,6 @@ function FormField({
   onChange: (v: string) => void;
   placeholder?: string;
   rows: number;
-  disabled: boolean;
 }) {
   return (
     <label className="block space-y-1">
@@ -137,8 +129,7 @@ function FormField({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className="w-full p-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm disabled:opacity-50"
+        className="w-full p-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
       />
       <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
         {hint}

@@ -1,0 +1,74 @@
+{
+  "route_pattern": "/admin/courses/[id]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← ALL COURSES"
+    },
+    {
+      "kind": "link",
+      "label": "PREVIEW AS MEMBER ↗"
+    },
+    {
+      "kind": "header",
+      "label": "Lessons"
+    },
+    {
+      "kind": "field",
+      "label": "New lesson title"
+    },
+    {
+      "kind": "button",
+      "label": "ADD LESSON"
+    },
+    {
+      "kind": "button",
+      "label": "PUBLISH"
+    },
+    {
+      "kind": "button",
+      "label": "PIN TO TOP"
+    },
+    {
+      "kind": "field",
+      "label": "title"
+    },
+    {
+      "kind": "field",
+      "label": "slug"
+    },
+    {
+      "kind": "field",
+      "label": "What this course covers and who it's for."
+    },
+    {
+      "kind": "toggle",
+      "label": "visibility"
+    },
+    {
+      "kind": "toggle",
+      "label": "community_ids"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE COURSE"
+    },
+    {
+      "kind": "link",
+      "label": "EDIT"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE"
+    }
+  ],
+  "source_hash": "6ddc3eb2f62c2485",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/course-flags.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/course-form.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lesson-list.tsx"
+  ]
+}

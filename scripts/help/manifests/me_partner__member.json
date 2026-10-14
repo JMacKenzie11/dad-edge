@@ -9,7 +9,7 @@
     },
     {
       "kind": "field",
-      "label": "Her name"
+      "label": "Their name"
     },
     {
       "kind": "select",
@@ -25,14 +25,14 @@
     },
     {
       "kind": "field",
-      "label": "Something you love about her."
+      "label": "Something you love about them."
     },
     {
       "kind": "button",
       "label": "Save"
     }
   ],
-  "source_hash": "117049e9adae5d13",
+  "source_hash": "8fb2bc04a097f1b8",
   "source_files": [
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/page.tsx",
     "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/actions.ts"

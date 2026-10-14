@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireLeader } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
@@ -123,11 +124,14 @@ const CorrectionSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pillar_code: z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]),
   new_value: z.enum(["0", "1", "clear"]),
-  reason: z.string().min(4).max(400),
+  reason: z
+    .string()
+    .min(4, "Give a reason for the correction.")
+    .max(400, "Keep the reason under 400 characters."),
 });
 
 export async function submitCorrection(formData: FormData) {
-  const parsed = CorrectionSchema.safeParse({
+  const parsed = parseForm(CorrectionSchema, {
     community_id: formData.get("community_id"),
     target_user_id: formData.get("target_user_id"),
     date: formData.get("date"),
@@ -135,8 +139,8 @@ export async function submitCorrection(formData: FormData) {
     new_value: formData.get("new_value"),
     reason: formData.get("reason"),
   });
-  if (!parsed.success) {
-    redirect(`/leader/corrections?error=${encodeURIComponent("Bad input.")}`);
+  if (!parsed.ok) {
+    redirect(`/leader/corrections?error=${encodeURIComponent(parsed.error)}`);
   }
   if (parsed.data.pillar_code === "A2") {
     redirect(

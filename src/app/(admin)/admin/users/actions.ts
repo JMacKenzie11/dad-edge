@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { auditLog } from "@/lib/audit";
@@ -14,7 +15,7 @@ function appOrigin(): string {
 
 const CreateAccountSchema = z
   .object({
-    email: z.string().email().max(254),
+    email: z.string().email("Enter a valid email address.").max(254, "That email is too long."),
     first_name: z.string().max(80).optional(),
     last_name: z.string().max(80).optional(),
     // Optional so admin-only accounts can be created without a
@@ -61,7 +62,7 @@ const CreateAccountSchema = z
 export async function createAccount(formData: FormData) {
   const admin = await requirePlatformAdmin();
   const rawCommunityId = formData.get("community_id");
-  const parsed = CreateAccountSchema.safeParse({
+  const parsed = parseForm(CreateAccountSchema, {
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
     first_name: String(formData.get("first_name") ?? "").trim() || undefined,
     last_name: String(formData.get("last_name") ?? "").trim() || undefined,
@@ -74,12 +75,8 @@ export async function createAccount(formData: FormData) {
     is_platform_admin: formData.get("is_platform_admin") ?? undefined,
     is_admin_only: formData.get("is_admin_only") ?? undefined,
   });
-  if (!parsed.success) {
-    redirect(
-      `/admin/users?error=${encodeURIComponent(
-        parsed.error.issues[0]?.message ?? "Bad input.",
-      )}`,
-    );
+  if (!parsed.ok) {
+    redirect(`/admin/users?error=${encodeURIComponent(parsed.error)}`);
   }
 
   const svc = createSupabaseServiceClient();
@@ -396,17 +393,17 @@ export async function sendInvitesBatch(formData: FormData) {
 const StatusSchema = z.object({
   user_id: z.string().uuid(),
   subscription_status: z.enum(["trialing", "active", "past_due", "canceled", "comped"]),
-  reason: z.string().max(240).optional(),
+  reason: z.string().max(240, "Keep the reason under 240 characters.").optional(),
 });
 
 export async function setSubscriptionStatus(formData: FormData) {
   const admin = await requirePlatformAdmin();
-  const parsed = StatusSchema.safeParse({
+  const parsed = parseForm(StatusSchema, {
     user_id: formData.get("user_id"),
     subscription_status: formData.get("subscription_status"),
     reason: formData.get("reason") ?? undefined,
   });
-  if (!parsed.success) redirect(`/admin/users?error=${encodeURIComponent("Bad input.")}`);
+  if (!parsed.ok) redirect(`/admin/users?error=${encodeURIComponent(parsed.error)}`);
   const svc = createSupabaseServiceClient();
 
   const { data: previous } = await svc

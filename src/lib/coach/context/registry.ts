@@ -1,8 +1,10 @@
 import type { ContextProvider } from "./types";
+import { coursesProvider } from "./providers/courses";
 import { familyProvider } from "./providers/family";
 import { goalsProvider } from "./providers/goals";
 import { identityProvider } from "./providers/identity";
 import { itcProvider } from "./providers/itc";
+import { missionSlotsProvider } from "./providers/mission-slots";
 import { missionsProvider } from "./providers/missions";
 import { reflectionsProvider } from "./providers/reflections";
 import { streaksProvider } from "./providers/streaks";
@@ -27,4 +29,6 @@ export const CONTEXT_PROVIDERS: ContextProvider[] = [
   reflectionsProvider,
   itcProvider,
   surveyProvider,
+  coursesProvider,
+  missionSlotsProvider,
 ];

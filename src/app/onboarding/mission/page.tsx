@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { PILLARS } from "@/lib/pillars";
+import { DOMAIN_PILLARS } from "@/lib/pillars";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { saveFirstMission } from "../actions";
 import { StepProgress } from "../step-progress";
@@ -44,7 +44,7 @@ export default async function MissionStep({
       <StepProgress step={7} total={8} />
       <h1 className="font-heading text-3xl mb-2">Your first mission.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
-        Behavior plus day. That's the format.
+        Pick a domain, then write one thing you'll do and the day you'll do it.
       </p>
       <form action={saveFirstMission} className="space-y-4">
         <input type="hidden" name="community_id" value={membership.community_id as string} />
@@ -52,8 +52,8 @@ export default async function MissionStep({
           <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] mb-2">
             PILLAR
           </p>
-          <div className="grid grid-cols-4 gap-2">
-            {PILLARS.map((p, i) => (
+          <div className="grid grid-cols-5 gap-2">
+            {DOMAIN_PILLARS.map((p, i) => (
               <label
                 key={p.code}
                 className="flex flex-col items-center py-2 rounded-md border border-[color:var(--color-border)] cursor-pointer transition-colors has-[:checked]:border-[color:var(--color-primary)] has-[:checked]:bg-[color:var(--color-primary)]/15"
@@ -69,7 +69,7 @@ export default async function MissionStep({
                   className="h-8 w-8 rounded-md flex items-center justify-center font-heading text-sm"
                   style={{ background: p.colorVar, color: "black" }}
                 >
-                  {p.code === "A2" ? "A" : p.code}
+                  {p.code}
                 </span>
                 <span className="text-[10px] font-heading tracking-widest mt-1 text-[color:var(--color-text-muted)]">
                   {p.short.toUpperCase()}

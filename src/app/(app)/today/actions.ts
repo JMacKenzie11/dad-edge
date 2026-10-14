@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { captureServerEvent } from "@/lib/analytics/server";
@@ -17,8 +18,8 @@ export async function setCheckin(input: unknown): Promise<{ ok: boolean; error?:
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
 
-  const parsed = InputSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(InputSchema, input);
+  if (!parsed.ok) return parsed;
   const { date, pillar_code, value } = parsed.data;
 
   if (pillar_code === "A2") {
@@ -65,8 +66,11 @@ export async function setCheckin(input: unknown): Promise<{ ok: boolean; error?:
 
 const ReflectionSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  wins: z.string().max(2000).nullable(),
-  learnings: z.string().max(2000).nullable(),
+  wins: z.string().max(2000, "Keep your wins under 2,000 characters.").nullable(),
+  learnings: z
+    .string()
+    .max(2000, "Keep your learnings under 2,000 characters.")
+    .nullable(),
 });
 
 /**
@@ -79,8 +83,8 @@ export async function saveReflection(
 ): Promise<{ ok: boolean; error?: string }> {
   const { user, readOnly } = await requireAccess();
   if (readOnly) return { ok: false, error: "Read-only account." };
-  const parsed = ReflectionSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Bad input." };
+  const parsed = parseForm(ReflectionSchema, input);
+  if (!parsed.ok) return parsed;
 
   const wins = parsed.data.wins?.trim() || null;
   const learnings = parsed.data.learnings?.trim() || null;

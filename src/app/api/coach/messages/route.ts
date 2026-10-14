@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { parseForm } from "@/lib/validation/form-error";
 import { requireAccess } from "@/lib/session";
 import { sendCoachMessage } from "@/lib/coach/send-message";
 
@@ -8,7 +9,10 @@ export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
   conversation_id: z.string().uuid(),
-  text: z.string().min(1).max(4000),
+  text: z
+    .string()
+    .min(1, "Write something first.")
+    .max(4000, "Keep your message under 4,000 characters."),
 });
 
 export async function POST(req: NextRequest) {
@@ -23,9 +27,9 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Bad JSON." }, { status: 400 });
   }
-  const parsed = BodySchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Bad input." }, { status: 400 });
+  const parsed = parseForm(BodySchema, body);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   try {

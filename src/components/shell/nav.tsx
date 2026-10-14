@@ -33,6 +33,7 @@ const communityItem = { href: "/community", label: "Community", icon: "◈" } as
 const coachItem = { href: "/coach", label: "Coach Larry", icon: "◐" } as const;
 const meItem = { href: "/me", label: "Me", icon: "●" } as const;
 const messagesItem = { href: "/messages", label: "Messages", icon: "✉" } as const;
+const resourcesItem = { href: "/resources", label: "Resources", icon: "▶" } as const;
 
 const adminItem = { href: "/admin", label: "Admin", icon: "⚙" } as const;
 
@@ -65,14 +66,26 @@ export function BottomNav() {
   );
 }
 
-export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: { isPlatformAdmin?: boolean; unreadMessageThreads?: number }) {
+export function SideNav({
+  isPlatformAdmin = false,
+  unreadMessageThreads = 0,
+  showResources = false,
+}: {
+  isPlatformAdmin?: boolean;
+  unreadMessageThreads?: number;
+  /** True when at least one published course is visible to him. */
+  showResources?: boolean;
+}) {
   const pathname = usePathname();
   // Desktop order: Today → Goals → Missions → My Braveman →
   // Community → Coach Larry → Me → Messages → Admin (if platform
   // admin). Goals moved up from below Coach Larry to sit directly
   // above Missions (2026-09-17): missions are set against a quarterly
   // goal, so the two get read together, and Goals was buried far
-  // enough down the list that the link was easy to miss.
+  // enough down the list that the link was easy to miss. Resources sits
+  // after Coach Larry (2026-10-14): both are where he goes to learn
+  // rather than to log, and it only shows once his community has a
+  // published course.
   const base = [
     todayItem,
     goalsItem,
@@ -80,6 +93,7 @@ export function SideNav({ isPlatformAdmin = false, unreadMessageThreads = 0 }: {
     dashboardItem,
     communityItem,
     coachItem,
+    ...(showResources ? [resourcesItem] : []),
     meItem,
     messagesItem,
   ];

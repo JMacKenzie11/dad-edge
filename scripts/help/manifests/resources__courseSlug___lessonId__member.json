@@ -1,0 +1,40 @@
+{
+  "route_pattern": "/resources/[courseSlug]/[lessonId]",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "←"
+    },
+    {
+      "kind": "header",
+      "label": "DOWNLOADS"
+    },
+    {
+      "kind": "link",
+      "label": "PDF ·"
+    },
+    {
+      "kind": "button",
+      "label": "Mark as not complete"
+    },
+    {
+      "kind": "button",
+      "label": "MARK AS COMPLETE"
+    },
+    {
+      "kind": "link",
+      "label": "← PREVIOUS"
+    },
+    {
+      "kind": "link",
+      "label": "NEXT →"
+    }
+  ],
+  "source_hash": "68291959f8b87227",
+  "source_files": [
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/resources/[courseSlug]/[lessonId]/page.tsx",
+    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/resources/[courseSlug]/[lessonId]/lesson-player.tsx"
+  ]
+}

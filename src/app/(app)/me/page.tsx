@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { hasVisibleCourses } from "@/lib/resources/queries";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "Not set";
@@ -18,7 +19,7 @@ export default async function MePage() {
   const { user } = await requireAccess();
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: partner }, { data: kids }, { data: latestSurvey }, { data: priorSurvey }] =
+  const [{ data: partner }, { data: kids }, { data: latestSurvey }, { data: priorSurvey }, showResources] =
     await Promise.all([
       supabase
         .from("partner_profiles")
@@ -40,6 +41,7 @@ export default async function MePage() {
         .order("taken_at", { ascending: false })
         .range(1, 1)
         .maybeSingle(),
+      hasVisibleCourses(),
     ]);
 
   const compositeOf = (row: { responses: { score: number }[] } | null | undefined) =>
@@ -95,6 +97,26 @@ export default async function MePage() {
         </div>
         <span className="text-[color:var(--color-primary)]">→</span>
       </Link>
+
+      {/* The bottom nav is at its five-item cap, so on a phone this card is
+          how he reaches Resources (same as My Brave Man above). */}
+      {showResources ? (
+        <Link
+          href="/resources"
+          className="flex items-center justify-between p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] transition-colors"
+        >
+          <div>
+            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+              COURSES
+            </p>
+            <p className="font-heading text-lg mt-1">Resources</p>
+            <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+              Video lessons and downloads from Larry and the Dad Edge team.
+            </p>
+          </div>
+          <span className="text-[color:var(--color-primary)]">→</span>
+        </Link>
+      ) : null}
 
       <section>
         <div className="flex items-baseline justify-between mb-3">

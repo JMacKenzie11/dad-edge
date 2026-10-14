@@ -6,8 +6,10 @@ import { currentUserHasItcAccess, requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
+import { friendlyMissionError } from "@/lib/missions/rules";
 
-const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
+// Goals and missions go on the five domains only (2026-10-15).
+const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E"]);
 const RelationshipLabel = z.enum(["wife", "husband", "partner", "girlfriend", "boyfriend", "fiancee"]);
 
 async function bumpStep(next: number) {
@@ -257,7 +259,7 @@ export async function saveFirstGoal(formData: FormData) {
   // Onboarding stays lean (one input field) to keep the funnel short.
   // The single input maps to desired_end_state; the coachee can add
   // current_state from /goals when they land there post-onboarding.
-  await supabase.from("quarterly_goals").insert({
+  const { error: goalErr } = await supabase.from("quarterly_goals").insert({
     user_id: user.id,
     focus_area: parsed.data.focus_area,
     desired_end_state: parsed.data.description.trim(),
@@ -265,6 +267,7 @@ export async function saveFirstGoal(formData: FormData) {
     source: "user",
     midpoint_check_at: midpointCheckAt,
   });
+  if (goalErr) redirect(`/onboarding/goal?error=${encodeURIComponent("That goal didn't save. Try again.")}`);
   await bumpStep(6);
   redirect("/onboarding/mission");
 }
@@ -284,7 +287,9 @@ export async function saveFirstMission(formData: FormData) {
     description: formData.get("description"),
     target_date: formData.get("target_date"),
   });
-  if (!parsed.success) redirect("/onboarding/mission?error=Behavior+plus+day.");
+  if (!parsed.success) {
+    redirect(`/onboarding/mission?error=${encodeURIComponent("Give the mission a domain, a behavior, and a day.")}`);
+  }
 
   const gate = validateMissionConcreteness({
     description: parsed.data.description,
@@ -295,7 +300,7 @@ export async function saveFirstMission(formData: FormData) {
   }
 
   const supabase = await createSupabaseServerClient();
-  await supabase.from("missions").insert({
+  const { error: missionErr } = await supabase.from("missions").insert({
     user_id: user.id,
     community_id: parsed.data.community_id,
     pillar_code: parsed.data.pillar_code,
@@ -303,6 +308,10 @@ export async function saveFirstMission(formData: FormData) {
     target_date: parsed.data.target_date,
     created_by: "user",
   });
+  if (missionErr) {
+    const today = new Date().toISOString().slice(0, 10);
+    redirect(`/onboarding/mission?error=${encodeURIComponent(friendlyMissionError(missionErr, today))}`);
+  }
   await bumpStep(7);
   redirect("/onboarding/first-checkin");
 }

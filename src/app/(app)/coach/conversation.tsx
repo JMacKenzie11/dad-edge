@@ -10,6 +10,10 @@ type MissionSuggestion = {
   description: string;
   pillar_code: PillarCode;
   target_date: string;
+  /** Set when the coach put it under one of his goals. Older stored
+   *  suggestions don't have these fields. */
+  quarterly_goal_id?: string | null;
+  goal_label?: string | null;
 };
 
 export type UITurn = {
@@ -297,6 +301,7 @@ function MissionCommitCard({
           description: suggestion.description,
           pillar_code: suggestion.pillar_code,
           target_date: suggestion.target_date,
+          quarterly_goal_id: suggestion.quarterly_goal_id ?? null,
         }),
       });
       if (!res.ok) {
@@ -313,8 +318,11 @@ function MissionCommitCard({
   return (
     <div className="rounded-[var(--radius-card)] bg-[color:var(--color-bg)] border border-[color:var(--color-coach)] p-3 space-y-2">
       <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-coach)]">
-        MISSION · {pillar.label.toUpperCase()}
+        {suggestion.quarterly_goal_id ? "GOAL MISSION" : "MISSION"} · {pillar.label.toUpperCase()}
       </p>
+      {suggestion.goal_label ? (
+        <p className="text-xs text-[color:var(--color-text-muted)] line-clamp-2">Goal: {suggestion.goal_label}</p>
+      ) : null}
       <p className="text-sm">{suggestion.description}</p>
       <p className="text-xs text-[color:var(--color-text-muted)]">
         {format(new Date(`${suggestion.target_date}T00:00:00`), "EEEE, MMM d")}
