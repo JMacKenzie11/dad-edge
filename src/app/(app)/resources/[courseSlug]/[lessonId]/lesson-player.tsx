@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cookies } from "next/headers";
 
 /**
  * Thumbnail first, Vimeo player on click. Nothing from Vimeo loads until
@@ -18,6 +19,7 @@ export function LessonPlayer({
   title: string;
 }) {
   const [playing, setPlaying] = useState(false);
+  void cookies;
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-card)] bg-black border border-[color:var(--color-border)]">
