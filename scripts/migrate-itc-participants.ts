@@ -31,6 +31,8 @@
  */
 
 import dotenv from "dotenv";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 dotenv.config({ path: ".env.local" });
 
 /**
@@ -41,22 +43,24 @@ dotenv.config({ path: ".env.local" });
  * the same wire protocol PostgREST speaks; nothing lost, plus this
  * script runs in any environment with network access.
  */
-const REST_URL = (() => {
+let REST_URL = "";
+let SVC_KEY = "";
+
+/** Reads the environment when main() starts, never at import
+ *  (scripts/entry-points.test.ts). */
+function loadEnv(): void {
+  // Writes data: dev database only (CLAUDE.md ground rules).
+  assertDevTarget();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local");
-    process.exit(1);
-  }
-  return `${url}/rest/v1`;
-})();
-const SVC_KEY = (() => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    console.error("Missing SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  if (!url || !key) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
     process.exit(1);
   }
-  return key;
-})();
+  REST_URL = `${url}/rest/v1`;
+  SVC_KEY = key;
+}
+
 
 async function pgGet<T>(path: string): Promise<T> {
   const res = await fetch(`${REST_URL}/${path}`, {
@@ -349,6 +353,7 @@ async function applyLinks(
 }
 
 async function main() {
+  loadEnv();
   const args = process.argv.slice(2);
   const isApply = args.includes("--apply");
   const isDry = args.includes("--dry-run");
@@ -383,7 +388,9 @@ async function main() {
   console.log("\nDone. Re-run with --dry-run to verify no unmatched participants remain.\n");
 }
 
-main().catch((err) => {
-  console.error("Unhandled error:", err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Unhandled error:", err);
+    process.exit(1);
+  });
+}

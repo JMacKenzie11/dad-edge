@@ -97,7 +97,7 @@ export default async function LessonPage({
       ) : null}
 
       {!lesson.vimeo_video_id && !description && files.length === 0 ? (
-        <p className="text-sm text-[color:var(--color-text-muted)]">Nothing's been added to this lesson yet.</p>
+        <p className="text-sm text-[color:var(--color-text-muted)]">Nothing&apos;s been added to this lesson yet.</p>
       ) : null}
 
       <section

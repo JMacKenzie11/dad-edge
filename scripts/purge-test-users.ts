@@ -27,12 +27,16 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
 /** The suite's own shape: formfirst-<uuid>@test.local, nothing else. */
 const TEST_EMAIL =
   /^formfirst-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@test\.local$/i;
 
 async function main() {
+  // Writes data: dev database only (CLAUDE.md ground rules).
+  assertDevTarget();
   const apply = process.argv.includes("--apply");
   const supabase = createSupabaseServiceClient();
 
@@ -106,4 +110,6 @@ async function main() {
   }
 }
 
-main();
+if (isEntryPoint(import.meta.url)) {
+  main();
+}

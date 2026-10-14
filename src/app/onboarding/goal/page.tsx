@@ -42,7 +42,7 @@ export default async function GoalStep({
         Your Q{quarter.quarterNumber} goal.
       </h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-4">
-        Pick one pillar. Write one goal you'll close before the quarter ends.
+        Pick one pillar. Write one goal you&apos;ll close before the quarter ends.
       </p>
       <div className="mb-6 p-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">

@@ -230,7 +230,7 @@ function AllowanceLine({ allowance }: { allowance: Allowance }) {
   if (allowance.bucket === "notice") {
     return (
       <p className="text-[10px] text-[color:var(--color-text-muted)] mt-2">
-        You've used {allowance.used} of {allowance.softCap} coach messages
+        You&apos;ve used {allowance.used} of {allowance.softCap} coach messages
         this month.
       </p>
     );

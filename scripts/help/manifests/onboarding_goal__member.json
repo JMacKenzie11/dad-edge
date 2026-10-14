@@ -22,7 +22,7 @@
   ],
   "source_hash": "ccdc0423b45b16bf",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/goal/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/goal/goal-form.tsx"
+    "src/app/onboarding/goal/page.tsx",
+    "src/app/onboarding/goal/goal-form.tsx"
   ]
 }

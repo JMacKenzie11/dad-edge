@@ -34,6 +34,7 @@ import { classifyMessage, CRISIS_RESOURCES } from "../src/lib/coach/safety";
 import { scrubCoachReply } from "../src/lib/coach/scrub-reply";
 import type { ContextBlock } from "../src/lib/coach/context";
 import { SCENARIOS, scenarioBySlug, type Scenario } from "../tests/coach/fixtures";
+import { isEntryPoint } from "./lib/entry";
 
 const PillarEnum = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -195,7 +196,9 @@ function renderBlocks(header: string, blocks: ContextBlock[]): string {
     .join("\n\n")}`;
 }
 
-main().catch((err) => {
-  console.error("Unhandled error:", err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Unhandled error:", err);
+    process.exit(1);
+  });
+}

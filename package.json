@@ -6,8 +6,10 @@
     "dev": "next dev -p 3300",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude \"tests/integration/**\" --exclude \"tests/form-first/regression.test.ts\" --exclude \"tests/coach/title.test.ts\"",
+    "test:live": "vitest run tests/integration tests/form-first/regression.test.ts tests/coach/title.test.ts",
     "test:itc": "vitest run --exclude \"tests/form-first/regression.test.ts\" --exclude \"tests/coach/title.test.ts\"",
     "test:itc:live": "vitest run tests/form-first/regression.test.ts tests/coach/title.test.ts",
     "test:itc:all": "vitest run",
@@ -27,7 +29,8 @@
     "reset:onboarding": "tsx scripts/reset-onboarding.ts",
     "help:extract": "tsx scripts/help/extract-routes.ts",
     "help:generate": "tsx scripts/help/generate-content.ts",
-    "help:check-stale": "tsx scripts/help/check-staleness.ts"
+    "help:check-stale": "tsx scripts/help/check-staleness.ts",
+    "help:check-manifests": "tsx scripts/help/check-manifests.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",
@@ -55,11 +58,14 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.1",
     "@tailwindcss/postcss": "^4.0.0-alpha.36",
     "@types/node": "^22.7.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/ui": "^4.1.10",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.23",
     "postcss": "^8.4.47",
     "tailwindcss": "^4.0.0-alpha.36",
     "tsx": "^4.19.1",

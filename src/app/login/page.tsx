@@ -64,13 +64,13 @@ function ResetSentPanel() {
       <div>
         <h1 className="font-heading text-2xl">Check your email</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          If that account exists, we've sent a reset link. Click it and
-          you'll be able to set a new password.
+          If that account exists, we&apos;ve sent a reset link. Click it and
+          you&apos;ll be able to set a new password.
         </p>
       </div>
       <p className="text-xs text-[color:var(--color-text-muted)]">
-        Didn't get it? Give it a minute, then check your spam folder. Still
-        nothing? The address you entered probably doesn't have an account
+        Didn&apos;t get it? Give it a minute, then check your spam folder. Still
+        nothing? The address you entered probably doesn&apos;t have an account
         on this system.
       </p>
       <Link
@@ -129,12 +129,12 @@ function ForgotForm({ error, sent }: { error?: string; sent?: string }) {
       <div>
         <h1 className="font-heading text-2xl">Reset password</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          We'll email you a link.
+          We&apos;ll email you a link.
         </p>
       </div>
       {sent ? (
         <p className="text-xs text-[color:var(--color-primary)]">
-          If that account exists, we've sent a reset link. Check your email.
+          If that account exists, we&apos;ve sent a reset link. Check your email.
         </p>
       ) : null}
       <form action={requestPasswordReset} className="space-y-3">

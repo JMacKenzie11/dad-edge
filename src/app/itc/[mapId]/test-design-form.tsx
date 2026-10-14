@@ -399,9 +399,9 @@ export function TestDesignForm({
           className="w-full rounded-md bg-black/30 border border-[color:var(--color-border)] px-3 py-2 text-sm"
         >
           <option value="behavioral">Behavioral (do something different in real life)</option>
-          <option value="observation">Observation (watch, don't act)</option>
-          <option value="data_mining">Data mining (look at what's already happened)</option>
-          <option value="thought_experiment">Thought experiment (imagine, don't act)</option>
+          <option value="observation">Observation (watch, don&apos;t act)</option>
+          <option value="data_mining">Data mining (look at what&apos;s already happened)</option>
+          <option value="thought_experiment">Thought experiment (imagine, don&apos;t act)</option>
         </select>
         <span className="block text-[11px] text-[color:var(--color-text-muted)]/70 italic">
           Changing the type gets you a fresh draft of that kind.

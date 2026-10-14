@@ -83,7 +83,7 @@ export default async function UsersPage({
       {created ? (
         <p className="text-xs text-[color:var(--color-primary)]">
           Account created. No invite email sent yet. Use Send Invite on
-          the user's page, or batch send from the list below.
+          the user&apos;s page, or batch send from the list below.
         </p>
       ) : null}
       {batch_sent ? (

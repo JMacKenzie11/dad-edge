@@ -34,8 +34,8 @@
   ],
   "source_hash": "122d9c8f967b6a48",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/avatar-cropper.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/profile/profile-form.tsx"
+    "src/app/onboarding/profile/page.tsx",
+    "src/app/onboarding/profile/avatar-cropper.tsx",
+    "src/app/onboarding/profile/profile-form.tsx"
   ]
 }

@@ -86,8 +86,8 @@
   ],
   "source_hash": "e7b2b81b4a8cd7b3",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/users/bulk-delete-button.tsx"
+    "src/app/(admin)/admin/users/page.tsx",
+    "src/app/(admin)/admin/users/actions.ts",
+    "src/app/(admin)/admin/users/bulk-delete-button.tsx"
   ]
 }

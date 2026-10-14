@@ -126,7 +126,7 @@ export function RowEditor({
                 </span>
                 <span>
                   <span className="font-mono text-white">
-                    "{h.match}"
+                    &quot;{h.match}&quot;
                   </span>{" "}
                   <span className="text-[color:var(--color-text-muted)]/80">
                     · {h.rule}

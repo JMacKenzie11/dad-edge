@@ -54,10 +54,10 @@
   ],
   "source_hash": "095050a2e1c009be",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/checkin-board.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/date-navigator.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/today/reflection-panel.tsx"
+    "src/app/(app)/today/page.tsx",
+    "src/app/(app)/today/actions.ts",
+    "src/app/(app)/today/checkin-board.tsx",
+    "src/app/(app)/today/date-navigator.tsx",
+    "src/app/(app)/today/reflection-panel.tsx"
   ]
 }

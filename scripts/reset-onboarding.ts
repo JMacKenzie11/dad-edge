@@ -42,27 +42,31 @@
  */
 
 import dotenv from "dotenv";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 dotenv.config({ path: ".env.local" });
 
 // Direct REST fetch — same reason as migrate-itc-participants.ts:
 // supabase-js does local JWT time validation that can fail in
 // environments with clock drift. Raw fetch bypasses that.
-const REST_URL = (() => {
+let REST_URL = "";
+let SVC_KEY = "";
+
+/** Reads the environment when main() starts, never at import
+ *  (scripts/entry-points.test.ts). */
+function loadEnv(): void {
+  // Writes data: dev database only (CLAUDE.md ground rules).
+  assertDevTarget();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local");
-    process.exit(1);
-  }
-  return `${url}/rest/v1`;
-})();
-const SVC_KEY = (() => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    console.error("Missing SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  if (!url || !key) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
     process.exit(1);
   }
-  return key;
-})();
+  REST_URL = `${url}/rest/v1`;
+  SVC_KEY = key;
+}
+
 
 async function pgGet<T>(path: string): Promise<T> {
   const res = await fetch(`${REST_URL}/${path}`, {
@@ -136,6 +140,7 @@ function parseArgs() {
 }
 
 async function main() {
+  loadEnv();
   const flags = parseArgs();
   const mode = flags.apply ? "APPLY" : "DRY-RUN";
   console.log(
@@ -198,7 +203,9 @@ async function main() {
   console.log(`[APPLY] Updated ${updated} of ${users.length} user rows.`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

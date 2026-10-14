@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { submitGoalReview } from "./actions";
@@ -76,12 +77,12 @@ export function GoalReviewPrompt({ goal }: { goal: ReviewableGoal }) {
 
       {isItc ? (
         <div className="flex gap-2">
-          <a
+          <Link
             href="/itc"
             className="h-9 px-3 rounded-md text-xs font-heading tracking-widest bg-[color:var(--color-primary)] text-white flex items-center"
           >
             OPEN THE MAP
-          </a>
+          </Link>
           <button
             type="button"
             onClick={() => setDismissed(true)}

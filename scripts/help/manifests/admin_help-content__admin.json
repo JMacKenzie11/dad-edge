@@ -46,8 +46,8 @@
   ],
   "source_hash": "af3f354ba27b06c2",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/help-content/row-editor.tsx"
+    "src/app/(admin)/admin/help-content/page.tsx",
+    "src/app/(admin)/admin/help-content/actions.ts",
+    "src/app/(admin)/admin/help-content/row-editor.tsx"
   ]
 }

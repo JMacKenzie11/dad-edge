@@ -50,7 +50,7 @@ export function EditCommunityForm({
           className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
         />
         <span className="text-[10px] text-[color:var(--color-text-muted)] normal-case">
-          Members can edit a past week's check-ins for this many days
+          Members can edit a past week&apos;s check-ins for this many days
           after it ends.
         </span>
       </label>

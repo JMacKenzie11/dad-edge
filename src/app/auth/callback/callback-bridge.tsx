@@ -57,7 +57,7 @@ export function CallbackBridge({ nextParam }: { nextParam: string | null }) {
   if (status === "error") {
     return (
       <p className="text-sm text-[color:var(--color-danger)]">
-        Sign-in link couldn't be verified. Redirecting…
+        Sign-in link couldn&apos;t be verified. Redirecting…
       </p>
     );
   }

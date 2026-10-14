@@ -15,6 +15,8 @@
  *   - isLegacyCannedIntro: legacy-persisted stage notes filter
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assembleAssumption,
@@ -1006,8 +1008,6 @@ describe("scoreWorryDepth prompt (structural)", () => {
   // that can stop it, and it has the behavior in its prompt. Lock both
   // facts so a prompt edit can't quietly drop the guard.
   it("rejects the behavior said back as self-criticism and sees the paired behavior", () => {
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const { resolve } = require("node:path") as typeof import("node:path");
     const src = readFileSync(resolve(__dirname, "../../src/lib/itc/rubric.ts"), "utf8");
     const worrySystem = src.slice(src.indexOf("const SYSTEM = `"), src.indexOf("export async function scoreCommitmentDepth"));
     expect(worrySystem).toMatch(/THE BEHAVIOR SAID BACK AS SELF-CRITICISM/);
@@ -1043,8 +1043,6 @@ describe("model middleware (structured-call defaults)", () => {
   // man wait 40-80s. Quality here is enforced after generation by the
   // rubrics and the criteria module, not by the model deliberating.
   it("disables extended thinking and floors the output budget", async () => {
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const { resolve } = require("node:path") as typeof import("node:path");
     const src = readFileSync(resolve(__dirname, "../../src/lib/model-config.ts"), "utf8");
     expect(src).toMatch(/thinking: \{ type: "disabled" \}/);
     expect(src).toMatch(/MIN_OUTPUT_TOKEN_BUDGET/);
@@ -1067,8 +1065,6 @@ describe("coaching text is verified by the judge that scores it on save (structu
   // accept must already have passed the function that scores it when
   // he does. These checks read the source so a refactor can't quietly
   // wire a suggester or drafter around its judge.
-  const { readFileSync } = require("node:fs") as typeof import("node:fs");
-  const { resolve } = require("node:path") as typeof import("node:path");
   const coach = readFileSync(resolve(__dirname, "../../src/lib/itc/coach.ts"), "utf8");
   const block = (name: string) => {
     const start = coach.indexOf(`export async function ${name}(`);
@@ -1214,8 +1210,6 @@ describe("stage intros name the same criteria the rubrics score (structural)", (
   // the intro can never promise a bar the judge doesn't hold (or hide
   // one it does).
   const ctx = { goal: "I'm committed to getting better at X", pillarCode: "B" as const };
-  const { readFileSync } = require("node:fs") as typeof import("node:fs");
-  const { resolve } = require("node:path") as typeof import("node:path");
   const rubric = readFileSync(resolve(__dirname, "../../src/lib/itc/rubric.ts"), "utf8");
 
   it("goal: one improvement, implicates him, room to improve, his and this pillar", () => {

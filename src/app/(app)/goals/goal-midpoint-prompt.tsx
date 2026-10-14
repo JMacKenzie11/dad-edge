@@ -57,7 +57,7 @@ export function GoalMidpointPrompt({ goal }: { goal: MidpointGoal }) {
         </p>
       </div>
       <p className="text-sm leading-relaxed">
-        You're halfway through the quarter on this one: &ldquo;{goal.desired_end_state}&rdquo;
+        You&apos;re halfway through the quarter on this one: &ldquo;{goal.desired_end_state}&rdquo;
       </p>
       <label className="block space-y-1">
         <span className="text-xs uppercase tracking-widest text-[color:var(--color-text-muted)]">

@@ -3,8 +3,12 @@ import path from "node:path";
 
 export default defineConfig({
   test: {
+    environment: "node",
     include: [
-      "src/**/__tests__/**/*.test.ts",
+      // Tests beside the code (new convention) and in __tests__/ folders
+      // (the existing ones); both match this pattern.
+      "src/**/*.test.ts",
+      "scripts/**/*.test.ts",
       // Form-First regression tests live here.
       "tests/form-first/**/*.test.ts",
       // Coach context pipeline unit tests.

@@ -89,7 +89,7 @@ export default async function CommunityDetailPage({
           <input type="hidden" name="role" value="leader" />
           <div>
             <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-primary)]">
-              YOU'RE NOT A MEMBER YET
+              YOU&apos;RE NOT A MEMBER YET
             </p>
             <p className="text-sm mt-1">
               Add yourself as leader so you can use the member surface (missions, coach, today).

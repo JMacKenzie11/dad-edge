@@ -30,6 +30,6 @@
   ],
   "source_hash": "5721d0a8ff216ad7",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/onboarding/kids/page.tsx"
+    "src/app/onboarding/kids/page.tsx"
   ]
 }

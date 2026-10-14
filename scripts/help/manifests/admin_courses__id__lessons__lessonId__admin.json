@@ -58,8 +58,8 @@
   ],
   "source_hash": "a110e7ade05c2fd3",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-files.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-form.tsx"
+    "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/page.tsx",
+    "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-files.tsx",
+    "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-form.tsx"
   ]
 }
