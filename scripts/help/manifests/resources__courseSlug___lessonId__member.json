@@ -24,15 +24,23 @@
       "label": "MARK AS COMPLETE"
     },
     {
-      "kind": "link",
-      "label": "← PREVIOUS"
+      "kind": "header",
+      "label": "NEXT UP"
     },
     {
       "kind": "link",
-      "label": "NEXT →"
+      "label": "Open"
+    },
+    {
+      "kind": "field",
+      "label": "PDF"
+    },
+    {
+      "kind": "link",
+      "label": "← PREVIOUS:"
     }
   ],
-  "source_hash": "68291959f8b87227",
+  "source_hash": "088b6517fe65c2c2",
   "source_files": [
     "src/app/(app)/resources/[courseSlug]/[lessonId]/page.tsx",
     "src/app/(app)/resources/[courseSlug]/[lessonId]/lesson-player.tsx"

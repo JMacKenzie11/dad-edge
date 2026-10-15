@@ -311,3 +311,7 @@ Jason: "I don't want to have to approve the help. Just roll it out automatically
 - **The nightly job also fills in pages that have no help**, so a new page gets help the night after it ships with no one running `help:generate`.
 - **`/admin/help-content` is hidden, not deleted.** It's off the admin menu and the Overview tile is gone, but it still works at its address for fixing a page's help by hand.
 - **The waiting drafts that passed the lint were published** by migration `20261016000003`. Drafts that failed it stay unpublished until the next run replaces them.
+
+## Next up lives in the lesson (2026-10-16)
+
+Jason: the Next up card on the course page doesn't make sense, since from there a member obviously starts at the first lesson, and Next up belongs at the end of each lesson when there is a next one. The course page now has only the Overview and the lesson list. Each lesson ends with a Next up card for the following lesson in course order (section order, then lesson order), and nothing on the last lesson. The "first lesson he hasn't finished" helper (`nextUpLesson`) had no other caller and is deleted.
