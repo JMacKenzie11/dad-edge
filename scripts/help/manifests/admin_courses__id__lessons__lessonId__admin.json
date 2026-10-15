@@ -41,7 +41,7 @@
     },
     {
       "kind": "select",
-      "label": "section_id"
+      "label": "Section"
     },
     {
       "kind": "field",
@@ -60,7 +60,7 @@
       "label": "SAVE LESSON"
     }
   ],
-  "source_hash": "3fefaf6373c6a2d8",
+  "source_hash": "29b05565aea1ad8d",
   "source_files": [
     "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/page.tsx",
     "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-files.tsx",

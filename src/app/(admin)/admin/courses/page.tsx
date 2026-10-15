@@ -80,7 +80,12 @@ export default async function AdminCoursesPage({
           <SubmitButton label="CREATE COURSE" pendingLabel="CREATING…" />
         </div>
         <label className="inline-flex items-center gap-2 text-sm">
-          <input type="checkbox" name="uses_sections" className="h-4 w-4 accent-[color:var(--color-primary)]" />
+          <input
+            type="checkbox"
+            name="uses_sections"
+            aria-label="Organize lessons into sections"
+            className="h-4 w-4 accent-[color:var(--color-primary)]"
+          />
           Organize lessons into sections
           <span className="text-xs text-[color:var(--color-text-muted)]">(titled groups, like Course Introduction and Part 1)</span>
         </label>
