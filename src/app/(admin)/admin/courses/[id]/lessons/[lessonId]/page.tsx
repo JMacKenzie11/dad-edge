@@ -91,7 +91,7 @@ export default async function AdminLessonEditPage({
         <div className="space-y-1">
           <h2 className="font-heading text-lg">PDF files</h2>
           <p className="text-xs text-[color:var(--color-text-muted)]">
-            PDFs only, up to 25 MB each. Members download them from the lesson page. Drag to change the order, and click a name to change what members see.
+            PDFs only, up to 50 MB each. Members download them from the lesson page. Drag to change the order, and click a name to change what members see.
           </p>
         </div>
         <LessonFiles lessonId={l.id} files={files} />

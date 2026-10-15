@@ -14,6 +14,7 @@ import {
   hasPdfSignature,
   LESSON_FILES_BUCKET,
   MAX_PDF_BYTES,
+  TOO_BIG_MESSAGE,
   storageSafeName,
   defaultDisplayName,
 } from "@/lib/resources/files";
@@ -635,9 +636,9 @@ export type UploadTicket =
 
 /**
  * Step 1 of an upload. The browser sends the file straight to Storage on
- * a one-time signed upload URL, which keeps 25 MB PDFs off our server
+ * a one-time signed upload URL, which keeps 50 MB PDFs off our server
  * (Vercel caps request bodies far below that). The bucket itself only
- * accepts application/pdf up to 25 MB.
+ * accepts application/pdf up to 50 MB.
  */
 export async function createLessonFileUpload(
   lessonId: string,
@@ -648,7 +649,7 @@ export async function createLessonFileUpload(
   if (!Uuid.safeParse(lessonId).success) return { ok: false, error: STALE_PAGE };
   if (!/\.pdf$/i.test(fileName)) return { ok: false, error: `${fileName} isn't a PDF. Only PDF files can be attached.` };
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return { ok: false, error: `${fileName} is empty.` };
-  if (sizeBytes > MAX_PDF_BYTES) return { ok: false, error: `${fileName} is over 25 MB. Compress it or split it, then try again.` };
+  if (sizeBytes > MAX_PDF_BYTES) return { ok: false, error: TOO_BIG_MESSAGE(fileName) };
 
   const svc = createSupabaseServiceClient();
   const { data: lesson } = await svc.from("lessons").select("id").eq("id", lessonId).maybeSingle();
@@ -700,7 +701,7 @@ export async function finalizeLessonFile(
   }
   if (total == null || !Number.isFinite(total) || total <= 0 || total > MAX_PDF_BYTES) {
     await removeObjects([path]);
-    return { ok: false, error: `${originalName} is over 25 MB. Compress it or split it, then try again.` };
+    return { ok: false, error: TOO_BIG_MESSAGE(originalName) };
   }
 
   const { data: last } = await svc
