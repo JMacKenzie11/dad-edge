@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     runWeeklyDigest(now),
     runExemplarNovelty(now),
     runGoalMidpointCheck(now),
-    runHelpContentAutoRegen(now),
+    runHelpContentAutoRegen(),
   ]);
   const ok = results.every((r) => r.ok);
   return NextResponse.json({ ok, results });

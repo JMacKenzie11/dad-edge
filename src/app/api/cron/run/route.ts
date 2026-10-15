@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       result = await runMarkGoalsForReview(now);
       break;
     case "help-content-auto-regen":
-      result = await runHelpContentAutoRegen(now);
+      result = await runHelpContentAutoRegen();
       break;
     default:
       return NextResponse.json(

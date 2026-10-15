@@ -13,7 +13,6 @@ const adminItems: NavItem[] = [
   { href: "/admin/disengagement", label: "Disengagement" },
   { href: "/admin/coach-flags", label: "Coach flags" },
   { href: "/admin/courses", label: "Courses" },
-  { href: "/admin/help-content", label: "Help content" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/audit", label: "Audit log" },
 ];

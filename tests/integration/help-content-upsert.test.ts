@@ -9,7 +9,9 @@ import { service } from "./helpers/supabase";
  * Most pages have view_key null. With a plain UNIQUE constraint two nulls
  * don't conflict, so every `help:generate` run inserted another copy and
  * the help widget picked one of them at random (docs/failure-modes.md
- * FM-13). Uses the generator's own write against the dev database.
+ * FM-13). And the new version is live straight away: there is no
+ * approval step (DECISIONS.md "Help publishes itself"). Uses the
+ * generator's own write against the dev database.
  */
 
 const ROUTE = `/zz-help-upsert-${Date.now()}`;
@@ -19,7 +21,7 @@ describe("help:generate write", () => {
     await service().from("help_content").delete().eq("route_pattern", ROUTE);
   });
 
-  it("keeps one row per page when view_key is null, and the newest content wins", async () => {
+  it("keeps one row per page when view_key is null, and the newest content is live", async () => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     assertDevTarget(url);
     const target = { restUrl: `${url}/rest/v1`, key: process.env.SUPABASE_SERVICE_ROLE_KEY! };
@@ -30,7 +32,6 @@ describe("help:generate write", () => {
       title,
       sections: [{ what_its_for: "A test capability for the upsert check.", steps: ["Tap **Test**."] }],
       source_hash: hash,
-      voice_lint_passed: true,
     });
 
     await upsertHelpContent(row("First version", "aaaa"), target);
@@ -38,9 +39,11 @@ describe("help:generate write", () => {
 
     const { data, error } = await service()
       .from("help_content")
-      .select("title, source_hash, reviewed")
+      .select("title, source_hash, reviewed, reviewed_by, voice_lint_passed")
       .eq("route_pattern", ROUTE);
     expect(error).toBeNull();
-    expect(data).toEqual([{ title: "Second version", source_hash: "bbbb", reviewed: false }]);
+    expect(data).toEqual([
+      { title: "Second version", source_hash: "bbbb", reviewed: true, reviewed_by: null, voice_lint_passed: true },
+    ]);
   });
 });

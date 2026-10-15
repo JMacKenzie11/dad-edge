@@ -1,16 +1,14 @@
 "use server";
 
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { generateObject } from "ai";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { utilityModel } from "@/lib/model-config";
 import { lintSections } from "@/../scripts/help/voice-lint";
 import { auditLog } from "@/lib/audit";
+import { generateForRow } from "@/lib/help/regenerate";
+import { publishedColumns } from "@/lib/help/publish";
 
 // Reuse the same schema shape as the generator script. Kept local to
 // this file rather than shared because the shape is small and
@@ -147,165 +145,6 @@ export async function editAndApproveHelpContent(formData: FormData) {
 // Regenerate — re-run generation for a single row from its manifest
 // ---------------------------------------------------------------------------
 
-/**
- * Derive the manifest filename from the row's route/view/role using
- * the same convention as scripts/help/extract-routes.ts. Route
- * segments become underscores, brackets stay.
- */
-function manifestFilenameFor(
-  routePattern: string,
-  viewKey: string | null,
-  role: string,
-): string {
-  const safe = (s: string) =>
-    s.replace(/[^a-z0-9-]/gi, "_").replace(/^_+|_+$/g, "");
-  const route = safe(routePattern.replace(/^\//, "") || "root");
-  const view = viewKey ? `__${safe(viewKey)}` : "";
-  return `${route}${view}__${role}.json`;
-}
-
-function loadManifest(filename: string): {
-  route_pattern: string;
-  view_key: string | null;
-  role: string;
-  elements: Array<{ kind: string; label: string }>;
-  source_hash: string;
-} | null {
-  const full = path.join(
-    process.cwd(),
-    "scripts",
-    "help",
-    "manifests",
-    filename,
-  );
-  if (!fs.existsSync(full)) return null;
-  return JSON.parse(fs.readFileSync(full, "utf-8"));
-}
-
-function findRoutePurpose(routePattern: string, spec: string): string | null {
-  const lines = spec.split("\n");
-  const escaped = routePattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(
-    `^\\|\\s*\`${escaped}(?:\\[[^\\]]+\\])?\`\\s*\\|`,
-  );
-  for (const line of lines) {
-    if (pattern.test(line)) {
-      const cells = line.split("|").map((c) => c.trim());
-      if (cells.length >= 3) {
-        const purpose = cells[cells.length - 2];
-        if (purpose && purpose.length > 20) return purpose;
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Regenerate a single row against its manifest. Returns a discriminated
- * result so bulk callers can tally successes vs failures without a
- * try/catch dance. Does not touch the DB — caller writes the result.
- */
-async function generateForRow(row: {
-  route_pattern: string;
-  view_key: string | null;
-  role: string;
-}): Promise<
-  | {
-      ok: true;
-      title: string;
-      sections: Sections;
-      source_hash: string;
-      voice_lint_passed: boolean;
-    }
-  | { ok: false; reason: string }
-> {
-  const filename = manifestFilenameFor(row.route_pattern, row.view_key, row.role);
-  const manifest = loadManifest(filename);
-  if (!manifest) {
-    return {
-      ok: false,
-      reason: `Manifest not found: ${filename} — run npm run help:extract first.`,
-    };
-  }
-
-  const spec = fs.readFileSync(
-    path.join(process.cwd(), "PRODUCT_SPEC.md"),
-    "utf-8",
-  );
-  const voiceDoc = fs.readFileSync(
-    path.join(process.cwd(), "docs", "app-voice-adaptation.md"),
-    "utf-8",
-  );
-  const purpose = findRoutePurpose(row.route_pattern, spec);
-
-  const system = `You write in-app HELP content for the BRAVE MAN OS. Reference content, not a coach turn. Written for a man scanning the app who wants to know what a button does or how to complete a step. Plain, tight, useful.
-
-Hard constraints:
-
-1. GROUNDED. You may only describe capabilities that correspond to elements in the ELEMENT LIST below. If an element isn't listed, you cannot describe it.
-
-2. LITERAL LABELS. When you reference an element, use its exact visible label wrapped in **bold**. Not paraphrases. "tap **Add**" — not "tap the add button". If a label is uppercase, keep it uppercase.
-
-3. NO CONVERSATION. This is reference content. No "let's", no "welcome to", no closing questions.
-
-4. VOICE RULES. Obey the voice adaptation guide below in full.
-
-5. FORMAT. Structured JSON matching the schema.
-
-===== VOICE RULES =====
-
-${voiceDoc}
-
-===== END VOICE RULES =====`;
-
-  const roleLine =
-    manifest.role === "all"
-      ? "Audience: any signed-in user."
-      : `Audience: ${manifest.role} role only.`;
-  const viewLine = manifest.view_key
-    ? `View: served when the user's current view is "${manifest.view_key}".`
-    : "";
-  const purposeLine = purpose
-    ? `Page purpose (from PRODUCT_SPEC.md): ${purpose}`
-    : "Page purpose: not documented; infer conservatively from the elements below.";
-  const elementLines = manifest.elements
-    .map((e, i) => `${i + 1}. [${e.kind}] "${e.label}"`)
-    .join("\n");
-  const prompt = `Route: ${manifest.route_pattern}
-${viewLine}
-${roleLine}
-
-${purposeLine}
-
-ELEMENT LIST (the only capabilities you may describe):
-${elementLines || "(no interactive elements — display-only surface)"}
-
-Produce the JSON now.`;
-
-  try {
-    const { object } = await generateObject({
-      model: utilityModel(),
-      schema: HelpContentSchema,
-      system,
-      prompt,
-      maxOutputTokens: 1500,
-    });
-    const lint = lintSections(object.sections);
-    return {
-      ok: true,
-      title: object.title,
-      sections: object.sections,
-      source_hash: manifest.source_hash,
-      voice_lint_passed: lint.passed,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
 export async function regenerateHelpContent(formData: FormData) {
   const admin = await requirePlatformAdmin();
   const id = String(formData.get("id") ?? "");
@@ -341,12 +180,9 @@ export async function regenerateHelpContent(formData: FormData) {
       title: result.title,
       sections: result.sections,
       source_hash: result.source_hash,
-      voice_lint_passed: result.voice_lint_passed,
-      // Regenerate resets review — new content, new approval needed.
-      reviewed: false,
-      reviewed_by: null,
-      reviewed_at: null,
-      generated_at: new Date().toISOString(),
+      // Live straight away: generateForRow only returns drafts that
+      // passed the voice lint (src/lib/help/publish.ts).
+      ...publishedColumns(),
     })
     .eq("id", id);
   if (error) {
@@ -384,7 +220,7 @@ export async function regenerateStaleHelpContent() {
   const { regenerateAllStale } = await import("@/lib/help/regenerate");
   const summary = await regenerateAllStale();
 
-  if (summary.staleTotal === 0) {
+  if (summary.staleTotal === 0 && summary.missingTotal === 0) {
     redirect("/admin/help-content?saved=No+stale+rows");
   }
 
@@ -404,6 +240,6 @@ export async function regenerateStaleHelpContent() {
   const msg =
     summary.failures.length === 0
       ? `Regenerated ${summary.regenerated} stale row${summary.regenerated === 1 ? "" : "s"}`
-      : `Regenerated ${summary.regenerated} of ${summary.staleTotal} (${summary.failures.length} failed)`;
+      : `Regenerated ${summary.regenerated} of ${summary.staleTotal + summary.missingTotal} (${summary.failures.length} failed)`;
   redirect(`/admin/help-content?saved=${encodeURIComponent(msg)}`);
 }
