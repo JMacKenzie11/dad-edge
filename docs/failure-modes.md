@@ -75,3 +75,9 @@ One short entry per incident: what happened, why the gates missed it, and the ru
 - **What happened:** `npm run rls:hazards -- --pending` refuses a migration that commits its own transaction, by looking for a line that is just `commit;` or `end;`. The course sections migration defines a PL/pgSQL function, whose body ends with `end;`, so the probes refused to run it at all (2026-10-16).
 - **Why the gates missed it:** no earlier migration probed with `--pending` had a function body ending on its own line.
 - **What it produced:** `commitsOwnTransaction()` in `scripts/rls-hazards.ts` ignores dollar-quoted bodies and comments before looking, with a test in `scripts/rls-hazards.test.ts` (red against the old check, then green) that still refuses a real top-level `commit;`.
+
+## FM-13: Regenerating help added a copy instead of replacing the row
+
+- **What happened:** `help:generate` writes with "insert, or update on conflict with (route_pattern, view_key, role)". Almost every page has `view_key` null, and a plain `UNIQUE` treats two nulls as different, so the conflict never fired and each run added another row. Production had 78 rows for 65 pages, with duplicates on 12 of them; six pages had two approved copies, and the help widget (`reviewed = true`, `limit 1`, no order) could show either. Found 2026-10-16 when regenerated course help still showed as stale.
+- **Why the gates missed it:** nothing checked the database after a generate run; the script reported "ok" because the insert succeeded.
+- **What it produced:** migration `20261016000002_help_content_one_row_per_page.sql` (keep the newest row per page, then `UNIQUE NULLS NOT DISTINCT`), and `tests/integration/help-content-upsert.test.ts`, which writes the same page twice through the generator's own `upsertHelpContent()` and expects one row (red on dev before the migration, green after). Rule of thumb: a unique key over a nullable column needs `NULLS NOT DISTINCT` or it isn't unique.

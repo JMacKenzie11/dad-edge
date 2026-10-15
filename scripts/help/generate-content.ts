@@ -202,19 +202,24 @@ function loadEnv(): void {
 }
 
 
-async function upsertHelpContent(row: {
-  route_pattern: string;
-  view_key: string | null;
-  role: string;
-  title: string;
-  sections: GeneratedHelp["sections"];
-  source_hash: string;
-  voice_lint_passed: boolean;
-}): Promise<void> {
+export async function upsertHelpContent(
+  row: {
+    route_pattern: string;
+    view_key: string | null;
+    role: string;
+    title: string;
+    sections: GeneratedHelp["sections"];
+    source_hash: string;
+    voice_lint_passed: boolean;
+  },
+  target: { restUrl: string; key: string } = { restUrl: REST_URL, key: SVC_KEY },
+): Promise<void> {
   // ON CONFLICT (route_pattern, view_key, role) — reset reviewed=false
   // on every regenerate; a reviewed row whose content is being
   // regenerated is now unreviewed until a human approves the new
-  // version.
+  // version. Most pages have view_key null; the unique constraint is
+  // NULLS NOT DISTINCT so those conflict too instead of piling up
+  // duplicates (docs/failure-modes.md FM-13).
   const body = {
     ...row,
     reviewed: false,
@@ -223,12 +228,12 @@ async function upsertHelpContent(row: {
     generated_at: new Date().toISOString(),
   };
   const res = await fetch(
-    `${REST_URL}/help_content?on_conflict=route_pattern,view_key,role`,
+    `${target.restUrl}/help_content?on_conflict=route_pattern,view_key,role`,
     {
       method: "POST",
       headers: {
-        apikey: SVC_KEY,
-        Authorization: `Bearer ${SVC_KEY}`,
+        apikey: target.key,
+        Authorization: `Bearer ${target.key}`,
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=minimal",
       },
