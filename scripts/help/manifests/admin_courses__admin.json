@@ -17,7 +17,7 @@
     },
     {
       "kind": "toggle",
-      "label": "uses_sections"
+      "label": "Organize lessons into sections"
     },
     {
       "kind": "button",
@@ -36,7 +36,7 @@
       "label": "DELETE"
     }
   ],
-  "source_hash": "b0de7755841e3cb3",
+  "source_hash": "0107f6ae6db784f2",
   "source_files": [
     "src/app/(admin)/admin/courses/page.tsx",
     "src/app/(admin)/admin/courses/actions.ts",

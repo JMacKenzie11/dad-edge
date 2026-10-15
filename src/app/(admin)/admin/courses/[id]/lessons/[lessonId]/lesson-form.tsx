@@ -88,6 +88,7 @@ export function LessonForm({
           <span className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">SECTION</span>
           <select
             name="section_id"
+            aria-label="Section"
             defaultValue={lesson.sectionId ?? sections[0].id}
             className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm"
           >
