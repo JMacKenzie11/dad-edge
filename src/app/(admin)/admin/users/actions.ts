@@ -634,6 +634,64 @@ export async function deleteUsersBatch(formData: FormData) {
   redirect(`/admin/users?error=${encodeURIComponent(summary)}`);
 }
 
+const SetNameSchema = z.object({
+  user_id: z.string().uuid(),
+  first_name: z.string().max(80, "First name is 80 characters at most."),
+  last_name: z.string().max(80, "Last name is 80 characters at most."),
+});
+
+/**
+ * Change a user's first and last name after the account exists. Same
+ * rules as the member's own profile edit (/me/profile): trimmed, blank
+ * saves as no name, 80 characters each. Names live only on public.users,
+ * so every page picks up the change. Audit-logged with the old and new
+ * values.
+ */
+export async function setName(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = SetNameSchema.safeParse({
+    user_id: formData.get("user_id"),
+    first_name: String(formData.get("first_name") ?? "").trim(),
+    last_name: String(formData.get("last_name") ?? "").trim(),
+  });
+  if (!parsed.success) {
+    const userId = String(formData.get("user_id") ?? "");
+    const message = parsed.error.issues[0]?.message ?? "That name isn't valid.";
+    redirect(
+      /^[0-9a-f-]{36}$/.test(userId)
+        ? `/admin/users/${userId}?error=${encodeURIComponent(message)}`
+        : `/admin/users?error=${encodeURIComponent(message)}`,
+    );
+  }
+  const svc = createSupabaseServiceClient();
+  const { data: before } = await svc
+    .from("users")
+    .select("first_name, last_name")
+    .eq("id", parsed.data.user_id)
+    .maybeSingle();
+  if (!before) {
+    redirect(`/admin/users?error=${encodeURIComponent("User not found.")}`);
+  }
+  const next = {
+    first_name: parsed.data.first_name || null,
+    last_name: parsed.data.last_name || null,
+  };
+  const { error } = await svc.from("users").update(next).eq("id", parsed.data.user_id);
+  if (error) {
+    redirect(`/admin/users/${parsed.data.user_id}?error=${encodeURIComponent(error.message)}`);
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "user.set_name",
+    target_type: "user",
+    target_id: parsed.data.user_id,
+    metadata: { before, after: next },
+  });
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${parsed.data.user_id}`);
+  redirect(`/admin/users/${parsed.data.user_id}?saved=1`);
+}
+
 const AdminFlagSchema = z.object({
   user_id: z.string().uuid(),
   is_platform_admin: z.enum(["on", "off"]).transform((v) => v === "on"),

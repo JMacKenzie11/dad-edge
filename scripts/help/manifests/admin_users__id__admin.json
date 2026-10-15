@@ -8,6 +8,18 @@
       "label": "← USERS"
     },
     {
+      "kind": "field",
+      "label": "First name"
+    },
+    {
+      "kind": "field",
+      "label": "Last name"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE NAME"
+    },
+    {
       "kind": "select",
       "label": "subscription_status"
     },
@@ -72,7 +84,7 @@
       "label": "Recent missions"
     }
   ],
-  "source_hash": "68b801021c969109",
+  "source_hash": "19d7f7a16477c8f1",
   "source_files": [
     "src/app/(admin)/admin/users/[id]/page.tsx"
   ]
