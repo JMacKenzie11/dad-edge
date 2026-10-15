@@ -5,12 +5,17 @@ import { generateObject } from "ai";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { utilityModel, utilityModelIdOrUnset } from "@/lib/model-config";
 import { lintSections } from "@/../scripts/help/voice-lint";
+import { firstCleanDraft, publishedColumns, withHyphens } from "@/lib/help/publish";
 
 /**
  * Shared help-content regeneration primitives. Callers:
  *   - The admin server action `regenerateStaleHelpContent` (from
  *     /admin/help-content REGEN ALL STALE button)
  *   - The nightly cron job `runHelpContentAutoRegen`
+ *
+ * Whatever this writes is live: a draft is published once it passes
+ * the voice lint, and a page whose drafts keep failing keeps its
+ * current help (src/lib/help/publish.ts).
  *
  * Kept as plain functions (no `"use server"`, no redirect) so both
  * callers can consume the same code path. Each caller wraps the
@@ -75,10 +80,20 @@ function loadManifest(filename: string): {
   return JSON.parse(fs.readFileSync(full, "utf-8"));
 }
 
+type ManifestKey = { route_pattern: string; view_key: string | null; role: string };
+
 function loadAllManifestsByKey(): Map<string, string> {
+  return new Map(loadAllManifestKeys().map((m) => [keyOf(m), m.source_hash]));
+}
+
+function keyOf(m: ManifestKey): string {
+  return `${m.route_pattern}||${m.view_key ?? ""}||${m.role}`;
+}
+
+function loadAllManifestKeys(): Array<ManifestKey & { source_hash: string }> {
   const dir = path.join(process.cwd(), "scripts", "help", "manifests");
-  if (!fs.existsSync(dir)) return new Map();
-  const out = new Map<string, string>();
+  if (!fs.existsSync(dir)) return [];
+  const out: Array<ManifestKey & { source_hash: string }> = [];
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith(".json")) continue;
     const m = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8")) as {
@@ -87,7 +102,7 @@ function loadAllManifestsByKey(): Map<string, string> {
       role: string;
       source_hash: string;
     };
-    out.set(`${m.route_pattern}||${m.view_key ?? ""}||${m.role}`, m.source_hash);
+    out.push(m);
   }
   return out;
 }
@@ -215,56 +230,67 @@ ${elementLines || "(no interactive elements — display-only surface)"}
 
 Produce the JSON now.`;
 
-  try {
-    const { object } = await generateObject({
-      model: utilityModel(),
-      schema: HelpContentSchema,
-      system,
-      prompt,
-      maxOutputTokens: 1500,
-    });
-    const lint = lintSections(object.sections);
-    return {
-      ok: true,
-      title: object.title,
-      sections: object.sections,
-      source_hash: manifest.source_hash,
-      voice_lint_passed: lint.passed,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err instanceof Error ? err.message : String(err),
-    };
-  }
+  const outcome = await firstCleanDraft(
+    async () =>
+      withHyphens(
+        (
+          await generateObject({
+            model: utilityModel(),
+            schema: HelpContentSchema,
+            system,
+            prompt,
+            maxOutputTokens: 1500,
+          })
+        ).object,
+      ),
+    (draft) => lintSections(draft.sections).passed,
+  );
+  if (!outcome.ok) return { ok: false, reason: outcome.reason };
+  return {
+    ok: true,
+    title: outcome.draft.title,
+    sections: outcome.draft.sections,
+    source_hash: manifest.source_hash,
+    voice_lint_passed: true,
+  };
+}
+
+/** Manifests with no help row at all: pages that have never had help. */
+export async function findMissingHelpContent(): Promise<ManifestKey[]> {
+  const svc = createSupabaseServiceClient();
+  const { data } = await svc.from("help_content").select("route_pattern, view_key, role");
+  const have = new Set(((data ?? []) as ManifestKey[]).map(keyOf));
+  return loadAllManifestKeys()
+    .filter((m) => !have.has(keyOf(m)))
+    .map(({ route_pattern, view_key, role }) => ({ route_pattern, view_key, role }));
 }
 
 /**
- * The whole stale-regen sweep. Both the admin action and the
- * nightly cron call this and diverge only in how they report
- * results.
+ * The whole sweep: regenerate every page whose controls changed and
+ * write help for every page that has none, publishing each one that
+ * passes the voice lint. Both the admin action and the nightly cron
+ * call this and diverge only in how they report results.
  */
 export async function regenerateAllStale(): Promise<{
   staleTotal: number;
+  missingTotal: number;
   regenerated: number;
   failures: string[];
 }> {
   const svc = createSupabaseServiceClient();
   const staleIds = await findStaleHelpContentIds();
-  if (staleIds.length === 0) {
-    return { staleTotal: 0, regenerated: 0, failures: [] };
+  const missing = await findMissingHelpContent();
+  if (staleIds.length === 0 && missing.length === 0) {
+    return { staleTotal: 0, missingTotal: 0, regenerated: 0, failures: [] };
   }
 
-  const { data } = await svc
-    .from("help_content")
-    .select("id, route_pattern, view_key, role")
-    .in("id", staleIds);
-  const rows = (data ?? []) as Array<{
-    id: string;
-    route_pattern: string;
-    view_key: string | null;
-    role: string;
-  }>;
+  const { data } = staleIds.length
+    ? await svc
+        .from("help_content")
+        .select("route_pattern, view_key, role")
+        .in("id", staleIds)
+    : { data: [] };
+  const rows = [...((data ?? []) as ManifestKey[]), ...missing];
 
   let regenerated = 0;
   const failures: string[] = [];
@@ -274,19 +300,18 @@ export async function regenerateAllStale(): Promise<{
       failures.push(`${row.route_pattern} (${row.role}): ${result.reason}`);
       continue;
     }
-    const { error } = await svc
-      .from("help_content")
-      .update({
+    const { error } = await svc.from("help_content").upsert(
+      {
+        route_pattern: row.route_pattern,
+        view_key: row.view_key,
+        role: row.role,
         title: result.title,
         sections: result.sections,
         source_hash: result.source_hash,
-        voice_lint_passed: result.voice_lint_passed,
-        reviewed: false,
-        reviewed_by: null,
-        reviewed_at: null,
-        generated_at: new Date().toISOString(),
-      })
-      .eq("id", row.id);
+        ...publishedColumns(),
+      },
+      { onConflict: "route_pattern,view_key,role" },
+    );
     if (error) {
       failures.push(`${row.route_pattern} (${row.role}): ${error.message}`);
       continue;
@@ -294,7 +319,7 @@ export async function regenerateAllStale(): Promise<{
     regenerated += 1;
   }
 
-  return { staleTotal: staleIds.length, regenerated, failures };
+  return { staleTotal: staleIds.length, missingTotal: missing.length, regenerated, failures };
 }
 
 /**

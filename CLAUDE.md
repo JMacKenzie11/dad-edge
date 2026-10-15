@@ -19,7 +19,7 @@ Multi-community accountability app for the BRAVE MAN framework: daily check-ins,
   Docs:  <which doc and section updated>, or "exempt: <reason>"
   ```
 - **A test that has only ever been green proves little.** For a new regression test or probe, show it failing against the old code first, then passing, and say so in the report.
-- **Never write to a production database from a test, script or seed.** Any script that can write somewhere real refuses unless the target is the dev or test database, checked by project id or host (`assertDevTarget()` in `scripts/lib/target.ts`), never by a flag. The one approved exception: `npm run help:generate` writes unreviewed rows to the production help review queue (Jason, 2026-10-15). Production data fixes ship as migrations.
+- **Never write to a production database from a test, script or seed.** Any script that can write somewhere real refuses unless the target is the dev or test database, checked by project id or host (`assertDevTarget()` in `scripts/lib/target.ts`), never by a flag. The one approved exception: `npm run help:generate` writes help rows to production, and they go live once they pass the voice check (Jason, 2026-10-15; no approval step since 2026-10-16). Production data fixes ship as migrations.
 
 ## Documentation
 

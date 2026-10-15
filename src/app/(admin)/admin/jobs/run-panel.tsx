@@ -24,7 +24,7 @@ const JOBS: Array<{
   { key: "exemplar-novelty", label: "Exemplar novelty scan", note: "Prune near-duplicate exemplar missions per pillar (weekly)." },
   { key: "mark-goals-for-review", label: "Mark goals for review", note: "Flip active goals to needs_review when quarter is closing; bell notifies each coachee." },
   { key: "goal-midpoint-check", label: "Goal midpoint check", note: "Bell-notify coachees whose midpoint_check_at has arrived and isn't answered." },
-  { key: "help-content-auto-regen", label: "Help content auto-regen", note: "Detect stale help rows (source_hash mismatch) and regenerate them via Haiku. Bell-notifies every platform admin so they know unreviewed drafts are waiting." },
+  { key: "help-content-auto-regen", label: "Help content auto-regen", note: "Regenerate help for pages whose controls changed and write help for pages that have none. Each page's help goes live once it passes the voice check; a page that fails three tries keeps its current help." },
 ];
 
 type RunResult = { ok: boolean; sent?: number; processed?: number; errors?: string[] };

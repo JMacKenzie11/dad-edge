@@ -3,9 +3,11 @@
  *
  * For each manifest under scripts/help/manifests/, call Anthropic
  * Haiku (utilityModel) to produce plain-language help content grounded
- * in the extracted elements. Run the result through voice-lint and
- * write to help_content with reviewed=false. A human reviews at
- * /admin/help-content.
+ * in the extracted elements. Run the result through voice-lint; a
+ * draft that passes is written to help_content live (reviewed=true),
+ * with no approval step. Up to three tries per page; a page whose
+ * drafts all fail is skipped and keeps its current help
+ * (src/lib/help/publish.ts, DECISIONS.md "Help publishes itself").
  *
  * Contract with the model:
  *   - Elements in the manifest are the ONLY concrete actions it may
@@ -28,6 +30,7 @@ dotenv.config({ path: ".env.local" });
 import { generateObject } from "ai";
 import { z } from "zod";
 import { utilityModel } from "../../src/lib/model-config";
+import { firstCleanDraft, publishedColumns, withHyphens } from "../../src/lib/help/publish";
 import { lintSections, type LintResult } from "./voice-lint";
 import { isEntryPoint } from "../lib/entry";
 
@@ -210,23 +213,16 @@ export async function upsertHelpContent(
     title: string;
     sections: GeneratedHelp["sections"];
     source_hash: string;
-    voice_lint_passed: boolean;
   },
   target: { restUrl: string; key: string } = { restUrl: REST_URL, key: SVC_KEY },
 ): Promise<void> {
-  // ON CONFLICT (route_pattern, view_key, role) — reset reviewed=false
-  // on every regenerate; a reviewed row whose content is being
-  // regenerated is now unreviewed until a human approves the new
-  // version. Most pages have view_key null; the unique constraint is
-  // NULLS NOT DISTINCT so those conflict too instead of piling up
-  // duplicates (docs/failure-modes.md FM-13).
-  const body = {
-    ...row,
-    reviewed: false,
-    reviewed_by: null,
-    reviewed_at: null,
-    generated_at: new Date().toISOString(),
-  };
+  // ON CONFLICT (route_pattern, view_key, role): a regeneration
+  // replaces the page's row and the new version is live at once. Only
+  // drafts that passed the voice lint reach here. Most pages have
+  // view_key null; the unique constraint is NULLS NOT DISTINCT so those
+  // conflict too instead of piling up duplicates (docs/failure-modes.md
+  // FM-13).
+  const body = { ...row, ...publishedColumns() };
   const res = await fetch(
     `${target.restUrl}/help_content?on_conflict=route_pattern,view_key,role`,
     {
@@ -291,18 +287,33 @@ async function main(): Promise<void> {
       }] · ${m.elements.length} elements ... `,
     );
 
+    // Dry runs show one draft as it came out, lint hits included;
+    // real runs retry until a draft passes.
     let help: GeneratedHelp;
-    try {
-      help = await generate(m, spec);
-    } catch (err) {
-      console.log("FAILED");
-      failures.push(
-        `  ${f}: ${err instanceof Error ? err.message : String(err)}`,
+    let lint: LintResult;
+    if (dryRun) {
+      try {
+        help = withHyphens(await generate(m, spec));
+      } catch (err) {
+        console.log("FAILED");
+        failures.push(`  ${f}: ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+      lint = lintSections(help.sections);
+    } else {
+      const outcome = await firstCleanDraft(
+        async () => withHyphens(await generate(m, spec)),
+        (d) => lintSections(d.sections).passed,
       );
-      continue;
+      if (!outcome.ok) {
+        console.log(`SKIPPED, page keeps its current help: ${outcome.reason}`);
+        failures.push(`  ${f}: ${outcome.reason}`);
+        failedLint += 1;
+        continue;
+      }
+      help = outcome.draft;
+      lint = lintSections(help.sections);
     }
-
-    const lint: LintResult = lintSections(help.sections);
     generated += 1;
     if (lint.passed) passed += 1;
     else failedLint += 1;
@@ -332,12 +343,11 @@ async function main(): Promise<void> {
       title: help.title,
       sections: help.sections,
       source_hash: m.source_hash,
-      voice_lint_passed: lint.passed,
     });
   }
 
   console.log(
-    `\n[help:generate] generated ${generated}, lint passed ${passed}, lint failed ${failedLint}`,
+    `\n[help:generate] ${dryRun ? "generated" : "published"} ${generated}, lint passed ${passed}, lint failed ${failedLint}`,
   );
   if (failures.length > 0) {
     console.log("\nFailures:");

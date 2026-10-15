@@ -298,3 +298,15 @@ Jason asked for lessons grouped under titled sections, like the Dad Edge course 
 - **Sections move by arrows, lessons by drag or arrows.** Nesting two drag-and-drop lists makes drags ambiguous. Moving a lesson to another section is a SECTION picker on the lesson's edit page, and the lesson lands at the end of that section.
 - **Members never see an empty section.** An admin can set up "Part 3" before its lessons exist without members seeing an empty card.
 - **The lesson's own section must belong to its course,** by a composite foreign key `(section_id, course_id)`, so no code path can file a lesson under another course's section.
+
+## Help publishes itself (2026-10-16)
+
+Jason: "I don't want to have to approve the help. Just roll it out automatically and hide the approval page." This replaces the human review gate from the Context-Aware Help System entry above.
+
+- **The voice lint is now the gate.** A generated draft that passes `scripts/help/voice-lint.ts` is written live (`reviewed=true`, which now means "published"). A draft that fails is never written. The model gets three tries per page (`firstCleanDraft()` in `src/lib/help/publish.ts`); its output sometimes doesn't match the schema, and that counts as a try too.
+- **A page whose drafts all fail keeps its current help** rather than losing it. Under the old flow a regeneration set the row back to unapproved, so a page lost its help between a UI change and someone approving the new text. Now the old text stays until a clean draft replaces it, and the failure shows in the job's errors on `/admin/jobs`.
+- **What still guards the text:** it can only describe controls extracted from the page's own source, it uses their exact labels, and it passes the voice lint. What's lost is a person catching help that's grounded and on-voice but wrong about what a control does.
+- **En dashes become hyphens instead of failing a draft.** The model writes ranges like "1–10", and pages failed three tries in a row over it. Jason: "Sometimes things just have hyphens in them." `withHyphens()` swaps each en dash for a plain hyphen before the lint, which keeps the voice rule (no en dashes in copy) without throwing the draft away. Em dashes still fail and get a fresh try, since they stand in for a sentence break.
+- **The nightly job also fills in pages that have no help**, so a new page gets help the night after it ships with no one running `help:generate`.
+- **`/admin/help-content` is hidden, not deleted.** It's off the admin menu and the Overview tile is gone, but it still works at its address for fixing a page's help by hand.
+- **The waiting drafts that passed the lint were published** by migration `20261016000003`. Drafts that failed it stay unpublished until the next run replaces them.
