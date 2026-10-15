@@ -78,3 +78,21 @@ describe("source guards", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("routes don't read files from public/ at runtime (FM-14)", () => {
+  it("no file under src/app reads public/ with fs", () => {
+    // Vercel doesn't bundle public/ into server functions, so a route that
+    // opens public/brand/mark-white.png works locally and throws ENOENT in
+    // production. Ship the file as a static asset instead.
+    const offenders = srcFiles
+      .filter((f) => f.rel.startsWith("src/app/"))
+      .filter((f) => /readFileSync|readFile\(/.test(f.text) && /["']public["']/.test(f.text))
+      .map((f) => f.rel);
+    expect(offenders).toEqual([]);
+  });
+
+  it("a control: the rule's regex does catch the old icon route", () => {
+    const old = 'const markPath = path.join(process.cwd(), "public", "brand", "mark-white.png");\nfs.readFileSync(markPath)';
+    expect(/readFileSync|readFile\(/.test(old) && /["']public["']/.test(old)).toBe(true);
+  });
+});

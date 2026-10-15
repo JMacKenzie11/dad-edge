@@ -620,6 +620,10 @@ Land on `/dashboard` → state resolver runs → if within grace period, card re
 - `mark-black.png`, `mark-white.png` — Centurion mark (favicon, app icons, coach avatar, loading).
 - `texture-dark.png`, `texture-light.png` — blueprint-style textures.
 
+**App icons** (`src/app/icon.png` 32×32, `src/app/apple-icon.png` 180×180) — the white mark on black, as static files. Next injects the `<link>` tags and `manifest.ts` points at `/icon.png` and `/apple-icon.png`. They used to be drawn at request time from `public/brand/mark-white.png`, which Vercel doesn't ship to server functions (FM-14).
+
+**Error screen** (`src/components/app-error.tsx`, used by `src/app/error.tsx` and `src/app/global-error.tsx`) — what a member sees when a page crashes, in place of Next's bare "Application error". It first reloads the tab by itself, at most once every 30 seconds (`src/lib/errors/reload-once.ts`), because most production crashes are a tab left open across a deploy and a reload fixes them. If the page crashes again it shows "This page didn't load.", a RELOAD button and the error code when there is one.
+
 **Branding archive** (`/Dad Edge Branding Guidelines/`) — original branding assets and `DAD_Edge_Guidelines_1.0.pdf`.
 
 **Coaching reference** (`/Assets/CoachingDocuments/`) — `Immunity-to-Change-Coach_s-Guide-Volume-{1,2}.pdf`; used for coach prompt development, not shipped.

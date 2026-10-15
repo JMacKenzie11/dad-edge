@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 /**
  * Web App Manifest — powers Add-to-Home-Screen on Android / Chrome
  * (iOS reads separate `apple-mobile-web-app-*` meta tags + the
- * pre-composed `/apple-icon` PNG; see src/app/apple-icon.tsx and
+ * `/apple-icon.png` (src/app/apple-icon.png); see
  * the appleWebApp block in src/app/layout.tsx).
  *
  * Black background_color + theme_color matches the app's dark
@@ -22,12 +22,12 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#000000",
     icons: [
       {
-        src: "/icon",
+        src: "/icon.png",
         sizes: "32x32",
         type: "image/png",
       },
       {
-        src: "/apple-icon",
+        src: "/apple-icon.png",
         sizes: "180x180",
         type: "image/png",
       },
@@ -36,13 +36,13 @@ export default function manifest(): MetadataRoute.Manifest {
       // for. "any maskable" lets Android crop it into shaped launcher
       // icons without losing the mark.
       {
-        src: "/apple-icon",
+        src: "/apple-icon.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "maskable",
       },
       {
-        src: "/apple-icon",
+        src: "/apple-icon.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
