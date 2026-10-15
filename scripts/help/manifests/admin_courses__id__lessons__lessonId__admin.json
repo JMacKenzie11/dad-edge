@@ -40,6 +40,10 @@
       "label": "title"
     },
     {
+      "kind": "select",
+      "label": "section_id"
+    },
+    {
       "kind": "field",
       "label": "https://vimeo.com/123456789"
     },
@@ -56,7 +60,7 @@
       "label": "SAVE LESSON"
     }
   ],
-  "source_hash": "a110e7ade05c2fd3",
+  "source_hash": "3fefaf6373c6a2d8",
   "source_files": [
     "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/page.tsx",
     "src/app/(admin)/admin/courses/[id]/lessons/[lessonId]/lesson-files.tsx",

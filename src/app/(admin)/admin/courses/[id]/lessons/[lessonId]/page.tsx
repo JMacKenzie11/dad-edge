@@ -19,11 +19,11 @@ export default async function AdminLessonEditPage({
   if (!UUID.test(id) || !UUID.test(lessonId)) notFound();
   const svc = createSupabaseServiceClient();
 
-  const [{ data: course }, { data: lesson }, { data: fileData }] = await Promise.all([
-    svc.from("courses").select("id, title, slug").eq("id", id).maybeSingle(),
+  const [{ data: course }, { data: lesson }, { data: fileData }, { data: sectionData }] = await Promise.all([
+    svc.from("courses").select("id, title, slug, uses_sections").eq("id", id).maybeSingle(),
     svc
       .from("lessons")
-      .select("id, course_id, title, vimeo_url, vimeo_video_id, vimeo_hash, vimeo_thumbnail_url, vimeo_duration_seconds, description_json")
+      .select("id, course_id, section_id, title, vimeo_url, vimeo_video_id, vimeo_hash, vimeo_thumbnail_url, vimeo_duration_seconds, description_json")
       .eq("id", lessonId)
       .eq("course_id", id)
       .maybeSingle(),
@@ -33,11 +33,14 @@ export default async function AdminLessonEditPage({
       .eq("lesson_id", lessonId)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
+    svc.from("course_sections").select("id, title").eq("course_id", id).order("sort_order", { ascending: true }),
   ]);
   if (!course || !lesson) notFound();
-  const c = course as { id: string; title: string; slug: string };
+  const c = course as { id: string; title: string; slug: string; uses_sections: boolean };
+  const sections = c.uses_sections ? ((sectionData ?? []) as { id: string; title: string }[]) : [];
   const l = lesson as {
     id: string;
+    section_id: string | null;
     title: string;
     vimeo_url: string | null;
     vimeo_video_id: string | null;
@@ -76,10 +79,12 @@ export default async function AdminLessonEditPage({
           title: l.title,
           vimeoUrl: l.vimeo_url ?? "",
           description: l.description_json,
+          sectionId: l.section_id,
           video: l.vimeo_video_id
             ? { thumbnailUrl: l.vimeo_thumbnail_url, durationSeconds: l.vimeo_duration_seconds, hasHash: Boolean(l.vimeo_hash) }
             : null,
         }}
+        sections={sections}
       />
 
       <section className="space-y-3">

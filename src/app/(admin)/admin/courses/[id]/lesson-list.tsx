@@ -17,7 +17,21 @@ export type AdminLessonRow = {
   fileCount: number;
 };
 
-export function LessonList({ courseId, lessons }: { courseId: string; lessons: AdminLessonRow[] }) {
+export function LessonList({
+  courseId,
+  lessons,
+  sectionId = null,
+  startIndex = 0,
+  emptyText = "No lessons yet. Add the first one below.",
+}: {
+  courseId: string;
+  lessons: AdminLessonRow[];
+  /** Set for one section of a sectioned course; reordering stays inside it. */
+  sectionId?: string | null;
+  /** Lesson numbers continue across sections. */
+  startIndex?: number;
+  emptyText?: string;
+}) {
   const router = useRouter();
   const [dialog, confirm] = useConfirm();
   const [pending, startTransition] = useTransition();
@@ -26,7 +40,7 @@ export function LessonList({ courseId, lessons }: { courseId: string; lessons: A
   if (lessons.length === 0) {
     return (
       <p className="px-4 py-6 text-sm text-center text-[color:var(--color-text-muted)] border border-dashed border-[color:var(--color-border)] rounded-[var(--radius-card)]">
-        No lessons yet. Add the first one below.
+        {emptyText}
       </p>
     );
   }
@@ -56,13 +70,13 @@ export function LessonList({ courseId, lessons }: { courseId: string; lessons: A
         items={lessons}
         itemLabel={(l) => l.title}
         onReorder={async (ids) => {
-          const res = await reorderLessons(courseId, ids);
+          const res = await reorderLessons(courseId, ids, sectionId);
           if (res.ok) router.refresh();
           return res.ok ? { ok: true } : { ok: false, error: res.error };
         }}
         renderItem={(l, i) => (
           <div className="flex items-center gap-3 py-2 pr-2">
-            <span className="w-6 text-right text-xs text-[color:var(--color-text-muted)]">{i + 1}</span>
+            <span className="w-6 text-right text-xs text-[color:var(--color-text-muted)]">{startIndex + i + 1}</span>
             <div className="w-20 h-11 shrink-0 rounded overflow-hidden bg-[color:var(--color-surface-2)] flex items-center justify-center">
               {l.thumbnail ? (
                 // eslint-disable-next-line @next/next/no-img-element

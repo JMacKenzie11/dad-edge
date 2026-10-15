@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bind, buildSql, judge, newIds, parseResults, PROBES, type Probe } from "./rls-hazards";
+import { bind, buildSql, commitsOwnTransaction, judge, newIds, parseResults, PROBES, type Probe } from "./rls-hazards";
 
 const read = (expect: "zero" | "some"): Probe => ({ id: "X", what: "x", kind: "read", as: "bob", sql: "", control: "", expect });
 const write = (expect: "allow" | "refuse", detail?: RegExp): Probe => ({ id: "W", what: "w", kind: "write", as: "alice", sql: "", expect, detail });
@@ -67,5 +67,13 @@ describe("helpers", () => {
     const payload = Buffer.from(JSON.stringify([{ id: "M1", outcome: "count", n: 0, control: 1 }])).toString("base64");
     expect(parseResults(`ERROR: P0001: PROBE_RESULTS:${payload}\nCONTEXT: ...`)).toEqual([{ id: "M1", outcome: "count", n: 0, control: 1 }]);
     expect(parseResults("ERROR: syntax error")).toBeNull();
+  });
+
+  it("refuses a migration that commits, but not a function whose body ends with end;", () => {
+    expect(commitsOwnTransaction("create table x (id int);\ncommit;")).toBe(true);
+    expect(commitsOwnTransaction("update x set a = 1;\nEND;")).toBe(true);
+    const fn = "create function f() returns void language plpgsql as $$\nbegin\n  perform 1;\nend;\n$$;\n-- end;\n";
+    expect(commitsOwnTransaction(fn)).toBe(false);
+    expect(commitsOwnTransaction("do $body$ begin perform 1;\nend;\n$body$;\ncommit;")).toBe(true);
   });
 });

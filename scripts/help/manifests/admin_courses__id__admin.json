@@ -17,6 +17,14 @@
     },
     {
       "kind": "field",
+      "label": "New section title, like Course Introduction"
+    },
+    {
+      "kind": "button",
+      "label": "ADD SECTION"
+    },
+    {
+      "kind": "field",
       "label": "New lesson title"
     },
     {
@@ -62,13 +70,42 @@
     {
       "kind": "button",
       "label": "DELETE"
+    },
+    {
+      "kind": "button",
+      "label": "↑"
+    },
+    {
+      "kind": "button",
+      "label": "↓"
+    },
+    {
+      "kind": "button",
+      "label": "RENAME"
+    },
+    {
+      "kind": "field",
+      "label": "Section title"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE"
+    },
+    {
+      "kind": "button",
+      "label": "CANCEL"
+    },
+    {
+      "kind": "button",
+      "label": "ORGANIZE INTO SECTIONS"
     }
   ],
-  "source_hash": "6ddc3eb2f62c2485",
+  "source_hash": "8fc2ea8446fd7ae9",
   "source_files": [
     "src/app/(admin)/admin/courses/[id]/page.tsx",
     "src/app/(admin)/admin/courses/[id]/course-flags.tsx",
     "src/app/(admin)/admin/courses/[id]/course-form.tsx",
-    "src/app/(admin)/admin/courses/[id]/lesson-list.tsx"
+    "src/app/(admin)/admin/courses/[id]/lesson-list.tsx",
+    "src/app/(admin)/admin/courses/[id]/section-list.tsx"
   ]
 }

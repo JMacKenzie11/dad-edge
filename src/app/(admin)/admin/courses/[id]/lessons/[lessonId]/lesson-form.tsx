@@ -10,8 +10,18 @@ type VideoPreview = { thumbnailUrl: string | null; durationSeconds: number | nul
 
 export function LessonForm({
   lesson,
+  sections,
 }: {
-  lesson: { id: string; title: string; vimeoUrl: string; description: unknown; video: VideoPreview | null };
+  lesson: {
+    id: string;
+    title: string;
+    vimeoUrl: string;
+    description: unknown;
+    video: VideoPreview | null;
+    sectionId: string | null;
+  };
+  /** The course's sections, in order. Empty for a course without them. */
+  sections: { id: string; title: string }[];
 }) {
   const [state, formAction] = useActionState<LessonSaveResult | null, FormData>(updateLesson, null);
   const [url, setUrl] = useState(lesson.vimeoUrl);
@@ -72,6 +82,26 @@ export function LessonForm({
           className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm"
         />
       </label>
+
+      {sections.length > 0 ? (
+        <label className="block space-y-1">
+          <span className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">SECTION</span>
+          <select
+            name="section_id"
+            defaultValue={lesson.sectionId ?? sections[0].id}
+            className="w-full h-11 px-3 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm"
+          >
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+          <span className="block text-xs text-[color:var(--color-text-muted)]">
+            Moving the lesson to another section puts it at the end of that section.
+          </span>
+        </label>
+      ) : null}
 
       <div className="space-y-2">
         <label className="block space-y-1">

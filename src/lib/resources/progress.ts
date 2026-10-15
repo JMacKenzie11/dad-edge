@@ -52,3 +52,41 @@ export function sortCourses<T extends { is_pinned: boolean; sort_order: number; 
     return a.created_at.localeCompare(b.created_at);
   });
 }
+
+export type SectionRef = { id: string; sort_order: number };
+export type OrderedLessonRef = { section_id: string | null; sort_order: number };
+
+/**
+ * Course order for a sectioned course: sections in their order, lessons in
+ * theirs inside each. A lesson with no section (only possible mid-edit)
+ * goes last rather than disappearing. With no sections this is a plain
+ * sort_order sort, so flat courses come out as they always did.
+ */
+export function orderLessons<T extends OrderedLessonRef>(lessons: T[], sections: SectionRef[]): T[] {
+  const rank = new Map(sections.map((s) => [s.id, s.sort_order]));
+  const sectionRank = (l: T) => (l.section_id != null && rank.has(l.section_id) ? rank.get(l.section_id)! : Infinity);
+  return lessons
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => sectionRank(a.l) - sectionRank(b.l) || a.l.sort_order - b.l.sort_order || a.i - b.i)
+    .map(({ l }) => l);
+}
+
+/**
+ * Lessons grouped under their sections, sections in order. Empty sections
+ * are kept (the admin editor shows them; the member page skips them).
+ * Lessons whose section isn't in the list land in a trailing group with
+ * section null.
+ */
+export function groupLessonsBySection<S extends SectionRef, T extends OrderedLessonRef>(
+  sections: S[],
+  lessons: T[],
+): Array<{ section: S | null; lessons: T[] }> {
+  const ordered = orderLessons(lessons, sections);
+  const groups = [...sections]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((section) => ({ section: section as S | null, lessons: ordered.filter((l) => l.section_id === section.id) }));
+  const known = new Set(sections.map((s) => s.id));
+  const loose = ordered.filter((l) => l.section_id == null || !known.has(l.section_id));
+  if (loose.length > 0) groups.push({ section: null, lessons: loose });
+  return groups;
+}
