@@ -5,7 +5,12 @@
  */
 
 export const LESSON_FILES_BUCKET = "lesson-files";
-export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+/** 50 MB: the most Supabase Storage takes per file on both projects
+ *  (project setting), and the lesson-files bucket's own limit. */
+export const MAX_PDF_MB = 50;
+export const MAX_PDF_BYTES = MAX_PDF_MB * 1024 * 1024;
+export const TOO_BIG_MESSAGE = (name: string) =>
+  `${name} is over ${MAX_PDF_MB} MB. Compress it or split it, then try again.`;
 export const PDF_MIME = "application/pdf";
 
 /** Every PDF starts with "%PDF-". An extension or a browser-reported
@@ -57,7 +62,7 @@ export async function checkPdfFile(file: File): Promise<string | null> {
     return `${file.name} isn't a PDF. Only PDF files can be attached.`;
   }
   if (file.size > MAX_PDF_BYTES) {
-    return `${file.name} is over 25 MB. Compress it or split it, then try again.`;
+    return TOO_BIG_MESSAGE(file.name);
   }
   if (file.size === 0) return `${file.name} is empty.`;
   const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());

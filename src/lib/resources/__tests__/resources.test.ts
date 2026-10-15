@@ -7,6 +7,7 @@ import {
   vimeoEmbedUrl,
 } from "@/lib/resources/vimeo";
 import {
+  checkPdfFile,
   defaultDisplayName,
   downloadFileName,
   hasPdfSignature,
@@ -145,5 +146,23 @@ describe("course progress", () => {
       { id: "3", is_pinned: false, sort_order: 1, created_at: "2026-01-01" },
     ]);
     expect(sorted.map((c) => c.id)).toEqual(["2", "1", "3"]);
+  });
+});
+
+describe("checkPdfFile size limit", () => {
+  const pdf = (bytes: number) => {
+    const b = new Uint8Array(bytes);
+    b.set(new TextEncoder().encode("%PDF-"));
+    return new File([b], "workbook.pdf", { type: "application/pdf" });
+  };
+
+  it("accepts a 30 MB PDF", async () => {
+    expect(await checkPdfFile(pdf(30 * 1024 * 1024))).toBeNull();
+  });
+
+  it("refuses a PDF over 50 MB with the size in the message", async () => {
+    expect(await checkPdfFile(pdf(51 * 1024 * 1024))).toBe(
+      "workbook.pdf is over 50 MB. Compress it or split it, then try again.",
+    );
   });
 });
