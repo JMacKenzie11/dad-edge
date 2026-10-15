@@ -14,7 +14,7 @@ import {
   storageSafeName,
 } from "@/lib/resources/files";
 import { slugify } from "@/lib/resources/slug";
-import { adjacentLessons, courseProgress, nextUpLesson, sortCourses } from "@/lib/resources/progress";
+import { adjacentLessons, courseProgress, sortCourses } from "@/lib/resources/progress";
 
 describe("parseVimeoUrl", () => {
   it.each([
@@ -122,11 +122,6 @@ describe("slugify", () => {
 
 describe("course progress", () => {
   const lessons = [{ id: "a" }, { id: "b" }, { id: "c" }];
-  it("next up is the first incomplete lesson in order, not the last one touched", () => {
-    expect(nextUpLesson(lessons, new Set(["a", "c"]))?.id).toBe("b");
-    expect(nextUpLesson(lessons, new Set())?.id).toBe("a");
-    expect(nextUpLesson(lessons, new Set(["a", "b", "c"]))).toBeNull();
-  });
   it("counts progress", () => {
     expect(courseProgress(lessons, new Set(["a"]))).toMatchObject({ completed: 1, total: 3, percent: 33, started: true, finished: false });
     expect(courseProgress(lessons, new Set(["a", "b", "c"])).finished).toBe(true);

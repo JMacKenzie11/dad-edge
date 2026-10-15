@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjacentLessons, groupLessonsBySection, nextUpLesson, orderLessons } from "./progress";
+import { adjacentLessons, groupLessonsBySection, orderLessons } from "./progress";
 
 const sections = [
   { id: "part1", sort_order: 1, title: "Part 1" },
@@ -33,9 +33,8 @@ describe("orderLessons", () => {
     expect(orderLessons(withLoose, sections).map((l) => l.id)).toEqual(["welcome", "outline", "voice", "mirror", "loose"]);
   });
 
-  it("drives next up and previous/next across a section boundary", () => {
+  it("drives previous/next (and the lesson page's Next up) across a section boundary", () => {
     const ordered = orderLessons(lessons, sections);
-    expect(nextUpLesson(ordered, new Set(["welcome", "outline"]))?.id).toBe("voice");
     const { prev, next } = adjacentLessons(ordered, "voice");
     expect(prev?.id).toBe("outline");
     expect(next?.id).toBe("mirror");

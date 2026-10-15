@@ -12,22 +12,6 @@
       "label": "Overview"
     },
     {
-      "kind": "header",
-      "label": "COURSE COMPLETE"
-    },
-    {
-      "kind": "link",
-      "label": "Open"
-    },
-    {
-      "kind": "field",
-      "label": "PDF LESSON"
-    },
-    {
-      "kind": "link",
-      "label": "BACK TO RESOURCES"
-    },
-    {
       "kind": "field",
       "label": "PDF"
     },
@@ -40,7 +24,7 @@
       "label": "Expand"
     }
   ],
-  "source_hash": "52a86ec5120c9ef5",
+  "source_hash": "9dc85201992b8eee",
   "source_files": [
     "src/app/(app)/resources/[courseSlug]/page.tsx",
     "src/app/(app)/resources/[courseSlug]/collapsibles.tsx"

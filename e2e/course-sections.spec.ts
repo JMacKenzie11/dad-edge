@@ -48,13 +48,21 @@ test("admin builds a sectioned course and a member sees the sections", async ({ 
     await expect(cards.nth(0)).toContainText("Course Introduction");
     await expect(cards.nth(0)).toContainText("2 lessons");
     await expect(cards.nth(1)).toContainText("Part 1: Become a Master Communicator");
-    // Next up follows section order, not the order lessons were added.
-    await expect(member.locator("aside", { hasText: "NEXT UP" })).toContainText("Welcome to the Course");
+    // The course page has no Next up card: the first lesson is the obvious start.
+    await expect(member.getByText("NEXT UP")).toHaveCount(0);
     await member.screenshot({ path: "test-results/course-sections-member.png", fullPage: true });
 
     await member.getByRole("link", { name: /Outline and Objectives/ }).click();
     await expect(member.getByText("COURSE INTRODUCTION · LESSON 2 OF 3")).toBeVisible();
-    await expect(member.getByRole("link", { name: /NEXT →/ })).toContainText("Mastering Your Voice Tone");
+    // Next up sits at the end of the lesson and follows section order,
+    // not the order lessons were added.
+    const nextUp = member.locator("section", { hasText: "NEXT UP" });
+    await expect(nextUp).toContainText("Mastering Your Voice Tone");
+    await member.screenshot({ path: "test-results/course-sections-lesson.png", fullPage: true });
+    await nextUp.getByRole("link").click();
+    await expect(member.getByText("LESSON 3 OF 3")).toBeVisible();
+    // Last lesson: nothing comes next, so no Next up card.
+    await expect(member.getByText("NEXT UP")).toHaveCount(0);
 
     await admin.goto(courseUrl);
     await admin.screenshot({ path: "test-results/course-sections-admin.png", fullPage: true });

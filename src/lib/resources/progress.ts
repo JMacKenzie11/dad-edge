@@ -20,15 +20,6 @@ export function courseProgress(
   };
 }
 
-/** First lesson he hasn't marked complete, in course order. Null when
- *  every lesson is done (or the course has none). */
-export function nextUpLesson<T extends LessonRef>(
-  lessons: T[],
-  completed: ReadonlySet<string>,
-): T | null {
-  return lessons.find((l) => !completed.has(l.id)) ?? null;
-}
-
 export function adjacentLessons<T extends LessonRef>(
   lessons: T[],
   lessonId: string,

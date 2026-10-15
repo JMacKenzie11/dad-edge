@@ -8,7 +8,7 @@ import { formatFileSize } from "@/lib/resources/files";
 import { readStoredDoc } from "@/lib/rich-text/doc";
 import { RichTextView } from "@/components/rich-text/rich-text-view";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { CompletionIndicator, PreviewBanner } from "../../resource-ui";
+import { CompletionIndicator, LessonThumb, PreviewBanner } from "../../resource-ui";
 import { markLessonComplete, markLessonIncomplete } from "../../actions";
 import { LessonPlayer } from "./lesson-player";
 
@@ -137,36 +137,41 @@ export default async function LessonPage({
           <form action={markLessonComplete} className="flex flex-col sm:flex-row sm:items-center gap-3">
             <input type="hidden" name="lesson_id" value={lesson.id} />
             {preview ? <input type="hidden" name="preview" value="1" /> : null}
-            <p className="flex-1 font-heading text-base">Ready to move on to the next lesson?</p>
+            <p className="flex-1 font-heading text-base">{next ? "Ready to move on to the next lesson?" : "Done with this lesson?"}</p>
             <SubmitButton label="MARK AS COMPLETE" pendingLabel="SAVING…" />
           </form>
         )}
       </section>
 
-      <nav className="flex items-stretch justify-between gap-3" aria-label="Lesson navigation">
-        {prev ? (
-          <Link
-            href={`/resources/${course.slug}/${prev.id}${q}`}
-            className="flex-1 max-w-[48%] rounded-[var(--radius-card)] border border-[color:var(--color-border)] px-4 py-3 hover:bg-[color:var(--color-surface)]"
-          >
-            <span className="block text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">← PREVIOUS</span>
-            <span className="block text-sm truncate">{prev.title}</span>
+      {/* Next up sits at the end of the lesson, once he's done with it.
+          The last lesson has none. */}
+      {next ? (
+        <section className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 space-y-3">
+          <h2 className="font-heading text-xs tracking-widest text-[color:var(--color-text-muted)]">NEXT UP</h2>
+          <Link href={`/resources/${course.slug}/${next.id}${q}`} className="group flex items-center gap-4">
+            <LessonThumb src={next.vimeo_thumbnail_url} className="w-28 sm:w-40" label="PDF" />
+            <p className="flex-1 min-w-0 text-sm leading-snug group-hover:text-[color:var(--color-accent)]">{next.title}</p>
+            <span
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)] text-white"
+              aria-hidden
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className="sr-only">Open {next.title}</span>
           </Link>
-        ) : (
-          <span className="flex-1" />
-        )}
-        {next ? (
-          <Link
-            href={`/resources/${course.slug}/${next.id}${q}`}
-            className="flex-1 max-w-[48%] rounded-[var(--radius-card)] border border-[color:var(--color-border)] px-4 py-3 text-right hover:bg-[color:var(--color-surface)]"
-          >
-            <span className="block text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">NEXT →</span>
-            <span className="block text-sm truncate">{next.title}</span>
-          </Link>
-        ) : (
-          <span className="flex-1" />
-        )}
-      </nav>
+        </section>
+      ) : null}
+
+      {prev ? (
+        <Link
+          href={`/resources/${course.slug}/${prev.id}${q}`}
+          className="inline-block text-xs text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]"
+        >
+          ← PREVIOUS: {prev.title}
+        </Link>
+      ) : null}
     </div>
   );
 }
