@@ -69,3 +69,9 @@ One short entry per incident: what happened, why the gates missed it, and the ru
 - **What happened:** a CI build failed in `src/lib/fonts.ts` with `next/font` "Cannot read properties of null (reading '1')": `next/font/google` fetches Archivo and Inter from Google Fonts at build time, and the response it got wasn't the CSS it expected. A rerun of the same commit passed (PR #3, 2026-10-15).
 - **Why the gates missed it:** they didn't; the build step caught it. It's here because it's a flake that isn't about the code, and a red build should first be checked against this entry before anyone debugs the diff.
 - **What it produced:** so far, this entry and a rerun. The lasting fix is to self-host the two fonts (`next/font/local`), which `src/lib/fonts.ts` already anticipates for the Adobe fonts. Open for Jason.
+
+## FM-12: The permission probes refused any migration that defines a function
+
+- **What happened:** `npm run rls:hazards -- --pending` refuses a migration that commits its own transaction, by looking for a line that is just `commit;` or `end;`. The course sections migration defines a PL/pgSQL function, whose body ends with `end;`, so the probes refused to run it at all (2026-10-16).
+- **Why the gates missed it:** no earlier migration probed with `--pending` had a function body ending on its own line.
+- **What it produced:** `commitsOwnTransaction()` in `scripts/rls-hazards.ts` ignores dollar-quoted bodies and comments before looking, with a test in `scripts/rls-hazards.test.ts` (red against the old check, then green) that still refuses a real top-level `commit;`.

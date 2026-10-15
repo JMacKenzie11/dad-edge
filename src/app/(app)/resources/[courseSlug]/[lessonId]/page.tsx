@@ -32,7 +32,7 @@ export default async function LessonPage({
 
   const data = await loadCourseBySlug(courseSlug, user.id, { preview });
   if (!data) notFound();
-  const { course, lessons, completed } = data;
+  const { course, sections, lessons, completed } = data;
   const lesson = lessons.find((l) => l.id === lessonId);
   if (!lesson) notFound();
   const files = await loadLessonFiles(lesson.id);
@@ -40,6 +40,7 @@ export default async function LessonPage({
   const isComplete = completed.has(lesson.id);
   const description = readStoredDoc(lesson.description_json);
   const fileQuery = preview ? "?preview=1" : "";
+  const sectionTitle = sections.find((s) => s.id === lesson.section_id)?.title ?? null;
 
   return (
     <div className="space-y-5">
@@ -53,7 +54,7 @@ export default async function LessonPage({
 
       <header className="space-y-1">
         <p className="text-xs font-heading tracking-widest text-[color:var(--color-text-muted)]">
-          LESSON {index + 1} OF {lessons.length}
+          {sectionTitle ? `${sectionTitle.toUpperCase()} · ` : ""}LESSON {index + 1} OF {lessons.length}
         </p>
         <h1 className="font-heading text-2xl leading-tight">{lesson.title}</h1>
       </header>

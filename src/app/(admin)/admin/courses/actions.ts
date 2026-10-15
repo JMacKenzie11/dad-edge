@@ -67,6 +67,7 @@ export async function createCourse(formData: FormData) {
   const admin = await requirePlatformAdmin();
   const parsed = parseForm(CreateCourseSchema, { title: formData.get("title") ?? "" });
   if (!parsed.ok) redirect(`/admin/courses?error=${encodeURIComponent(parsed.error)}`);
+  const usesSections = formData.get("uses_sections") === "on";
 
   const svc = createSupabaseServiceClient();
   const slug = await uniqueSlug(slugify(parsed.data.title));
@@ -80,7 +81,7 @@ export async function createCourse(formData: FormData) {
 
   const { data, error } = await svc
     .from("courses")
-    .insert({ title: parsed.data.title, slug, sort_order: sortOrder })
+    .insert({ title: parsed.data.title, slug, sort_order: sortOrder, uses_sections: usesSections })
     .select("id")
     .single();
   if (error || !data) {
@@ -92,7 +93,7 @@ export async function createCourse(formData: FormData) {
     action: "course.create",
     target_type: "course",
     target_id: id,
-    metadata: { title: parsed.data.title, slug },
+    metadata: { title: parsed.data.title, slug, uses_sections: usesSections },
   });
   revalidatePath("/admin/courses");
   redirect(`/admin/courses/${id}`);
@@ -244,6 +245,177 @@ export async function deleteCourse(courseId: string): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+const SectionTitle = z
+  .string()
+  .trim()
+  .min(1, "Give the section a title.")
+  .max(120, "Keep the section title under 120 characters.");
+
+/**
+ * Turns sections on or off for a course, in one database transaction
+ * (set_course_sections). On: any existing lessons go into one first
+ * section the admin can rename. Off: lessons become one list in the order
+ * members saw them, and the section titles are deleted.
+ */
+export async function setCourseSections(courseId: string, enabled: boolean): Promise<ActionResult> {
+  const admin = await requirePlatformAdmin();
+  if (!Uuid.safeParse(courseId).success) return { ok: false, error: STALE_PAGE };
+  const svc = createSupabaseServiceClient();
+  const { error } = await svc.rpc("set_course_sections", {
+    target_course: courseId,
+    enabled,
+    first_section_title: "Lessons",
+  });
+  if (error) return { ok: false, error: "That change didn't save. Try again." };
+  await auditLog({
+    actor_user_id: admin.id,
+    action: enabled ? "course.sections_on" : "course.sections_off",
+    target_type: "course",
+    target_id: courseId,
+  });
+  revalidateCourse(courseId);
+  return { ok: true };
+}
+
+export async function createSection(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const courseId = String(formData.get("course_id") ?? "");
+  const parsed = parseForm(z.object({ course_id: Uuid, title: SectionTitle }), {
+    course_id: courseId,
+    title: formData.get("title") ?? "",
+  });
+  if (!parsed.ok) redirect(`/admin/courses/${courseId}?error=${encodeURIComponent(parsed.error)}`);
+
+  const svc = createSupabaseServiceClient();
+  const { data: course } = await svc.from("courses").select("uses_sections").eq("id", parsed.data.course_id).maybeSingle();
+  if (!(course as { uses_sections: boolean } | null)?.uses_sections) {
+    redirect(`/admin/courses/${courseId}?error=${encodeURIComponent(STALE_PAGE)}`);
+  }
+  const { data: last } = await svc
+    .from("course_sections")
+    .select("sort_order")
+    .eq("course_id", parsed.data.course_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = ((last as { sort_order: number } | null)?.sort_order ?? -1) + 1;
+  const { data, error } = await svc
+    .from("course_sections")
+    .insert({ course_id: parsed.data.course_id, title: parsed.data.title, sort_order: sortOrder })
+    .select("id")
+    .single();
+  if (error || !data) {
+    redirect(`/admin/courses/${courseId}?error=${encodeURIComponent("The section didn't save. Try again.")}`);
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "course_section.create",
+    target_type: "course_section",
+    target_id: (data as { id: string }).id,
+    metadata: { course_id: parsed.data.course_id, title: parsed.data.title },
+  });
+  revalidateCourse(parsed.data.course_id);
+  redirect(`/admin/courses/${parsed.data.course_id}`);
+}
+
+export async function renameSection(sectionId: string, title: string): Promise<ActionResult> {
+  const admin = await requirePlatformAdmin();
+  const parsed = parseForm(z.object({ id: Uuid, title: SectionTitle }), { id: sectionId, title });
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const svc = createSupabaseServiceClient();
+  const { data, error } = await svc
+    .from("course_sections")
+    .update({ title: parsed.data.title })
+    .eq("id", parsed.data.id)
+    .select("course_id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, error: "The title didn't save. Try again." };
+  const courseId = (data as { course_id: string }).course_id;
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "course_section.rename",
+    target_type: "course_section",
+    target_id: parsed.data.id,
+    metadata: { course_id: courseId, title: parsed.data.title },
+  });
+  revalidateCourse(courseId);
+  return { ok: true };
+}
+
+export async function reorderSections(courseId: string, orderedIds: string[]): Promise<ActionResult> {
+  const admin = await requirePlatformAdmin();
+  if (!Uuid.safeParse(courseId).success || !z.array(Uuid).safeParse(orderedIds).success) {
+    return { ok: false, error: STALE_PAGE };
+  }
+  const svc = createSupabaseServiceClient();
+  const results = await Promise.all(
+    orderedIds.map((id, i) => svc.from("course_sections").update({ sort_order: i }).eq("id", id).eq("course_id", courseId)),
+  );
+  if (results.some((r) => r.error)) return { ok: false, error: "The new order didn't save. Refresh and try again." };
+  await auditLog({ actor_user_id: admin.id, action: "course_section.reorder", target_type: "course", target_id: courseId });
+  revalidateCourse(courseId);
+  return { ok: true };
+}
+
+/** Only an empty section can be deleted; the database refuses otherwise. */
+export async function deleteSection(sectionId: string): Promise<ActionResult> {
+  const admin = await requirePlatformAdmin();
+  if (!Uuid.safeParse(sectionId).success) return { ok: false, error: STALE_PAGE };
+  const svc = createSupabaseServiceClient();
+  const { data: section } = await svc.from("course_sections").select("course_id, title").eq("id", sectionId).maybeSingle();
+  if (!section) return { ok: false, error: STALE_PAGE };
+  const { count } = await svc.from("lessons").select("id", { count: "exact", head: true }).eq("section_id", sectionId);
+  if ((count ?? 0) > 0) {
+    return { ok: false, error: "Move or delete this section's lessons first. Only an empty section can be deleted." };
+  }
+  const { error } = await svc.from("course_sections").delete().eq("id", sectionId);
+  if (error) return { ok: false, error: "The section didn't delete. Try again." };
+  const s = section as { course_id: string; title: string };
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "course_section.delete",
+    target_type: "course_section",
+    target_id: sectionId,
+    metadata: { course_id: s.course_id, title: s.title },
+  });
+  revalidateCourse(s.course_id);
+  return { ok: true };
+}
+
+/** Where a new or moved lesson goes: the end of its section (or of the
+ *  course, when the course has no sections). */
+async function nextLessonSortOrder(courseId: string, sectionId: string | null): Promise<number> {
+  const svc = createSupabaseServiceClient();
+  let q = svc.from("lessons").select("sort_order").eq("course_id", courseId);
+  q = sectionId ? q.eq("section_id", sectionId) : q.is("section_id", null);
+  const { data: last } = await q.order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  return ((last as { sort_order: number } | null)?.sort_order ?? -1) + 1;
+}
+
+/** In a sectioned course a lesson needs a section of that course; in a
+ *  flat course it has none. Null means the pairing is wrong. */
+async function resolveLessonSection(
+  courseId: string,
+  sectionId: string,
+): Promise<{ ok: true; sectionId: string | null } | { ok: false }> {
+  const svc = createSupabaseServiceClient();
+  const { data: course } = await svc.from("courses").select("uses_sections").eq("id", courseId).maybeSingle();
+  if (!course) return { ok: false };
+  if (!(course as { uses_sections: boolean }).uses_sections) return { ok: true, sectionId: null };
+  if (!Uuid.safeParse(sectionId).success) return { ok: false };
+  const { data: section } = await svc
+    .from("course_sections")
+    .select("id")
+    .eq("id", sectionId)
+    .eq("course_id", courseId)
+    .maybeSingle();
+  return section ? { ok: true, sectionId } : { ok: false };
+}
+
+// ---------------------------------------------------------------------------
 // Lessons
 // ---------------------------------------------------------------------------
 
@@ -262,18 +434,14 @@ export async function createLesson(formData: FormData) {
   const parsed = parseForm(CreateLessonSchema, { course_id: courseId, title: formData.get("title") ?? "" });
   if (!parsed.ok) redirect(`/admin/courses/${courseId}?error=${encodeURIComponent(parsed.error)}`);
 
+  const placement = await resolveLessonSection(parsed.data.course_id, String(formData.get("section_id") ?? ""));
+  if (!placement.ok) redirect(`/admin/courses/${courseId}?error=${encodeURIComponent(STALE_PAGE)}`);
+  const sectionId = placement.sectionId;
   const svc = createSupabaseServiceClient();
-  const { data: last } = await svc
-    .from("lessons")
-    .select("sort_order")
-    .eq("course_id", parsed.data.course_id)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const sortOrder = ((last as { sort_order: number } | null)?.sort_order ?? -1) + 1;
+  const sortOrder = await nextLessonSortOrder(parsed.data.course_id, sectionId);
   const { data, error } = await svc
     .from("lessons")
-    .insert({ course_id: parsed.data.course_id, title: parsed.data.title, sort_order: sortOrder })
+    .insert({ course_id: parsed.data.course_id, section_id: sectionId, title: parsed.data.title, sort_order: sortOrder })
     .select("id")
     .single();
   if (error || !data) {
@@ -285,25 +453,38 @@ export async function createLesson(formData: FormData) {
     action: "lesson.create",
     target_type: "lesson",
     target_id: id,
-    metadata: { course_id: parsed.data.course_id, title: parsed.data.title },
+    metadata: { course_id: parsed.data.course_id, section_id: sectionId, title: parsed.data.title },
   });
   revalidateCourse(parsed.data.course_id);
   redirect(`/admin/courses/${parsed.data.course_id}/lessons/${id}`);
 }
 
-export async function reorderLessons(courseId: string, orderedIds: string[]): Promise<ActionResult> {
+/** Reorders a flat course's lessons, or one section's when sectionId is
+ *  given (sort_order restarts inside each section). */
+export async function reorderLessons(
+  courseId: string,
+  orderedIds: string[],
+  sectionId: string | null = null,
+): Promise<ActionResult> {
   const admin = await requirePlatformAdmin();
-  if (!Uuid.safeParse(courseId).success || !z.array(Uuid).safeParse(orderedIds).success) {
+  if (
+    !Uuid.safeParse(courseId).success ||
+    !z.array(Uuid).safeParse(orderedIds).success ||
+    (sectionId !== null && !Uuid.safeParse(sectionId).success)
+  ) {
     return { ok: false, error: STALE_PAGE };
   }
   const svc = createSupabaseServiceClient();
   const results = await Promise.all(
-    orderedIds.map((id, i) =>
-      svc.from("lessons").update({ sort_order: i }).eq("id", id).eq("course_id", courseId),
-    ),
+    orderedIds.map((id, i) => {
+      const q = svc.from("lessons").update({ sort_order: i }, { count: "exact" }).eq("id", id).eq("course_id", courseId);
+      return sectionId ? q.eq("section_id", sectionId) : q.is("section_id", null);
+    }),
   );
-  if (results.some((r) => r.error)) return { ok: false, error: "The new order didn't save. Refresh and try again." };
-  await auditLog({ actor_user_id: admin.id, action: "lesson.reorder", target_type: "course", target_id: courseId });
+  if (results.some((r) => r.error || r.count === 0)) {
+    return { ok: false, error: "The new order didn't save. Refresh and try again." };
+  }
+  await auditLog({ actor_user_id: admin.id, action: "lesson.reorder", target_type: "course", target_id: courseId, metadata: { section_id: sectionId } });
   revalidateCourse(courseId);
   return { ok: true };
 }
@@ -352,6 +533,7 @@ const UpdateLessonSchema = z.object({
     .min(2, "Give the lesson a title of at least 2 characters.")
     .max(160, "Keep the lesson title under 160 characters."),
   vimeo_url: z.string().trim().max(500, "That link is too long to be a Vimeo link."),
+  section_id: z.string(),
 });
 
 export type LessonSaveResult =
@@ -364,6 +546,7 @@ export async function updateLesson(_prev: LessonSaveResult | null, formData: For
     id: formData.get("id"),
     title: formData.get("title") ?? "",
     vimeo_url: formData.get("vimeo_url") ?? "",
+    section_id: formData.get("section_id") ?? "",
   });
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const { id, title, vimeo_url } = parsed.data;
@@ -371,12 +554,13 @@ export async function updateLesson(_prev: LessonSaveResult | null, formData: For
   const svc = createSupabaseServiceClient();
   const { data: existing } = await svc
     .from("lessons")
-    .select("course_id, vimeo_url, vimeo_video_id, vimeo_hash, vimeo_thumbnail_url, vimeo_duration_seconds")
+    .select("course_id, section_id, vimeo_url, vimeo_video_id, vimeo_hash, vimeo_thumbnail_url, vimeo_duration_seconds")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return { ok: false, error: STALE_PAGE };
   const prev = existing as {
     course_id: string;
+    section_id: string | null;
     vimeo_url: string | null;
     vimeo_video_id: string | null;
     vimeo_hash: string | null;
@@ -407,10 +591,20 @@ export async function updateLesson(_prev: LessonSaveResult | null, formData: For
     });
   }
 
+  // A lesson moved to another section goes to the end of it. An empty
+  // section_id means the form had no section picker (a flat course).
+  const placement: Record<string, unknown> = {};
+  if (parsed.data.section_id !== "" && parsed.data.section_id !== prev.section_id) {
+    const target = await resolveLessonSection(prev.course_id, parsed.data.section_id);
+    if (!target.ok) return { ok: false, error: STALE_PAGE };
+    placement.section_id = target.sectionId;
+    placement.sort_order = await nextLessonSortOrder(prev.course_id, target.sectionId);
+  }
+
   const description = sanitizeDoc(formData.get("description_json"));
   const { error } = await svc
     .from("lessons")
-    .update({ title, description_json: description, ...videoFields })
+    .update({ title, description_json: description, ...videoFields, ...placement })
     .eq("id", id);
   if (error) return { ok: false, error: "The lesson didn't save. Try again." };
 
@@ -419,7 +613,12 @@ export async function updateLesson(_prev: LessonSaveResult | null, formData: For
     action: "lesson.update",
     target_type: "lesson",
     target_id: id,
-    metadata: { title, vimeo_video_id: videoFields.vimeo_video_id, had_video: Boolean(prev.vimeo_video_id) },
+    metadata: {
+      title,
+      vimeo_video_id: videoFields.vimeo_video_id,
+      had_video: Boolean(prev.vimeo_video_id),
+      ...(placement.section_id !== undefined ? { moved_to_section: placement.section_id } : {}),
+    },
   });
   revalidateCourse(prev.course_id);
   revalidatePath(`/admin/courses/${prev.course_id}/lessons/${id}`);

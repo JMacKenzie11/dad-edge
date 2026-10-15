@@ -286,3 +286,15 @@ Part 2 of the Resource Library + Missions/Goals instruction. Settled with Larry 
 - **Hidden onboarding goal/mission steps were updated too** (five-pillar pickers, errors surfaced). They aren't in the live flow, but they're still routable.
 - **The migration is tested inside a transaction that always rolls back** against the live schema (27 cases: third Bond, sixth goal mission, carry into a full slot, retired pillars, closed goal, pillar inheritance, third and fourth goals allowed, grandfathered week still editable/completable/movable within itself). It's applied only together with the code deploy: the old planner stamps every no-goal mission Bond, so with the new trigger live and the old page still serving, men would hit "two Bond missions" after two entries.
 - **Help staleness:** `/missions` (and `/me`, for the Resources card) are flagged. `/goals` is not: the extractor sees the same buttons and fields, and its current help text never mentioned the old limit. Regeneration into the review queue runs at deploy, so approved help doesn't get swapped for text describing a page production isn't serving yet.
+
+## Course sections (2026-10-16)
+
+Jason asked for lessons grouped under titled sections, like the Dad Edge course pages ("Course Introduction", "Part 1: Become a Master Communicator"), chosen per course, with existing courses left flat.
+
+- **A switch per course, off by default.** `courses.uses_sections` is false for every existing course, so nothing about them changes. It's offered when creating a course and can be switched later from the course's edit page, because a course often outgrows a flat list after it's built.
+- **Switching on never loses a lesson.** Existing lessons go into one section called Lessons, which the admin renames. Switching off keeps every lesson in the order members saw, as one list, and deletes only the section titles. Both run in one database function so a half-switched course can't exist.
+- **`sort_order` restarts inside each section.** Course order is section order, then lesson order. One helper (`orderLessons()` in `src/lib/resources/progress.ts`) builds it, and Next up, Previous/Next, the lesson number and the library cover all read from it.
+- **Only empty sections can be deleted.** The database enforces it (foreign key with no cascade from section to lesson). Deleting a section with its lessons is one click from losing members' progress; moving or deleting the lessons first is deliberate.
+- **Sections move by arrows, lessons by drag or arrows.** Nesting two drag-and-drop lists makes drags ambiguous. Moving a lesson to another section is a SECTION picker on the lesson's edit page, and the lesson lands at the end of that section.
+- **Members never see an empty section.** An admin can set up "Part 3" before its lessons exist without members seeing an empty card.
+- **The lesson's own section must belong to its course,** by a composite foreign key `(section_id, course_id)`, so no code path can file a lesson under another course's section.

@@ -78,7 +78,8 @@ export type Observation = {
 //   alice, bob: members of community A.   carol: member of community B.
 //   alice has a domain mission next week, a check-in, a reflection, a
 //   partner profile and a goal. Courses: open (published, all
-//   communities), draft (unpublished), onlyB (published, community B).
+//   communities), draft (unpublished), onlyB (published, community B),
+//   each sectioned, with one section holding its one lesson.
 //   One object in the private lesson-files bucket.
 
 const NEXT_MON = "date_trunc('week', current_date + 7)::date";
@@ -157,16 +158,30 @@ export const PROBES: Probe[] = [
     sql: "select count(*) from storage.objects where bucket_id = 'lesson-files' and name like 'zz-probe/%'", control: "select count(*) from storage.objects where bucket_id = 'lesson-files' and name like 'zz-probe/%'", expect: "zero" },
   { id: "R9", what: "alice can't put a file in the private PDF bucket", kind: "write", as: "alice",
     sql: "insert into storage.objects (bucket_id, name) values ('lesson-files', 'zz-probe/planted.pdf')", expect: "refuse" },
+
+  // Course sections: readable exactly where the course is; admin-only writes.
+  { id: "S1", what: "alice can see the open course's sections", kind: "read", as: "alice",
+    sql: "select count(*) from public.course_sections where course_id = :open", control: "select count(*) from public.course_sections where course_id = :open", expect: "some" },
+  { id: "S2", what: "alice can't see the draft course's sections", kind: "read", as: "alice",
+    sql: "select count(*) from public.course_sections where course_id = :draft", control: "select count(*) from public.course_sections where course_id = :draft", expect: "zero" },
+  { id: "S3", what: "alice can't see community B's course sections", kind: "read", as: "alice",
+    sql: "select count(*) from public.course_sections where course_id = :onlyB", control: "select count(*) from public.course_sections where course_id = :onlyB", expect: "zero" },
+  { id: "S4", what: "alice can't add a section to a course", kind: "write", as: "alice",
+    sql: "insert into public.course_sections (course_id, title, sort_order) values (:open, 'Planted', 9)", expect: "refuse" },
+  { id: "S5", what: "alice can't rename a section", kind: "write", as: "alice",
+    sql: "update public.course_sections set title = 'Renamed' where course_id = :open", expect: "refuse" },
+  { id: "S6", what: "alice can't switch a course's sections off", kind: "write", as: "alice",
+    sql: "select public.set_course_sections(:open, false)", expect: "refuse" },
 ];
 
 // ---------------------------------------------------------------------------
 // SQL generation
 // ---------------------------------------------------------------------------
 
-export type Ids = Record<"alice" | "bob" | "carol" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson", string>;
+export type Ids = Record<"alice" | "bob" | "carol" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection", string>;
 
 export function newIds(): Ids {
-  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson"];
+  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection"];
   return Object.fromEntries(keys.map((k) => [k, randomUUID()])) as Ids;
 }
 
@@ -205,15 +220,19 @@ function fixturesSql(ids: Ids): string {
   insert into public.quarterly_goals (user_id, quarter_start, focus_area, desired_end_state, status, source) values
     ('${ids.alice}', date_trunc('quarter', current_date)::date, 'V', 'Deadlift 315', 'active', 'user'),
     ('${ids.alice}', date_trunc('quarter', current_date)::date, 'A', 'Close three clients', 'active', 'user');
-  insert into public.courses (id, title, slug, is_published) values
-    ('${ids.open}', 'zz probe open', 'zz-probe-open-${ids.open.slice(0, 8)}', true),
-    ('${ids.draft}', 'zz probe draft', 'zz-probe-draft-${ids.draft.slice(0, 8)}', false),
-    ('${ids.onlyB}', 'zz probe only B', 'zz-probe-onlyb-${ids.onlyB.slice(0, 8)}', true);
+  insert into public.courses (id, title, slug, is_published, uses_sections) values
+    ('${ids.open}', 'zz probe open', 'zz-probe-open-${ids.open.slice(0, 8)}', true, true),
+    ('${ids.draft}', 'zz probe draft', 'zz-probe-draft-${ids.draft.slice(0, 8)}', false, true),
+    ('${ids.onlyB}', 'zz probe only B', 'zz-probe-onlyb-${ids.onlyB.slice(0, 8)}', true, true);
+  insert into public.course_sections (id, course_id, title, sort_order) values
+    ('${ids.openSection}', '${ids.open}', 'Intro', 0),
+    ('${ids.draftSection}', '${ids.draft}', 'Intro', 0),
+    ('${ids.onlyBSection}', '${ids.onlyB}', 'Intro', 0);
   insert into public.course_communities (course_id, community_id) values ('${ids.onlyB}', '${ids.commB}');
-  insert into public.lessons (id, course_id, title, sort_order) values
-    ('${ids.openLesson}', '${ids.open}', 'L1', 0),
-    ('${ids.draftLesson}', '${ids.draft}', 'L1', 0),
-    ('${ids.onlyBLesson}', '${ids.onlyB}', 'L1', 0);
+  insert into public.lessons (id, course_id, section_id, title, sort_order) values
+    ('${ids.openLesson}', '${ids.open}', '${ids.openSection}', 'L1', 0),
+    ('${ids.draftLesson}', '${ids.draft}', '${ids.draftSection}', 'L1', 0),
+    ('${ids.onlyBLesson}', '${ids.onlyB}', '${ids.onlyBSection}', 'L1', 0);
   insert into storage.objects (bucket_id, name) values ('lesson-files', 'zz-probe/fixture.pdf');
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.
@@ -328,6 +347,17 @@ export function parseResults(message: string): Observation[] | null {
   return JSON.parse(Buffer.from(m[1], "base64").toString("utf8")) as Observation[];
 }
 
+/** True when a migration would end the probe transaction itself. Ignores
+ *  dollar-quoted bodies and comments, so a function's closing `end;` isn't
+ *  mistaken for a commit (docs/failure-modes.md FM-12). */
+export function commitsOwnTransaction(sql: string): boolean {
+  const outside = sql
+    .replace(/(\$[A-Za-z_]*\$)[\s\S]*?\1/g, "")
+    .replace(/--[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  return /^\s*(commit|end)\s*;/im.test(outside);
+}
+
 // ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
@@ -340,7 +370,7 @@ function main(): void {
 
   const ref = assertLinkedDev();
   const pendingSql = pendingPath ? readFileSync(pendingPath, "utf8") : undefined;
-  if (pendingSql && /^\s*(commit|end)\s*;/im.test(pendingSql)) {
+  if (pendingSql && commitsOwnTransaction(pendingSql)) {
     console.error(`[rls:hazards] ${pendingPath} commits its own transaction; refusing, since that would make it permanent.`);
     process.exit(2);
   }
