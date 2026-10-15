@@ -29,6 +29,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { utilityModel } from "../../src/lib/model-config";
 import { lintSections, type LintResult } from "./voice-lint";
+import { isEntryPoint } from "../lib/entry";
 
 const MANIFEST_DIR = path.join(process.cwd(), "scripts", "help", "manifests");
 const VOICE_DOC = path.join(process.cwd(), "docs", "app-voice-adaptation.md");
@@ -184,22 +185,22 @@ async function generate(m: Manifest, spec: string): Promise<GeneratedHelp> {
 // DB write (raw fetch — same pattern as migrate-itc-participants.ts)
 // ---------------------------------------------------------------------------
 
-const REST_URL = (() => {
+let REST_URL = "";
+let SVC_KEY = "";
+
+/** Reads the environment when main() starts, never at import
+ *  (scripts/entry-points.test.ts). */
+function loadEnv(): void {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local");
-    process.exit(1);
-  }
-  return `${url}/rest/v1`;
-})();
-const SVC_KEY = (() => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    console.error("Missing SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  if (!url || !key) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
     process.exit(1);
   }
-  return key;
-})();
+  REST_URL = `${url}/rest/v1`;
+  SVC_KEY = key;
+}
+
 
 async function upsertHelpContent(row: {
   route_pattern: string;
@@ -245,6 +246,7 @@ async function upsertHelpContent(row: {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  loadEnv();
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const filter = args.find((a) => !a.startsWith("--")) ?? null;
@@ -338,7 +340,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

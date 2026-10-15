@@ -133,7 +133,7 @@ function StreamingSummary({ weekStart }: { weekStart: string }) {
       <SummaryShell weekStart={weekStart}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm text-[color:var(--color-text-muted)]">
-            Recap couldn't generate just now.
+            Recap couldn&apos;t generate just now.
           </p>
           <button
             type="button"

@@ -6,18 +6,28 @@
  *   cp .env.example .env.local  # fill in Supabase URL + service role
  *   npm run seed
  */
-import "dotenv/config";
-import { createClient } from "@supabase/supabase-js";
+import { config } from "dotenv";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { PILLARS, type PillarCode } from "../src/lib/pillars";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-  process.exit(1);
+let sb: SupabaseClient;
+
+/** Connects when main() starts, never at import, and only to the dev
+ *  database (CLAUDE.md ground rules). Reads .env.local like every other
+ *  script; it used to read .env, which this repo doesn't have. */
+function connect(): void {
+  config({ path: ".env.local" });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    process.exit(1);
+  }
+  assertDevTarget(url);
+  sb = createClient(url, key, { auth: { persistSession: false } });
 }
-
-const sb = createClient(url, key, { auth: { persistSession: false } });
 
 const COMMUNITY = {
   name: "The Basecamp",
@@ -230,6 +240,7 @@ function quarterStart(dateISO: string): string {
 }
 
 async function main() {
+  connect();
   console.log("Seeding BRAVE MAN OS test data…");
   const communityId = await upsertCommunity();
   console.log(` community: ${COMMUNITY.slug} → ${communityId}`);
@@ -256,7 +267,9 @@ async function main() {
   console.log("Done.");
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

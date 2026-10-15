@@ -26,7 +26,7 @@
   ],
   "source_hash": "d845aef9d27714fc",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/coach-flags/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/coach-flags/actions.ts"
+    "src/app/(admin)/admin/coach-flags/page.tsx",
+    "src/app/(admin)/admin/coach-flags/actions.ts"
   ]
 }

@@ -42,21 +42,28 @@
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isEntryPoint } from "./lib/entry";
 
 const args = process.argv.slice(2);
-if (args.includes("--apply")) {
-  console.error(
-    "[migrate:mission-structure] There's nothing to apply yet. This is the review step: no rows change until Jason has read the report and decided each listed goal.",
-  );
-  process.exit(1);
-}
 const asJson = args.includes("--json");
 const includeTest = args.includes("--include-test-accounts");
 
-const svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+// Read-only: no dev-target guard, so the report can be run against
+// production. It never writes (--apply refuses).
+let svc: SupabaseClient;
+
+function connect(): void {
+  if (args.includes("--apply")) {
+    console.error(
+      "[migrate:mission-structure] There's nothing to apply yet. This is the review step: no rows change until Jason has read the report and decided each listed goal.",
+    );
+    process.exit(1);
+  }
+  svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 const DOMAINS = ["B", "R", "A", "V", "E"] as const;
 const RETIRED = ["M", "A2", "N"] as const;
@@ -120,6 +127,7 @@ function currentQuarterStart(today = new Date()): string {
 }
 
 async function main() {
+  connect();
   const [users, missions, goals, maps, memberships, communities] = await Promise.all([
     all<User>("users", "id, email, first_name, last_name"),
     all<Mission>("missions", "id, user_id, pillar_code, quarterly_goal_id, target_date, status, created_by, legacy_import, created_at"),
@@ -329,7 +337,9 @@ async function main() {
   console.log(L.join("\n"));
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

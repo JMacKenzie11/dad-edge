@@ -1,10 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { assertDevTarget } from "../../../scripts/lib/target";
 
 /**
  * Integration-test helpers for RLS + boundary tests.
  *
- * Runs against the DEV Supabase project configured in .env.local. Tests
+ * Runs against the dev Supabase project configured in .env.local, and
+ * refuses any other project (scripts/lib/target.ts). Tests
  * create real auth users + real communities so RLS policies fire exactly
  * as they do in prod. Every fixture is namespaced with a random suffix
  * so parallel runs and re-runs don't collide, and cleanup runs in
@@ -24,6 +26,9 @@ function requireEnv(name: string): string {
 }
 
 export function service(): SupabaseClient {
+  // These tests create real users and rows: dev database only
+  // (CLAUDE.md ground rules). Checked by project id, not a flag.
+  assertDevTarget(requireEnv("NEXT_PUBLIC_SUPABASE_URL"));
   return createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
@@ -32,6 +37,7 @@ export function service(): SupabaseClient {
 }
 
 export async function authedAs(email: string, password: string): Promise<SupabaseClient> {
+  assertDevTarget(requireEnv("NEXT_PUBLIC_SUPABASE_URL"));
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),

@@ -27,7 +27,7 @@ export default async function EditProfilePage({
         </p>
         <h1 className="font-heading text-3xl mt-1">Your details</h1>
         <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-          Your photo, name, and where you're based. Cell phone is
+          Your photo, name, and where you&apos;re based. Cell phone is
           leader/admin visible only.
         </p>
       </header>

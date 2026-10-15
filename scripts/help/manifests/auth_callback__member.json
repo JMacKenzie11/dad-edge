@@ -5,7 +5,7 @@
   "elements": [],
   "source_hash": "e3b0c44298fc1c14",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/auth/callback/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/auth/callback/callback-bridge.tsx"
+    "src/app/auth/callback/page.tsx",
+    "src/app/auth/callback/callback-bridge.tsx"
   ]
 }

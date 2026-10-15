@@ -44,7 +44,7 @@ export default async function MissionStep({
       <StepProgress step={7} total={8} />
       <h1 className="font-heading text-3xl mb-2">Your first mission.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
-        Pick a domain, then write one thing you'll do and the day you'll do it.
+        Pick a domain, then write one thing you&apos;ll do and the day you&apos;ll do it.
       </p>
       <form action={saveFirstMission} className="space-y-4">
         <input type="hidden" name="community_id" value={membership.community_id as string} />

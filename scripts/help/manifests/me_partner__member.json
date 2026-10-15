@@ -34,7 +34,7 @@
   ],
   "source_hash": "8fb2bc04a097f1b8",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/partner/actions.ts"
+    "src/app/(app)/me/partner/page.tsx",
+    "src/app/(app)/me/partner/actions.ts"
   ]
 }

@@ -9,3 +9,11 @@ node_modules
 next-env.d.ts
 
 .claude/
+
+# Supabase CLI link state (which project this machine is linked to)
+supabase/.temp/
+
+# Playwright
+/playwright-report/
+/test-results/
+/e2e/.auth/

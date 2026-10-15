@@ -53,7 +53,7 @@ export default async function CoachFlagsPage({
         <p className="text-sm text-[color:var(--color-text-muted)]">
           Coach messages the safety classifier flagged for review
           (self-harm signals, crisis language, abuse). Only you as
-          platform admin see this queue. Community leaders don't.
+          platform admin see this queue. Community leaders don&apos;t.
         </p>
       </header>
 

@@ -1,0 +1,71 @@
+# Checks: install, typecheck, lint, unit tests, help-manifest check, build.
+#
+# Why each piece is here:
+# - Runs on push to EVERY branch, not only main, and on PRs into main. A
+#   gate that first speaks at the merge is a postmortem.
+# - One run per branch at a time; a new push cancels the old run, so the
+#   result you're looking at is for the commit you just pushed.
+# - Order is cheapest-signal first. Typecheck and lint fail in seconds;
+#   the build is slowest, so it runs last.
+# - Lint fails on errors only; warnings print (eslint's default exit code).
+#   Before eslint.config.mjs existed, `next lint` only prompted for setup,
+#   so lint had never run (docs/failure-modes.md FM-7).
+# - Unit tests are the suites that need no database and no model calls.
+#   Database integration tests and live LLM regressions run locally with
+#   `npm run test:live` against the dev database.
+# - The help-manifest check fails a PR that changes a page's buttons,
+#   links or fields without re-extracting its help manifest
+#   (docs/failure-modes.md FM-9).
+# - The production build is REQUIRED and runs LAST. Typecheck doesn't prove
+#   the app compiles (route segment config, server/client boundaries and
+#   bundling only fail at build). The build needs no secrets: every page
+#   reads its environment at request time (verified 2026-10-15 by building a
+#   clean checkout with an empty environment).
+# - No secrets anywhere in this workflow.
+
+name: checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (errors fail, warnings print)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Help manifests match the UI
+        run: npm run help:check-manifests
+
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

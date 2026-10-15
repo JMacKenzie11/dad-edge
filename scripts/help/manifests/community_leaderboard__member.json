@@ -10,6 +10,6 @@
   ],
   "source_hash": "ef8d2b8abbf6fd98",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard/page.tsx"
+    "src/app/(app)/community/leaderboard/page.tsx"
   ]
 }

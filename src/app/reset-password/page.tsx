@@ -35,7 +35,7 @@ export default async function ResetPasswordPage({
         <div>
           <h1 className="font-heading text-2xl">Set new password</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            Choose something you'll remember.
+            Choose something you&apos;ll remember.
           </p>
         </div>
         <form action={updatePassword} className="space-y-3">

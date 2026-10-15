@@ -34,7 +34,7 @@
   ],
   "source_hash": "68291959f8b87227",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/resources/[courseSlug]/[lessonId]/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/resources/[courseSlug]/[lessonId]/lesson-player.tsx"
+    "src/app/(app)/resources/[courseSlug]/[lessonId]/page.tsx",
+    "src/app/(app)/resources/[courseSlug]/[lessonId]/lesson-player.tsx"
   ]
 }

@@ -26,6 +26,8 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
 /** Every wording this advice has shipped under. Both are matched, so
  *  rows written before the 2026-09-03 rewording are caught too. */
@@ -42,6 +44,8 @@ function strip(text: string): string {
 }
 
 async function main() {
+  // Writes data: dev database only (CLAUDE.md ground rules).
+  assertDevTarget();
   const apply = process.argv.includes("--apply");
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
@@ -82,4 +86,6 @@ async function main() {
   if (!apply && cleared + trimmed > 0) console.log("re-run with --apply to write");
 }
 
-main();
+if (isEntryPoint(import.meta.url)) {
+  main();
+}

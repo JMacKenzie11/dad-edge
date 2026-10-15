@@ -20,7 +20,9 @@
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
 const SLUG = "patience-course";
 const BUCKET = "lesson-files";
@@ -33,9 +35,16 @@ const value = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-const svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+let svc: SupabaseClient;
+
+/** Connects when main() starts, never at import, and only to the dev
+ *  database (CLAUDE.md ground rules). */
+function connect(): void {
+  assertDevTarget();
+  svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 function p(text: string) {
   return { type: "paragraph", content: [{ type: "text", text }] };
@@ -119,6 +128,7 @@ async function removeCourse(courseId: string) {
 }
 
 async function main() {
+  connect();
   const { data: existing } = await svc.from("courses").select("id").eq("slug", SLUG).maybeSingle();
   if (existing && (flag("reset") || flag("remove"))) {
     await removeCourse((existing as { id: string }).id);
@@ -190,7 +200,9 @@ async function main() {
   console.log(`[seed:courses] member view:  /resources/${SLUG}${flag("publish") ? "" : "?preview=1 (admins only while it's a draft)"}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

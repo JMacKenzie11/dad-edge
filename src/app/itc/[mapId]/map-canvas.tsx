@@ -842,7 +842,7 @@ function ColumnReviewNote({ content }: { content: string }) {
     <div className="mt-4 overflow-hidden rounded-md border border-[color:var(--color-warning)]/40 border-l-[3px] border-l-[color:var(--color-warning)] bg-[color:var(--color-surface)] shadow-sm">
       <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-warning)]/[0.05] px-4 py-2">
         <div className="text-[11px] font-semibold uppercase tracking-widest text-[color:var(--color-warning)]">
-          Coach's take on this set
+          Coach&apos;s take on this set
         </div>
       </div>
       <div className="px-4 py-3 text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
@@ -1070,7 +1070,7 @@ function TestsPanel({
             </div>
           ) : (
             <div className="text-[color:var(--color-text-muted)] mt-0.5">
-              Come back with observations whenever you're ready.
+              Come back with observations whenever you&apos;re ready.
             </div>
           )}
         </div>

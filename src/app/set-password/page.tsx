@@ -49,7 +49,7 @@ export default async function SetPasswordPage({
         <div>
           <h1 className="font-heading text-2xl">Set your password</h1>
           <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            One-time setup. You'll sign in with your email and this password from now on.
+            One-time setup. You&apos;ll sign in with your email and this password from now on.
           </p>
         </div>
         <form action={updatePassword} className="space-y-3">

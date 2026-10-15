@@ -12,22 +12,29 @@
  */
 
 import { config as loadEnv } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { addDays, format, startOfWeek } from "date-fns";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
-loadEnv({ path: ".env.local" });
-loadEnv();
+let svc: SupabaseClient;
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-  process.exit(1);
+/** Connects when main() starts, never at import, and only to the dev
+ *  database (CLAUDE.md ground rules). */
+function connect(): void {
+  loadEnv({ path: ".env.local" });
+  loadEnv();
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    process.exit(1);
+  }
+  assertDevTarget(SUPABASE_URL);
+  svc = createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
-
-const svc = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 const COMMUNITY_SLUG = "dad-edge-business-owner-brotherhood";
 const DEFAULT_PASSWORD = "Boardroom2026!";
@@ -173,6 +180,7 @@ const REFLECTIONS: { wins: string; learnings: string }[] = [
 ];
 
 async function main() {
+  connect();
   console.log("Seeding Boardroom…");
 
   // 1. Find community.
@@ -458,7 +466,9 @@ async function upsertReflections(
   return count;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

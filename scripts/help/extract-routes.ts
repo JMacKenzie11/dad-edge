@@ -51,6 +51,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import ts from "typescript";
+import { isEntryPoint } from "../lib/entry";
 
 const APP_ROOT = path.join(process.cwd(), "src", "app");
 const MANIFEST_DIR = path.join(process.cwd(), "scripts", "help", "manifests");
@@ -91,7 +92,9 @@ function discoverRoutes(): RouteRecord[] {
 function walk(dir: string, segments: string[], found: RouteRecord[]): void {
   let entries: string[];
   try {
-    entries = fs.readdirSync(dir);
+    // Sorted: readdir order differs between filesystems (APFS vs ext4),
+    // and element order feeds source_hash.
+    entries = fs.readdirSync(dir).sort();
   } catch {
     return;
   }
@@ -166,7 +169,7 @@ function loadPageSource(dir: string): {
  */
 function loadColocatedSources(pageDir: string): string[] {
   const results: string[] = [];
-  const entries = fs.readdirSync(pageDir);
+  const entries = fs.readdirSync(pageDir).sort();
   for (const entry of entries) {
     if (entry === "page.tsx" || entry === "page.ts") continue;
     if (!entry.endsWith(".tsx") && !entry.endsWith(".ts")) continue;
@@ -617,7 +620,9 @@ function main(): void {
     ];
     const roleSignalText = perFileTexts.map((f) => f.text).join("\n");
     const role = detectRoleOverride(roleSignalText, r.baseRole);
-    const sourceFiles = [src.filename, ...colocated];
+    // Repo-relative so a manifest extracted on CI (Linux) matches one
+    // extracted on a Mac byte for byte; see help:check-manifests.
+    const sourceFiles = [src.filename, ...colocated].map((f) => path.relative(process.cwd(), f));
 
     console.log(`\n${r.routePattern}  [${role}]`);
 
@@ -677,4 +682,6 @@ function main(): void {
   console.log(`\n[help:extract] wrote ${wrote} manifests to ${MANIFEST_DIR}`);
 }
 
-main();
+if (isEntryPoint(import.meta.url)) {
+  main();
+}

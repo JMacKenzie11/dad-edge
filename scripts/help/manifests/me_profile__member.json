@@ -34,8 +34,8 @@
   ],
   "source_hash": "b3e8649e40e1da32",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/actions.ts",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/me/profile/edit-form.tsx"
+    "src/app/(app)/me/profile/page.tsx",
+    "src/app/(app)/me/profile/actions.ts",
+    "src/app/(app)/me/profile/edit-form.tsx"
   ]
 }

@@ -40,6 +40,8 @@ import type {
   ItcMap,
   ItcWorry,
 } from "@/lib/itc/maps";
+import { isEntryPoint } from "./lib/entry";
+import { assertDevTarget } from "./lib/target";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -58,6 +60,8 @@ type ScoreDelta = {
 };
 
 async function main() {
+  // Writes data: dev database only (CLAUDE.md ground rules).
+  assertDevTarget();
   const supabase = createSupabaseServiceClient();
   console.log(APPLY ? "MODE: apply (writes)" : "MODE: dry run (no writes)");
   console.log("");
@@ -226,7 +230,9 @@ async function main() {
   console.log(`Done. Written: ${written}, failed: ${failed}.`);
 }
 
-main().catch((err) => {
-  console.error("fatal:", err);
-  process.exit(1);
-});
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error("fatal:", err);
+    process.exit(1);
+  });
+}

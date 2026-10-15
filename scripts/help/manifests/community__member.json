@@ -38,9 +38,9 @@
   ],
   "source_hash": "9fdf02fad4ef8b4a",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/community-tabs.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/leaderboard-card.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(app)/community/people-tab.tsx"
+    "src/app/(app)/community/page.tsx",
+    "src/app/(app)/community/community-tabs.tsx",
+    "src/app/(app)/community/leaderboard-card.tsx",
+    "src/app/(app)/community/people-tab.tsx"
   ]
 }

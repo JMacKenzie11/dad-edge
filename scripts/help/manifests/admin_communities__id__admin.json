@@ -62,8 +62,8 @@
   ],
   "source_hash": "97b407c0185100bd",
   "source_files": [
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/page.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/edit-form.tsx",
-    "/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/src/app/(admin)/admin/communities/[id]/member-row.tsx"
+    "src/app/(admin)/admin/communities/[id]/page.tsx",
+    "src/app/(admin)/admin/communities/[id]/edit-form.tsx",
+    "src/app/(admin)/admin/communities/[id]/member-row.tsx"
   ]
 }
