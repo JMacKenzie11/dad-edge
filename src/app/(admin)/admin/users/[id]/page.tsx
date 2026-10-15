@@ -12,6 +12,7 @@ import {
   setAdminOnly,
   setItcAccess,
   setMembershipRole,
+  setName,
   setPlatformAdmin,
   setSubscriptionStatus,
 } from "../actions";
@@ -159,6 +160,37 @@ export default async function UserDetailPage({
         </p>
       ) : null}
       {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
+
+      <section className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
+        <form action={setName} className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <input type="hidden" name="user_id" value={u.id} />
+          <label className="flex-1 flex flex-col gap-1 text-xs">
+            <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
+              FIRST NAME
+            </span>
+            <input
+              name="first_name"
+              defaultValue={u.first_name ?? ""}
+              maxLength={80}
+              aria-label="First name"
+              className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
+            />
+          </label>
+          <label className="flex-1 flex flex-col gap-1 text-xs">
+            <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">
+              LAST NAME
+            </span>
+            <input
+              name="last_name"
+              defaultValue={u.last_name ?? ""}
+              maxLength={80}
+              aria-label="Last name"
+              className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-sm"
+            />
+          </label>
+          <SubmitButton label="SAVE NAME" pendingLabel="SAVING…" className="h-10 px-4 text-xs" />
+        </form>
+      </section>
 
       <section className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] space-y-2">
         <div className="flex items-center justify-between">
