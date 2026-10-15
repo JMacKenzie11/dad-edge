@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { firstCleanDraft, publishedColumns } from "./publish";
+import { lintSections } from "../../../scripts/help/voice-lint";
+import { firstCleanDraft, publishedColumns, withHyphens } from "./publish";
 
 const clean = (d: { lint: boolean }) => d.lint;
 
@@ -41,5 +42,19 @@ describe("publishedColumns", () => {
       reviewed_at: "2026-10-16T06:15:00.000Z",
       generated_at: "2026-10-16T06:15:00.000Z",
     });
+  });
+});
+
+describe("withHyphens", () => {
+  it("turns en dashes into hyphens so the draft passes, and leaves em dashes to fail", () => {
+    const draft = {
+      title: "Rate 1–10",
+      sections: [{ what_its_for: "Score each area 1 – 10.", steps: ["Tap **NEXT** — then save."] }],
+    };
+    expect(lintSections(draft.sections).hits.map((h) => h.rule)).toContain("punct.en_dash");
+    const fixed = withHyphens(draft);
+    expect(fixed.title).toBe("Rate 1-10");
+    expect(fixed.sections[0].what_its_for).toBe("Score each area 1-10.");
+    expect(lintSections(fixed.sections).hits.map((h) => h.rule)).toEqual(["punct.em_dash"]);
   });
 });

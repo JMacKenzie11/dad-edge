@@ -30,7 +30,7 @@ dotenv.config({ path: ".env.local" });
 import { generateObject } from "ai";
 import { z } from "zod";
 import { utilityModel } from "../../src/lib/model-config";
-import { firstCleanDraft, publishedColumns } from "../../src/lib/help/publish";
+import { firstCleanDraft, publishedColumns, withHyphens } from "../../src/lib/help/publish";
 import { lintSections, type LintResult } from "./voice-lint";
 import { isEntryPoint } from "../lib/entry";
 
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
     let lint: LintResult;
     if (dryRun) {
       try {
-        help = await generate(m, spec);
+        help = withHyphens(await generate(m, spec));
       } catch (err) {
         console.log("FAILED");
         failures.push(`  ${f}: ${err instanceof Error ? err.message : String(err)}`);
@@ -302,7 +302,7 @@ async function main(): Promise<void> {
       lint = lintSections(help.sections);
     } else {
       const outcome = await firstCleanDraft(
-        () => generate(m, spec),
+        async () => withHyphens(await generate(m, spec)),
         (d) => lintSections(d.sections).passed,
       );
       if (!outcome.ok) {

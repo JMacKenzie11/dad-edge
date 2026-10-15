@@ -5,7 +5,7 @@ import { generateObject } from "ai";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { utilityModel, utilityModelIdOrUnset } from "@/lib/model-config";
 import { lintSections } from "@/../scripts/help/voice-lint";
-import { firstCleanDraft, publishedColumns } from "@/lib/help/publish";
+import { firstCleanDraft, publishedColumns, withHyphens } from "@/lib/help/publish";
 
 /**
  * Shared help-content regeneration primitives. Callers:
@@ -232,15 +232,17 @@ Produce the JSON now.`;
 
   const outcome = await firstCleanDraft(
     async () =>
-      (
-        await generateObject({
-          model: utilityModel(),
-          schema: HelpContentSchema,
-          system,
-          prompt,
-          maxOutputTokens: 1500,
-        })
-      ).object,
+      withHyphens(
+        (
+          await generateObject({
+            model: utilityModel(),
+            schema: HelpContentSchema,
+            system,
+            prompt,
+            maxOutputTokens: 1500,
+          })
+        ).object,
+      ),
     (draft) => lintSections(draft.sections).passed,
   );
   if (!outcome.ok) return { ok: false, reason: outcome.reason };

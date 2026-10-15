@@ -37,6 +37,24 @@ export async function firstCleanDraft<T>(
   return { ok: false, reason: `${lastReason} (${max} tries)`, attempts: max };
 }
 
+/**
+ * The model sometimes writes an en dash in a range ("1–10") or a
+ * compound. The voice rules ban it, but a plain hyphen is fine, so swap
+ * it before the lint instead of throwing the draft away. Em dashes
+ * still fail the lint: those stand in for a comma or a full stop, and
+ * the sentence needs rewriting.
+ */
+export function withHyphens<T extends { title: string; sections: Array<{ what_its_for: string; steps: string[] }> }>(
+  draft: T,
+): T {
+  const fix = (s: string) => s.replace(/\s*–\s*/g, "-");
+  return {
+    ...draft,
+    title: fix(draft.title),
+    sections: draft.sections.map((sec) => ({ ...sec, what_its_for: fix(sec.what_its_for), steps: sec.steps.map(fix) })),
+  };
+}
+
 /** Columns that mark a freshly generated row as live. `reviewed` is the
  *  flag the help widget serves on; it now means "published". */
 export function publishedColumns(now: Date = new Date()) {
