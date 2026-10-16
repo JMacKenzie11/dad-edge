@@ -126,7 +126,7 @@ function EmptySlot({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             description,
-            target_date: weekDates[dayIndexes[dayIndexes.length - 1]],
+            target_dates: dayIndexes.map((i) => weekDates[i]).filter(Boolean),
           }),
         });
         if (seq !== scoreSeq.current) return;
@@ -353,8 +353,9 @@ function FilledSlot({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             description,
-            target_date:
-              weekDates[dayIndexes[dayIndexes.length - 1]] ?? mission.target_date,
+            target_dates: dayIndexes.length
+              ? dayIndexes.map((i) => weekDates[i]).filter(Boolean)
+              : [mission.target_date].filter(Boolean),
           }),
         });
         if (seq !== scoreSeq.current) return;

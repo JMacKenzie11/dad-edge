@@ -32,6 +32,11 @@ import { utilityModel } from "@/lib/model-config";
  * produce a domain judgement. The remaining weights (4/4/2) keep the
  * total on the 0-10 scale the pill, the DB column and the exemplar
  * rule already speak.
+ *
+ * 2026-10-16: the scorer is told every day picked on the row, not just
+ * the last one, and runs at temperature 0. "Walk 10 km 3 times" on
+ * Fri/Sat/Sun scored 6 to 8 depending on the run, because the model saw
+ * one date and couldn't tell the count was already pinned to days.
  */
 
 export const CRITERIA = ["concrete", "binary", "time_bound"] as const;
@@ -79,10 +84,12 @@ Score three criteria and return JSON only. Scores only — no feedback prose, no
     0 = fuzzy verb with no end-state ("focus on my marriage")
     2 = you could argue either way ("spend more time praying")
     4 = you either did it or you didn't, no argument ("pray before 6 AM every day this week")
-- time_bound (0-2): read this off the target_date input line ONLY.
-    target_date is set -> 2
-    target_date is missing -> 0
-    Do NOT dock time_bound because the description doesn't name a day. The day is picked in the UI, not typed.
+- time_bound (0-2): read this off the "Days picked" input line ONLY.
+    at least one day is picked -> 2
+    no day is picked -> 0
+    Do NOT dock time_bound because the description doesn't name a day. The days are picked in the UI, not typed.
+
+The days picked are part of the mission. A count in the description that matches the number of days picked ("3 times" with 3 days picked) is fully pinned down: do not dock concrete or binary for not naming the days, and do not ask when the sessions happen.
 
 Return only the scores object. Nothing else.`;
 
@@ -94,8 +101,19 @@ Return only the scores object. Nothing else.`;
  */
 type ScoreInput = {
   description: string;
-  target_date: string | null;
+  /** Every day picked on the row, YYYY-MM-DD. */
+  target_dates: string[];
 };
+
+const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** "Days picked: 3 (Friday 2026-10-16, ...)". Exported for the test. */
+export function daysPickedLine(dates: string[]): string {
+  const days = [...new Set(dates)].sort();
+  if (days.length === 0) return "Days picked: none (auto-fails Time-bound)";
+  const named = days.map((d) => `${WEEKDAY[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${d}`);
+  return `Days picked: ${days.length} (${named.join(", ")})`;
+}
 
 export async function scoreMissionDraft(input: ScoreInput): Promise<MissionScore> {
   const desc = input.description.trim();
@@ -103,11 +121,7 @@ export async function scoreMissionDraft(input: ScoreInput): Promise<MissionScore
     return emptyScore("Write at least a few words.");
   }
 
-  const dateLine = input.target_date
-    ? `Target date: ${input.target_date}`
-    : "Target date: (none — auto-fails Time-bound)";
-
-  const userPrompt = `${dateLine}
+  const userPrompt = `${daysPickedLine(input.target_dates)}
 
 Mission draft:
 """
@@ -122,6 +136,9 @@ Return JSON only.`;
       schema: SchemaZ,
       system: SYSTEM,
       prompt: userPrompt,
+      // A rubric is a classifier: the same mission should get the same
+      // score every time it's checked.
+      temperature: 0,
       maxOutputTokens: 200,
     });
     const scores = object.scores as Record<Criterion, number>;
@@ -161,7 +178,7 @@ export function renderMissionFeedback(scores: Record<Criterion, number>): string
   const perfect = CRITERIA.every((c) => scores[c] === CRITERION_MAX[c]);
   if (perfect) return "Sharp mission. Ready to run.";
   if (total >= 8 && CRITERIA.every((c) => scores[c] > 0)) {
-    return "Ready to save — it's clear enough to hold you to. Tighten the wording if you feel it, otherwise ship it.";
+    return "Ready to save. It's clear enough to hold you to, so tighten the wording if you want to or ship it.";
   }
   const weakest = CRITERIA.slice().sort(
     (a, b) => scores[a] / CRITERION_MAX[a] - scores[b] / CRITERION_MAX[b],
@@ -171,15 +188,15 @@ export function renderMissionFeedback(scores: Record<Criterion, number>): string
 
 const CRITIQUE_ZERO: Record<Criterion, string> = {
   concrete:
-    "Wording is vague. Add specifics — a number, a distance, a duration, a person, a place.",
+    "Wording is vague. Add specifics, like a number, a distance, a duration, a person or a place.",
   binary:
-    "The done-or-not test is fuzzy. Add the observable end-state — reps, time, message sent.",
+    "The done-or-not test is fuzzy. Add the end-state someone could see, like reps, a time or a message sent.",
   time_bound: "Pick a target day on the row.",
 };
 
 const CRITIQUE_PARTIAL: Record<Criterion, string> = {
   concrete:
-    "Add one more specific — a number, a distance, a name — so anyone reading it knows what done looks like.",
+    "Pin down one more detail, like how far, how long, where or with whom, so anyone reading it knows what done looks like.",
   binary:
     "The done test is close but not binary yet. Name the exact end-state (a count, a threshold, a checkpoint).",
   time_bound: "Timing is close but not locked. Pick a specific day on the row.",

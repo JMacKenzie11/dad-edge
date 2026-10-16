@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CRITERIA,
   CRITERION_MAX,
+  daysPickedLine,
   renderMissionFeedback,
   type Criterion,
 } from "../mission-quality";
@@ -51,5 +52,27 @@ describe("renderMissionFeedback", () => {
 
   it("takes no pillar argument, so a domain judgement is unreachable", () => {
     expect(renderMissionFeedback.length).toBe(1);
+  });
+});
+
+describe("feedback copy follows the voice rules", () => {
+  it("has no em dashes or en dashes in any sentence it can show", () => {
+    for (const c of CRITERIA) {
+      for (let v = 0; v <= CRITERION_MAX[c]; v++) {
+        expect(renderMissionFeedback(scores({ [c]: v }))).not.toMatch(/[\u2013\u2014]/);
+      }
+    }
+  });
+});
+
+describe("daysPickedLine", () => {
+  it("names every day picked, in order, with the count", () => {
+    expect(daysPickedLine(["2026-10-18", "2026-10-16", "2026-10-17"])).toBe(
+      "Days picked: 3 (Friday 2026-10-16, Saturday 2026-10-17, Sunday 2026-10-18)",
+    );
+  });
+
+  it("says none when no day is picked", () => {
+    expect(daysPickedLine([])).toMatch(/^Days picked: none/);
   });
 });
