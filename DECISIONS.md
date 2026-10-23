@@ -315,3 +315,21 @@ Jason: "I don't want to have to approve the help. Just roll it out automatically
 ## Next up lives in the lesson (2026-10-16)
 
 Jason: the Next up card on the course page doesn't make sense, since from there a member obviously starts at the first lesson, and Next up belongs at the end of each lesson when there is a next one. The course page now has only the Overview and the lesson list. Each lesson ends with a Next up card for the following lesson in course order (section order, then lesson order), and nothing on the last lesson. The "first lesson he hasn't finished" helper (`nextUpLesson`) had no other caller and is deleted.
+
+## Stripe billing (2026-10-23)
+
+Jason wants paid sign-up to run itself: link a Stripe product to a community, and Stripe payments add, suspend and end memberships with no admin in the loop. His answers, in his order:
+
+- **Sign-up lives in this app** at `/join/<community slug>`. The page collects first name, last name and email, then sends him to Stripe Checkout for that community's product. The name comes from our form, not from Stripe.
+- **One Stripe product per community** (`communities.stripe_product_id`, unique). Checkout uses the product's default price, so switching a community from monthly to annual is a Stripe change, not an app change.
+- **Accounts match on email.** A payment from an email we already have joins that account; a new email gets a new account and the invite email (set a password). A man who comes back after cancelling gets his old account switched back on and a "you're back in" email, never a second account.
+- **Billing is per membership, not per user.** Each membership records its own Stripe subscription and billing status, so a man can pay for two communities and cancel one. Today everyone is in one community, but nothing here assumes it.
+- **Stripe never touches what it didn't create.** Memberships an admin added by hand (`billing_source = 'manual'`) and users marked comped or managed by hand keep working exactly as now. Stripe only changes memberships whose `billing_source` is `stripe`.
+- **Cancelling ends access the day the paid period ends.** Stripe sends the cancellation when the period runs out, and the membership ends then, with no 30-day read-only window for Stripe-billed memberships. The 30-day window still applies to manual cancellations.
+- **A full refund ends access straight away.** The app cancels the subscription in Stripe right then. A partial refund changes nothing.
+- **Failed payments: Stripe sends the emails, the app shows a banner.** Stripe's own emails (failed payment with an update-card link, card expiring, receipts, cancellation) cover the money, so a man never gets the same news from two places. The app sends only access emails: the invite and "you're back in". During Stripe's retries he keeps full access and sees a banner linking to Stripe's billing page. When the last retry fails, Stripe cancels and the membership ends. Recommended Stripe setting: Smart Retries, 4 tries over 2 weeks, then cancel the subscription.
+- **Admins see failed payments** on `/admin/billing`: everyone past due, with community and how long since the payment failed.
+- **Members manage billing in Stripe.** A Manage billing link on `/me/profile` opens Stripe's customer portal to change card or cancel. Hands-off by design.
+- **Trials and coupons come from Stripe.** Checkout allows promotion codes; a trial counts as full access, and a trial that ends without a card is a normal cancellation.
+- **A failed welcome email never undoes a payment.** The membership stands and the failure is listed on `/admin/billing` for an admin to resend the invite. Found in the test-mode run: when the invite failed, the handler stopped, and Stripe's retry then found a finished membership and never sent it, so a man would have paid and never got his set-password link.
+- **Every Stripe notification is recorded once** (`stripe_events`, keyed by Stripe's event id), so a retried delivery can't send a second invite. The webhook re-reads the subscription from Stripe rather than trusting the order notifications arrive in.

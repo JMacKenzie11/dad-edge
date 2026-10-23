@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { canAccess, type SubscriptionStatus } from "@/lib/entitlement";
+import { canAccess, type SubscriptionSource, type SubscriptionStatus } from "@/lib/entitlement";
 
 export type EmploymentType =
   | "w2"
@@ -21,6 +21,7 @@ export type SessionUser = {
    *  20260825000003_users_admin_only.sql. Requires is_platform_admin. */
   is_admin_only: boolean;
   subscription_status: SubscriptionStatus;
+  subscription_source: SubscriptionSource;
   deactivated_at: string | null;
   onboarding_step: number;
   occupation: string | null;
@@ -41,7 +42,7 @@ export async function requireUser(): Promise<SessionUser> {
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, email, first_name, last_name, timezone, is_platform_admin, is_admin_only, itc_access, subscription_status, canceled_at, onboarding_step, occupation, employment_type, avatar_url, city, phone")
+    .select("id, email, first_name, last_name, timezone, is_platform_admin, is_admin_only, itc_access, subscription_status, subscription_source, canceled_at, onboarding_step, occupation, employment_type, avatar_url, city, phone")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -106,6 +107,7 @@ export async function requireAccess(options?: {
   const decision = canAccess({
     subscription_status: user.subscription_status,
     deactivated_at: user.deactivated_at,
+    subscription_source: user.subscription_source,
   });
   if (decision.access === "none") redirect("/inactive");
   // Platform admins bypass onboarding — they set the system up, they don't need

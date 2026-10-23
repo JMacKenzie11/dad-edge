@@ -1,0 +1,23 @@
+{
+  "route_pattern": "/admin/billing",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Billing"
+    },
+    {
+      "kind": "header",
+      "label": "Paid, but the email didn&apos;t send ()"
+    },
+    {
+      "kind": "header",
+      "label": "Failed payments ()"
+    }
+  ],
+  "source_hash": "cea733a417a9b8bd",
+  "source_files": [
+    "src/app/(admin)/admin/billing/page.tsx"
+  ]
+}

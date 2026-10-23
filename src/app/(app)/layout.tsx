@@ -7,13 +7,16 @@ import { getNotificationsForBell } from "@/lib/notifications/read";
 import { getUnreadThreadCount } from "@/lib/messages/threads";
 import { PostHogBridge } from "@/components/analytics/posthog-bridge";
 import { hasVisibleCourses } from "@/lib/resources/queries";
+import { myBilling } from "@/lib/billing/member";
+import { PaymentBanner } from "@/components/shell/payment-banner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, readOnly } = await requireAccess();
-  const [{ unreadCount, recent }, unreadMessageThreads, showResources] = await Promise.all([
+  const [{ unreadCount, recent }, unreadMessageThreads, showResources, billing] = await Promise.all([
     getNotificationsForBell(),
     getUnreadThreadCount(user.id),
     hasVisibleCourses(),
+    myBilling(),
   ]);
 
   const initials =
@@ -30,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           viewerId={user.id}
           unreadMessageThreads={unreadMessageThreads}
         />
+        {billing.paymentFailing ? <PaymentBanner /> : null}
         <div className="mx-auto max-w-5xl md:grid md:grid-cols-[220px_1fr]">
           {/* Sticky rail, matching src/app/itc/layout.tsx exactly so the
               nav behaves the same on both sides of the app.

@@ -1,0 +1,40 @@
+{
+  "route_pattern": "/join/[slug]",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Sign-up is closed"
+    },
+    {
+      "kind": "link",
+      "label": "Already a member? Sign in."
+    },
+    {
+      "kind": "header",
+      "label": "Join"
+    },
+    {
+      "kind": "field",
+      "label": "FIRST NAME"
+    },
+    {
+      "kind": "field",
+      "label": "LAST NAME"
+    },
+    {
+      "kind": "field",
+      "label": "EMAIL"
+    },
+    {
+      "kind": "button",
+      "label": "CONTINUE TO PAYMENT"
+    }
+  ],
+  "source_hash": "02686ca021a31c5a",
+  "source_files": [
+    "src/app/join/[slug]/page.tsx",
+    "src/app/join/[slug]/actions.ts"
+  ]
+}

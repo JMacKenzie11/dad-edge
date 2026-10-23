@@ -12,6 +12,10 @@
       "label": "Your details"
     },
     {
+      "kind": "button",
+      "label": "MANAGE BILLING"
+    },
+    {
       "kind": "field",
       "label": "first_name"
     },
@@ -32,7 +36,7 @@
       "label": "SAVE CHANGES"
     }
   ],
-  "source_hash": "b3e8649e40e1da32",
+  "source_hash": "a4453f47fa6e453e",
   "source_files": [
     "src/app/(app)/me/profile/page.tsx",
     "src/app/(app)/me/profile/actions.ts",

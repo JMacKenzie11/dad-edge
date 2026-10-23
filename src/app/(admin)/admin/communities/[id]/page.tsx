@@ -5,6 +5,10 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { joinSelf } from "../actions";
 import { EditCommunityForm } from "./edit-form";
 import { MemberRow } from "./member-row";
+import { SignupPanel } from "./signup-panel";
+import { isStripeConfigured } from "@/lib/billing/stripe";
+import { listProducts, type ProductOption } from "@/lib/billing/products";
+import { appOrigin } from "@/lib/invites";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +26,7 @@ export default async function CommunityDetailPage({
 
   const { data: community } = await svc
     .from("communities")
-    .select("id, name, slug, status, timezone, week_lock_days, leaderboard_enabled, missions_visible")
+    .select("id, name, slug, status, timezone, week_lock_days, leaderboard_enabled, missions_visible, stripe_product_id")
     .eq("id", id)
     .maybeSingle();
   if (!community) notFound();
@@ -57,7 +61,20 @@ export default async function CommunityDetailPage({
     week_lock_days: number;
     leaderboard_enabled: boolean;
     missions_visible: boolean;
+    stripe_product_id: string | null;
   };
+
+  let products: ProductOption[] | null = null;
+  let stripeError: string | null = null;
+  if (!isStripeConfigured()) {
+    stripeError = "Stripe isn't connected yet, so there are no products to pick from.";
+  } else {
+    try {
+      products = await listProducts();
+    } catch (err) {
+      stripeError = `Couldn't load products from Stripe: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -105,6 +122,15 @@ export default async function CommunityDetailPage({
       ) : null}
 
       <EditCommunityForm community={c} />
+
+      <SignupPanel
+        communityId={c.id}
+        slug={c.slug}
+        current={c.stripe_product_id}
+        products={products}
+        stripeError={stripeError}
+        appUrl={appOrigin()}
+      />
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">

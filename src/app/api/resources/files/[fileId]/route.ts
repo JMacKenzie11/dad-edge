@@ -40,12 +40,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
 
   const { data: me } = await supabase
     .from("users")
-    .select("subscription_status, canceled_at, is_platform_admin")
+    .select("subscription_status, subscription_source, canceled_at, is_platform_admin")
     .eq("id", user.id)
     .maybeSingle();
-  const profile = me as { subscription_status: SubscriptionStatus; canceled_at: string | null; is_platform_admin: boolean } | null;
+  const profile = me as { subscription_status: SubscriptionStatus; subscription_source: "manual" | "stripe"; canceled_at: string | null; is_platform_admin: boolean } | null;
   if (!profile) return new NextResponse("Not found", { status: 404 });
-  const decision = canAccess({ subscription_status: profile.subscription_status, deactivated_at: profile.canceled_at });
+  const decision = canAccess({ subscription_status: profile.subscription_status, deactivated_at: profile.canceled_at, subscription_source: profile.subscription_source });
   if (decision.access === "none") return NextResponse.redirect(new URL("/inactive", req.url), 303);
 
   const { data: file } = await supabase

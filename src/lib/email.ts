@@ -135,6 +135,18 @@ export async function sendActivationEmail(opts: {
   });
 }
 
+export async function sendMembershipActiveEmail(opts: {
+  to: string;
+  firstName: string | null;
+  communityName: string;
+  returning: boolean;
+  signInUrl: string;
+}) {
+  const { membershipActiveEmail } = await import("./copy/auth-emails");
+  const body = membershipActiveEmail(opts);
+  return send({ to: opts.to, subject: body.subject, text: body.text, html: body.html });
+}
+
 export async function sendPasswordResetEmail(opts: {
   to: string;
   firstName: string | null;

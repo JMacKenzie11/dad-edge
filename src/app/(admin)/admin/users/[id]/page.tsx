@@ -60,7 +60,7 @@ export default async function UserDetailPage({
     itc_access: boolean | null;
     is_admin_only: boolean | null;
     subscription_status: "trialing" | "active" | "past_due" | "canceled" | "comped";
-    subscription_source: string;
+    subscription_source: "manual" | "stripe";
     canceled_at: string | null;
     created_at: string;
     last_seen_at: string | null;
@@ -108,6 +108,7 @@ export default async function UserDetailPage({
   const access = canAccess({
     subscription_status: u.subscription_status,
     deactivated_at: u.canceled_at,
+    subscription_source: u.subscription_source,
   });
 
   return (

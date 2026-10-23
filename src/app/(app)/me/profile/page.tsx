@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireAccess } from "@/lib/session";
 import { EditProfileForm } from "./edit-form";
+import { myBilling } from "@/lib/billing/member";
+import { openBillingPortal } from "@/lib/billing/portal";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ export default async function EditProfilePage({
 }) {
   const { user } = await requireAccess();
   const params = await searchParams;
+  const billing = await myBilling();
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -43,6 +46,24 @@ export default async function EditProfilePage({
         defaultPhone={user.phone ?? ""}
         existingAvatarUrl={user.avatar_url ?? ""}
       />
+
+      {billing.hasStripe ? (
+        <form
+          action={openBillingPortal}
+          className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] flex items-center justify-between gap-3"
+        >
+          <div>
+            <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">BILLING</p>
+            <p className="text-sm mt-1">Change your card, see receipts, or cancel on Stripe&apos;s billing page.</p>
+          </div>
+          <button
+            type="submit"
+            className="h-10 px-4 rounded-md border border-[color:var(--color-border)] font-heading text-xs tracking-widest shrink-0 hover:bg-[color:var(--color-bg)]"
+          >
+            MANAGE BILLING
+          </button>
+        </form>
+      ) : null}
     </div>
   );
 }

@@ -102,3 +102,41 @@ Dad Edge`;
     html,
   };
 }
+
+/**
+ * Sent when a Stripe payment switches on a membership for a man who
+ * already has an account: he's coming back, or joining a second
+ * community. A brand-new account gets activationEmail() instead.
+ */
+export function membershipActiveEmail(opts: {
+  firstName: string | null;
+  communityName: string;
+  returning: boolean;
+  signInUrl: string;
+}): EmailBody {
+  const greeting = opts.firstName ? `${opts.firstName},` : "Hey,";
+  const headline = opts.returning ? "You're back in." : "You're in.";
+  const line = opts.returning
+    ? `Your membership in ${opts.communityName} is active again. Everything you logged before is still there.`
+    : `You're now a member of ${opts.communityName}.`;
+  const text = `${greeting}
+
+${line}
+
+Sign in with your usual email and password:
+${opts.signInUrl}
+
+Dad Edge`;
+  const html = htmlShell(
+    headline,
+    `<p>${greeting}</p>
+     <p>${line}</p>
+     <p>Sign in with your usual email and password.</p>
+     ${ctaButton(opts.signInUrl, "Sign in")}`,
+  );
+  return {
+    subject: opts.returning ? `You're back in ${opts.communityName}` : `You're in ${opts.communityName}`,
+    text,
+    html,
+  };
+}

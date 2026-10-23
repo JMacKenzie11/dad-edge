@@ -1,7 +1,7 @@
 /**
  * The one entitlement gate. Section 5.
- * Every protected route calls canAccess(user). Phase 3 (Stripe) writes the same
- * subscription_status field via webhooks; this function does not change.
+ * Every protected route calls canAccess(user). The Stripe webhook writes the
+ * same subscription_status field (src/lib/billing/webhook.ts).
  */
 export type SubscriptionStatus =
   | "trialing"
@@ -17,9 +17,13 @@ export type AccessDecision =
 
 const WIN_BACK_DAYS = 30; // DECISION #4
 
+export type SubscriptionSource = "manual" | "stripe";
+
 export function canAccess(user: {
   subscription_status: SubscriptionStatus;
   deactivated_at?: string | null;
+  /** Missing means manual: every row before Stripe billing was. */
+  subscription_source?: SubscriptionSource | null;
 } | null): AccessDecision {
   if (!user) return { access: "none", reason: "no_user" };
 
@@ -30,6 +34,9 @@ export function canAccess(user: {
     case "past_due":
       return { access: "full" };
     case "canceled": {
+      // A Stripe cancellation ends access the day the paid period ends,
+      // with no read-only window (DECISIONS.md "Stripe billing").
+      if (user.subscription_source === "stripe") return { access: "none", reason: "canceled_expired" };
       if (!user.deactivated_at) return { access: "none", reason: "canceled_expired" };
       const cutoff = new Date(user.deactivated_at).getTime() + WIN_BACK_DAYS * 86400_000;
       return Date.now() < cutoff
