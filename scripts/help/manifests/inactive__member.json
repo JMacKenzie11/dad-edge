@@ -8,11 +8,11 @@
       "label": "Account inactive"
     },
     {
-      "kind": "link",
-      "label": "Home"
+      "kind": "button",
+      "label": "SIGN OUT"
     }
   ],
-  "source_hash": "40383cfa91fdcf6c",
+  "source_hash": "8aab8516c19a6d7f",
   "source_files": [
     "src/app/inactive/page.tsx"
   ]
