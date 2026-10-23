@@ -44,6 +44,7 @@ const deps: WebhookDeps = {
   svc,
   stripe,
   sendInvite: async (user, community) => {
+    if (user.email.includes("bounce")) return "Email address is invalid";
     sent.push({ kind: "invite", to: user.email, community });
     return null;
   },
@@ -219,6 +220,28 @@ describe("Stripe webhook", () => {
     expect((await membership(comped.id, commB))?.status).toBe("inactive");
     expect((await membership(comped.id, commA))?.status).toBe("active");
     expect(await userByEmail(comped.email)).toMatchObject({ subscription_status: "comped", subscription_source: "manual" });
+  });
+
+  it("reads a failed invoice in Stripe's older notification format", async () => {
+    const oldEmail = `it+stripe-old-${randomUUID().slice(0, 8)}@braveman.test`;
+    const sub = newSub(commA, oldEmail);
+    await handleStripeEvent(checkoutDone(sub), deps);
+    users.push((await userByEmail(oldEmail))!.id);
+    sub.status = "past_due";
+    // Before API 2025-03-31 the invoice named its subscription directly.
+    await handleStripeEvent(evt("invoice.payment_failed", { subscription: sub.id }), deps);
+    expect((await billing(sub.id))?.payment_failed_at).not.toBeNull();
+  });
+
+  it("a failed invite email still lets him in, and is kept for an admin to resend", async () => {
+    const bounce = `it+stripe-bounce-${randomUUID().slice(0, 8)}@braveman.test`;
+    const sub = newSub(commA, bounce);
+    expect((await handleStripeEvent(checkoutDone(sub), deps)).detail).toBe("joined:failed");
+    const u = await userByEmail(bounce);
+    users.push(u!.id);
+    expect((await membership(u!.id, commA))?.status).toBe("active");
+    const { data: row } = await svc.from("membership_billing").select("welcome_email_error").eq("stripe_subscription_id", sub.id).single();
+    expect(row?.welcome_email_error).toMatch(/invalid/);
   });
 
   it("ignores a subscription that didn't come from our sign-up page", async () => {

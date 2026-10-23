@@ -236,6 +236,9 @@ export async function sendInvite(formData: FormData) {
     .from("users")
     .update({ invited_at: new Date().toISOString() })
     .eq("id", parsed.data.user_id);
+  // A Stripe sign-up whose welcome email failed is listed on
+  // /admin/billing until the invite goes out.
+  await svc.from("membership_billing").update({ welcome_email_error: null }).eq("user_id", parsed.data.user_id);
 
   await auditLog({
     actor_user_id: admin.id,
@@ -293,6 +296,7 @@ export async function sendInvitesBatch(formData: FormData) {
       continue;
     }
     await svc.from("users").update({ invited_at: nowIso }).eq("id", u.id);
+    await svc.from("membership_billing").update({ welcome_email_error: null }).eq("user_id", u.id);
     await auditLog({
       actor_user_id: admin.id,
       action: "user.invite_sent",

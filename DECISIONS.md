@@ -331,4 +331,5 @@ Jason wants paid sign-up to run itself: link a Stripe product to a community, an
 - **Admins see failed payments** on `/admin/billing`: everyone past due, with community and how long since the payment failed.
 - **Members manage billing in Stripe.** A Manage billing link on `/me/profile` opens Stripe's customer portal to change card or cancel. Hands-off by design.
 - **Trials and coupons come from Stripe.** Checkout allows promotion codes; a trial counts as full access, and a trial that ends without a card is a normal cancellation.
+- **A failed welcome email never undoes a payment.** The membership stands and the failure is listed on `/admin/billing` for an admin to resend the invite. Found in the test-mode run: when the invite failed, the handler stopped, and Stripe's retry then found a finished membership and never sent it, so a man would have paid and never got his set-password link.
 - **Every Stripe notification is recorded once** (`stripe_events`, keyed by Stripe's event id), so a retried delivery can't send a second invite. The webhook re-reads the subscription from Stripe rather than trusting the order notifications arrive in.

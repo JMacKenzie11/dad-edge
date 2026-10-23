@@ -37,7 +37,13 @@ export type StripeLike = {
 
 type InvoiceLike = {
   parent?: { subscription_details?: { subscription: string | { id: string } } | null } | null;
+  /** Where the subscription sat before Stripe API 2025-03-31. A webhook
+   *  endpoint on an older API version still sends it here. */
+  subscription?: string | { id: string } | null;
 };
+
+const invoiceSubscription = (inv: InvoiceLike) =>
+  idOf(inv.parent?.subscription_details?.subscription ?? inv.subscription);
 
 export type StripeEventLike = {
   id: string;
@@ -97,7 +103,7 @@ async function dispatch(event: StripeEventLike, deps: WebhookDeps): Promise<stri
       return syncSubscription(String(obj.id), deps);
     case "invoice.payment_failed":
     case "invoice.paid": {
-      const subId = idOf((obj as InvoiceLike).parent?.subscription_details?.subscription);
+      const subId = invoiceSubscription(obj as InvoiceLike);
       if (!subId) return "ignored";
       if (event.type === "invoice.payment_failed") {
         // Keep the first failure's time: the admin list shows how long
@@ -125,11 +131,16 @@ async function refund(charge: Record<string, unknown>, deps: WebhookDeps): Promi
   if (charge.refunded !== true) return "ignored";
   const pi = idOf(charge.payment_intent as string | { id: string } | null);
   if (!pi) return "ignored";
-  const payments = await deps.stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi } });
-  const invoiceId = idOf(payments.data[0]?.invoice);
+  // Older API versions put the invoice on the charge; newer ones only
+  // link it through invoice payments.
+  let invoiceId = idOf(charge.invoice as string | { id: string } | null);
+  if (!invoiceId) {
+    const payments = await deps.stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi } });
+    invoiceId = idOf(payments.data[0]?.invoice);
+  }
   if (!invoiceId) return "ignored";
   const invoice = await deps.stripe.invoices.retrieve(invoiceId);
-  const subId = idOf(invoice.parent?.subscription_details?.subscription);
+  const subId = invoiceSubscription(invoice);
   if (!subId) return "ignored";
   const current = await deps.stripe.subscriptions.retrieve(subId);
   const sub = grantsAccess(current.status) ? await deps.stripe.subscriptions.cancel(subId) : current;
@@ -313,28 +324,41 @@ async function onboard(sub: StripeSubscription, deps: WebhookDeps): Promise<stri
     // used it). Someone already active here gets nothing new.
     const { data: authUser } = await svc.auth.admin.getUserById(user.id);
     const neverSignedIn = !authUser?.user?.last_sign_in_at;
+    // A failed email doesn't undo the payment: the membership stands, the
+    // failure is kept on the billing row, and /admin/billing lists him so
+    // an admin can resend the invite. Throwing here would leave Stripe's
+    // retry finding a finished membership and never sending it.
     let email_sent: string;
-    if (created || neverSignedIn) {
-      const err = await deps.sendInvite({ id: user.id, email: user.email, first_name: user.first_name ?? firstName }, community.name);
-      if (err) throw new Error(`invite failed: ${err}`);
-      await svc.from("users").update({ invited_at: new Date().toISOString() }).eq("id", user.id);
-      email_sent = "invite";
-    } else if (existing?.status === "active") {
-      email_sent = "none";
-    } else {
-      await deps.sendMembershipActive({
-        to: user.email,
-        firstName: user.first_name ?? firstName,
-        communityName: community.name,
-        returning: Boolean(existing),
-      });
-      email_sent = existing ? "back_in" : "joined";
+    let emailError: string | null = null;
+    try {
+      if (created || neverSignedIn) {
+        emailError = await deps.sendInvite({ id: user.id, email: user.email, first_name: user.first_name ?? firstName }, community.name);
+        if (!emailError) await svc.from("users").update({ invited_at: new Date().toISOString() }).eq("id", user.id);
+        email_sent = "invite";
+      } else if (existing?.status === "active") {
+        email_sent = "none";
+      } else {
+        await deps.sendMembershipActive({
+          to: user.email,
+          firstName: user.first_name ?? firstName,
+          communityName: community.name,
+          returning: Boolean(existing),
+        });
+        email_sent = existing ? "back_in" : "joined";
+      }
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err);
+      email_sent = "failed";
+    }
+    if (emailError) {
+      email_sent = "failed";
+      await svc.from("membership_billing").update({ welcome_email_error: emailError.slice(0, 500) }).eq("membership_id", membershipId);
     }
 
     await deps.audit({
       action: "billing.joined",
       target_id: user.id,
-      metadata: { subscription: sub.id, community_id: community.id, created, returning: Boolean(existing), email_sent },
+      metadata: { subscription: sub.id, community_id: community.id, created, returning: Boolean(existing), email_sent, email_error: emailError },
     });
     return `joined:${email_sent}`;
   } catch (err) {

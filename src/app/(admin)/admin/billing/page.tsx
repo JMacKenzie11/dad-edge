@@ -31,6 +31,17 @@ export default async function BillingPage() {
     .order("payment_failed_at", { ascending: true });
   const failing = ((data ?? []) as unknown as Row[]).map((r) => ({ ...r, users: one(r.users), communities: one(r.communities) }));
 
+  const { data: unsent } = await svc
+    .from("membership_billing")
+    .select("user_id, welcome_email_error, users:user_id(email, first_name, last_name), communities:community_id(name)")
+    .not("welcome_email_error", "is", null)
+    .in("status", ["active", "trialing", "past_due"]);
+  const emailFailed = ((unsent ?? []) as unknown as Array<Row & { welcome_email_error: string }>).map((r) => ({
+    ...r,
+    users: one(r.users),
+    communities: one(r.communities),
+  }));
+
   const { count: billed } = await svc
     .from("membership_billing")
     .select("membership_id", { count: "exact", head: true })
@@ -46,6 +57,28 @@ export default async function BillingPage() {
           {billed ?? 0} paying through Stripe. Stripe retries a failed card and emails him each time; when the last try fails, his membership ends.
         </p>
       </header>
+
+      {emailFailed.length > 0 ? (
+        <section>
+          <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">Paid, but the email didn&apos;t send ({emailFailed.length})</h2>
+          <p className="text-xs text-[color:var(--color-text-muted)] mb-3">
+            Their membership is on. Open each one and use Send Invite so they can set a password.
+          </p>
+          <ul className="divide-y divide-[color:var(--color-border)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] overflow-hidden">
+            {emailFailed.map((r) => (
+              <li key={`${r.user_id}-${r.communities?.name}`} className="p-3 text-sm">
+                <Link href={`/admin/users/${r.user_id}`} className="hover:text-[color:var(--color-primary)]">
+                  {[r.users?.first_name, r.users?.last_name].filter(Boolean).join(" ") || r.users?.email}
+                </Link>
+                <p className="text-xs text-[color:var(--color-text-muted)]">
+                  {r.users?.email} · {r.communities?.name}
+                </p>
+                <p className="text-xs text-[color:var(--color-danger)] mt-1">{r.welcome_email_error}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section>
         <h2 className="font-heading text-lg text-[color:var(--color-accent)] mb-3">Failed payments ({failing.length})</h2>
