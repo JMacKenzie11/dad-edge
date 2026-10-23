@@ -1,10 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { isStripeConfigured } from "@/lib/billing/stripe";
 import { productPrice } from "@/lib/billing/products";
-import { startCheckout } from "./actions";
+import { JoinForm } from "./join-form";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +12,8 @@ export const dynamic = "force-dynamic";
  * He gives his name and email here, pays on Stripe's page, and the
  * webhook sets up his account.
  */
-export default async function JoinPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{ error?: string }>;
-}) {
+export default async function JoinPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { error } = await searchParams;
   const svc = createSupabaseServiceClient();
   const { data: community } = await svc
     .from("communities")
@@ -36,7 +28,7 @@ export default async function JoinPage({
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-10 gap-8">
       <Image src="/brand/logo-tagline-white.png" alt="THE DAD EDGE - Live Legendary" width={320} height={90} priority />
-      <div className="w-full max-w-sm bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6 space-y-4">
+      <div className="w-full max-w-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[var(--radius-card)] p-6 space-y-4">
         {!community || !price ? (
           <div>
             <h1 className="font-heading text-2xl">Sign-up is closed</h1>
@@ -55,16 +47,9 @@ export default async function JoinPage({
                 {price.label}. Cancel anytime from your profile.
               </p>
             </div>
-            <form action={startCheckout} className="space-y-3">
-              <input type="hidden" name="slug" value={community.slug} />
-              <Field label="FIRST NAME" name="first_name" autoComplete="given-name" autoFocus />
-              <Field label="LAST NAME" name="last_name" autoComplete="family-name" />
-              <Field label="EMAIL" name="email" type="email" autoComplete="email" />
-              <SubmitButton label="CONTINUE TO PAYMENT" pendingLabel="OPENING STRIPE…" className="w-full" />
-              {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
-            </form>
+            <JoinForm slug={community.slug} />
             <p className="text-xs text-[color:var(--color-text-muted)]">
-              You&apos;ll pay on Stripe&apos;s secure page. Then we&apos;ll email you a link to set your password. Already have an account? Use the same email and we&apos;ll add this community to it.
+              Payment is handled securely by Stripe. Then we&apos;ll email you a link to set your password. Already have an account? Use the same email and we&apos;ll add this community to it.
             </p>
           </>
         )}
@@ -73,30 +58,3 @@ export default async function JoinPage({
   );
 }
 
-function Field({
-  label,
-  name,
-  type = "text",
-  autoComplete,
-  autoFocus,
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  autoComplete?: string;
-  autoFocus?: boolean;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">{label}</span>
-      <input
-        type={type}
-        name={name}
-        required
-        autoComplete={autoComplete}
-        autoFocus={autoFocus}
-        className="mt-1 w-full h-11 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)] text-[color:var(--color-text)] focus:border-[color:var(--color-primary)]"
-      />
-    </label>
-  );
-}

@@ -154,8 +154,8 @@ Eight pillars, seven of which are self-reported daily; one is derived from missi
 | `/reset-password` | `src/app/reset-password/page.tsx` | Same shape as set-password with reset copy. Also lands on `/itc` or `/today` based on `itc_access` + admin status. When Supabase rejects the update because the new password matches the current one, the raw error is translated to "You've already set that password. Sign in with it here — no need to reset again." + a GO TO SIGN IN button so the user isn't stuck in a reset loop. |
 | `/logout` | `src/app/logout/route.ts` | POST-only. Explicit 303 redirect (default 307 preserved POST → 405 blank screen). Lands on `/login`. |
 | `/inactive` | `src/app/inactive/page.tsx` | Shown when subscription is `canceled` and the 30-day win-back window has elapsed, or straight away for a Stripe cancellation. |
-| `/join/[slug]` | `src/app/join/[slug]/page.tsx` + `actions.ts` | Public paid sign-up for a community with a Stripe product. Shows the community name and the product's default price, takes first name, last name and email, and `startCheckout` sends him to Stripe Checkout (subscription mode, promotion codes allowed; name, email and `community_id` ride on the subscription's metadata). Refuses an email that's already an active member of that community. Shows "Sign-up is closed" when the community has no product, isn't active, or Stripe isn't configured. |
-| `/join/[slug]/welcome` | `src/app/join/[slug]/welcome/page.tsx` | Where Checkout returns him after paying: tells him to look for the email. |
+| `/join/[slug]` | `src/app/join/[slug]/page.tsx` + `actions.ts` | Public paid sign-up for a community with a Stripe product. Shows the community name and the product's default price, takes first name, last name and email, then `createCheckout` opens Stripe's payment form **on the same page** (embedded Checkout, `ui_mode: embedded_page`, mounted by `join-form.tsx`; subscription mode, promotion codes allowed; name, email and `community_id` ride on the subscription's metadata). Paying sends him to the welcome page. Without `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` it falls back to Stripe's own checkout page (`checkoutSessionParams()` in `src/lib/billing/checkout.ts`). Refuses an email that's already an active member of that community. Shows "Sign-up is closed" when the community has no product, isn't active, or Stripe isn't configured. |
+| `/join/[slug]/welcome` | `src/app/join/[slug]/welcome/page.tsx` | Where he lands after paying: tells him to look for the email. |
 | `/api/stripe/webhook` | `src/app/api/stripe/webhook/route.ts` | Stripe notifications, signature-checked with `STRIPE_WEBHOOK_SECRET`. See §5 "Stripe billing". |
 
 **Sign-in landing logic** (in `signIn` and `updatePassword`, `src/app/login/actions.ts`):
@@ -612,7 +612,7 @@ Land on `/dashboard` → state resolver runs → if within grace period, card re
 
 **Resend** — Stage B live. Sends activation invites, password resets, reminders, nudges, disengagement ladder, weekly digests through the verified `dadedgeoperatingsystem.com` domain. Gated on `EMAIL_STAGE=B` + non-empty `RESEND_API_KEY`; falls back to Supabase's default sender otherwise (dev / misconfig safety net). Detailed error responses (including Resend response body on 4xx/5xx) logged via `[email:send]` and `[admin] batch invite failed` prefixes. Env: `RESEND_API_KEY`, `RESEND_FROM`, `EMAIL_STAGE`. `src/lib/email.ts` + `src/lib/copy/auth-emails.ts`. Go-live checklist: `docs/email-setup-checklist.md`.
 
-**Stripe** — paid sign-up and membership billing (§5 "Stripe billing"). SDK `stripe` pinned at 22.6.2 (API `2026-08-26.dahlia`). Webhook at `/api/stripe/webhook`. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Hand-managed users still have their status set via `/admin/users/[id]`.
+**Stripe** — paid sign-up and membership billing (§5 "Stripe billing"). SDK `stripe` pinned at 22.6.2 (API `2026-08-26.dahlia`). Webhook at `/api/stripe/webhook`. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Browser packages `@stripe/stripe-js` 10.0.0 and `@stripe/react-stripe-js` 7.0.0 (embedded Checkout). Hand-managed users still have their status set via `/admin/users/[id]`.
 
 **Vercel Cron** — hits `/api/cron/daily` with `CRON_SECRET` bearer. `vercel.json` holds the schedule.
 
@@ -683,6 +683,7 @@ Email (Stage B — live in prod)
 Stripe
 - `STRIPE_SECRET_KEY` — test-mode key (`sk_test_`) in `.env.local`, live key in Vercel.
 - `STRIPE_WEBHOOK_SECRET` — the signing secret of the webhook endpoint (`whsec_`); locally, the one `stripe listen` prints.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — publishable key (`pk_test_` locally, `pk_live_` in Vercel). Public by design; puts the payment form inside `/join/<slug>`. Baked in at build time, so a change needs a redeploy. Missing, sign-up uses Stripe's own checkout page.
 
 Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 
