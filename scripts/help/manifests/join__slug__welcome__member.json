@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/join/[slug]/welcome",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "You&apos;re in"
+    },
+    {
+      "kind": "link",
+      "label": "Go to sign in"
+    }
+  ],
+  "source_hash": "2be708b8827f0f10",
+  "source_files": [
+    "src/app/join/[slug]/welcome/page.tsx"
+  ]
+}

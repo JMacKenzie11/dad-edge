@@ -172,6 +172,20 @@ export const PROBES: Probe[] = [
     sql: "update public.course_sections set title = 'Renamed' where course_id = :open", expect: "refuse" },
   { id: "S6", what: "alice can't switch a course's sections off", kind: "write", as: "alice",
     sql: "select public.set_course_sections(:open, false)", expect: "refuse" },
+
+  // Stripe billing: a man's payment status is his own and the admins'.
+  // Community-mates read each other's memberships, so billing has its own table.
+  { id: "B1", what: "alice can read her own billing row", kind: "read", as: "alice",
+    sql: "select count(*) from public.membership_billing where user_id = :alice", control: "select count(*) from public.membership_billing where user_id = :alice", expect: "some" },
+  { id: "B2", what: "bob (same community) can't read alice's billing row", kind: "read", as: "bob",
+    sql: "select count(*) from public.membership_billing where user_id = :alice", control: "select count(*) from public.membership_billing where user_id = :alice", expect: "zero" },
+  { id: "B3", what: "alice can't clear her own failed payment", kind: "write", as: "alice",
+    sql: "update public.membership_billing set status = 'active', payment_failed_at = null where user_id = :alice", expect: "refuse" },
+  { id: "B4", what: "bob can't give himself a billing row", kind: "write", as: "bob",
+    sql: "insert into public.membership_billing (membership_id, user_id, community_id, stripe_customer_id, stripe_subscription_id, status) select id, user_id, community_id, 'cus_planted', 'sub_planted', 'active' from public.memberships where user_id = :bob", expect: "refuse" },
+  // stripe_events has no grants at all, so even reading it is an error.
+  { id: "B5", what: "alice can't read Stripe's event log", kind: "write", as: "alice",
+    sql: "select count(*) from public.stripe_events where id like 'evt_zzprobe%'", expect: "refuse" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -234,6 +248,10 @@ function fixturesSql(ids: Ids): string {
     ('${ids.draftLesson}', '${ids.draft}', '${ids.draftSection}', 'L1', 0),
     ('${ids.onlyBLesson}', '${ids.onlyB}', '${ids.onlyBSection}', 'L1', 0);
   insert into storage.objects (bucket_id, name) values ('lesson-files', 'zz-probe/fixture.pdf');
+  insert into public.membership_billing (membership_id, user_id, community_id, stripe_customer_id, stripe_subscription_id, status, payment_failed_at)
+    select id, user_id, community_id, 'cus_zzprobe', 'sub_zzprobe_${ids.alice.slice(0, 8)}', 'past_due', now()
+    from public.memberships where user_id = '${ids.alice}' and community_id = '${ids.commA}';
+  insert into public.stripe_events (id, type) values ('evt_zzprobe_${ids.alice.slice(0, 8)}', 'invoice.payment_failed');
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.
   create table public.zz_probe_leaky (owner uuid not null, secret text);

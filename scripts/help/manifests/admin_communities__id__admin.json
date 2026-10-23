@@ -58,12 +58,25 @@
     {
       "kind": "button",
       "label": "GO"
+    },
+    {
+      "kind": "header",
+      "label": "Paid sign-up"
+    },
+    {
+      "kind": "select",
+      "label": "stripe_product_id"
+    },
+    {
+      "kind": "button",
+      "label": "SAVE PRODUCT"
     }
   ],
-  "source_hash": "97b407c0185100bd",
+  "source_hash": "ba44b17e6e908be8",
   "source_files": [
     "src/app/(admin)/admin/communities/[id]/page.tsx",
     "src/app/(admin)/admin/communities/[id]/edit-form.tsx",
-    "src/app/(admin)/admin/communities/[id]/member-row.tsx"
+    "src/app/(admin)/admin/communities/[id]/member-row.tsx",
+    "src/app/(admin)/admin/communities/[id]/signup-panel.tsx"
   ]
 }

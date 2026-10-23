@@ -97,7 +97,7 @@ _Change log since 2026-08-20 snapshot:_
 **Roadmap phase model** (per `braveman-app-build-config.md`):
 - **Phase 1 — Core Tracker** (largely complete)
 - **Phase 2 — The Coach** (in progress; scaffolding shipped, allowance metering and email delivery pending)
-- **Phase 3 — Stripe Billing** (not started; subscription status currently managed manually)
+- **Phase 3 — Stripe Billing** (shipped 2026-10-23: paid sign-up, webhook, failed-payment banner, admin Billing page; see §5 "Stripe billing")
 - **Phase 4 — Polish & Expand** (push notifications, deeper analytics, funnel integrations)
 
 **Tech stack**
@@ -153,7 +153,10 @@ Eight pillars, seven of which are self-reported daily; one is derived from missi
 | `/set-password` | `src/app/set-password/page.tsx` | Activation destination for admin Send Invite links. User arrives already-authenticated, sets a password, `updatePassword()` invalidates other sessions and lands them on `/itc` (ITC users) or `/today`. |
 | `/reset-password` | `src/app/reset-password/page.tsx` | Same shape as set-password with reset copy. Also lands on `/itc` or `/today` based on `itc_access` + admin status. When Supabase rejects the update because the new password matches the current one, the raw error is translated to "You've already set that password. Sign in with it here — no need to reset again." + a GO TO SIGN IN button so the user isn't stuck in a reset loop. |
 | `/logout` | `src/app/logout/route.ts` | POST-only. Explicit 303 redirect (default 307 preserved POST → 405 blank screen). Lands on `/login`. |
-| `/inactive` | `src/app/inactive/page.tsx` | Shown when subscription is `canceled` and the 30-day win-back window has elapsed. |
+| `/inactive` | `src/app/inactive/page.tsx` | Shown when subscription is `canceled` and the 30-day win-back window has elapsed, or straight away for a Stripe cancellation. |
+| `/join/[slug]` | `src/app/join/[slug]/page.tsx` + `actions.ts` | Public paid sign-up for a community with a Stripe product. Shows the community name and the product's default price, takes first name, last name and email, and `startCheckout` sends him to Stripe Checkout (subscription mode, promotion codes allowed; name, email and `community_id` ride on the subscription's metadata). Refuses an email that's already an active member of that community. Shows "Sign-up is closed" when the community has no product, isn't active, or Stripe isn't configured. |
+| `/join/[slug]/welcome` | `src/app/join/[slug]/welcome/page.tsx` | Where Checkout returns him after paying: tells him to look for the email. |
+| `/api/stripe/webhook` | `src/app/api/stripe/webhook/route.ts` | Stripe notifications, signature-checked with `STRIPE_WEBHOOK_SECRET`. See §5 "Stripe billing". |
 
 **Sign-in landing logic** (in `signIn` and `updatePassword`, `src/app/login/actions.ts`):
 - Explicit `?next=` param wins.
@@ -193,7 +196,7 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | `/coach` | `src/app/(app)/coach/page.tsx` | Coach Larry hub — lists conversations, "new conversation" button (general or mission mode). Nav label is "Coach Larry"; card copy uses first-name personalization ("Talk to Larry"). |
 | `/coach/[id]` | `src/app/(app)/coach/[id]/page.tsx` | Threaded conversation. Coach messages get a purple accent + Centurion mark avatar. Mission suggestion cards render inline with accept/reject. |
 | `/me` | `src/app/(app)/me/page.tsx` | Profile: circular avatar (via `UserAvatar` component; initial fallback), name, email, city, partner summary, kids summary, latest survey composite + delta. Edit link → `/me/profile`. |
-| `/me/profile` | `src/app/(app)/me/profile/page.tsx` | Dedicated post-onboarding profile edit: first/last name, city, cell phone, avatar (reuses `AvatarCropper` from onboarding). Own server action (`saveProfileEdit`) skips `bumpStep` and redirects back to `/me`. |
+| `/me/profile` | `src/app/(app)/me/profile/page.tsx` | Dedicated post-onboarding profile edit: first/last name, city, cell phone, avatar (reuses `AvatarCropper` from onboarding). Own server action (`saveProfileEdit`) skips `bumpStep` and redirects back to `/me`. Members billed through Stripe also get **MANAGE BILLING**, which opens Stripe's customer portal (card, receipts, cancel). |
 | `/me/partner` | `src/app/(app)/me/partner/page.tsx` | Full partner profile edit. |
 | `/me/kids` | `src/app/(app)/me/kids/page.tsx` | Add / edit / delete kids. |
 | `/me/survey` | `src/app/(app)/me/survey/page.tsx` | List of Partner Connection Surveys with composite + delta. |
@@ -218,7 +221,8 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 |------|---------|
 | `/admin` | Platform overview: communities, active members, this week's check-ins, disengagement. |
 | `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). |
-| `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. |
+| `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. **Paid sign-up** panel: pick the Stripe product that buys a place here (`setStripeProduct`, one product per community) and copy the `/join/<slug>` link. |
+| `/admin/billing` | Stripe-billed memberships whose card is failing (`payment_failed_at` set, not yet ended), oldest failure first, with community and days failing; plus the count paying through Stripe. |
 | `/admin/users` | User list with subscription status. Universal checkboxes drive two batch actions: SEND INVITES (BATCH) (fires activation via Resend) and DELETE SELECTED (opens modal requiring typed "DELETE" confirmation). New Account form creates auth + public user in one step with optional platform-admin checkbox and an **"Admin only"** checkbox (community selector becomes optional; server refuses admin-only without platform-admin). All buttons use the shared `<SubmitButton>` with pending state (spinner + disabled + swapped label). |
 | `/admin/users/[id]` | Edit a user: **first and last name** (`setName`; same rules as the member's own `/me/profile` edit: trimmed, blank saves as no name, 80 characters each; audit-logged as `user.set_name` with the old and new values), subscription status, platform-admin toggle, `itc_access` toggle, **admin-only toggle** (`setAdminOnly` force-sets `is_platform_admin=true` alongside), single-user Send Invite, and a Danger Zone panel with a hard-delete requiring typed email confirmation. **Memberships management** section: per active membership a role dropdown (Member/Leader) with save action + REMOVE button, plus an "Add to community" form (community dropdown that excludes ones the user is already in + role selector + ADD). Backed by `addMembership` / `removeMembership` / `setMembershipRole` server actions in `src/app/(admin)/admin/users/actions.ts`, all audit-logged. Audit-log entries surface below. |
 | `/admin/disengagement` | Platform-wide disengagement view. Split into "Never activated" + "Inactive" sections (renamed from "Silent" on 2026-08-24). Inactive ranges: **21+ / 14-20 / 7-13 / 3-6 days inactive**. |
@@ -277,6 +281,7 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `is_admin_only` (backstage-only admin; CHECK `users_admin_only_requires_platform_admin` forces `is_platform_admin=true` when true), `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–6 with current flow), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
 - **`communities`** — name, unique slug, accent color, timezone, `leaderboard_enabled`, `missions_visible`, status (`active` / `archived`), `week_lock_days` (default 3).
 - **`memberships`** — one row per (user, community). Role (`member` / `leader`), status (`active` / `inactive` / `removed`), `joined_at`, `deactivated_at`, `canceled_visible_until` (= `deactivated_at + 30 days`). **Platform admins are auto-provisioned as `leader` in every community** via triggers `communities_grant_admins` (fires on community insert) and `users_grant_admin_communities` (fires when `is_platform_admin` flips true on insert or update). Backfill runs at migration time (`20260824000002`) for existing state. Idempotent via `on conflict (user_id, community_id) do nothing`.
+- **`membership_billing`** / **`stripe_events`** — Stripe billing per membership and the record of Stripe notifications; `communities.stripe_product_id` links a community to its Stripe product. See §5 "Stripe billing".
 - **`weeks`** — per community, Monday `start_date`, `is_intensive`, `locked_at`. Unique (community, start_date).
 - **`pillar_framework_versions`** — versioned JSONB definition of pillars + `weekly_max`.
 - **`daily_checkins`** — one row per (user, date, pillar). `value` is `0` or `1`. Absence of a row is meaningfully different from `value=0`.
@@ -374,6 +379,21 @@ This rule was learned the hard way from the `message_threads_insert_shared_commu
 - `subscription_status ∈ {active, trialing, comped, past_due}` → `access: "full"`.
 - `canceled` and `now - canceled_at < WIN_BACK_DAYS (30)` → `access: "read_only"`. User keeps history read + shows on scorecard with "INACTIVE" badge; write actions rejected.
 - `canceled` past 30 days → `access: "none"`; redirected to `/inactive`.
+- `canceled` with `subscription_source = 'stripe'` → `access: "none"` straight away: a Stripe cancellation has no read-only window. `has_read_entitlement()` in SQL follows the same rule.
+
+### Stripe billing (2026-10-23)
+
+Decisions and reasons: DECISIONS.md "Stripe billing". Code: `src/lib/billing/` (`webhook.ts` holds the rules, `state.ts` the pure status mapping).
+
+- **Data.** `communities.stripe_product_id` (unique). `membership_billing`, one row per Stripe-billed membership: Stripe customer and subscription ids, Stripe's status as is, period end, `cancel_at_period_end`, `payment_failed_at`, `ended_at`. Readable by the member himself and platform admins only (community-mates can read each other's memberships, so billing is a separate table); written only by the webhook with the service role. `stripe_events` records every notification id once (no grants to members). A membership without a billing row is hand-managed and Stripe never touches it.
+- **Sign-up.** `/join/<slug>` → Stripe Checkout → `checkout.session.completed`. The webhook finds the account by email (case-insensitive) or creates it from the name and email on the subscription, switches the membership on, writes the billing row, and emails him: the set-password invite if the account is new or has never signed in, "you're back in" if the membership existed before, "you're in" for an existing account joining another community, nothing if he was already an active member. A claim row (`onboard:<subscription id>` in `stripe_events`) stops simultaneous notifications from onboarding twice.
+- **Every subscription event re-reads the subscription from Stripe** and syncs to it, so arrival order doesn't matter. Active, trialing and past due keep the membership on; anything else (canceled, unpaid, incomplete, paused) switches it off with `canceled_visible_until = deactivated_at`, so there's no win-back window.
+- **User-level status** for a Stripe-billed user is the best of his Stripe memberships (active, then trialing, then past due, else canceled), with `subscription_source = 'stripe'`. A hand-managed user who's still entitled (comped, active, trialing, past due) keeps his own status when he pays for a community.
+- **Failed payment.** `invoice.payment_failed` sets `payment_failed_at` (first failure kept), the member keeps full access, and the app shell shows "Your last payment didn't go through. UPDATE YOUR CARD" (opens the Stripe portal). `invoice.paid` clears it. Stripe sends the emails. When Stripe gives up it cancels the subscription and the membership ends.
+- **Cancel.** Cancelling in the portal sets `cancel_at_period_end`; access continues until Stripe ends the subscription at the period end, then stops.
+- **Refund.** A full refund (`charge.refunded` with `refunded = true`) cancels the subscription in Stripe immediately and ends the membership. A partial refund changes nothing.
+- **Admin edits.** Removing a Stripe-billed membership by hand doesn't cancel the subscription in Stripe; cancel it in Stripe instead, or the next paid invoice adds him back. An admin setting a user's subscription status by hand makes that user hand-managed again.
+- **Stripe settings this relies on:** Smart Retries (4 tries over 2 weeks, then cancel the subscription), Stripe's customer emails for failed payments, expiring cards and receipts, and the customer portal with cancel at period end. Webhook events: `checkout.session.completed`, `customer.subscription.created/updated/deleted/paused/resumed`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`.
 
 **Session helpers** (`src/lib/session.ts`):
 - `requireUser()` — auth check + redirect. Loads `SessionUser` including `avatar_url`, `city`, `phone`.
@@ -469,7 +489,7 @@ Two independent numbers plus a combined total:
   - `over` (150-299): explicit "Over your monthly allowance" notice, coach STILL responds. Spec is explicit that we never hard-block a man mid-conversation about his marriage.
   - `block` (300+): hard cap — runaway-spend safety net only, composer disables. Normal use never approaches this.
 - Exposed on every `POST /api/coach/messages` response via the `allowance` field so the client can render the bucket-appropriate treatment inline.
-- No billing consequence yet; Stripe integration is Phase 3.
+- No billing consequence: the coach allowance isn't tied to Stripe billing.
 
 ### Coach context pipeline (added 2026-08-27)
 - Provider pattern under `src/lib/coach/context/`. Each provider is one file that returns a `{ label, text, tokenEstimate }` block (or null when it has nothing). Adding a new context source is: write the file, append to `registry.ts`. No changes to the assembler, no prompt changes, no other provider changes. Extensibility is the whole point; a load-bearing test in `tests/coach/context.test.ts` proves the pattern with a throwaway provider.
@@ -591,7 +611,7 @@ Land on `/dashboard` → state resolver runs → if within grace period, card re
 
 **Resend** — Stage B live. Sends activation invites, password resets, reminders, nudges, disengagement ladder, weekly digests through the verified `dadedgeoperatingsystem.com` domain. Gated on `EMAIL_STAGE=B` + non-empty `RESEND_API_KEY`; falls back to Supabase's default sender otherwise (dev / misconfig safety net). Detailed error responses (including Resend response body on 4xx/5xx) logged via `[email:send]` and `[admin] batch invite failed` prefixes. Env: `RESEND_API_KEY`, `RESEND_FROM`, `EMAIL_STAGE`. `src/lib/email.ts` + `src/lib/copy/auth-emails.ts`. Go-live checklist: `docs/email-setup-checklist.md`.
 
-**Stripe** — Phase 3. Not yet integrated; subscription status is set manually via `/admin/users/[id]`. Planned webhooks: `customer.subscription.updated/deleted`, `invoice.payment_failed`. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
+**Stripe** — paid sign-up and membership billing (§5 "Stripe billing"). SDK `stripe` pinned at 22.6.2 (API `2026-08-26.dahlia`). Webhook at `/api/stripe/webhook`. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Hand-managed users still have their status set via `/admin/users/[id]`.
 
 **Vercel Cron** — hits `/api/cron/daily` with `CRON_SECRET` bearer. `vercel.json` holds the schedule.
 
@@ -659,9 +679,9 @@ Email (Stage B — live in prod)
 - `RESEND_FROM` — must be a bare email (`no-reply@dadedgeoperatingsystem.com`) or name-with-brackets (`Dad Edge <no-reply@dadedgeoperatingsystem.com>`). Local part must match the verified Resend sending domain.
 - `EMAIL_STAGE` — must be exactly `B` (case-sensitive single char) to activate Stage B. Any other value falls back to Stage A (Supabase's default sender).
 
-Stripe (Phase 3)
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
+Stripe
+- `STRIPE_SECRET_KEY` — test-mode key (`sk_test_`) in `.env.local`, live key in Vercel.
+- `STRIPE_WEBHOOK_SECRET` — the signing secret of the webhook endpoint (`whsec_`); locally, the one `stripe listen` prints.
 
 Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 
@@ -718,7 +738,7 @@ Examples at `.env.example` (minimal) and `.env.local.example` (extended).
 - [x] Trigger on user is_platform_admin flip-to-true: backfill memberships.
 
 **Phase 3 — Stripe Billing**
-- [ ] Checkout, customer portal, webhooks, dunning, win-back mechanics.
+- [x] Checkout, customer portal, webhooks, failed-payment banner, admin Billing page (2026-10-23).
 
 **Phase 4 — Polish & Expand**
 - [ ] Push notifications (PWA first).

@@ -253,3 +253,41 @@ export async function moveMember(formData: FormData) {
   revalidatePath(`/admin/communities/${parsed.data.to_community_id}`);
   redirect(`/admin/communities/${parsed.data.to_community_id}?saved=1`);
 }
+
+const StripeProductSchema = z.object({
+  id: z.string().uuid(),
+  stripe_product_id: z
+    .string()
+    .trim()
+    .regex(/^(prod_[A-Za-z0-9]+)?$/, "Pick a Stripe product from the list.")
+    .transform((v) => v || null),
+});
+
+/** Links a Stripe product to the community: paying for it joins him here
+ *  (DECISIONS.md "Stripe billing"). Blank unlinks it. */
+export async function setStripeProduct(formData: FormData) {
+  const admin = await requirePlatformAdmin();
+  const parsed = parseForm(StripeProductSchema, {
+    id: formData.get("id"),
+    stripe_product_id: formData.get("stripe_product_id") ?? "",
+  });
+  if (!parsed.ok) redirect(`/admin/communities?error=${encodeURIComponent(parsed.error)}`);
+  const { id, stripe_product_id } = parsed.data;
+  const svc = createSupabaseServiceClient();
+  const { error } = await svc.from("communities").update({ stripe_product_id }).eq("id", id);
+  if (error) {
+    const message = /communities_stripe_product_id_key/.test(error.message)
+      ? "That Stripe product is already linked to another community."
+      : error.message;
+    redirect(`/admin/communities/${id}?error=${encodeURIComponent(message)}`);
+  }
+  await auditLog({
+    actor_user_id: admin.id,
+    action: "community.set_stripe_product",
+    target_type: "community",
+    target_id: id,
+    metadata: { stripe_product_id },
+  });
+  revalidatePath(`/admin/communities/${id}`);
+  redirect(`/admin/communities/${id}?saved=1`);
+}

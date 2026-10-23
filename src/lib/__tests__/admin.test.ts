@@ -42,6 +42,7 @@ function fakeUser(overrides: Partial<SessionUser> = {}): SessionUser {
     is_platform_admin: false,
     is_admin_only: false,
     subscription_status: "active",
+    subscription_source: "manual",
     deactivated_at: null,
     onboarding_step: 7,
     occupation: null,
