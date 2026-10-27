@@ -7,8 +7,7 @@
  * voice_lint_passed=false so the admin knows to regenerate or edit
  * before approving.
  *
- * Rules mirror the banned lists in docs/coach-voice-and-tone.md +
- * docs/main-coach-ai-patterns.md. Deliberately conservative: word-
+ * Rules mirror the banned lists in docs/coach-voice-and-tone.md. Deliberately conservative: word-
  * boundary matches only, no fuzzy stemming, so false positives are
  * rare and false negatives push the reviewer to do the semantic
  * pass. The scan is a safety net, not a substitute for reading.
