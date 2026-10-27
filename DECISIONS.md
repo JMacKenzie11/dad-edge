@@ -351,6 +351,15 @@ Jason wants challenges a community can opt into: a leader sets a domain, a missi
 - **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end. The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
 - **The database holds the line on the cap.** Because challenge missions skip the two-per-domain check, the mission trigger checks each one against its challenge (joined, matching wording, domain and days, inside the dates, one a week) so a challenge mission can't be forged to get round the limit. Probes CH1 to CH13.
 
+## Coach Larry: his name first, brother and man sparingly, "work" not "the business" (2026-10-27)
+
+On the first day live Larry opened Jason's "I'm struggling man" with "Hey brother… Is this home, the business, or just everything piling up at once?", then said "man" in each of the next two replies. Jason's calls:
+
+- **Use his first name in the first reply.** After that, "brother", "man" or "my man" only now and then.
+- **Say "work", not "the business".** Not every member runs one. Shift to "the business" only once he talks about his business himself, even if his profile says business owner.
+
+Both were already prompt rules or easy to add as one ("at most once per reply, and plenty of replies without any"), and the model ignored them: with "Business owner" on file it said "the business" in 4 of 6 first replies even with the new rule in the voice guide. So the server decides, from the conversation so far, and puts it in one short "How to talk to him this turn" section at the end of the system prompt (`src/lib/coach/address.ts`): his name on the first reply; no name, "brother" or "man" while any of the last three replies used one; and "work, not business" until he has mentioned a business. Same pattern as the two-model split: structure the server owns, not a rule the model has to remember. The voice guide's examples of "brother" and "man" were also removed, since the model copies its examples.
+
 ## Coach Larry speaks as Larry (2026-10-27)
 
 Jason analysed 12 of Larry Hagner's recorded coaching sessions (the "Larry Coaching Style Analysis") and wants the Coach Larry chat to sound and behave as much like Larry as possible. Until now the chat was a generic "BRAVE MAN coach" whose voice rules banned most of what Larry actually does: specific praise, "tell me more about that", "that sounds frustrating", naming his tools, telling his own stories, "Does that land for you?". Jason's calls:

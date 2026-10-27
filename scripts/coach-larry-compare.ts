@@ -36,9 +36,11 @@ export type Checks = {
   slang: string[];
   dashes: boolean;
   larryLife: string[];
+  business: string[];
 };
 
 const SLANG = /\b(freakin[g']?|frickin[g']?|friggin[g']?|dang|darn|damn|dammit|hell|crap|crappy|pissed|shit\w*|fuck\w*|ass|badass|sucks?)\b/gi;
+const BUSINESS = /\b(business(es)?|company|companies)\b/gi;
 const LARRY_LIFE = /\b(Jess(ica)?|Mason|Ethan|Lawson|Colton|Toby|my wife|my boys?|my sons?|my (oldest|youngest)|my marriage|my therapist)\b/gi;
 
 export function checkReply(text: string): Checks {
@@ -48,6 +50,7 @@ export function checkReply(text: string): Checks {
     slang: [...new Set((text.match(SLANG) ?? []).map((s) => s.toLowerCase()))],
     dashes: /[—–]|\s-\s/.test(text),
     larryLife: [...new Set(text.match(LARRY_LIFE) ?? [])],
+    business: [...new Set((text.match(BUSINESS) ?? []).map((s) => s.toLowerCase()))],
   };
 }
 
@@ -60,6 +63,7 @@ async function run(label: string, out: string) {
   const { mainModel } = await import("../src/lib/model-config");
   const { systemBase, PROMPT_VERSION } = await import("../src/lib/coach/prompts");
   const { scrubCoachReply } = await import("../src/lib/coach/scrub-reply");
+  const { addressNote, workNote } = await import("../src/lib/coach/address");
   const { LARRY_SCENARIOS } = await import("../tests/coach/fixtures/larry-scenarios");
 
   const render = (header: string, blocks: { label: string; text: string }[]) =>
@@ -71,6 +75,12 @@ async function run(label: string, out: string) {
       `${systemBase(s.mode)}\n\n(prompt version: ${PROMPT_VERSION})`,
       render("# Live user context (stable)", s.cacheable),
       render("# Live user context (this turn)", s.volatile),
+      `# How to talk to him this turn\n${[
+        addressNote(firstName(s), (s.history ?? []).filter((m) => m.role === "assistant").map((m) => m.content)),
+        workNote([...(s.history ?? []).filter((m) => m.role === "user").map((m) => m.content), s.userMessage]),
+      ]
+        .filter(Boolean)
+        .join("\n")}`,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -100,12 +110,18 @@ async function run(label: string, out: string) {
   console.log(`wrote ${out}`);
 }
 
+/** The first name from a scenario's "Name:" line, as send-message.ts gets it from the session. */
+function firstName(s: { cacheable: { text: string }[] }): string | null {
+  return s.cacheable.map((b) => b.text.match(/^Name: (\S+)/m)?.[1]).find(Boolean) ?? null;
+}
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function checkLine(c: Checks): string {
   const bits = [`${c.words} words`, `${c.questions} question${c.questions === 1 ? "" : "s"}`];
   if (c.slang.length) bits.push(`<span class="bad">slang: ${esc(c.slang.join(", "))}</span>`);
   if (c.dashes) bits.push(`<span class="bad">dash</span>`);
+  if (c.business.length) bits.push(`<span class="note">business: ${esc(c.business.join(", "))}</span>`);
   if (c.larryLife.length) bits.push(`<span class="note">his own life: ${esc(c.larryLife.join(", "))}</span>`);
   return bits.join(" · ");
 }
@@ -151,7 +167,7 @@ h3{font:700 .72rem/1 var(--display);letter-spacing:.1em;text-transform:uppercase
 </style>
 <main>
 <header><h1>Coach Larry: before and after</h1>
-<p>The same ${a.results.length} situations and the same made-up member: Ryan, wife Kate, kids Jake and Lily. On the left is ${esc(a.label)} (${esc(a.promptVersion)}). On the right is ${esc(b.label)} (${esc(b.promptVersion)}). Most situations are the member's first message, and the last four come later in a conversation. Under each reply you'll see its length, how many questions it asks, any slang or dashes, and any mention of Larry's own life.</p></header>
+<p>The same ${a.results.length} situations and the same made-up member: Ryan, wife Kate, kids Jake and Lily. On the left is ${esc(a.label)} (${esc(a.promptVersion)}). On the right is ${esc(b.label)} (${esc(b.promptVersion)}). Most situations are the member's first message, and the last four come later in a conversation. Under each reply you'll see its length, how many questions it asks, any slang or dashes, any mention of a business, and any mention of Larry's own life.</p></header>
 ${rows}
 </main>`;
   writeFileSync(out, page);

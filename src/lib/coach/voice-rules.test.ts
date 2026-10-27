@@ -38,4 +38,9 @@ describe("Coach Larry voice bundle", () => {
   it("keeps the honesty rule: he's told it's an AI if he asks", () => {
     expect(LARRY_VOICE).toMatch(/If he asks whether you're really Larry, a person, or an AI, tell him the truth/);
   });
+
+  it("calls it work, not his business, until he says he runs one", () => {
+    expect(LARRY_VOICE).toMatch(/Call it "work"/);
+    expect(LARRY_VOICE).toMatch(/until he tells you he runs his own business/);
+  });
 });

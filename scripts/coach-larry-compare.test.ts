@@ -12,6 +12,11 @@ describe("checkReply", () => {
   });
 
   it("passes a clean reply", () => {
-    expect(checkReply("Tell me more about that, brother. What did she say?")).toMatchObject({ slang: [], dashes: false, larryLife: [] });
+    expect(checkReply("Tell me more about that, brother. What did she say?")).toMatchObject({ slang: [], dashes: false, larryLife: [], business: [] });
+  });
+
+  it("flags a reply that assumes he runs a business", () => {
+    expect(checkReply("Is this home, the business, or everything at once?").business).toEqual(["business"]);
+    expect(checkReply("Is this home, work, or everything at once?").business).toEqual([]);
   });
 });
