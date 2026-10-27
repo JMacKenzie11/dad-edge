@@ -522,7 +522,11 @@ function FilledSlot({
             before. */}
         <div className="flex flex-wrap items-center gap-3 sm:contents">
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
-          {locked ? (
+          {isChallenge && !readOnly && !isDone ? (
+            // Same row as every other mission, with the challenge's days
+            // lit; locked, because the days come from the challenge.
+            <DayPicker weekDates={weekDates} value={dayIndexes} onChange={() => {}} disabled />
+          ) : locked ? (
             <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
               {displayDates
                 .map((d) => format(new Date(`${d}T00:00:00`), "EEE").toUpperCase())
@@ -670,15 +674,19 @@ function FilledSlot({
  *  - Uses onMouseDown+preventDefault so clicking a button doesn't
  *    steal focus from a sibling textarea. Prevents the blur-triggered
  *    save from racing the click and dropping the day change.
+ *  - `disabled` shows the days without letting them change (challenge
+ *    missions take their days from the challenge).
  */
 function DayPicker({
   weekDates,
   value,
   onChange,
+  disabled = false,
 }: {
   weekDates: string[];
   value: number[];
   onChange: (indexes: number[]) => void;
+  disabled?: boolean;
 }) {
   const selected = new Set(value);
   const toggle = (i: number) => {
@@ -695,7 +703,7 @@ function DayPicker({
     <div
       className="shrink-0 flex gap-0.5"
       role="group"
-      aria-label="Days of week"
+      aria-label={disabled ? "Days of week, set by the challenge" : "Days of week"}
     >
       {DOW_LABELS.map((label, i) => {
         const active = selected.has(i);
@@ -706,14 +714,17 @@ function DayPicker({
             type="button"
             role="checkbox"
             aria-checked={active}
+            disabled={disabled}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => toggle(i)}
             className={`h-6 w-5 rounded text-[10px] font-heading tracking-widest ${
               active
                 ? "bg-[color:var(--color-primary)] text-white"
-                : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-            }`}
-            title={iso}
+                : disabled
+                  ? "text-[color:var(--color-text-muted)]"
+                  : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+            } ${disabled ? "cursor-default" : ""}`}
+            title={disabled ? `${iso} · set by the challenge` : iso}
           >
             {label}
           </button>

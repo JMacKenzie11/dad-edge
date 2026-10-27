@@ -65,6 +65,13 @@ test("a leader sets a challenge; a member joins, completes the week and leaves",
     await expect(row.getByRole("button", { name: /NEXT WEEK/ })).toHaveCount(0);
     await expect(row.getByRole("button", { name: "Delete mission" })).toHaveCount(0);
     await expect(row.locator("textarea")).toHaveCount(0);
+    // The same M T W T F S S row as other missions, locked, with the
+    // challenge's days from today to Sunday lit.
+    const days = row.getByRole("group", { name: "Days of week, set by the challenge" });
+    await expect(days.getByRole("checkbox")).toHaveCount(7);
+    const isoDow = ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+    await expect(days.locator('[aria-checked="true"]')).toHaveCount(8 - isoDow);
+    await expect(days.getByRole("checkbox").first()).toBeDisabled();
     if (shots) await asMember.locator("section", { hasText: "ENJOYMENT" }).last().screenshot({ path: `${shots}/3-member-mission-row.png` });
     await row.getByRole("button", { name: "COMPLETE" }).click();
     await asMember.getByRole("alertdialog").getByRole("button", { name: "COMPLETE" }).click();
