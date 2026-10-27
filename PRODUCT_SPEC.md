@@ -223,7 +223,7 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | Path | Purpose |
 |------|---------|
 | `/admin` | Platform overview: communities, active members, this week's check-ins, disengagement. |
-| `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). |
+| `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). Lists active communities only; archived ones are left off (they still open at `/admin/communities/[id]`, where status can be set back to Active). |
 | `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. **Paid sign-up** panel: pick the Stripe product that buys a place here (`setStripeProduct`, one product per community) and copy the `/join/<slug>` link. |
 | `/admin/challenges` | Every community's challenges (community, domain, mission, target, dates, status, how many are in, EDIT) and a New challenge form with the community picked in the form. Same form, rules and actions as `/leader/challenges`. |
 | `/admin/challenges/[id]` | Edit or delete a challenge, as on `/leader/challenges/[id]`. |

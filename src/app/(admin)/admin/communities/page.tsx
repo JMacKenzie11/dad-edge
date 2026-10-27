@@ -14,9 +14,12 @@ export default async function CommunitiesPage({
   const { error } = await searchParams;
   const svc = createSupabaseServiceClient();
 
+  // Archived communities are left off the list (Jason, 2026-10-27). One
+  // can still be opened at /admin/communities/<id> and set back to active.
   const { data: communities } = await svc
     .from("communities")
     .select("id, name, slug, status, timezone, week_lock_days, created_at")
+    .eq("status", "active")
     .order("created_at", { ascending: false });
 
   const ids = (communities ?? []).map((c) => (c as { id: string }).id);
