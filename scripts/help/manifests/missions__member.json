@@ -20,6 +20,10 @@
       "label": "Behavior + how you'll know it's done."
     },
     {
+      "kind": "link",
+      "label": "⚑ CHALLENGE ·"
+    },
+    {
       "kind": "button",
       "label": "COMPLETE"
     },
@@ -64,7 +68,7 @@
       "label": "Earlier missions"
     }
   ],
-  "source_hash": "7b2fe5fcbd38c41f",
+  "source_hash": "7cc27c89ff688030",
   "source_files": [
     "src/app/(app)/missions/page.tsx",
     "src/app/(app)/missions/actions.ts",

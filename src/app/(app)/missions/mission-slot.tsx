@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { PILLAR_BY_CODE, type PillarCode } from "@/lib/pillars";
 import { format } from "date-fns";
@@ -14,6 +15,7 @@ import type { WeekMission } from "./page";
 import type { PlannerMode } from "./weekly-planner";
 import type { MissionScore } from "@/lib/coach/mission-quality";
 import { useConfirm } from "@/components/ui/use-confirm";
+import { missionTargetNote } from "@/lib/challenges/rules";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -334,8 +336,9 @@ function FilledSlot({
   useEffect(() => {
     if (scoreTimer.current) clearTimeout(scoreTimer.current);
     // Skip scoring on completed missions — the coach's take on a
-    // finished mission is noise and the pill is hidden anyway.
-    if (mission.status === "completed") {
+    // finished mission is noise and the pill is hidden anyway. Challenge
+    // missions are never scored: the wording is the challenge's, not his.
+    if (mission.status === "completed" || mission.challenge_id) {
       setScore(null);
       setScoring(false);
       return;
@@ -368,7 +371,7 @@ function FilledSlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndexes, weekDates, mission.target_date, mission.status]);
+  }, [description, dayIndexes, weekDates, mission.target_date, mission.status, mission.challenge_id]);
 
   // Carrying shifts a mission one week forward from its own dates, so
   // from last week's catch-up view the copy lands in THIS week, not
@@ -377,6 +380,11 @@ function FilledSlot({
   const carryTargetLabel = catchUpMode ? "this week" : "next week";
 
   const isDone = mission.status === "completed";
+  // A challenge mission keeps the challenge's wording and days (the
+  // database refuses edits). He completes it like any other; leaving the
+  // challenge happens on Community > Challenges.
+  const isChallenge = mission.challenge_id != null;
+  const locked = readOnly || isDone || isChallenge;
   // A mission only reads as missed once its last day has actually
   // gone by. The nightly job writes the status and nothing used to
   // clear it, so a mission marked missed and then rescheduled for
@@ -446,7 +454,7 @@ function FilledSlot({
       {confirmDialog}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="w-full min-w-0 sm:flex-1">
-          {readOnly || isDone ? (
+          {locked ? (
             <p
               className={
                 isDone
@@ -477,6 +485,20 @@ function FilledSlot({
               className="w-full p-2 rounded-md bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-sm focus:border-[color:var(--color-primary)] resize-none overflow-hidden"
             />
           )}
+          {isChallenge ? (
+            <p className="text-[10px] mt-1 text-[color:var(--color-text-muted)]">
+              <Link
+                href="/community?tab=challenges"
+                className="font-heading tracking-widest text-[color:var(--color-accent)] hover:underline"
+              >
+                ⚑ CHALLENGE · {(mission.challenge?.name ?? "Challenge").toUpperCase()}
+              </Link>
+              {mission.challenge ? (() => {
+                const note = missionTargetNote(mission.challenge.target, displayDates.length);
+                return note ? <span className="block mt-0.5">{note}</span> : null;
+              })() : null}
+            </p>
+          ) : null}
           {isMissed && !isDone ? (
             <p className="text-[10px] mt-1">
               <span className="font-heading tracking-widest text-[color:var(--color-warning)]">
@@ -485,8 +507,10 @@ function FilledSlot({
               <span className="text-[color:var(--color-text-muted)]">
                 {" · "}
                 {format(new Date(`${mission.target_date}T00:00:00`), "EEEE")}{" "}
-                came and went without a COMPLETE. You can still complete it —
-                it&rsquo;ll log as late — or send it to next week.
+                came and went without a COMPLETE.{" "}
+                {isChallenge
+                  ? "You can still complete it, and it\u2019ll log as late."
+                  : <>You can still complete it — it&rsquo;ll log as late — or send it to next week.</>}
               </span>
             </p>
           ) : null}
@@ -498,7 +522,7 @@ function FilledSlot({
             before. */}
         <div className="flex flex-wrap items-center gap-3 sm:contents">
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
-          {readOnly || isDone ? (
+          {locked ? (
             <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
               {displayDates
                 .map((d) => format(new Date(`${d}T00:00:00`), "EEE").toUpperCase())
@@ -565,7 +589,7 @@ function FilledSlot({
             ) : null}
           </div>
           <div className={`shrink-0 flex justify-end ${COL_NEXT_WEEK_SLOT}`}>
-            {!readOnly && allowCarry ? (
+            {!readOnly && allowCarry && !isChallenge ? (
               <button
                 type="button"
                 onClick={() =>
@@ -591,7 +615,7 @@ function FilledSlot({
             ) : null}
           </div>
           <div className={`shrink-0 flex justify-end ${COL_DELETE_SLOT}`}>
-            {!readOnly && !isDone ? (
+            {!readOnly && !isDone && !isChallenge ? (
               <button
                 type="button"
                 onClick={() =>

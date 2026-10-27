@@ -4,6 +4,10 @@
   "role": "member",
   "elements": [
     {
+      "kind": "header",
+      "label": "Challenges"
+    },
+    {
       "kind": "field",
       "label": "DAILY"
     },
@@ -20,12 +24,36 @@
       "label": "Message this brother"
     },
     {
+      "kind": "button",
+      "label": "I'M IN"
+    },
+    {
+      "kind": "button",
+      "label": "LEAVE CHALLENGE"
+    },
+    {
+      "kind": "button",
+      "label": "REMOVE MY UPCOMING CHALLENGE MISSIONS"
+    },
+    {
+      "kind": "button",
+      "label": "KEEP THEM AS REGULAR MISSIONS"
+    },
+    {
+      "kind": "button",
+      "label": "STAY IN"
+    },
+    {
       "kind": "field",
       "label": "Leaderboard"
     },
     {
       "kind": "field",
       "label": "People"
+    },
+    {
+      "kind": "field",
+      "label": "Challenges"
     },
     {
       "kind": "field",
@@ -36,9 +64,11 @@
       "label": "STREAK"
     }
   ],
-  "source_hash": "9fdf02fad4ef8b4a",
+  "source_hash": "e77cc4887f651151",
   "source_files": [
     "src/app/(app)/community/page.tsx",
+    "src/app/(app)/community/challenge-membership.tsx",
+    "src/app/(app)/community/challenges-tab.tsx",
     "src/app/(app)/community/community-tabs.tsx",
     "src/app/(app)/community/leaderboard-card.tsx",
     "src/app/(app)/community/people-tab.tsx"

@@ -22,6 +22,7 @@ const leaderItems: NavItem[] = [
   { href: "/leader", label: "Overview", exact: true },
   { href: "/leader/members", label: "Members" },
   { href: "/leader/disengagement", label: "Disengagement" },
+  { href: "/leader/challenges", label: "Challenges" },
   { href: "/leader/nudges", label: "Nudges" },
   { href: "/leader/corrections", label: "Corrections" },
 ];

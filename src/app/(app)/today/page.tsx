@@ -18,6 +18,8 @@ import { DateNavigator } from "./date-navigator";
 import { StreakChip } from "@/components/ui/streak-chip";
 import { GoalReviewPrompt } from "@/app/(app)/goals/goal-review-prompt";
 import { GoalMidpointPrompt } from "@/app/(app)/goals/goal-midpoint-prompt";
+import { ChallengeJoinCards } from "@/components/challenges/join-card";
+import { loadJoinableChallenges } from "@/lib/challenges/load";
 import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +67,7 @@ export default async function TodayPage({
     { data: reflection },
     { data: reviewGoals },
     { data: midpointGoals },
+    joinable,
   ] = await Promise.all([
     supabase
       .from("daily_checkins")
@@ -96,6 +99,8 @@ export default async function TodayPage({
       .is("midpoint_check_answer", null)
       .not("midpoint_check_at", "is", null)
       .lte("midpoint_check_at", today),
+    // Open challenges he hasn't answered, on today's view only.
+    date === today && !readOnly ? loadJoinableChallenges(supabase, user.id, today) : Promise.resolve([]),
   ]);
   const dateReflection = (reflection ?? { wins: "", learnings: "" }) as {
     wins: string | null;
@@ -156,6 +161,8 @@ export default async function TodayPage({
       {midpointGoalsSafe.map((g) => (
         <GoalMidpointPrompt key={`midpoint-${g.id}`} goal={g} />
       ))}
+
+      <ChallengeJoinCards items={joinable} />
 
       <section className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
         <div className="flex items-start justify-between">

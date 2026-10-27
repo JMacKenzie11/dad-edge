@@ -75,12 +75,14 @@ export type Observation = {
 // ---------------------------------------------------------------------------
 //
 // Fixtures (all inside the rolled-back transaction):
-//   alice, bob: members of community A.   carol: member of community B.
+//   alice, bob: members of community A.   carol: leader of community B.
 //   alice has a domain mission next week, a check-in, a reflection, a
 //   partner profile and a goal. Courses: open (published, all
 //   communities), draft (unpublished), onlyB (published, community B),
 //   each sectioned, with one section holding its one lesson.
 //   One object in the private lesson-files bucket.
+//   A challenge in community A (Vitality, Mon/Wed/Fri, started two weeks
+//   ago) that bob has joined; alice hasn't.
 
 const NEXT_MON = "date_trunc('week', current_date + 7)::date";
 
@@ -186,16 +188,44 @@ export const PROBES: Probe[] = [
   // stripe_events has no grants at all, so even reading it is an error.
   { id: "B5", what: "alice can't read Stripe's event log", kind: "write", as: "alice",
     sql: "select count(*) from public.stripe_events where id like 'evt_zzprobe%'", expect: "refuse" },
+
+  // Challenges: the community reads them; its leaders (and admins) set them.
+  { id: "CH1", what: "bob can read community A's challenge", kind: "read", as: "bob",
+    sql: "select count(*) from public.challenges where id = :chA", control: "select count(*) from public.challenges where id = :chA", expect: "some" },
+  { id: "CH2", what: "carol (other community) can't read community A's challenge", kind: "read", as: "carol",
+    sql: "select count(*) from public.challenges where id = :chA", control: "select count(*) from public.challenges where id = :chA", expect: "zero" },
+  { id: "CH3", what: "alice (member) can't create a challenge", kind: "write", as: "alice",
+    sql: "insert into public.challenges (community_id, name, pillar_code, mission_description, days, target, starts_on, ends_on) values (:commA, 'Planted', 'B', 'Call her every lunch', array[1]::smallint[], 1, current_date, current_date + 7)", expect: "refuse" },
+  { id: "CH4", what: "carol (leader of B) can create a challenge in B", kind: "write", as: "carol",
+    sql: "insert into public.challenges (community_id, name, pillar_code, mission_description, days, target, starts_on, ends_on) values (:commB, 'Lights out', 'V', 'In bed by 10pm', array[1,2,3,4,5]::smallint[], 4, current_date, current_date + 28)", expect: "allow" },
+  { id: "CH5", what: "carol can't create a challenge in community A", kind: "write", as: "carol",
+    sql: "insert into public.challenges (community_id, name, pillar_code, mission_description, days, target, starts_on, ends_on) values (:commA, 'Not hers', 'V', 'In bed by 10pm', array[1]::smallint[], 1, current_date, current_date + 7)", expect: "refuse" },
+  { id: "CH6", what: "alice can't rename community A's challenge", kind: "write", as: "alice",
+    sql: "update public.challenges set name = 'Hijacked' where id = :chA", expect: "refuse" },
+  { id: "CH7", what: "alice can't plant a challenge mission without joining (it would skip the weekly cap)", kind: "write", as: "alice",
+    sql: "insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by, challenge_id) select :alice, :commA, 'Walk 10 km before work', 'V', d, array[d], 'user', :chA from (select (date_trunc('week', current_date + 7)::date + 2) as d) x", expect: "refuse", detail: /challenge_not_joined/ },
+  { id: "CH8", what: "alice can join community A's challenge", kind: "write", as: "alice",
+    sql: "select public.join_challenge(:chA)", expect: "allow" },
+  { id: "CH9", what: "joining gave alice her challenge missions", kind: "read", as: "alice",
+    sql: "select count(*) from public.missions where user_id = :alice and challenge_id = :chA", control: "select count(*) from public.missions where user_id = :alice and challenge_id = :chA", expect: "some" },
+  { id: "CH10", what: "alice can't move her challenge mission onto other days", kind: "write", as: "alice",
+    sql: "update public.missions set target_dates = target_dates || (target_date - 1) where user_id = :alice and challenge_id = :chA", expect: "refuse", detail: /challenge_mission_locked/ },
+  { id: "CH11", what: "alice can see bob is in the challenge (the board)", kind: "read", as: "alice",
+    sql: "select count(*) from public.challenge_participants where challenge_id = :chA and user_id = :bob", control: "select count(*) from public.challenge_participants where challenge_id = :chA and user_id = :bob", expect: "some" },
+  { id: "CH12", what: "carol can't see who's in community A's challenge", kind: "read", as: "carol",
+    sql: "select count(*) from public.challenge_participants where challenge_id = :chA", control: "select count(*) from public.challenge_participants where challenge_id = :chA", expect: "zero" },
+  { id: "CH13", what: "alice can't take bob out of the challenge", kind: "write", as: "alice",
+    sql: "update public.challenge_participants set status = 'left' where user_id = :bob", expect: "refuse" },
 ];
 
 // ---------------------------------------------------------------------------
 // SQL generation
 // ---------------------------------------------------------------------------
 
-export type Ids = Record<"alice" | "bob" | "carol" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection", string>;
+export type Ids = Record<"alice" | "bob" | "carol" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection" | "chA", string>;
 
 export function newIds(): Ids {
-  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection"];
+  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection", "chA"];
   return Object.fromEntries(keys.map((k) => [k, randomUUID()])) as Ids;
 }
 
@@ -225,7 +255,7 @@ function fixturesSql(ids: Ids): string {
   insert into public.memberships (user_id, community_id, role, status) values
     ('${ids.alice}', '${ids.commA}', 'member', 'active'),
     ('${ids.bob}', '${ids.commA}', 'member', 'active'),
-    ('${ids.carol}', '${ids.commB}', 'member', 'active');
+    ('${ids.carol}', '${ids.commB}', 'leader', 'active');
   insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by)
     values ('${ids.alice}', '${ids.commA}', 'Call her at lunch Tuesday', 'B', ${NEXT_MON} + 1, array[${NEXT_MON} + 1], 'user');
   insert into public.daily_checkins (user_id, date, pillar_code, value) values ('${ids.alice}', current_date, 'B', 1);
@@ -252,6 +282,12 @@ function fixturesSql(ids: Ids): string {
     select id, user_id, community_id, 'cus_zzprobe', 'sub_zzprobe_${ids.alice.slice(0, 8)}', 'past_due', now()
     from public.memberships where user_id = '${ids.alice}' and community_id = '${ids.commA}';
   insert into public.stripe_events (id, type) values ('evt_zzprobe_${ids.alice.slice(0, 8)}', 'invoice.payment_failed');
+  -- Only once the challenges migration exists (it can arrive via --pending).
+  if to_regclass('public.challenges') is not null then
+    execute $c$insert into public.challenges (id, community_id, name, pillar_code, mission_description, days, target, starts_on, ends_on)
+      values ('${ids.chA}', '${ids.commA}', 'zz probe challenge', 'V', 'Walk 10 km before work', array[1,3,5]::smallint[], 2, current_date - 14, current_date + 60)$c$;
+    execute $c$insert into public.challenge_participants (challenge_id, user_id, status, joined_at) values ('${ids.chA}', '${ids.bob}', 'in', now())$c$;
+  end if;
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.
   create table public.zz_probe_leaky (owner uuid not null, secret text);
