@@ -350,3 +350,17 @@ Jason wants challenges a community can opt into: a leader sets a domain, a missi
 - **Editing stays cheap.** Name and wording can change any time, and new wording flows to upcoming missions. Days, dates, target and domain lock once anyone has joined, which rules out reshaping missions people already have; to change those, delete the challenge and set a new one.
 - **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end. The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
 - **The database holds the line on the cap.** Because challenge missions skip the two-per-domain check, the mission trigger checks each one against its challenge (joined, matching wording, domain and days, inside the dates, one a week) so a challenge mission can't be forged to get round the limit. Probes CH1 to CH13.
+
+## Coach Larry speaks as Larry (2026-10-27)
+
+Jason analysed 12 of Larry Hagner's recorded coaching sessions (the "Larry Coaching Style Analysis") and wants the Coach Larry chat to sound and behave as much like Larry as possible. Until now the chat was a generic "BRAVE MAN coach" whose voice rules banned most of what Larry actually does: specific praise, "tell me more about that", "that sounds frustrating", naming his tools, telling his own stories, "Does that land for you?". Jason's calls:
+
+- **It speaks as Larry,** in the first person, with his stories. Larry has agreed.
+- **Only the stories and facts written in `docs/larry-playbook.md`.** A coach that tells personal stories will invent new ones unless it's held to a fixed set, and an invented story about Larry's family is worse than none. Client names from the sessions are left out.
+- **It's honest about being an AI** when a member asks. The voice is Larry's, the claim to be a person isn't made.
+- **Only the chat.** The weekly recap, the ITC tool (which speaks as Kegan) and mission scoring keep `docs/coach-voice-and-tone.md`. Larry's voice gets its own guide, so loosening the shared rules for Larry changes nothing elsewhere.
+- **No slang at all,** even though Larry uses "freaking" and "dang" in person, and even if the member curses.
+- **Lots of questions.** Good coaching practice is mostly questions: facts before advice, let him find the answer, most replies end with a question. It's capped at one or two related questions a reply, because it's a text conversation.
+- **Kept from the old rules:** the AI-tell bans (em-dashes, "delve", "I hear you"), no therapy-speak Larry doesn't use, no "read" as a noun, short enough for a phone, no talk of scores.
+- **"The Move" (OTFW spine) replaced by Larry's own flow** and his Cube, which covers the same ground in his words.
+- **Judged side by side.** `scripts/coach-larry-compare.ts` runs the same situations through the old and new prompt for Jason to compare, as with the deterministic ITC feedback in August, before the wording is locked further.

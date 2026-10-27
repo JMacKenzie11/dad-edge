@@ -9,6 +9,9 @@ const nextConfig = {
   // prompts.ts can read it at runtime on Vercel.
   outputFileTracingIncludes: {
     "/itc/**": ["./docs/coach-voice-and-tone.md"],
+    // The Coach Larry chat reads its voice guide and playbook at runtime
+    // (src/lib/coach/voice-rules.ts).
+    "/api/coach/**": ["./docs/larry-voice.md", "./docs/larry-playbook.md"],
   },
 };
 
