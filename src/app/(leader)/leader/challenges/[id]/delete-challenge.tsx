@@ -4,13 +4,14 @@ import { useRef } from "react";
 import { useConfirm } from "@/components/ui/use-confirm";
 import { deleteChallenge } from "../actions";
 
-export function DeleteChallenge({ challengeId, name }: { challengeId: string; name: string }) {
+export function DeleteChallenge({ challengeId, name, returnTo = "leader" }: { challengeId: string; name: string; returnTo?: "admin" | "leader" }) {
   const [dialog, confirm] = useConfirm();
   const formRef = useRef<HTMLFormElement>(null);
   return (
     <form ref={formRef} action={deleteChallenge}>
       {dialog}
       <input type="hidden" name="challenge_id" value={challengeId} />
+      <input type="hidden" name="return_to" value={returnTo} />
       <button
         type="button"
         onClick={async () => {

@@ -10,7 +10,9 @@ import { localDate } from "@/lib/scoring/week";
 import { challengeFormSchema, friendlyChallengeError } from "@/lib/challenges/rules";
 
 /**
- * Leaders (and platform admins) set challenges for a community they lead.
+ * Leaders set challenges for a community they lead (/leader/challenges);
+ * platform admins set them for any community (/admin/challenges). Both
+ * pages post here with `return_to` naming where to land afterwards.
  * Writes go through the leader's own session, so the "challenges: leader
  * manage" policy is what allows them; the edit lock and the wording sync
  * are database triggers (20261027000001_challenges.sql).
@@ -38,6 +40,18 @@ function formFields(formData: FormData) {
 
 const CommunityId = z.string().uuid();
 
+/** Where the form came from: the admin page or the leader panel. */
+function listPath(formData: FormData, communityId: string, query: string): string {
+  return formData.get("return_to") === "admin"
+    ? `/admin/challenges?${query}`
+    : `/leader/challenges?c=${communityId}&${query}`;
+}
+
+function refreshLists() {
+  revalidatePath("/leader/challenges");
+  revalidatePath("/admin/challenges");
+}
+
 export async function createChallenge(_prev: ChallengeFormState, formData: FormData): Promise<ChallengeFormState> {
   const communityId = String(formData.get("community_id") ?? "");
   if (!CommunityId.safeParse(communityId).success) return { error: "Pick a community." };
@@ -59,8 +73,8 @@ export async function createChallenge(_prev: ChallengeFormState, formData: FormD
     target_id: data.id,
     metadata: { community_id: communityId, name: parsed.data.name },
   });
-  revalidatePath("/leader/challenges");
-  redirect(`/leader/challenges?c=${communityId}&saved=1`);
+  refreshLists();
+  redirect(listPath(formData, communityId, "saved=1"));
 }
 
 /**
@@ -102,8 +116,8 @@ export async function updateChallenge(_prev: ChallengeFormState, formData: FormD
     target_id: id,
     metadata: { community_id: current.community_id, fields: Object.keys(patch) },
   });
-  revalidatePath("/leader/challenges");
-  redirect(`/leader/challenges?c=${current.community_id}&saved=1`);
+  refreshLists();
+  redirect(listPath(formData, current.community_id, "saved=1"));
 }
 
 export async function deleteChallenge(formData: FormData): Promise<void> {
@@ -121,6 +135,6 @@ export async function deleteChallenge(formData: FormData): Promise<void> {
     target_id: id,
     metadata: { community_id: current.community_id, name: current.name },
   });
-  revalidatePath("/leader/challenges");
-  redirect(`/leader/challenges?c=${current.community_id}&deleted=1`);
+  refreshLists();
+  redirect(listPath(formData, current.community_id, "deleted=1"));
 }

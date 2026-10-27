@@ -165,6 +165,27 @@ describe("challenges", () => {
     expect(await challengeMissions(alice.id, upcoming)).toHaveLength(4);
   });
 
+  it("a platform admin (a leader in every community) can join, and shows on the board", async () => {
+    const admin = await createTestUser("ch-admin");
+    users.push(admin);
+    // Making him an admin adds him as an active leader of every community,
+    // this one included (grant_admin_all_communities).
+    await svc.from("users").update({ is_platform_admin: true, subscription_status: "comped", onboarding_step: 6 }).eq("id", admin.id);
+    const { data: m } = await svc.from("memberships").select("role, status").eq("user_id", admin.id).eq("community_id", community).single();
+    expect(m).toEqual({ role: "leader", status: "active" });
+
+    const db = await authedAs(admin.email, admin.password);
+    const { data, error } = await db.rpc("join_challenge", { p_challenge: upcoming });
+    expect(error).toBeNull();
+    expect(data).toBe(4);
+    const [first] = await challengeMissions(admin.id, upcoming);
+    expect((await db.from("missions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", first.id)).error).toBeNull();
+
+    // His community-mates see him on the board.
+    const { data: rows } = await as.get(carol.id)!.from("challenge_participants").select("user_id, status").eq("challenge_id", upcoming).eq("user_id", admin.id);
+    expect(rows).toEqual([{ user_id: admin.id, status: "in" }]);
+  });
+
   it("a member of another community can't join, and a member can't set a challenge", async () => {
     const res = await as.get(outsider.id)!.rpc("join_challenge", { p_challenge: upcoming });
     expect(res.error?.details).toBe("challenge_not_found");

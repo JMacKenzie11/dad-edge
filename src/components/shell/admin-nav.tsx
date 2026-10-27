@@ -14,6 +14,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/disengagement", label: "Disengagement" },
   { href: "/admin/coach-flags", label: "Coach flags" },
   { href: "/admin/courses", label: "Courses" },
+  { href: "/admin/challenges", label: "Challenges" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/audit", label: "Audit log" },
 ];

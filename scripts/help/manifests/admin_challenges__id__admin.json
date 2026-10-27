@@ -1,0 +1,19 @@
+{
+  "route_pattern": "/admin/challenges/[id]",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← CHALLENGES"
+    },
+    {
+      "kind": "header",
+      "label": "Delete this challenge"
+    }
+  ],
+  "source_hash": "e293eef81f7c08da",
+  "source_files": [
+    "src/app/(admin)/admin/challenges/[id]/page.tsx"
+  ]
+}
