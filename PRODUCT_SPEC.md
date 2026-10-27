@@ -693,7 +693,7 @@ Coach (required)
 
 Email (Stage B — live in prod)
 - `RESEND_API_KEY`
-- `RESEND_FROM` — must be a bare email (`no-reply@dadedgeoperatingsystem.com`) or name-with-brackets (`Dad Edge <no-reply@dadedgeoperatingsystem.com>`). Local part must match the verified Resend sending domain.
+- `RESEND_FROM` — a bare email (`no-reply@dadedgeoperatingsystem.com`) or name-with-brackets (`Dad Edge <no-reply@dadedgeoperatingsystem.com>`). A bare email is sent as `Dad Edge Operating System <address>` (`fromHeader()` in `src/lib/email-from.ts`), so inboxes show the name, not the address. Local part must match the verified Resend sending domain.
 - `EMAIL_STAGE` — must be exactly `B` (case-sensitive single char) to activate Stage B. Any other value falls back to Stage A (Supabase's default sender).
 
 Stripe

@@ -6,7 +6,9 @@
  * Magic links themselves are still delivered by Supabase Auth, not this module.
  */
 
-const FROM = process.env.RESEND_FROM ?? "BRAVE MAN OS <noreply@dadedge.local>";
+import { fromHeader } from "./email-from";
+
+const FROM = fromHeader(process.env.RESEND_FROM);
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
 
 type SendResult = { ok: true; id?: string } | { ok: false; error: string };
