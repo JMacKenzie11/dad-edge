@@ -62,8 +62,22 @@ function scenario(slug: string, headline: string, userMessage: string, history: 
   return { slug, headline, mode: "general", cacheable: RYAN, volatile: RYAN_WEEK, history, userMessage };
 }
 
+/** Ryan with no work on file, like most members: nothing tells the coach what he does. */
+const RYAN_NO_WORK: ContextBlock[] = RYAN.map((b) =>
+  b.label === "The man" ? { ...b, text: b.text.replace(/^Work: .*$/m, "Work: (not on file)") } : b,
+);
+
 export const LARRY_SCENARIOS: Scenario[] = [
   scenario("hello", "A plain hello", "Hey Larry."),
+  {
+    slug: "struggling",
+    headline: "Struggling, no work on file: say work, not business",
+    mode: "general",
+    cacheable: RYAN_NO_WORK,
+    volatile: RYAN_WEEK,
+    history: [],
+    userMessage: "I'm struggling man",
+  },
   scenario("vague", "Vague opener: questions before advice", "Things are just off at home lately."),
   scenario(
     "never-enough",
