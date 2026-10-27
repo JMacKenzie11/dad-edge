@@ -216,6 +216,12 @@ export const PROBES: Probe[] = [
     sql: "select count(*) from public.challenge_participants where challenge_id = :chA", control: "select count(*) from public.challenge_participants where challenge_id = :chA", expect: "zero" },
   { id: "CH13", what: "alice can't take bob out of the challenge", kind: "write", as: "alice",
     sql: "update public.challenge_participants set status = 'left' where user_id = :bob", expect: "refuse" },
+  { id: "CH14", what: "alice can't tick a challenge day that hasn't come yet", kind: "write", as: "alice",
+    sql: `update public.missions set done_dates = target_dates[1:1] where user_id = :alice and challenge_id = :chA and target_date >= ${NEXT_MON}`, expect: "refuse", detail: /challenge_tick_future/ },
+  { id: "CH15", what: "alice can't COMPLETE a challenge mission without ticking its days", kind: "write", as: "alice",
+    sql: `update public.missions set status = 'completed', completed_at = now() where user_id = :alice and challenge_id = :chA and target_date >= ${NEXT_MON}`, expect: "refuse", detail: /challenge_needs_days/ },
+  { id: "CH16", what: "alice can't tick days on a regular mission", kind: "write", as: "alice",
+    sql: "update public.missions set done_dates = array[target_date] where user_id = :alice and challenge_id is null", expect: "refuse", detail: /challenge_tick_invalid/ },
 ];
 
 // ---------------------------------------------------------------------------

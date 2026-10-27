@@ -42,6 +42,8 @@ export type WeekMission = {
    *  the challenge and can't be edited here. */
   challenge_id: string | null;
   challenge: { name: string; target: number } | null;
+  /** Challenge missions: the days he has ticked. */
+  done_dates: string[] | null;
 };
 
 export type ActiveGoal = {
@@ -130,7 +132,7 @@ export default async function MissionsPage({
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id, created_at, challenge_id, challenge:challenges(name, target)",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id, created_at, challenge_id, done_dates, challenge:challenges(name, target)",
       )
       .eq("user_id", user.id)
       .gte("target_date", viewMonday)

@@ -165,6 +165,10 @@ export function friendlyChallengeError(
   if (detail === "challenge_locked") return "Someone has already joined, so the days, dates, target and domain are locked.";
   if (detail === "challenge_over") return "That challenge has ended.";
   if (detail === "challenge_not_found") return "That challenge isn't open to you.";
+  if (detail === "challenge_tick_future") return "You can mark a day once it comes, not before.";
+  if (detail === "challenge_not_joined") return "Join the challenge first.";
+  if (detail === "challenge_needs_days") return "Tap the days you did. It completes itself once you hit the target.";
+  if (detail === "challenge_tick_invalid") return "That day isn't one of this mission's days.";
   if (detail.startsWith("challenge_mission")) return "A challenge mission keeps the challenge's wording, days and domain.";
   return fallback;
 }

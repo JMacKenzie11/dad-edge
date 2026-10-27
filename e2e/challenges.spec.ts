@@ -3,9 +3,9 @@ import { test, expect, credentialsFor } from "./fixtures";
 
 /**
  * The whole challenge loop in the browser: the leader sets one, the
- * member joins from Today, completes the week's mission on Missions with
- * the ordinary COMPLETE, sees himself on Community > Challenges, and
- * leaves. Cleans up the challenge and its missions at the end. Dev
+ * member joins from Today, marks today done on Missions (the day row
+ * starts empty; days still to come can't be marked), sees his days on
+ * Community > Challenges, and leaves. Cleans up the challenge and its missions at the end. Dev
  * database only (docs/e2e.md).
  *
  * E2E_SHOTS=<dir> also saves screenshots of each screen.
@@ -22,7 +22,7 @@ const plusDays = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-test("a leader sets a challenge; a member joins, completes the week and leaves", async ({ asLeader, asMember }) => {
+test("a leader sets a challenge; a member joins, marks today done and leaves", async ({ asLeader, asMember }) => {
   test.setTimeout(180_000);
   const shots = process.env.E2E_SHOTS;
   const name = `E2E Challenge ${Date.now().toString(36)}`;
@@ -56,7 +56,7 @@ test("a leader sets a challenge; a member joins, completes the week and leaves",
     await expect(card).toContainText(/You.re in\./);
 
     // Missions: a challenge mission in the Enjoyment row, no coach score,
-    // no carry or delete, the ordinary COMPLETE.
+    // no carry, delete or COMPLETE.
     await asMember.goto("/missions");
     const row = asMember.locator("li", { hasText: `⚑ CHALLENGE · ${name.toUpperCase()}` });
     await expect(row).toBeVisible();
@@ -65,24 +65,47 @@ test("a leader sets a challenge; a member joins, completes the week and leaves",
     await expect(row.getByRole("button", { name: /NEXT WEEK/ })).toHaveCount(0);
     await expect(row.getByRole("button", { name: "Delete mission" })).toHaveCount(0);
     await expect(row.locator("textarea")).toHaveCount(0);
-    // The same M T W T F S S row as other missions, locked, with the
-    // challenge's days from today to Sunday lit.
-    const days = row.getByRole("group", { name: "Days of week, set by the challenge" });
-    await expect(days.getByRole("checkbox")).toHaveCount(7);
-    const isoDow = ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
-    await expect(days.locator('[aria-checked="true"]')).toHaveCount(8 - isoDow);
-    await expect(days.getByRole("checkbox").first()).toBeDisabled();
-    if (shots) await asMember.locator("section", { hasText: "ENJOYMENT" }).last().screenshot({ path: `${shots}/3-member-mission-row.png` });
-    await row.getByRole("button", { name: "COMPLETE" }).click();
-    await asMember.getByRole("alertdialog").getByRole("button", { name: "COMPLETE" }).click();
     await expect(row.getByRole("button", { name: "COMPLETE" })).toHaveCount(0);
+    // The same M T W T F S S row as other missions, nothing marked yet.
+    // Days before he joined are greyed; today can be marked, later days
+    // can't yet.
+    const days = row.getByRole("group", { name: "Challenge days done" });
+    const isoDow = ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+    const daysLeft = 8 - isoDow;
+    const weekTarget = Math.min(3, daysLeft);
+    await expect(days.locator('[data-challenge-day="off"]')).toHaveCount(isoDow - 1);
+    await expect(days.getByRole("checkbox")).toHaveCount(daysLeft);
+    await expect(days.locator('[aria-checked="true"]')).toHaveCount(0);
+    await expect(days.locator('[data-challenge-day="later"]')).toHaveCount(daysLeft - 1);
+    if (daysLeft > 1) await expect(days.getByRole("checkbox").nth(1)).toBeDisabled();
+    await expect(row.locator("[data-challenge-progress]")).toContainText("Tap a day once you\u2019ve done it.");
+    if (shots) await asMember.locator("section", { hasText: "ENJOYMENT" }).last().screenshot({ path: `${shots}/3-member-mission-row.png` });
 
-    // Community > Challenges: his row, this week done.
+    // Mark today, take it back, mark it again.
+    const todayBox = days.getByRole("checkbox").first();
+    await todayBox.click();
+    await expect(todayBox).toHaveAttribute("aria-checked", "true");
+    await expect(row.locator("[data-challenge-progress]")).toContainText(weekTarget === 1 ? "Done: 1 of 1 days." : `1 of ${weekTarget} done.`);
+    await todayBox.click();
+    await expect(todayBox).toHaveAttribute("aria-checked", "false");
+    await todayBox.click();
+    await expect(todayBox).toHaveAttribute("aria-checked", "true");
+    if (shots) await asMember.locator("section", { hasText: "ENJOYMENT" }).last().screenshot({ path: `${shots}/3b-member-today-marked.png` });
+    // It saved: still marked after a reload.
+    await asMember.reload();
+    await expect(asMember.locator("li", { hasText: `⚑ CHALLENGE · ${name.toUpperCase()}` }).getByRole("group", { name: "Challenge days done" }).locator('[aria-checked="true"]')).toHaveCount(1);
+
+    // Community > Challenges: his row shows today's mark.
     await asMember.goto("/community?tab=challenges");
     const board = asMember.getByRole("region", { name: `Challenge: ${name}` });
     const mine = board.locator("li", { hasText: "(YOU)" });
-    await expect(mine).toContainText("DONE THIS WEEK");
-    await expect(mine.locator('[data-week-state="done"]')).toHaveCount(1);
+    if (weekTarget === 1) {
+      await expect(mine).toContainText("DONE THIS WEEK");
+      await expect(mine.locator('[data-week-state="done"]')).toHaveCount(1);
+    } else {
+      await expect(mine).toContainText(`1 OF ${weekTarget} THIS WEEK`);
+      await expect(mine.locator('[data-week-state="open"]')).toHaveCount(1);
+    }
     if (shots) await board.screenshot({ path: `${shots}/4-member-board.png` });
 
     // Leaving, removing what's left: the board offers I'M IN again.

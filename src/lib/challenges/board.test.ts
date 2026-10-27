@@ -23,6 +23,21 @@ describe("buildBoard", () => {
     expect(board.rows[0]).toMatchObject({ weeks: ["done", "missed", "open", "upcoming"], done: 1, missed: 1, perfect: false, thisWeek: "open" });
   });
 
+  it("shows this week's ticked days against the target", () => {
+    const board = buildBoard({
+      challenge: { ...challenge, target: 5 },
+      today: "2026-11-18",
+      participants: [{ user_id: "a", status: "in", name: "A" }, { user_id: "b", status: "in", name: "B" }],
+      missions: [
+        { ...m("a", "2026-11-22"), target_dates: ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"], done_dates: ["2026-11-16", "2026-11-17"] },
+        // Joined Saturday-ish: two days left, so the week's target is two.
+        { ...m("b", "2026-11-22"), target_dates: ["2026-11-21", "2026-11-22"], done_dates: [] },
+      ],
+    });
+    const byName = Object.fromEntries(board.rows.map((r) => [r.name, r.thisWeekDays]));
+    expect(byName).toEqual({ A: { done: 2, target: 5 }, B: { done: 0, target: 2 } });
+  });
+
   it("counts a planned mission as missed once its week is over, even before the nightly job runs", () => {
     const board = buildBoard({ challenge, today: "2026-11-09", participants: [{ user_id: "a", status: "in", name: "A" }], missions: [m("a", "2026-11-06")] });
     expect(board.rows[0].weeks[0]).toBe("missed");

@@ -64,3 +64,38 @@ export async function leaveChallenge(challengeId: string, keepMissions: boolean)
   refresh();
   return { ok: true };
 }
+
+const DateIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/**
+ * Ticks (or unticks) one day of his challenge mission. The database
+ * decides the rest: the day has to be one of the mission's and not still
+ * to come, and the mission completes itself when the ticks reach the
+ * week's target (20261027000002_challenge_day_ticks.sql).
+ */
+export async function tickChallengeDay(missionId: string, date: string, done: boolean): Promise<Result & { doneDates?: string[] }> {
+  const { user, readOnly } = await requireAccess();
+  if (readOnly) return { ok: false, error: "Read-only account." };
+  if (!Id.safeParse(missionId).success || !DateIso.safeParse(date).success) return { ok: false, error: "That didn't save. Try again." };
+  const supabase = await createSupabaseServerClient();
+  const { data: row } = await supabase
+    .from("missions")
+    .select("done_dates")
+    .eq("id", missionId)
+    .eq("user_id", user.id)
+    .not("challenge_id", "is", null)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "That mission isn't yours to tick." };
+  const current = ((row as { done_dates: string[] | null }).done_dates ?? []).filter((d) => d !== date);
+  const next = done ? [...current, date].sort() : current;
+  const { data: saved, error } = await supabase
+    .from("missions")
+    .update({ done_dates: next })
+    .eq("id", missionId)
+    .eq("user_id", user.id)
+    .select("done_dates")
+    .maybeSingle();
+  if (error) return { ok: false, error: friendlyChallengeError(error) };
+  refresh();
+  return { ok: true, doneDates: ((saved as { done_dates: string[] } | null)?.done_dates ?? next) };
+}

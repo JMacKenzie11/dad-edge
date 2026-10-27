@@ -1,4 +1,4 @@
-import { addDays, challengeWeeks, mondayOf, type Challenge } from "./rules";
+import { addDays, challengeWeeks, mondayOf, weekTarget, type Challenge } from "./rules";
 
 /**
  * The community board for one challenge: each man who's in, one square
@@ -19,7 +19,13 @@ export type WeekState =
   /** No mission that week: before he joined, or none of the days were left. */
   | "none";
 
-export type BoardMission = { user_id: string; target_date: string; status: string };
+export type BoardMission = {
+  user_id: string;
+  target_date: string;
+  status: string;
+  target_dates?: string[] | null;
+  done_dates?: string[] | null;
+};
 export type BoardParticipant = { user_id: string; status: string; name: string };
 
 export type BoardRow = {
@@ -33,6 +39,9 @@ export type BoardRow = {
   /** The challenge is over and he hit every week he had. */
   finisher: boolean;
   thisWeek: WeekState | null;
+  /** Days ticked this week against the week's target, null when he has
+   *  no mission this week. */
+  thisWeekDays: { done: number; target: number } | null;
 };
 
 export type Board = {
@@ -44,7 +53,7 @@ export type Board = {
 };
 
 export function buildBoard(input: {
-  challenge: Pick<Challenge, "starts_on" | "ends_on">;
+  challenge: Pick<Challenge, "starts_on" | "ends_on"> & { target?: number };
   participants: BoardParticipant[];
   missions: BoardMission[];
   /** The viewer's date, yyyy-MM-dd. */
@@ -72,6 +81,8 @@ export function buildBoard(input: {
       });
       const done = states.filter((s) => s === "done").length;
       const missed = states.filter((s) => s === "missed").length;
+      const current = byUserWeek.get(`${p.user_id}|${thisMonday}`);
+      const days = current?.target_dates?.length ?? 0;
       return {
         userId: p.user_id,
         name: p.name,
@@ -81,6 +92,10 @@ export function buildBoard(input: {
         perfect: missed === 0,
         finisher: phase === "ended" && missed === 0 && done > 0,
         thisWeek: currentIdx >= 0 ? states[currentIdx] : null,
+        thisWeekDays:
+          currentIdx >= 0 && current && days > 0
+            ? { done: current.done_dates?.length ?? 0, target: weekTarget(challenge.target ?? days, days) }
+            : null,
       };
     })
     .sort((a, b) => {

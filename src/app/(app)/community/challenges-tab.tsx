@@ -17,7 +17,7 @@ export function ChallengesTab({ boards, viewerId, readOnly }: { boards: Challeng
         <ChallengeCard key={b.challenge.id} entry={b} viewerId={viewerId} readOnly={readOnly} />
       ))}
       <p className="text-[11px] text-[color:var(--color-text-muted)]">
-        Each square is one week. A week counts when that week&rsquo;s challenge mission is marked complete.
+        Each square is one week. Mark each day on your Missions page once it&rsquo;s done; a week counts when you hit its target.
       </p>
     </div>
   );
@@ -125,6 +125,12 @@ function RowNote({ row, phase }: { row: ChallengeBoard["board"]["rows"][number];
     );
   }
   if (row.thisWeek === "done") return <span className="text-[color:var(--color-success)]">DONE THIS WEEK</span>;
-  if (row.thisWeek === "open") return <span className="text-[color:var(--color-text-muted)]">NOT YET</span>;
+  if (row.thisWeek === "open") {
+    return (
+      <span className="text-[color:var(--color-text-muted)]" data-this-week-days>
+        {row.thisWeekDays ? `${row.thisWeekDays.done} OF ${row.thisWeekDays.target} THIS WEEK` : "NOT YET"}
+      </span>
+    );
+  }
   return null;
 }

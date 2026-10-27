@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, CHALLENGE_COLUMNS, type Challenge } from "./rules";
-import { buildBoard, type Board } from "./board";
+import { buildBoard, type Board, type BoardMission } from "./board";
 
 /**
  * Reads for the member side. Everything goes through his own session, so
@@ -102,7 +102,7 @@ export async function loadChallengeBoards(
       .in("challenge_id", ids),
     supabase
       .from("missions")
-      .select("challenge_id, user_id, target_date, status")
+      .select("challenge_id, user_id, target_date, target_dates, done_dates, status")
       .in("challenge_id", ids)
       .neq("status", "rolled_over"),
   ]);
@@ -122,7 +122,7 @@ export async function loadChallengeBoards(
       name: [u?.first_name, u?.last_name].filter(Boolean).join(" ") || "Unnamed brother",
     };
   });
-  const allMissions = (missions ?? []) as { challenge_id: string; user_id: string; target_date: string; status: string }[];
+  const allMissions = (missions ?? []) as (BoardMission & { challenge_id: string })[];
 
   // Running and upcoming first, then the ended ones.
   const order = { running: 0, upcoming: 1, ended: 2 } as const;
