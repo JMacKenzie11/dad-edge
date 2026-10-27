@@ -53,18 +53,10 @@ export default async function CoachHome({
         ) : null}
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <NewConversationCard
-          mode="general"
-          title="Talk to Larry"
-          hint="Marriage, kids, work, business, health, money."
-        />
-        <NewConversationCard
-          mode="mission"
-          title="Set the mission"
-          hint="One behavior. One day."
-        />
-      </div>
+      <NewConversationCard
+        title="Talk to Larry"
+        hint="Marriage, kids, work, business, health, money."
+      />
 
       <AllowanceBanner state={allowance} />
 
@@ -74,24 +66,17 @@ export default async function CoachHome({
   );
 }
 
-function NewConversationCard({
-  mode,
-  title,
-  hint,
-}: {
-  mode: "general" | "mission";
-  title: string;
-  hint: string;
-}) {
+/** Starts a general conversation. Mission conversations are no longer started from here; old ones stay listed below. */
+function NewConversationCard({ title, hint }: { title: string; hint: string }) {
   return (
     <form action={createConversation}>
-      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="mode" value="general" />
       <button
         type="submit"
         className="w-full text-left p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] transition-colors"
       >
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-primary)]">
-          + NEW {mode.toUpperCase()} CONVERSATION
+          + NEW CONVERSATION
         </p>
         <p className="font-heading text-base mt-1">{title}</p>
         <p className="text-xs text-[color:var(--color-text-muted)] mt-1">{hint}</p>
