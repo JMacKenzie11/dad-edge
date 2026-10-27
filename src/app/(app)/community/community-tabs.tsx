@@ -12,13 +12,19 @@ import Link from "next/link";
  */
 export function CommunityTabs({
   active,
+  showChallenges = false,
 }: {
-  active: "leaderboard" | "people";
+  active: "leaderboard" | "people" | "challenges";
+  /** Only when one of his communities has a current or recent challenge. */
+  showChallenges?: boolean;
 }) {
   return (
     <div className="flex gap-1 border-b border-[color:var(--color-border)]">
       <Tab href="/community?tab=leaderboard" label="Leaderboard" active={active === "leaderboard"} />
       <Tab href="/community?tab=people" label="People" active={active === "people"} />
+      {showChallenges ? (
+        <Tab href="/community?tab=challenges" label="Challenges" active={active === "challenges"} />
+      ) : null}
     </div>
   );
 }

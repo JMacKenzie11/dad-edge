@@ -1,0 +1,57 @@
+{
+  "route_pattern": "/leader/challenges",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Challenges"
+    },
+    {
+      "kind": "link",
+      "label": "EDIT"
+    },
+    {
+      "kind": "header",
+      "label": "New challenge"
+    },
+    {
+      "kind": "field",
+      "label": "30 Days of Movement"
+    },
+    {
+      "kind": "field",
+      "label": "Walk 10 km"
+    },
+    {
+      "kind": "select",
+      "label": "pillar_code"
+    },
+    {
+      "kind": "toggle",
+      "label": "days"
+    },
+    {
+      "kind": "select",
+      "label": "target"
+    },
+    {
+      "kind": "field",
+      "label": "starts_on"
+    },
+    {
+      "kind": "field",
+      "label": "ends_on"
+    },
+    {
+      "kind": "button",
+      "label": "SAVING…"
+    }
+  ],
+  "source_hash": "b7d65e1ff5eeed76",
+  "source_files": [
+    "src/app/(leader)/leader/challenges/page.tsx",
+    "src/app/(leader)/leader/challenges/actions.ts",
+    "src/app/(leader)/leader/challenges/challenge-form.tsx"
+  ]
+}

@@ -6,6 +6,8 @@ import { daysUntilQuarterEnd, getCurrentQuarter } from "@/lib/scoring/quarters";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { isEarlierUnattached, relativeWeek } from "@/lib/missions/rules";
 import { loadMissionCutover } from "@/lib/missions/slots";
+import { loadJoinableChallenges } from "@/lib/challenges/load";
+import { ChallengeJoinCards } from "@/components/challenges/join-card";
 import { WeeklyPlanner } from "./weekly-planner";
 import { WeekNavigator } from "./week-navigator";
 import { resolveMissionWeek } from "./week-nav";
@@ -36,6 +38,10 @@ export type WeekMission = {
    *  carried forward and disable the → NEXT WEEK button. */
   rolled_over_from_mission_id: string | null;
   created_at: string;
+  /** Set on a challenge mission: its wording, days and domain come from
+   *  the challenge and can't be edited here. */
+  challenge_id: string | null;
+  challenge: { name: string; target: number } | null;
 };
 
 export type ActiveGoal = {
@@ -114,7 +120,7 @@ export default async function MissionsPage({
 
   // Goals that can still take missions: active, or in their quarter-end
   // review week (the trigger accepts both). No cap on how many.
-  const [{ data: goals }, { data: missions }, cutover] = await Promise.all([
+  const [{ data: goals }, { data: missions }, cutover, joinable] = await Promise.all([
     supabase
       .from("quarterly_goals")
       .select("id, desired_end_state, focus_area, quarter_start, source")
@@ -124,7 +130,7 @@ export default async function MissionsPage({
     supabase
       .from("missions")
       .select(
-        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id, created_at",
+        "id, description, pillar_code, target_date, target_dates, status, completed_late, quarterly_goal_id, quality_score, rolled_over_from_mission_id, created_at, challenge_id, challenge:challenges(name, target)",
       )
       .eq("user_id", user.id)
       .gte("target_date", viewMonday)
@@ -136,10 +142,14 @@ export default async function MissionsPage({
       // became a hunt.
       .order("created_at", { ascending: true }),
     loadMissionCutover(supabase),
+    readOnly ? Promise.resolve([]) : loadJoinableChallenges(supabase, user.id, todayISO),
   ]);
 
   const activeGoals = (goals ?? []) as ActiveGoal[];
-  const allMissions = (missions ?? []) as WeekMission[];
+  // PostgREST returns the joined challenge as an object or a one-item array.
+  const allMissions = ((missions ?? []) as Array<Omit<WeekMission, "challenge"> & { challenge: WeekMission["challenge"] | WeekMission["challenge"][] }>).map(
+    (m) => ({ ...m, challenge: (Array.isArray(m.challenge) ? m.challenge[0] : m.challenge) ?? null }),
+  ) as WeekMission[];
   const weekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
   // Abandoned missions (an ITC test he dropped) don't count and don't show.
   const shown = weekMissions.filter((m) => (m.status as string) !== "abandoned");
@@ -192,6 +202,8 @@ export default async function MissionsPage({
           <QuarterCountdown className="text-sm text-[color:var(--color-text-muted)] mt-1" />
         </div>
       </header>
+
+      <ChallengeJoinCards items={joinable} />
 
       <WeekNavigator
         monday={viewMonday}

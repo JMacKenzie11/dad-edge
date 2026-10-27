@@ -334,3 +334,18 @@ Jason wants paid sign-up to run itself: link a Stripe product to a community, an
 - **Trials and coupons come from Stripe.** Checkout allows promotion codes; a trial counts as full access, and a trial that ends without a card is a normal cancellation.
 - **A failed welcome email never undoes a payment.** The membership stands and the failure is listed on `/admin/billing` for an admin to resend the invite. Found in the test-mode run: when the invite failed, the handler stopped, and Stripe's retry then found a finished membership and never sent it, so a man would have paid and never got his set-password link.
 - **Every Stripe notification is recorded once** (`stripe_events`, keyed by Stripe's event id), so a retried delivery can't send a second invite. The webhook re-reads the subscription from Stripe rather than trusting the order notifications arrive in.
+
+## Challenges (2026-10-27)
+
+Jason wants challenges a community can opt into: a leader sets a domain, a mission, the days, how many days a week count, and start and end dates, and members who opt in get the missions made for them. His answers, and the calls that followed:
+
+- **Leaders and admins both create them,** from the leader panel (admins are leaders in every community, so one page covers both).
+- **Joining late is fine.** His first part week counts, with its target cut to the days left (join Thursday on an all-three M/W/F challenge and that week asks for Friday only).
+- **Success means hitting the target every week,** but missing a week doesn't put him out. He keeps going and the board shows the miss; dropping a man the moment he slips is when we'd lose him.
+- **One COMPLETE per week, no per-day ticks.** Jason: don't create new ways of doing things in the UI. A challenge mission is an ordinary multi-day mission with the target shown beside it, and he marks it complete when he's hit the week, on the honour system like every other mission.
+- **It counts toward his normal missions,** taking one of the two slots in its domain, and it may push that domain over two when he joins. The limit is there to stop a man overloading himself, not to block a challenge his leader set. One point a week on the leaderboard, like any mission, so a daily challenge doesn't swamp the scores.
+- **No coaching on challenge missions.** The coach doesn't score or rewrite wording the leader wrote; the member can't edit it either.
+- **Opting out is his choice of two:** remove the challenge missions from today on, or keep them as regular missions.
+- **Editing stays cheap.** Name and wording can change any time, and new wording flows to upcoming missions. Days, dates, target and domain lock once anyone has joined, which rules out reshaping missions people already have; to change those, delete the challenge and set a new one.
+- **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end. The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
+- **The database holds the line on the cap.** Because challenge missions skip the two-per-domain check, the mission trigger checks each one against its challenge (joined, matching wording, domain and days, inside the dates, one a week) so a challenge mission can't be forged to get round the limit. Probes CH1 to CH13.

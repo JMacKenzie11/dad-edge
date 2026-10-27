@@ -16,19 +16,42 @@ import { loadPeopleDirectory } from "@/lib/community/people-directory";
 import { PeopleTab } from "./people-tab";
 import { CommunityTabs } from "./community-tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { localDate } from "@/lib/scoring/week";
+import { hasVisibleChallenges, loadChallengeBoards } from "@/lib/challenges/load";
+import { ChallengesTab } from "./challenges-tab";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "leaderboard" | "people";
+type Tab = "leaderboard" | "people" | "challenges";
 
 export default async function CommunityPage({
   searchParams,
 }: {
   searchParams: Promise<{ tab?: Tab }>;
 }) {
-  const { user } = await requireAccess();
+  const { user, readOnly } = await requireAccess();
   const params = await searchParams;
-  const tab: Tab = params.tab === "people" ? "people" : "leaderboard";
+  const tab: Tab = params.tab === "people" || params.tab === "challenges" ? params.tab : "leaderboard";
+  const today = localDate(new Date(), user.timezone);
+  const showChallenges = await hasVisibleChallenges(await createSupabaseServerClient(), user.id, today);
+
+  if (tab === "challenges") {
+    const boards = await loadChallengeBoards(await createSupabaseServerClient(), user.id, today);
+    return (
+      <div className="max-w-3xl mx-auto space-y-6 py-2">
+        <header>
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">COMMUNITY</p>
+          <h1 className="font-heading text-3xl">Challenges</h1>
+        </header>
+        <CommunityTabs active="challenges" showChallenges />
+        {boards.length === 0 ? (
+          <EmptyState title="No challenges right now." body="When your leader sets one, it shows up here and on your Today page." />
+        ) : (
+          <ChallengesTab boards={boards} viewerId={user.id} readOnly={readOnly} />
+        )}
+      </div>
+    );
+  }
 
   // People tab renders on top of the same /community route via
   // ?tab=people. Keeps a single nav item, single route, one shared
@@ -39,7 +62,7 @@ export default async function CommunityPage({
     return (
       <div className="max-w-3xl mx-auto space-y-6 py-2">
         <PeopleHeader communityNames={dir?.communityNames ?? []} count={dir?.members.length ?? 0} />
-        <CommunityTabs active="people" />
+        <CommunityTabs active="people" showChallenges={showChallenges} />
         {dir === null ? (
           <EmptyState
             title="People directory unavailable."
@@ -257,7 +280,7 @@ export default async function CommunityPage({
         <h1 className="font-heading text-3xl">{communityName}</h1>
       </header>
 
-      <CommunityTabs active="leaderboard" />
+      <CommunityTabs active="leaderboard" showChallenges={showChallenges} />
 
       {/* Tier 1a — You this week: big prominent card */}
       {meRow ? (

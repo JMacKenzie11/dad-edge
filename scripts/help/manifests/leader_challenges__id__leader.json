@@ -1,0 +1,24 @@
+{
+  "route_pattern": "/leader/challenges/[id]",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "← CHALLENGES"
+    },
+    {
+      "kind": "header",
+      "label": "Delete this challenge"
+    },
+    {
+      "kind": "button",
+      "label": "DELETE CHALLENGE"
+    }
+  ],
+  "source_hash": "c59603dc903020cd",
+  "source_files": [
+    "src/app/(leader)/leader/challenges/[id]/page.tsx",
+    "src/app/(leader)/leader/challenges/[id]/delete-challenge.tsx"
+  ]
+}
