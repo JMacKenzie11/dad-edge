@@ -63,7 +63,7 @@ async function run(label: string, out: string) {
   const { mainModel } = await import("../src/lib/model-config");
   const { systemBase, PROMPT_VERSION } = await import("../src/lib/coach/prompts");
   const { scrubCoachReply } = await import("../src/lib/coach/scrub-reply");
-  const { addressNote, workNote } = await import("../src/lib/coach/address");
+  const { addressNote, openingNote, workNote } = await import("../src/lib/coach/address");
   const { LARRY_SCENARIOS } = await import("../tests/coach/fixtures/larry-scenarios");
 
   const render = (header: string, blocks: { label: string; text: string }[]) =>
@@ -77,6 +77,7 @@ async function run(label: string, out: string) {
       render("# Live user context (this turn)", s.volatile),
       `# How to talk to him this turn\n${[
         addressNote(firstName(s), (s.history ?? []).filter((m) => m.role === "assistant").map((m) => m.content)),
+        openingNote((s.history ?? []).filter((m) => m.role === "assistant").map((m) => m.content)),
         workNote([...(s.history ?? []).filter((m) => m.role === "user").map((m) => m.content), s.userMessage]),
       ]
         .filter(Boolean)

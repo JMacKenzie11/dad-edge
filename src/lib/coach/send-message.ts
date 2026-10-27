@@ -7,7 +7,7 @@ import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
 import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
 import { checkCoachReply } from "@/lib/coach/degenerate-reply";
 import { scrubCoachReply } from "@/lib/coach/scrub-reply";
-import { addressNote, workNote } from "@/lib/coach/address";
+import { addressNote, openingNote, workNote } from "@/lib/coach/address";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { fitSuggestion, loadCoachMissionPlan, type FitResult } from "@/lib/missions/coach-slots";
 import { weekStartOf } from "@/lib/missions/rules";
@@ -128,7 +128,7 @@ function buildSystemPrompt(
   mode: Mode,
   cacheablePrefix: string,
   volatileBody: string,
-  /** Per-turn lines from address.ts: how to address him, how to talk about his work. */
+  /** Per-turn lines from address.ts: how to address him, how to open, how to talk about his work. */
   address: string,
   crisis: boolean,
 ): string {
@@ -227,15 +227,14 @@ export async function sendCoachMessage(opts: {
     content: t.role === "assistant" ? assistantProse(t.content) : t.content,
   }));
 
+  const priorReplies = historyMessages.filter((m) => m.role === "assistant").map((m) => String(m.content));
   const systemPrompt = buildSystemPrompt(
     mode,
     assembled.cacheablePrefix,
     assembled.volatileBody,
     [
-      addressNote(
-        opts.user.first_name,
-        historyMessages.filter((m) => m.role === "assistant").map((m) => String(m.content)),
-      ),
+      addressNote(opts.user.first_name, priorReplies),
+      openingNote(priorReplies),
       workNote(historyMessages.filter((m) => m.role === "user").map((m) => String(m.content))),
     ]
       .filter(Boolean)

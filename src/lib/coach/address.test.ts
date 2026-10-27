@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressNote, usesAddressTerm, workNote } from "./address";
+import { addressNote, openingNote, usesAddressTerm, workNote } from "./address";
 
 describe("usesAddressTerm", () => {
   it("spots brother, man, my man and his first name used to address him", () => {
@@ -46,5 +46,15 @@ describe("workNote", () => {
   it("goes quiet once he's mentioned his business", () => {
     expect(workNote(["I'm struggling man", "The business is eating every evening"])).toBe("");
     expect(workNote(["My company lost its biggest client"])).toBe("");
+  });
+});
+
+describe("openingNote", () => {
+  it("first reply: no \"I hear you\"", () => {
+    expect(openingNote([])).toMatch(/Don't say "I hear you"/);
+  });
+
+  it("nothing after the first reply", () => {
+    expect(openingNote(["What's going on, Jason?"])).toBe("");
   });
 });

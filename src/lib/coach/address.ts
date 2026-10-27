@@ -54,3 +54,15 @@ export function workNote(memberMessages: string[]): string {
     ? ""
     : `Call his work "work" or "your job". Don't say "the business", "your business" or "your company": he hasn't told you he runs one, whatever his profile says.`;
 }
+
+/**
+ * The first reply's opener. "I hear you" is on the voice guide's never
+ * list, yet 10 of 16 first replies to "I'm struggling man" opened with
+ * it, and none after the first. So the first reply gets told directly.
+ * Empty after that.
+ */
+export function openingNote(priorReplies: string[]): string {
+  return priorReplies.length === 0
+    ? `Don't say "I hear you". Thank him for saying it, or go straight to your question.`
+    : "";
+}

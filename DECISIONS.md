@@ -360,6 +360,11 @@ On the first day live Larry opened Jason's "I'm struggling man" with "Hey brothe
 
 Both were already prompt rules or easy to add as one ("at most once per reply, and plenty of replies without any"), and the model ignored them: with "Business owner" on file it said "the business" in 4 of 6 first replies even with the new rule in the voice guide. So the server decides, from the conversation so far, and puts it in one short "How to talk to him this turn" section at the end of the system prompt (`src/lib/coach/address.ts`): his name on the first reply; no name, "brother" or "man" while any of the last three replies used one; and "work, not business" until he has mentioned a business. Same pattern as the two-model split: structure the server owns, not a rule the model has to remember. The voice guide's examples of "brother" and "man" were also removed, since the model copies its examples.
 
+Two more from the same sampling, same day:
+
+- **"I hear you"** is on the never list, but 10 of 16 first replies to "I'm struggling man" opened with it, and no later reply did. The first-reply instruction now says not to (0 of 16 after).
+- **An invented scene from Larry's marriage:** 1 reply in 64 said "Jess would bring me something and I'd be three steps into a fix", the exact pattern the story rules ban. Rather than add a rule, the existing one now says what to do instead: "I did this too" is always true, so say it in about those words and stop. After: 0 in 64, with two "I did this for years myself" lines. One in 64 is too rare for that to prove much; the comparison runs keep flagging Larry's family names to watch it.
+
 ## Coach Larry speaks as Larry (2026-10-27)
 
 Jason analysed 12 of Larry Hagner's recorded coaching sessions (the "Larry Coaching Style Analysis") and wants the Coach Larry chat to sound and behave as much like Larry as possible. Until now the chat was a generic "BRAVE MAN coach" whose voice rules banned most of what Larry actually does: specific praise, "tell me more about that", "that sounds frustrating", naming his tools, telling his own stories, "Does that land for you?". Jason's calls:
