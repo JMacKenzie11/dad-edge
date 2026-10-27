@@ -92,3 +92,37 @@ test("a leader sets a challenge; a member joins, completes the week and leaves",
     await db.from("missions").delete().eq("user_id", member!.id).eq("description", "Phone in a drawer by 8pm");
   }
 });
+
+test("an admin sets a challenge from Admin > Challenges and can join it", async ({ asAdmin }) => {
+  test.setTimeout(120_000);
+  const name = `E2E Admin Challenge ${Date.now().toString(36)}`;
+  const today = chicagoToday();
+  const db = svc();
+  try {
+    await asAdmin.goto("/admin");
+    await asAdmin.getByRole("link", { name: "CHALLENGES", exact: true }).click();
+    await asAdmin.waitForURL("**/admin/challenges");
+    await asAdmin.selectOption('select[name="community_id"]', { label: "E2E Basecamp" });
+    await asAdmin.fill('input[name="name"]', name);
+    await asAdmin.fill('input[name="mission_description"]', "Lights out by 10pm");
+    await asAdmin.selectOption('select[name="pillar_code"]', "V");
+    await asAdmin.fill('input[name="starts_on"]', today);
+    await asAdmin.fill('input[name="ends_on"]', plusDays(today, 13));
+    await asAdmin.getByRole("button", { name: "CREATE CHALLENGE" }).click();
+    await asAdmin.waitForURL("**/admin/challenges?saved=1");
+    await expect(asAdmin.locator("li", { hasText: name })).toContainText("E2E Basecamp");
+
+    await asAdmin.goto("/today");
+    const card = asAdmin.getByRole("region", { name: `Challenge: ${name}` });
+    await card.getByRole("button", { name: "I'M IN" }).click();
+    await expect(card).toContainText(/You.re in\./);
+    await asAdmin.goto("/community?tab=challenges");
+    await expect(asAdmin.getByRole("region", { name: `Challenge: ${name}` }).locator("li", { hasText: "(YOU)" })).toBeVisible();
+  } finally {
+    const { data: ch } = await db.from("challenges").select("id").eq("name", name).maybeSingle();
+    if (ch) {
+      await db.from("missions").delete().eq("challenge_id", ch.id);
+      await db.from("challenges").delete().eq("id", ch.id);
+    }
+  }
+});

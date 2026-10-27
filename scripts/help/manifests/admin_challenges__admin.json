@@ -1,0 +1,23 @@
+{
+  "route_pattern": "/admin/challenges",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Challenges"
+    },
+    {
+      "kind": "link",
+      "label": "EDIT"
+    },
+    {
+      "kind": "header",
+      "label": "New challenge"
+    }
+  ],
+  "source_hash": "792e8509d1b2ec65",
+  "source_files": [
+    "src/app/(admin)/admin/challenges/page.tsx"
+  ]
+}

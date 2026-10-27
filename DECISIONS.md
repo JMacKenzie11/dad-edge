@@ -339,7 +339,8 @@ Jason wants paid sign-up to run itself: link a Stripe product to a community, an
 
 Jason wants challenges a community can opt into: a leader sets a domain, a mission, the days, how many days a week count, and start and end dates, and members who opt in get the missions made for them. His answers, and the calls that followed:
 
-- **Leaders and admins both create them,** from the leader panel (admins are leaders in every community, so one page covers both).
+- **Leaders and admins both create them.** Admins do it from Admin > Challenges, a page in the admin panel with the community picked in the form (Jason, 2026-10-27: a Challenges page in the Admin module, no new item in the left-hand menu). Leaders have the same form in the leader panel for their own communities.
+- **Admins can join too.** They're active leaders of every community, which is all joining needs.
 - **Joining late is fine.** His first part week counts, with its target cut to the days left (join Thursday on an all-three M/W/F challenge and that week asks for Friday only).
 - **Success means hitting the target every week,** but missing a week doesn't put him out. He keeps going and the board shows the miss; dropping a man the moment he slips is when we'd lose him.
 - **One COMPLETE per week, no per-day ticks.** Jason: don't create new ways of doing things in the UI. A challenge mission is an ordinary multi-day mission with the target shown beside it, and he marks it complete when he's hit the week, on the honour system like every other mission.

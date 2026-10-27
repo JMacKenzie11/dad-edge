@@ -16,6 +16,10 @@
       "label": "New challenge"
     },
     {
+      "kind": "select",
+      "label": "community_id"
+    },
+    {
       "kind": "field",
       "label": "30 Days of Movement"
     },
@@ -48,7 +52,7 @@
       "label": "SAVING…"
     }
   ],
-  "source_hash": "b7d65e1ff5eeed76",
+  "source_hash": "627ae6d186d6c8e2",
   "source_files": [
     "src/app/(leader)/leader/challenges/page.tsx",
     "src/app/(leader)/leader/challenges/actions.ts",

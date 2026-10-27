@@ -26,6 +26,8 @@ const label = "text-[10px] font-heading tracking-widest text-[color:var(--color-
 export function ChallengeForm({
   action,
   communityId,
+  communities,
+  returnTo = "leader",
   challenge,
   locked = false,
   defaultStart,
@@ -33,6 +35,9 @@ export function ChallengeForm({
 }: {
   action: (prev: ChallengeFormState, formData: FormData) => Promise<ChallengeFormState>;
   communityId?: string;
+  /** The admin page picks the community in the form instead. */
+  communities?: { id: string; name: string }[];
+  returnTo?: "admin" | "leader";
   challenge?: Challenge;
   locked?: boolean;
   defaultStart: string;
@@ -46,6 +51,22 @@ export function ChallengeForm({
   return (
     <form action={formAction} className="space-y-4">
       {communityId ? <input type="hidden" name="community_id" value={communityId} /> : null}
+      <input type="hidden" name="return_to" value={returnTo} />
+      {communities ? (
+        <label className="block max-w-xs">
+          <span className={label}>COMMUNITY</span>
+          <select name="community_id" required defaultValue={communities.length === 1 ? communities[0].id : ""} className={input}>
+            <option value="" disabled>
+              Pick a community
+            </option>
+            {communities.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {challenge ? <input type="hidden" name="challenge_id" value={challenge.id} /> : null}
       {locked ? <input type="hidden" name="locked" value="1" /> : null}
 
