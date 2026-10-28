@@ -351,6 +351,10 @@ Jason wants challenges a community can opt into: a leader sets a domain, a missi
 - **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end. The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
 - **The database holds the line on the cap.** Because challenge missions skip the two-per-domain check, the mission trigger checks each one against its challenge (joined, matching wording, domain and days, inside the dates, one a week) so a challenge mission can't be forged to get round the limit. Probes CH1 to CH13.
 
+## Which community the Community page shows (2026-10-27)
+
+Platform admins are active in every community, and a few members are in two. The Community page and its leaderboard took whichever membership came back first, which isn't stable. Jason saw 11am CST Braveman's leaderboard and read it as the Business Owner Brotherhood with strangers in it. The fix reuses the leader pages' community dropdown (`?c=`). The default is the community he joined first, because that's his own community rather than one the admin trigger added him to later (Jason: Business Owner Brotherhood, 2026-08-04; the trigger added the rest on 2026-08-24). Ties go by name, so the default doesn't change between visits. The People tab already lists all his communities together and is unchanged.
+
 ## Coach Larry: his name first, brother and man sparingly, "work" not "the business" (2026-10-27)
 
 On the first day live Larry opened Jason's "I'm struggling man" with "Hey brother… Is this home, the business, or just everything piling up at once?", then said "man" in each of the next two replies. Jason's calls:

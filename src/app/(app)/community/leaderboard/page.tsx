@@ -3,6 +3,8 @@ import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { LeaderboardRow } from "@/components/ui/leaderboard-row";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CommunityPicker } from "@/components/ui/community-picker";
+import { loadViewerCommunities, pickViewerCommunity } from "@/lib/communities/viewer-community";
 import { assembleWeekly } from "@/lib/scoring/leaderboard";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
 import { localDate, localMonday, weekDates } from "@/lib/scoring/week";
@@ -16,33 +18,21 @@ type Tab = "weekly" | "monthly" | "streaks";
 export default async function LeaderboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: Tab }>;
+  searchParams: Promise<{ tab?: Tab; c?: string }>;
 }) {
   const { user } = await requireAccess();
   const params = await searchParams;
   const tab: Tab = params.tab ?? "weekly";
   const supabase = await createSupabaseServerClient();
 
-  const { data: myMembership } = await supabase
-    .from("memberships")
-    .select("community_id, communities:community_id(name)")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+  const myCommunities = await loadViewerCommunities(supabase, user.id);
+  const community = pickViewerCommunity(myCommunities, params.c);
 
-  if (!myMembership) {
+  if (!community) {
     return <EmptyState title="No community yet." />;
   }
-  const communityId = myMembership.community_id as string;
-  const communityName = (() => {
-    const c = (myMembership.communities as unknown) as
-      | { name: string }
-      | { name: string }[]
-      | null;
-    if (!c) return "";
-    return Array.isArray(c) ? c[0]?.name ?? "" : c.name;
-  })();
+  const communityId = community.id;
+  const communityName = community.name;
 
   const { data: roster } = await supabase
     .from("memberships")
@@ -164,6 +154,11 @@ export default async function LeaderboardPage({
           {communityName.toUpperCase()}
         </p>
         <h1 className="font-heading text-3xl">Leaderboard</h1>
+        {myCommunities.length > 1 ? (
+          <div className="mt-2">
+            <CommunityPicker communities={myCommunities} current={communityId} />
+          </div>
+        ) : null}
       </header>
 
       <nav className="flex gap-1 border-b border-[color:var(--color-border)]">
@@ -172,7 +167,7 @@ export default async function LeaderboardPage({
           return (
             <Link
               key={t}
-              href={`/community/leaderboard?tab=${t}`}
+              href={`/community/leaderboard?tab=${t}&c=${communityId}`}
               className="h-10 px-4 flex items-center font-heading text-xs tracking-widest border-b-2"
               style={{
                 color: active ? "var(--color-accent)" : "var(--color-text-muted)",

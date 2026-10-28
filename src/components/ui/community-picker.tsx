@@ -2,15 +2,23 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-export function LeaderCommunityPicker({
+/**
+ * Community dropdown for anyone in more than one community. Writes the
+ * choice to ?c= on the current page. Used by the leader layout and the
+ * Community pages.
+ */
+export function CommunityPicker({
   communities,
+  current: currentProp,
 }: {
   communities: { id: string; name: string }[];
+  /** The community the page is showing, when the server already chose one. */
+  current?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const search = useSearchParams();
-  const current = search.get("c") ?? communities[0]?.id ?? "";
+  const current = currentProp ?? search.get("c") ?? communities[0]?.id ?? "";
 
   if (communities.length <= 1) {
     return communities[0] ? (

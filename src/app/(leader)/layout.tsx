@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { requireLeader } from "@/lib/admin";
 import { AdminNav } from "@/components/shell/admin-nav";
-import { LeaderCommunityPicker } from "./community-picker";
+import { CommunityPicker } from "@/components/ui/community-picker";
 import { HelpWidget } from "@/components/help/help-widget";
 import { CurrentHelpViewProvider } from "@/components/help/current-view-context";
 
@@ -20,7 +20,7 @@ export default async function LeaderLayout({ children }: { children: React.React
             <span className="font-heading text-sm tracking-widest">LEADER PANEL</span>
           </Link>
           <div className="flex items-center gap-4 text-xs">
-            <LeaderCommunityPicker communities={leaderOf} />
+            <CommunityPicker communities={leaderOf} />
             <Link
               href="/today"
               className="font-heading tracking-widest text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]"

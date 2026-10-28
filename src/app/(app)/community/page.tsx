@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { loadViewerCommunities, pickViewerCommunity } from "@/lib/communities/viewer-community";
+import { CommunityPicker } from "@/components/ui/community-picker";
 import { format } from "date-fns";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -27,7 +29,7 @@ type Tab = "leaderboard" | "people" | "challenges";
 export default async function CommunityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: Tab }>;
+  searchParams: Promise<{ tab?: Tab; c?: string }>;
 }) {
   const { user, readOnly } = await requireAccess();
   const params = await searchParams;
@@ -82,15 +84,10 @@ export default async function CommunityPage({
 
   const supabase = await createSupabaseServerClient();
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("community_id, communities:community_id(name, timezone)")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+  const myCommunities = await loadViewerCommunities(supabase, user.id);
+  const community = pickViewerCommunity(myCommunities, params.c);
 
-  if (!membership) {
+  if (!community) {
     return (
       <div className="max-w-2xl mx-auto">
         <EmptyState
@@ -101,14 +98,9 @@ export default async function CommunityPage({
     );
   }
 
-  const communityId = membership.community_id as string;
-  const communityRaw = membership.communities as
-    | { name: string; timezone: string }
-    | { name: string; timezone: string }[]
-    | null;
-  const community = Array.isArray(communityRaw) ? communityRaw[0] : communityRaw;
-  const communityName = community?.name ?? "Brothers";
-  const communityTz = community?.timezone ?? "America/Chicago";
+  const communityId = community.id;
+  const communityName = community.name;
+  const communityTz = community.timezone;
 
   // Roster. Also pulls avatar_url + email so the leaderboard rows
   // can render <UserAvatar> and the message-button deep link.
@@ -278,9 +270,14 @@ export default async function CommunityPage({
           {members.length} BROTHERS
         </p>
         <h1 className="font-heading text-3xl">{communityName}</h1>
+        {myCommunities.length > 1 ? (
+          <div className="mt-2">
+            <CommunityPicker communities={myCommunities} current={communityId} />
+          </div>
+        ) : null}
       </header>
 
-      <CommunityTabs active="leaderboard" showChallenges={showChallenges} />
+      <CommunityTabs active="leaderboard" showChallenges={showChallenges} communityId={communityId} />
 
       {/* Tier 1a — You this week: big prominent card */}
       {meRow ? (
