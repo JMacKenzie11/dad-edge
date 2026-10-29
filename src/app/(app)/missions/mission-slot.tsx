@@ -15,7 +15,8 @@ import type { WeekMission } from "./page";
 import type { PlannerMode } from "./weekly-planner";
 import type { MissionScore } from "@/lib/coach/mission-quality";
 import { useConfirm } from "@/components/ui/use-confirm";
-import { missionTargetNote } from "@/lib/challenges/rules";
+import { missionTargetNote, weekTarget } from "@/lib/challenges/rules";
+import { tickChallengeDay } from "@/lib/challenges/actions";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -296,6 +297,12 @@ function FilledSlot({
   const [deletePending, startDelete] = useTransition();
   const [carryPending, startCarry] = useTransition();
   const [justCarried, setJustCarried] = useState(false);
+  const [doneDates, setDoneDates] = useState<string[]>(mission.done_dates ?? []);
+  const [tickPending, startTick] = useTransition();
+  const doneDatesKey = (mission.done_dates ?? []).join(",");
+  useEffect(() => {
+    setDoneDates(doneDatesKey ? doneDatesKey.split(",") : []);
+  }, [mission.id, doneDatesKey]);
   const [carryError, setCarryError] = useState<string | null>(null);
   // Optimistic local flag OR server-derived — either disables the button.
   const carriedAlready = carriedForward || justCarried;
@@ -381,8 +388,9 @@ function FilledSlot({
 
   const isDone = mission.status === "completed";
   // A challenge mission keeps the challenge's wording and days (the
-  // database refuses edits). He completes it like any other; leaving the
-  // challenge happens on Community > Challenges.
+  // database refuses edits). He taps each day once he's done it, and it
+  // completes itself at the week's target; there's no COMPLETE. Leaving
+  // the challenge happens on Community > Challenges.
   const isChallenge = mission.challenge_id != null;
   const locked = readOnly || isDone || isChallenge;
   // A mission only reads as missed once its last day has actually
@@ -396,6 +404,20 @@ function FilledSlot({
     mission.target_dates && mission.target_dates.length > 0
       ? mission.target_dates
       : [mission.target_date];
+
+  const toggleChallengeDay = (iso: string) => {
+    const done = !doneDates.includes(iso);
+    const before = doneDates;
+    setDoneDates(done ? [...before, iso].sort() : before.filter((d) => d !== iso));
+    setSaveError(null);
+    startTick(async () => {
+      const res = await tickChallengeDay(mission.id, iso, done);
+      if (!res.ok) {
+        setDoneDates(before);
+        setSaveError(res.error);
+      }
+    });
+  };
 
   const persistIfChanged = (
     nextDescription: string,
@@ -495,7 +517,18 @@ function FilledSlot({
               </Link>
               {mission.challenge ? (() => {
                 const note = missionTargetNote(mission.challenge.target, displayDates.length);
-                return note ? <span className="block mt-0.5">{note}</span> : null;
+                const t = weekTarget(mission.challenge.target, displayDates.length);
+                const progress = isDone
+                  ? `Done: ${doneDates.length} of ${displayDates.length} days.`
+                  : doneDates.length === 0
+                    ? "Tap a day once you\u2019ve done it."
+                    : `${doneDates.length} of ${t} done.`;
+                return (
+                  <span className="block mt-0.5" data-challenge-progress>
+                    {progress}
+                    {note && !isDone ? ` ${note}` : null}
+                  </span>
+                );
               })() : null}
             </p>
           ) : null}
@@ -507,10 +540,11 @@ function FilledSlot({
               <span className="text-[color:var(--color-text-muted)]">
                 {" · "}
                 {format(new Date(`${mission.target_date}T00:00:00`), "EEEE")}{" "}
-                came and went without a COMPLETE.{" "}
-                {isChallenge
-                  ? "You can still complete it, and it\u2019ll log as late."
-                  : <>You can still complete it — it&rsquo;ll log as late — or send it to next week.</>}
+                {isChallenge ? (
+                  <>came and went short of the target. If you did more days, you can still tick them until the week locks.</>
+                ) : (
+                  <>came and went without a COMPLETE. You can still complete it — it&rsquo;ll log as late — or send it to next week.</>
+                )}
               </span>
             </p>
           ) : null}
@@ -522,10 +556,17 @@ function FilledSlot({
             before. */}
         <div className="flex flex-wrap items-center gap-3 sm:contents">
         <div className={`shrink-0 flex items-center justify-center ${COL_DAY_WIDTH}`}>
-          {isChallenge && !readOnly && !isDone ? (
-            // Same row as every other mission, with the challenge's days
-            // lit; locked, because the days come from the challenge.
-            <DayPicker weekDates={weekDates} value={dayIndexes} onChange={() => {}} disabled />
+          {isChallenge ? (
+            // Same row as every other mission. Here a lit day means he
+            // did it, not that he plans to.
+            <ChallengeDayRow
+              weekDates={weekDates}
+              missionDates={displayDates}
+              doneDates={doneDates}
+              todayISO={todayISO}
+              disabled={readOnly || tickPending}
+              onToggle={toggleChallengeDay}
+            />
           ) : locked ? (
             <span className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
               {displayDates
@@ -570,7 +611,7 @@ function FilledSlot({
         </div>
         <div className={`shrink-0 flex items-center justify-end gap-1 ${COL_ACTIONS_WIDTH}`}>
           <div className={`shrink-0 flex justify-end ${COL_COMPLETE_SLOT}`}>
-            {!readOnly && !isDone ? (
+            {!readOnly && !isDone && !isChallenge ? (
               <button
                 type="button"
                 onClick={async () => {
@@ -674,19 +715,15 @@ function FilledSlot({
  *  - Uses onMouseDown+preventDefault so clicking a button doesn't
  *    steal focus from a sibling textarea. Prevents the blur-triggered
  *    save from racing the click and dropping the day change.
- *  - `disabled` shows the days without letting them change (challenge
- *    missions take their days from the challenge).
  */
 function DayPicker({
   weekDates,
   value,
   onChange,
-  disabled = false,
 }: {
   weekDates: string[];
   value: number[];
   onChange: (indexes: number[]) => void;
-  disabled?: boolean;
 }) {
   const selected = new Set(value);
   const toggle = (i: number) => {
@@ -703,7 +740,7 @@ function DayPicker({
     <div
       className="shrink-0 flex gap-0.5"
       role="group"
-      aria-label={disabled ? "Days of week, set by the challenge" : "Days of week"}
+      aria-label="Days of week"
     >
       {DOW_LABELS.map((label, i) => {
         const active = selected.has(i);
@@ -714,17 +751,83 @@ function DayPicker({
             type="button"
             role="checkbox"
             aria-checked={active}
-            disabled={disabled}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => toggle(i)}
             className={`h-6 w-5 rounded text-[10px] font-heading tracking-widest ${
               active
                 ? "bg-[color:var(--color-primary)] text-white"
-                : disabled
-                  ? "text-[color:var(--color-text-muted)]"
-                  : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
-            } ${disabled ? "cursor-default" : ""}`}
-            title={disabled ? `${iso} · set by the challenge` : iso}
+                : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+            }`}
+            title={iso}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A challenge mission's day row: the same seven letters as DayPicker,
+ * but a lit day means "done". Only the mission's own days can be tapped,
+ * and only once they've come; tapping a lit day takes it back.
+ */
+function ChallengeDayRow({
+  weekDates,
+  missionDates,
+  doneDates,
+  todayISO,
+  disabled,
+  onToggle,
+}: {
+  weekDates: string[];
+  missionDates: string[];
+  doneDates: string[];
+  todayISO: string;
+  disabled: boolean;
+  onToggle: (iso: string) => void;
+}) {
+  const mine = new Set(missionDates);
+  const done = new Set(doneDates);
+  return (
+    <div className="shrink-0 flex gap-0.5" role="group" aria-label="Challenge days done">
+      {DOW_LABELS.map((label, i) => {
+        const iso = weekDates[i];
+        const dayName = iso ? format(new Date(`${iso}T00:00:00`), "EEEE") : "";
+        if (!iso || !mine.has(iso)) {
+          return (
+            <span
+              key={i}
+              className="h-6 w-5 inline-flex items-center justify-center text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)] opacity-40"
+              title={`${dayName} isn\u2019t a challenge day`}
+              data-challenge-day="off"
+            >
+              {label}
+            </span>
+          );
+        }
+        const isDone = done.has(iso);
+        const notYet = iso > todayISO && !isDone;
+        return (
+          <button
+            key={i}
+            type="button"
+            role="checkbox"
+            aria-checked={isDone}
+            aria-label={`${dayName}${isDone ? ", done" : notYet ? ", not yet" : ", not done"}`}
+            disabled={disabled || notYet}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onToggle(iso)}
+            data-challenge-day={isDone ? "done" : notYet ? "later" : "open"}
+            className={`h-6 w-5 rounded border text-[10px] font-heading tracking-widest ${
+              isDone
+                ? "bg-[color:var(--color-primary)] border-[color:var(--color-primary)] text-white"
+                : notYet
+                  ? "border-dashed border-[color:var(--color-border)] text-[color:var(--color-text-muted)] cursor-not-allowed"
+                  : "border-[color:var(--color-primary)] text-[color:var(--color-text)] hover:bg-[color:var(--color-primary)]/20"
+            }`}
+            title={isDone ? `${dayName}: done. Tap to undo.` : notYet ? `${dayName}: not yet` : `${dayName}: tap once it\u2019s done`}
           >
             {label}
           </button>

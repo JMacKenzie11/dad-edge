@@ -35,11 +35,11 @@ async function makeChallenge(fields: Record<string, unknown>) {
 async function challengeMissions(userId: string, challengeId: string) {
   const { data } = await svc
     .from("missions")
-    .select("id, description, target_dates, target_date, status, pillar_code, challenge_id")
+    .select("id, description, target_dates, target_date, done_dates, status, pillar_code, challenge_id")
     .eq("user_id", userId)
     .eq("challenge_id", challengeId)
     .order("target_date");
-  return (data ?? []) as { id: string; description: string; target_dates: string[]; target_date: string; status: string }[];
+  return (data ?? []) as { id: string; description: string; target_dates: string[]; target_date: string; done_dates: string[]; status: string }[];
 }
 
 beforeAll(async () => {
@@ -126,17 +126,65 @@ describe("challenges", () => {
     const db = as.get(alice.id)!;
     expect((await db.from("missions").update({ description: "Walk 2 km" }).eq("id", m.id)).error?.details).toBe("challenge_mission_locked");
     expect((await db.from("missions").update({ target_dates: [m.target_dates[0]], target_date: m.target_dates[0] }).eq("id", m.id)).error?.details).toBe("challenge_mission_locked");
-    // Completing it is the ordinary COMPLETE.
-    expect((await db.from("missions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", m.id)).error).toBeNull();
+    // No COMPLETE: it completes itself once enough days are ticked.
+    expect((await db.from("missions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", m.id)).error?.details).toBe("challenge_needs_days");
+    // And a day still to come can't be ticked.
+    expect((await db.from("missions").update({ done_dates: [m.target_dates[0]] }).eq("id", m.id)).error?.details).toBe("challenge_tick_future");
+  });
+
+  it("ticking days completes the week at its target, and unticking takes it back", async () => {
+    const ticks = await makeChallenge({ name: "Ticks", days: [1, 2, 3, 4, 5, 6, 7], target: 2, starts_on: addDays(today, -14), ends_on: addDays(today, 20) });
+    const db = as.get(carol.id)!;
+    await db.rpc("join_challenge", { p_challenge: ticks });
+    const [thisWeek] = await challengeMissions(carol.id, ticks);
+    const tick = (days: string[]) => db.from("missions").update({ done_dates: days }).eq("id", thisWeek.id).select("status, done_dates, completed_at").single();
+
+    // Joined late: only today on is his. Today counts, tomorrow doesn't yet.
+    expect(thisWeek.target_dates[0]).toBe(today);
+    expect((await tick([today])).data?.done_dates).toEqual([today]);
+    const tomorrow = addDays(today, 1);
+    if (thisWeek.target_dates.includes(tomorrow)) {
+      expect((await tick([today, tomorrow])).error?.details).toBe("challenge_tick_future");
+    }
+    // An earlier day of the week isn't on his mission.
+    if (today !== mondayOf(today)) {
+      expect((await tick([addDays(today, -1), today])).error?.details).toBe("challenge_tick_invalid");
+    }
+
+    // One of two days: the week stays open (unless today is his only day
+    // left, which cuts the target to one).
+    const expected = thisWeek.target_dates.length === 1 ? "completed" : "planned";
+    expect((await tick([today])).data?.status).toBe(expected);
+
+    // A completed one goes back to planned when a day is taken back.
+    const solo = await makeChallenge({ name: "Solo", days: [1, 2, 3, 4, 5, 6, 7], target: 1, starts_on: addDays(today, -14), ends_on: addDays(today, 20) });
+    await db.rpc("join_challenge", { p_challenge: solo });
+    const [soloWeek] = await challengeMissions(carol.id, solo);
+    const soloTick = (days: string[]) => db.from("missions").update({ done_dates: days }).eq("id", soloWeek.id).select("status, completed_at").single();
+    const done = (await soloTick([today])).data;
+    expect(done?.status).toBe("completed");
+    expect(done?.completed_at).not.toBeNull();
+    expect((await soloTick([])).data).toEqual({ status: "planned", completed_at: null });
+    expect((await soloTick([today])).data?.status).toBe("completed");
+
+    // Another member can't tick his days.
+    const { data: bobTry } = await as.get(bob.id)!.from("missions").update({ done_dates: [] }).eq("id", soloWeek.id).select("id");
+    expect(bobTry ?? []).toEqual([]);
+    expect((await challengeMissions(carol.id, solo))[0].status).toBe("completed");
+
+    // Deleting the challenge: the ticked week stays as a regular mission,
+    // the weeks to come go.
+    expect((await leader.from("challenges").delete().eq("id", solo)).error).toBeNull();
+    const { data: kept } = await svc.from("missions").select("challenge_id, status, done_dates").eq("id", soloWeek.id).single();
+    expect(kept).toEqual({ challenge_id: null, status: "completed", done_dates: [today] });
+    expect(await challengeMissions(carol.id, solo)).toEqual([]);
   });
 
   it("new wording reaches everyone's upcoming missions; the schedule locks once someone has joined", async () => {
     const { error } = await leader.from("challenges").update({ mission_description: "Walk 12 km before work" }).eq("id", upcoming);
     expect(error).toBeNull();
     const missions = await challengeMissions(alice.id, upcoming);
-    expect(missions.filter((m) => m.status === "planned").every((m) => m.description === "Walk 12 km before work")).toBe(true);
-    // The one he already completed keeps the words he did.
-    expect(missions.find((m) => m.status === "completed")?.description).toBe("Walk 10 km before work");
+    expect(missions.every((m) => m.description === "Walk 12 km before work")).toBe(true);
 
     const locked = await leader.from("challenges").update({ days: [1, 3] }).eq("id", upcoming);
     expect(locked.error?.details).toBe("challenge_locked");
@@ -144,8 +192,7 @@ describe("challenges", () => {
 
   it("leaving removes his upcoming challenge missions, or keeps them as regular missions", async () => {
     await as.get(alice.id)!.rpc("leave_challenge", { p_challenge: upcoming, p_keep_missions: false });
-    const left = await challengeMissions(alice.id, upcoming);
-    expect(left.map((m) => m.status)).toEqual(["completed"]);
+    expect(await challengeMissions(alice.id, upcoming)).toEqual([]);
 
     await as.get(bob.id)!.rpc("leave_challenge", { p_challenge: upcoming, p_keep_missions: true });
     expect(await challengeMissions(bob.id, upcoming)).toHaveLength(0);
@@ -160,8 +207,8 @@ describe("challenges", () => {
     const { data: rows } = await svc.from("challenge_participants").select("user_id, status").eq("challenge_id", upcoming);
     expect(rows).toEqual(expect.arrayContaining([{ user_id: alice.id, status: "left" }, { user_id: bob.id, status: "left" }]));
 
-    // Coming back: the missing weeks come back, the completed week stays as it is.
-    expect((await as.get(alice.id)!.rpc("join_challenge", { p_challenge: upcoming })).data).toBe(3);
+    // Coming back: the weeks come back.
+    expect((await as.get(alice.id)!.rpc("join_challenge", { p_challenge: upcoming })).data).toBe(4);
     expect(await challengeMissions(alice.id, upcoming)).toHaveLength(4);
   });
 
@@ -178,8 +225,6 @@ describe("challenges", () => {
     const { data, error } = await db.rpc("join_challenge", { p_challenge: upcoming });
     expect(error).toBeNull();
     expect(data).toBe(4);
-    const [first] = await challengeMissions(admin.id, upcoming);
-    expect((await db.from("missions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", first.id)).error).toBeNull();
 
     // His community-mates see him on the board.
     const { data: rows } = await as.get(carol.id)!.from("challenge_participants").select("user_id, status").eq("challenge_id", upcoming).eq("user_id", admin.id);
@@ -195,13 +240,10 @@ describe("challenges", () => {
     expect(planted.error).not.toBeNull();
   });
 
-  it("deleting a challenge removes upcoming missions and keeps finished ones as regular missions", async () => {
-    const [done] = await challengeMissions(alice.id, upcoming).then((ms) => ms.filter((m) => m.status === "completed"));
+  it("deleting a challenge removes upcoming missions with nothing ticked", async () => {
     const { error } = await leader.from("challenges").delete().eq("id", upcoming);
     expect(error).toBeNull();
     const { data } = await svc.from("missions").select("id, challenge_id").eq("user_id", alice.id).eq("description", "Walk 12 km before work");
     expect(data).toEqual([]);
-    const { data: kept } = await svc.from("missions").select("challenge_id, status").eq("id", done.id).single();
-    expect(kept).toEqual({ challenge_id: null, status: "completed" });
   });
 });
