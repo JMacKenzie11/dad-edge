@@ -7,6 +7,7 @@ import { classifyMessage, CRISIS_RESOURCES } from "@/lib/coach/safety";
 import { readAllowance, type AllowanceState } from "@/lib/coach/allowance";
 import { checkCoachReply } from "@/lib/coach/degenerate-reply";
 import { scrubCoachReply } from "@/lib/coach/scrub-reply";
+import { addressNote, openingNote, workNote } from "@/lib/coach/address";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
 import { fitSuggestion, loadCoachMissionPlan, type FitResult } from "@/lib/missions/coach-slots";
 import { weekStartOf } from "@/lib/missions/rules";
@@ -127,6 +128,8 @@ function buildSystemPrompt(
   mode: Mode,
   cacheablePrefix: string,
   volatileBody: string,
+  /** Per-turn lines from address.ts: how to address him, how to open, how to talk about his work. */
+  address: string,
   crisis: boolean,
 ): string {
   const parts: string[] = [
@@ -134,6 +137,7 @@ function buildSystemPrompt(
   ];
   if (cacheablePrefix) parts.push(cacheablePrefix);
   if (volatileBody) parts.push(volatileBody);
+  parts.push(`# How to talk to him this turn\n${address}`);
   if (crisis) {
     parts.push(
       `# Crisis signal detected on this turn
@@ -223,10 +227,18 @@ export async function sendCoachMessage(opts: {
     content: t.role === "assistant" ? assistantProse(t.content) : t.content,
   }));
 
+  const priorReplies = historyMessages.filter((m) => m.role === "assistant").map((m) => String(m.content));
   const systemPrompt = buildSystemPrompt(
     mode,
     assembled.cacheablePrefix,
     assembled.volatileBody,
+    [
+      addressNote(opts.user.first_name, priorReplies),
+      openingNote(priorReplies),
+      workNote(historyMessages.filter((m) => m.role === "user").map((m) => String(m.content))),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     crisis,
   );
 

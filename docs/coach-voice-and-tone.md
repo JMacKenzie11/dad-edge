@@ -1,6 +1,6 @@
 # Coach Voice, Language, and Tone
 
-Rulebook for the AI coach across the Dad Edge Boardroom app (ITC tool and, later, the member coach). Loaded on every coach turn as the source of truth on voice. Two upstream sources: `Assets/Voice and Tone/voice-and-style.md` and `Assets/Voice and Tone/writing-craft.md`. App-specific rulings live in `docs/app-voice-adaptation.md`.
+Rulebook for the AI coach in the ITC tool, the weekly recap and other generated copy. The Coach Larry chat speaks as Larry and uses `docs/larry-voice.md` and `docs/larry-playbook.md` instead. Loaded on every coach turn as the source of truth on voice. Two upstream sources: `Assets/Voice and Tone/voice-and-style.md` and `Assets/Voice and Tone/writing-craft.md`. App-specific rulings live in `docs/app-voice-adaptation.md`.
 
 Add new bans as new tropes surface. Banned lists trip in output review; base-prompt vibes drift over time.
 

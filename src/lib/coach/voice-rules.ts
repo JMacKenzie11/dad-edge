@@ -2,46 +2,38 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Voice + tone bundle for the MAIN COACH only (src/lib/coach/prompts.ts,
- * general and mission modes). NOT loaded by the ITC coach — that path
- * reads only the shared voice doc via src/lib/itc/prompts/preamble.ts,
- * and its output has been calibrated to a voice that's working.
+ * Voice bundle for the Coach Larry chat only (src/lib/coach/prompts.ts,
+ * general and mission modes). The coach speaks as Larry Hagner
+ * (DECISIONS.md "Coach Larry speaks as Larry").
  *
  * Composition:
- *   1. docs/coach-voice-and-tone.md  — shared voice/tone rules used
- *                                      by both coaches (contractions,
- *                                      no praise, banned vocabulary,
- *                                      no em-dashes, etc.)
- *   2. docs/main-coach-ai-patterns.md — stricter AI-pattern bans that
- *                                      only apply to the main coach's
- *                                      open conversational surface
- *                                      (manufactured reversals,
- *                                      dramatic openers, tricolons,
- *                                      empty intensifiers, etc.)
+ *   1. docs/larry-voice.md    — who he is, how a conversation goes, the
+ *                               questions, how he sounds, the never list
+ *   2. docs/larry-playbook.md — his facts, beliefs, tools, the only
+ *                               stories he may tell, his scripts
  *
- * The split exists specifically so tightening the main coach doesn't
- * change the ITC coach's behavior (product decision 2026-08-27).
- * Updating shared rules is one file (`coach-voice-and-tone.md`);
- * updating main-coach-only rules is another (`main-coach-ai-patterns.md`).
+ * Not loaded anywhere else. The ITC coach, the weekly recap and mission
+ * scoring keep docs/coach-voice-and-tone.md, so changing Larry's voice
+ * changes nothing on those surfaces.
  */
 
 function readDoc(filename: string): string {
   return readFileSync(join(process.cwd(), "docs", filename), "utf8").trim();
 }
 
-const SHARED_VOICE = readDoc("coach-voice-and-tone.md");
-const MAIN_COACH_AI_PATTERNS = readDoc("main-coach-ai-patterns.md");
+export const LARRY_VOICE = readDoc("larry-voice.md");
+export const LARRY_PLAYBOOK = readDoc("larry-playbook.md");
 
-export const MAIN_COACH_VOICE = `${SHARED_VOICE}
+export const MAIN_COACH_VOICE = `${LARRY_VOICE}
 
-===== ADDITIONAL RULES — MAIN COACH ONLY =====
+===== LARRY'S PLAYBOOK =====
 
-${MAIN_COACH_AI_PATTERNS}`;
+${LARRY_PLAYBOOK}`;
 
 /**
- * Prepend the composed main-coach voice bundle to a system prompt, with
- * a clear delimiter so the model can distinguish rules from the surface-
- * specific prompt that follows.
+ * Prepend the Larry voice bundle to a system prompt, with a clear
+ * delimiter so the model can tell the rules from the mode-specific
+ * prompt that follows.
  */
 export function withVoiceRules(systemPrompt: string): string {
   return `${MAIN_COACH_VOICE}\n\n===== END VOICE RULES =====\n\n${systemPrompt}`;
