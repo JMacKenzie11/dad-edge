@@ -13,17 +13,21 @@ import Link from "next/link";
 export function CommunityTabs({
   active,
   showChallenges = false,
+  communityId,
 }: {
   active: "leaderboard" | "people" | "challenges";
   /** Only when one of his communities has a current or recent challenge. */
   showChallenges?: boolean;
+  /** The community the leaderboard is showing, kept when he switches back to it. */
+  communityId?: string;
 }) {
+  const c = communityId ? `&c=${communityId}` : "";
   return (
     <div className="flex gap-1 border-b border-[color:var(--color-border)]">
-      <Tab href="/community?tab=leaderboard" label="Leaderboard" active={active === "leaderboard"} />
-      <Tab href="/community?tab=people" label="People" active={active === "people"} />
+      <Tab href={`/community?tab=leaderboard${c}`} label="Leaderboard" active={active === "leaderboard"} />
+      <Tab href={`/community?tab=people${c}`} label="People" active={active === "people"} />
       {showChallenges ? (
-        <Tab href="/community?tab=challenges" label="Challenges" active={active === "challenges"} />
+        <Tab href={`/community?tab=challenges${c}`} label="Challenges" active={active === "challenges"} />
       ) : null}
     </div>
   );

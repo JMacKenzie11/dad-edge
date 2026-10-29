@@ -360,6 +360,10 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Which community the Community page shows (2026-10-27)
+
+Platform admins are active in every community, and a few members are in two. The Community page and its leaderboard took whichever membership came back first, which isn't stable. Jason saw 11am CST Braveman's leaderboard and read it as the Business Owner Brotherhood with strangers in it. The fix reuses the leader pages' community dropdown (`?c=`). The default is the community he joined first, because that's his own community rather than one the admin trigger added him to later (Jason: Business Owner Brotherhood, 2026-08-04; the trigger added the rest on 2026-08-24). Ties go by name, so the default doesn't change between visits. The People tab already lists all his communities together and is unchanged.
+
 ## Coach Larry: his name first, brother and man sparingly, "work" not "the business" (2026-10-27)
 
 On the first day live Larry opened Jason's "I'm struggling man" with "Hey brother… Is this home, the business, or just everything piling up at once?", then said "man" in each of the next two replies. Jason's calls:

@@ -96,3 +96,17 @@ describe("routes don't read files from public/ at runtime (FM-14)", () => {
     expect(/readFileSync|readFile\(/.test(old) && /["']public["']/.test(old)).toBe(true);
   });
 });
+
+describe("which community the Community pages show", () => {
+  it("the Community pages choose his community through viewer-community.ts, never the first membership row", () => {
+    // A man in several communities (every platform admin) saw whichever
+    // membership came back first: 11am CST Braveman instead of the
+    // Business Owner Brotherhood (2026-10-27).
+    const offenders = srcFiles
+      .filter((f) => f.rel.startsWith("src/app/(app)/community/"))
+      .filter((f) => /from\("memberships"\)[\s\S]{0,300}?\.eq\("user_id", user\.id\)[\s\S]{0,120}?\.limit\(1\)/.test(f.text))
+      .map((f) => f.rel);
+    expect(offenders).toEqual([]);
+  });
+});
+
