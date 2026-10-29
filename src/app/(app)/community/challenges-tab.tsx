@@ -7,8 +7,9 @@ import { ChallengeMembership } from "./challenge-membership";
 /**
  * Community > Challenges: one card per challenge in his communities
  * (running and upcoming first, ended ones for 30 days). Each man who's in
- * gets a row of squares, one per week. The ones still perfect sort to
- * the top; a miss doesn't take anyone off the board.
+ * is ranked by the challenge days he ticked, with a square per week
+ * showing that week's days. A missed day costs him that day; it doesn't
+ * take anyone off the board.
  */
 export function ChallengesTab({ boards, viewerId, readOnly }: { boards: ChallengeBoard[]; viewerId: string; readOnly: boolean }) {
   return (
@@ -17,7 +18,7 @@ export function ChallengesTab({ boards, viewerId, readOnly }: { boards: Challeng
         <ChallengeCard key={b.challenge.id} entry={b} viewerId={viewerId} readOnly={readOnly} />
       ))}
       <p className="text-[11px] text-[color:var(--color-text-muted)]">
-        Each square is one week. Mark each day on your Missions page once it&rsquo;s done; a week counts when you hit its target.
+        The board ranks everyone by days done. Each square is one week, with the days you ticked in it; it fills when you hit the week&rsquo;s target. Tick each day on your Missions page, any time until your community locks that week.
       </p>
     </div>
   );
@@ -70,9 +71,9 @@ function ChallengeCard({ entry, viewerId, readOnly }: { entry: ChallengeBoard; v
                   {r.name}
                   {isMe ? <span className="ml-1.5 text-[10px] tracking-widest text-[color:var(--color-primary)]">(YOU)</span> : null}
                 </p>
-                <div className="flex flex-wrap gap-1 justify-end" aria-label={`${r.done} of ${board.weeks.length} weeks hit`}>
+                <div className="flex flex-wrap gap-1 justify-end" aria-label={`${r.daysDone} of ${r.daysSoFar} days done`}>
                   {r.weeks.map((w, i) => (
-                    <WeekSquare key={i} state={w} week={i + 1} />
+                    <WeekSquare key={i} state={w} week={i + 1} ticks={r.weekTicks[i]} />
                   ))}
                 </div>
                 <p className="w-[96px] shrink-0 text-right text-[10px] font-heading tracking-widest">
@@ -95,7 +96,7 @@ const SQUARE_LABEL: Record<WeekState, string> = {
   none: "not in yet",
 };
 
-function WeekSquare({ state, week }: { state: WeekState; week: number }) {
+function WeekSquare({ state, week, ticks }: { state: WeekState; week: number; ticks: number }) {
   const style: React.CSSProperties =
     state === "done"
       ? { background: "var(--color-accent)", borderColor: "var(--color-accent)" }
@@ -108,29 +109,32 @@ function WeekSquare({ state, week }: { state: WeekState; week: number }) {
             : { borderColor: "var(--color-border)" };
   return (
     <span
-      className="inline-block h-4 w-4 rounded-[3px] border-2"
+      className={
+        "inline-flex h-5 w-5 items-center justify-center rounded-[3px] border-2 text-[9px] font-heading leading-none " +
+        (state === "done" ? "text-white" : "text-[color:var(--color-text)]")
+      }
       style={style}
-      title={`Week ${week}: ${SQUARE_LABEL[state]}`}
+      title={`Week ${week}: ${ticks} ${ticks === 1 ? "day" : "days"} done, ${SQUARE_LABEL[state]}`}
       data-week-state={state}
-    />
+      data-week-ticks={ticks}
+    >
+      {ticks > 0 ? ticks : null}
+    </span>
   );
 }
 
 function RowNote({ row, phase }: { row: ChallengeBoard["board"]["rows"][number]; phase: ChallengeBoard["board"]["phase"] }) {
   if (phase === "ended") {
     return row.finisher ? (
-      <span className="text-[color:var(--color-accent)]">★ FINISHER</span>
+      <span className="text-[color:var(--color-accent)]" data-days-done>★ {row.daysDone} OF {row.daysTotal} DAYS</span>
     ) : (
-      <span className="text-[color:var(--color-text-muted)]">{row.done} WEEKS HIT</span>
+      <span className="text-[color:var(--color-text-muted)]" data-days-done>{row.daysDone} OF {row.daysTotal} DAYS</span>
     );
   }
-  if (row.thisWeek === "done") return <span className="text-[color:var(--color-success)]">DONE THIS WEEK</span>;
-  if (row.thisWeek === "open") {
-    return (
-      <span className="text-[color:var(--color-text-muted)]" data-this-week-days>
-        {row.thisWeekDays ? `${row.thisWeekDays.done} OF ${row.thisWeekDays.target} THIS WEEK` : "NOT YET"}
-      </span>
-    );
-  }
-  return null;
+  if (phase === "upcoming") return null;
+  return (
+    <span className={row.daysDone === row.daysSoFar ? "text-[color:var(--color-success)]" : "text-[color:var(--color-text-muted)]"} data-days-done>
+      {row.daysDone} OF {row.daysSoFar} DAYS
+    </span>
+  );
 }

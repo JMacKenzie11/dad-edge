@@ -348,8 +348,17 @@ Jason wants challenges a community can opt into: a leader sets a domain, a missi
 - **No coaching on challenge missions.** The coach doesn't score or rewrite wording the leader wrote; the member can't edit it either.
 - **Opting out is his choice of two:** remove the challenge missions from today on, or keep them as regular missions.
 - **Editing stays cheap.** Name and wording can change any time, and new wording flows to upcoming missions. Days, dates, target and domain lock once anyone has joined, which rules out reshaping missions people already have; to change those, delete the challenge and set a new one.
-- **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end. The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
+- **The community sees everyone's progress** on a Challenges tab under Community: one square per week per member, perfect runs first, a finisher mark at the end (counted in days since 2026-10-29, see "Challenges: counted in days"). The tab only appears while there's a challenge to show, and the join card is the only addition to Today and Missions, so nothing is cluttered when no challenge is running.
 - **The database holds the line on the cap.** Because challenge missions skip the two-per-domain check, the mission trigger checks each one against its challenge (joined, matching wording, domain and days, inside the dates, one a week) so a challenge mission can't be forged to get round the limit. Probes CH1 to CH16.
+
+## Challenges: counted in days (2026-10-29)
+
+Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man missing a day should not cost him the whole week; the board should tally days. A man who does 57 of the 60 days should show 57. His calls, and what followed:
+
+- **The board ranks by days ticked,** not weeks hit and not "perfect runs first". The weekly squares stay, each showing that week's days, so the week-by-week picture isn't lost, and a ★ still marks a man who hit every week's target. Today counts against him only once he's ticked it, so the board doesn't show a miss at breakfast.
+- **A day can be ticked until his community locks that week** (Jason: "as long as the current week is open"). That's the lock check-ins already use (three days after the week by default), so Monday's forgotten Sunday still counts and nobody back-fills a month. The database enforces it, ticks and unticks alike.
+- **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
+- Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
 ## Coach Larry: his name first, brother and man sparingly, "work" not "the business" (2026-10-27)
 

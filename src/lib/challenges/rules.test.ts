@@ -73,4 +73,8 @@ describe("friendlyChallengeError", () => {
     expect(friendlyChallengeError({ details: "challenge_mission_locked" })).toMatch(/keeps the challenge/);
     expect(friendlyChallengeError({ details: "other" })).toBe("That didn't save. Try again.");
   });
+
+  it("says when a tick lands on a locked week", () => {
+    expect(friendlyChallengeError({ details: "challenge_tick_locked" })).toBe("That week is locked, so its days can't change.");
+  });
 });

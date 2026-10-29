@@ -169,6 +169,7 @@ export function friendlyChallengeError(
   if (detail === "challenge_not_joined") return "Join the challenge first.";
   if (detail === "challenge_needs_days") return "Tap the days you did. It completes itself once you hit the target.";
   if (detail === "challenge_tick_invalid") return "That day isn't one of this mission's days.";
+  if (detail === "challenge_tick_locked") return "That week is locked, so its days can't change.";
   if (detail.startsWith("challenge_mission")) return "A challenge mission keeps the challenge's wording, days and domain.";
   return fallback;
 }

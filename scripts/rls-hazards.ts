@@ -81,10 +81,14 @@ export type Observation = {
 //   communities), draft (unpublished), onlyB (published, community B),
 //   each sectioned, with one section holding its one lesson.
 //   One object in the private lesson-files bucket.
-//   A challenge in community A (Vitality, Mon/Wed/Fri, started two weeks
-//   ago) that bob has joined; alice hasn't.
+//   A challenge in community A (Vitality, Mon/Wed/Fri, two a week, started
+//   three weeks ago) that bob has joined; alice hasn't. bob has its
+//   missions for last week (open) and the week before (locked by the
+//   community, with Monday ticked).
 
 const NEXT_MON = "date_trunc('week', current_date + 7)::date";
+const LAST_MON = "date_trunc('week', current_date - 7)::date";
+const LOCKED_MON = "date_trunc('week', current_date - 14)::date";
 
 export const PROBES: Probe[] = [
   // Self-check controls: the scratch tables are created by the harness.
@@ -222,6 +226,19 @@ export const PROBES: Probe[] = [
     sql: `update public.missions set status = 'completed', completed_at = now() where user_id = :alice and challenge_id = :chA and target_date >= ${NEXT_MON}`, expect: "refuse", detail: /challenge_needs_days/ },
   { id: "CH16", what: "alice can't tick days on a regular mission", kind: "write", as: "alice",
     sql: "update public.missions set done_dates = array[target_date] where user_id = :alice and challenge_id is null", expect: "refuse", detail: /challenge_tick_invalid/ },
+  // Ticking runs until the community locks the week; a week completed by
+  // ticks isn't late.
+  { id: "CH17", what: "bob can tick last Monday and Wednesday", kind: "write", as: "bob",
+    sql: `update public.missions set done_dates = target_dates[1:2] where user_id = :bob and challenge_id = :chA and target_date = ${LAST_MON} + 4`, expect: "allow" },
+  { id: "CH18", what: "two ticks completed last week's mission, not logged as late", kind: "read", as: "bob",
+    sql: `select count(*) from public.missions where user_id = :bob and challenge_id = :chA and target_date = ${LAST_MON} + 4 and status = 'completed' and not completed_late`,
+    control: `select count(*) from public.missions where user_id = :bob and challenge_id = :chA and target_date = ${LAST_MON} + 4`, expect: "some" },
+  { id: "CH19", what: "bob can't tick a day in a week the community has locked", kind: "write", as: "bob",
+    sql: `update public.missions set done_dates = target_dates[1:2] where user_id = :bob and challenge_id = :chA and target_date = ${LOCKED_MON} + 4`, expect: "refuse", detail: /challenge_tick_locked/ },
+  { id: "CH20", what: "bob can't untick a day in a locked week", kind: "write", as: "bob",
+    sql: `update public.missions set done_dates = '{}' where user_id = :bob and challenge_id = :chA and target_date = ${LOCKED_MON} + 4`, expect: "refuse", detail: /challenge_tick_locked/ },
+  { id: "CH21", what: "bob can untick last Wednesday while the week is open", kind: "write", as: "bob",
+    sql: `update public.missions set done_dates = target_dates[1:1] where user_id = :bob and challenge_id = :chA and target_date = ${LAST_MON} + 4`, expect: "allow" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -291,8 +308,17 @@ function fixturesSql(ids: Ids): string {
   -- Only once the challenges migration exists (it can arrive via --pending).
   if to_regclass('public.challenges') is not null then
     execute $c$insert into public.challenges (id, community_id, name, pillar_code, mission_description, days, target, starts_on, ends_on)
-      values ('${ids.chA}', '${ids.commA}', 'zz probe challenge', 'V', 'Walk 10 km before work', array[1,3,5]::smallint[], 2, current_date - 14, current_date + 60)$c$;
+      values ('${ids.chA}', '${ids.commA}', 'zz probe challenge', 'V', 'Walk 10 km before work', array[1,3,5]::smallint[], 2, current_date - 21, current_date + 60)$c$;
     execute $c$insert into public.challenge_participants (challenge_id, user_id, status, joined_at) values ('${ids.chA}', '${ids.bob}', 'in', now())$c$;
+    -- bob's challenge missions for last week and the week before, Mon/Wed/Fri.
+    -- He ticked Monday of the week before, which community A has since locked.
+    execute $c$insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by, challenge_id)
+      select '${ids.bob}', '${ids.commA}', 'Walk 10 km before work', 'V', w + 4, array[w, w + 2, w + 4], 'user', '${ids.chA}'
+      from (values (${LAST_MON}), (${LOCKED_MON})) as x(w)$c$;
+    if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'missions' and column_name = 'done_dates') then
+      execute $c$update public.missions set done_dates = array[${LOCKED_MON}] where user_id = '${ids.bob}' and target_date = ${LOCKED_MON} + 4$c$;
+    end if;
+    execute $c$insert into public.weeks (community_id, start_date, locked_at) values ('${ids.commA}', ${LOCKED_MON}, now())$c$;
   end if;
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.

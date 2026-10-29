@@ -541,7 +541,7 @@ function FilledSlot({
                 {" · "}
                 {format(new Date(`${mission.target_date}T00:00:00`), "EEEE")}{" "}
                 {isChallenge ? (
-                  <>came and went short of the target. If you did more days, you can still mark them, and it&rsquo;ll log as late.</>
+                  <>came and went short of the target. If you did more days, you can still tick them until the week locks.</>
                 ) : (
                   <>came and went without a COMPLETE. You can still complete it — it&rsquo;ll log as late — or send it to next week.</>
                 )}

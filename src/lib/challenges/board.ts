@@ -1,10 +1,12 @@
-import { addDays, challengeWeeks, mondayOf, weekTarget, type Challenge } from "./rules";
+import { addDays, challengeWeeks, mondayOf, type Challenge } from "./rules";
 
 /**
- * The community board for one challenge: each man who's in, one square
- * per week. A week counts when that week's challenge mission is
- * completed. Missing a week doesn't put him out; he keeps going and the
- * board shows the miss.
+ * The community board for one challenge: each man who's in, tallied by
+ * the day. His score is the challenge days he ticked; missing a day costs
+ * him that day, not the week. Each week still gets a square, showing the
+ * days he ticked in it and whether he hit that week's target (his
+ * challenge mission completes itself when he does). Missing days doesn't
+ * put him out; he keeps going and the board shows it.
  */
 
 export type WeekState =
@@ -34,14 +36,18 @@ export type BoardRow = {
   weeks: WeekState[];
   done: number;
   missed: number;
-  /** No missed weeks so far. */
-  perfect: boolean;
   /** The challenge is over and he hit every week he had. */
   finisher: boolean;
   thisWeek: WeekState | null;
-  /** Days ticked this week against the week's target, null when he has
-   *  no mission this week. */
-  thisWeekDays: { done: number; target: number } | null;
+  /** Days ticked in each week, one per square. */
+  weekTicks: number[];
+  /** Challenge days he ticked. */
+  daysDone: number;
+  /** His challenge days before today, plus today once ticked (all of
+   *  them once it's over). */
+  daysSoFar: number;
+  /** All his challenge days, from when he joined to the end. */
+  daysTotal: number;
 };
 
 export type Board = {
@@ -53,7 +59,7 @@ export type Board = {
 };
 
 export function buildBoard(input: {
-  challenge: Pick<Challenge, "starts_on" | "ends_on"> & { target?: number };
+  challenge: Pick<Challenge, "starts_on" | "ends_on">;
   participants: BoardParticipant[];
   missions: BoardMission[];
   /** The viewer's date, yyyy-MM-dd. */
@@ -81,28 +87,26 @@ export function buildBoard(input: {
       });
       const done = states.filter((s) => s === "done").length;
       const missed = states.filter((s) => s === "missed").length;
-      const current = byUserWeek.get(`${p.user_id}|${thisMonday}`);
-      const days = current?.target_dates?.length ?? 0;
+      const mine = weeks.map((monday) => byUserWeek.get(`${p.user_id}|${monday}`));
+      const days = mine.flatMap((m) => m?.target_dates ?? []);
+      const weekTicks = mine.map((m) => m?.done_dates?.length ?? 0);
+      const ticked = new Set(mine.flatMap((m) => m?.done_dates ?? []));
       return {
         userId: p.user_id,
         name: p.name,
         weeks: states,
         done,
         missed,
-        perfect: missed === 0,
         finisher: phase === "ended" && missed === 0 && done > 0,
         thisWeek: currentIdx >= 0 ? states[currentIdx] : null,
-        thisWeekDays:
-          currentIdx >= 0 && current && days > 0
-            ? { done: current.done_dates?.length ?? 0, target: weekTarget(challenge.target ?? days, days) }
-            : null,
+        weekTicks,
+        daysDone: weekTicks.reduce((a, b) => a + b, 0),
+        // Today only counts against him once he's ticked it.
+        daysSoFar: days.filter((d) => d < today || ticked.has(d)).length,
+        daysTotal: days.length,
       };
     })
-    .sort((a, b) => {
-      if (a.perfect !== b.perfect) return a.perfect ? -1 : 1;
-      if (b.done !== a.done) return b.done - a.done;
-      return a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => b.daysDone - a.daysDone || a.name.localeCompare(b.name));
 
   return { phase, weeks, currentWeek: currentIdx >= 0 ? currentIdx + 1 : null, rows };
 }

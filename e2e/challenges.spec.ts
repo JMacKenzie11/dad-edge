@@ -95,17 +95,14 @@ test("a leader sets a challenge; a member joins, marks today done and leaves", a
     await asMember.reload();
     await expect(asMember.locator("li", { hasText: `⚑ CHALLENGE · ${name.toUpperCase()}` }).getByRole("group", { name: "Challenge days done" }).locator('[aria-checked="true"]')).toHaveCount(1);
 
-    // Community > Challenges: his row shows today's mark.
+    // Community > Challenges: his row counts today's day.
     await asMember.goto("/community?tab=challenges");
     const board = asMember.getByRole("region", { name: `Challenge: ${name}` });
     const mine = board.locator("li", { hasText: "(YOU)" });
-    if (weekTarget === 1) {
-      await expect(mine).toContainText("DONE THIS WEEK");
-      await expect(mine.locator('[data-week-state="done"]')).toHaveCount(1);
-    } else {
-      await expect(mine).toContainText(`1 OF ${weekTarget} THIS WEEK`);
-      await expect(mine.locator('[data-week-state="open"]')).toHaveCount(1);
-    }
+    // He joined today and ticked today: one day of one so far.
+    await expect(mine.locator("[data-days-done]")).toHaveText("1 OF 1 DAYS");
+    await expect(mine.locator('[data-week-ticks="1"]')).toHaveCount(1);
+    await expect(mine.locator(`[data-week-state="${weekTarget === 1 ? "done" : "open"}"]`)).toHaveCount(1);
     if (shots) await board.screenshot({ path: `${shots}/4-member-board.png` });
 
     // Leaving, removing what's left: the board offers I'M IN again.
