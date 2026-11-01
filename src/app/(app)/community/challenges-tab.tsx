@@ -65,13 +65,18 @@ function ChallengeCard({ entry, viewerId, readOnly }: { entry: ChallengeBoard; v
             return (
               <li
                 key={r.userId}
-                className={"px-4 sm:px-5 py-3 flex items-center gap-3 " + (isMe ? "bg-[color:var(--color-primary)]/[0.08]" : "")}
+                className={"px-4 sm:px-5 py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 " + (isMe ? "bg-[color:var(--color-primary)]/[0.08]" : "")}
               >
                 <p className="font-heading text-sm truncate min-w-0 flex-1">
                   {r.name}
                   {isMe ? <span className="ml-1.5 text-[10px] tracking-widest text-[color:var(--color-primary)]">(YOU)</span> : null}
                 </p>
-                <div className="flex flex-wrap gap-1 justify-end" aria-label={`${r.daysDone} of ${r.daysSoFar} days done`}>
+                {/* On a phone the squares take a line of their own under the
+                    name and count; beside them the name had no room left. */}
+                <div
+                  className="order-last sm:order-none basis-full sm:basis-auto flex flex-wrap gap-1 sm:justify-end"
+                  aria-label={`${r.daysDone} of ${r.daysSoFar} days done`}
+                >
                   {r.weeks.map((w, i) => (
                     <WeekSquare key={i} state={w} week={i + 1} ticks={r.weekTicks[i]} />
                   ))}
