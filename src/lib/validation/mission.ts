@@ -22,6 +22,11 @@ const VAGUE_PATTERNS = [
   /^mindful\b/i,
 ];
 
+/** Shown wherever a mission is too short to save, on the page as well
+ *  as from the server, so Enter never fails without saying why. */
+export const MISSION_MIN_LENGTH = 8;
+export const MISSION_TOO_SHORT = "Too short to save. Say what you'll do, like \"Lift weights for 45 minutes.\"";
+
 export type MissionValidationInput = {
   description: string;
   target_date: string; // YYYY-MM-DD
@@ -42,8 +47,8 @@ export function validateMissionConcreteness({
   bypassConcreteness = false,
 }: MissionValidationInput): MissionValidationResult {
   const desc = description.trim();
-  if (desc.length < 8) {
-    return { ok: false, reason: "Too short. Say what you'll do." };
+  if (desc.length < MISSION_MIN_LENGTH) {
+    return { ok: false, reason: MISSION_TOO_SHORT };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(target_date)) {
     return { ok: false, reason: "Pick a specific day." };

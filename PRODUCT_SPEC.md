@@ -3,6 +3,7 @@
 _Snapshot of current app behavior as of 2026-09-01. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
 
 _Change log since 2026-08-20 snapshot:_
+- **Too-short missions say so (2026-11-02):** a mission under eight characters ("Weights") used to ignore Enter without a word. The mission row now shows "Too short to save. Say what you'll do, like \"Lift weights for 45 minutes.\"" and keeps his words in the box; editing a saved one below eight puts the saved wording back with the same message. See Concreteness validator, FM-17.
 - **Challenges board shows a running total (2026-11-01):** each man's row on Community > Challenges is his name and his days done out of every day in the challenge ("1 OF 61 DAYS"), green while he's ticked every day so far, with a ★ at the end for a man who hit every week's target. The weekly squares are gone: members took them for boxes to tick. The note under the board links to Missions, where days are ticked. See §6 Challenges.
 - **Challenges counted in days (2026-10-29):** the Challenges board ranks each man by the challenge days he ticked ("12 OF 13 DAYS" while it runs, "57 OF 60 DAYS" at the end), so a missed day costs a day, not the week. Each week's square shows the days ticked in it. A day can be ticked or unticked until his community locks that week, and not after (migration `20261029000001_challenge_ticks_week_lock.sql`); a week completed by ticks no longer logs as late. See §6 Challenges.
 - **Challenge days (2026-10-27):** a challenge mission no longer has COMPLETE. Its day row starts empty; he taps each day once he's done it (today or earlier, never a day still to come), and the mission completes itself when the days marked reach that week's target. Tapping a marked day takes it back. The Challenges board shows "N OF T THIS WEEK". Column `missions.done_dates`, trigger `challenge_ticks_trg` (migration `20261027000002_challenge_day_ticks.sql`). See §6 Challenges.
@@ -580,7 +581,7 @@ State machine in `src/lib/weekly-summary/state.ts` returns one of `ready | gener
 - **Multi-community handling:** rosters union across every community the viewer is in, deduped by user_id, all community names listed in the header. Rare — no picker.
 
 ### Concreteness validator (`src/lib/validation/mission.ts`)
-1. Description length ≥ 8 chars.
+1. Description length ≥ 8 chars. Below that the mission row says so ("Too short to save. Say what you'll do, like \"Lift weights for 45 minutes.\"") when he presses Enter or leaves the box, instead of doing nothing; a saved mission edited below 8 goes back to its saved wording with the same message (`MISSION_TOO_SHORT`, FM-17).
 2. Target date must be an ISO `YYYY-MM-DD` real date.
 3. Description must not match vague-only patterns ("be more present", "improve", "be less…", "focus on…", "get better", "show up", "intentional", "mindful").
 
