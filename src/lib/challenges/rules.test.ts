@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   challengeDates,
+  challengeDayCount,
   challengeFormSchema,
   challengeWeeks,
   daysLetters,
@@ -76,5 +77,17 @@ describe("friendlyChallengeError", () => {
 
   it("says when a tick lands on a locked week", () => {
     expect(friendlyChallengeError({ details: "challenge_tick_locked" })).toBe("That week is locked, so its days can't change.");
+  });
+});
+
+describe("challengeDayCount", () => {
+  it("counts every picked day from start to end, inclusive", () => {
+    // The 60/60/60 burpee challenge: every day, Nov 1 to Dec 31.
+    expect(challengeDayCount({ days: [1, 2, 3, 4, 5, 6, 7], starts_on: "2026-11-01", ends_on: "2026-12-31" })).toBe(61);
+    // Mon, Wed, Fri over Mon Nov 2 .. Sun Nov 15: two of each.
+    expect(challengeDayCount({ days: [1, 3, 5], starts_on: "2026-11-02", ends_on: "2026-11-15" })).toBe(6);
+    // A one-day challenge on a picked day, and one on a day that isn't.
+    expect(challengeDayCount({ days: [7], starts_on: "2026-11-01", ends_on: "2026-11-01" })).toBe(1);
+    expect(challengeDayCount({ days: [1], starts_on: "2026-11-01", ends_on: "2026-11-01" })).toBe(0);
   });
 });

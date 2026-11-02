@@ -44,6 +44,10 @@
       "label": "STAY IN"
     },
     {
+      "kind": "link",
+      "label": "Missions page"
+    },
+    {
       "kind": "field",
       "label": "Leaderboard"
     },
@@ -64,7 +68,7 @@
       "label": "STREAK"
     }
   ],
-  "source_hash": "e77cc4887f651151",
+  "source_hash": "6b2eee3725bdfe6f",
   "source_files": [
     "src/app/(app)/community/page.tsx",
     "src/app/(app)/community/challenge-membership.tsx",

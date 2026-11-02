@@ -360,6 +360,14 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Challenges board: a running total, no squares (2026-11-01)
+
+On the burpee challenge's first day, members (Tim Cox among them) tried to tick the day on the Challenges board: the empty week squares looked like checkboxes. Jason: the board should just show a running total against the total possible days. So each row is now the man's days done out of every day in the challenge ("1 OF 61 DAYS"), and the squares are gone.
+
+- **The total is the challenge's, not his.** Every row shows the same number of days, so a man who joined late shows fewer done out of the same total rather than a flattering smaller one. Ranking is unchanged: days ticked, then name.
+- **Kept:** green while he's ticked every day so far, and the ★ at the end for a man who hit every week's target. Neither looks like something to tap.
+- **The note under the board links to Missions**, so a man who comes to the board to tick a day is sent to the right place.
+
 ## Which community the Community page shows (2026-10-27)
 
 Platform admins are active in every community, and a few members are in two. The Community page and its leaderboard took whichever membership came back first, which isn't stable. Jason saw 11am CST Braveman's leaderboard and read it as the Business Owner Brotherhood with strangers in it. The fix reuses the leader pages' community dropdown (`?c=`). The default is the community he joined first, because that's his own community rather than one the admin trigger added him to later (Jason: Business Owner Brotherhood, 2026-08-04; the trigger added the rest on 2026-08-24). Ties go by name, so the default doesn't change between visits. The People tab already lists all his communities together and is unchanged.
