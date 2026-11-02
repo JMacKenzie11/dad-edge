@@ -17,6 +17,7 @@ import type { MissionScore } from "@/lib/coach/mission-quality";
 import { useConfirm } from "@/components/ui/use-confirm";
 import { missionTargetNote, weekTarget } from "@/lib/challenges/rules";
 import { tickChallengeDay } from "@/lib/challenges/actions";
+import { MISSION_MIN_LENGTH, MISSION_TOO_SHORT } from "@/lib/validation/mission";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -188,7 +189,12 @@ function EmptySlot({
     });
   };
 
-  const canSave = description.trim().length >= 8;
+  const canSave = description.trim().length >= MISSION_MIN_LENGTH;
+  // Too short to save: say so rather than ignore the Enter (FM-17).
+  const trySave = () => {
+    if (canSave) save();
+    else if (description.trim().length > 0) setError(MISSION_TOO_SHORT);
+  };
 
   const pillText = score ? `${score.total}/10` : scoring ? "…" : null;
   const pillColor = score
@@ -211,15 +217,18 @@ function EmptySlot({
           rows={2}
           maxLength={280}
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            setDescription(e.target.value);
+            setError(null);
+          }}
           onBlur={() => {
-            if (canSave) save();
-            else if (description.trim().length === 0) setExpanded(false);
+            if (description.trim().length === 0) setExpanded(false);
+            else trySave();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              if (canSave) save();
+              trySave();
               return;
             }
             if (e.key === "Escape") {
@@ -429,15 +438,24 @@ function FilledSlot({
       quality_score?: number | null;
     } = {};
     const trimmed = nextDescription.trim();
-    if (trimmed !== initialDescRef.current.trim() && trimmed.length >= 8) {
-      patch.description = trimmed;
+    let tooShort = false;
+    if (trimmed !== initialDescRef.current.trim()) {
+      if (trimmed.length >= MISSION_MIN_LENGTH) {
+        patch.description = trimmed;
+      } else {
+        // Too short to save: put the saved wording back and say why,
+        // rather than show words that were never saved (FM-17).
+        tooShort = true;
+        setDescription(initialDescRef.current);
+        setSaveError(MISSION_TOO_SHORT);
+      }
     }
     if (!sameDayIndexes(nextDayIndexes, initialDaysRef.current)) {
       patch.target_dates = nextDayIndexes.map((i) => weekDates[i]);
     }
     if (score) patch.quality_score = score.total;
     if (Object.keys(patch).length === 0) return;
-    setSaveError(null);
+    if (!tooShort) setSaveError(null);
     startSave(async () => {
       const res = await updateMission({ mission_id: mission.id, patch });
       if (!res.ok) {
