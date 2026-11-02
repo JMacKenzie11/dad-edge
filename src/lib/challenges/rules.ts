@@ -108,6 +108,15 @@ export function isoDow(iso: string): number {
   return ((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 }
 
+/** Every challenge day from start to end: the most a man can tick. */
+export function challengeDayCount(c: Pick<Challenge, "days" | "starts_on" | "ends_on">): number {
+  let n = 0;
+  for (let d = c.starts_on; d <= c.ends_on; d = addDays(d, 1)) {
+    if (c.days.includes(isoDow(d))) n++;
+  }
+  return n;
+}
+
 /** True when the dates hold at least one of the picked days. */
 export function hasAPickedDay(startsOn: string, endsOn: string, days: number[]): boolean {
   for (let d = startsOn, i = 0; d <= endsOn && i < 7; d = addDays(d, 1), i++) {

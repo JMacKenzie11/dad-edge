@@ -1,15 +1,16 @@
+import Link from "next/link";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
-import { challengeDates, shortDate, targetLine } from "@/lib/challenges/rules";
+import { challengeDates, challengeDayCount, shortDate, targetLine } from "@/lib/challenges/rules";
 import type { ChallengeBoard } from "@/lib/challenges/load";
-import type { WeekState } from "@/lib/challenges/board";
 import { ChallengeMembership } from "./challenge-membership";
 
 /**
  * Community > Challenges: one card per challenge in his communities
  * (running and upcoming first, ended ones for 30 days). Each man who's in
- * is ranked by the challenge days he ticked, with a square per week
- * showing that week's days. A missed day costs him that day; it doesn't
- * take anyone off the board.
+ * is ranked by the challenge days he ticked, shown against every day in
+ * the challenge. Just a total, nothing to tap: the squares it had looked
+ * like boxes to tick, and men tried. A missed day costs him that day; it
+ * doesn't take anyone off the board.
  */
 export function ChallengesTab({ boards, viewerId, readOnly }: { boards: ChallengeBoard[]; viewerId: string; readOnly: boolean }) {
   return (
@@ -18,7 +19,11 @@ export function ChallengesTab({ boards, viewerId, readOnly }: { boards: Challeng
         <ChallengeCard key={b.challenge.id} entry={b} viewerId={viewerId} readOnly={readOnly} />
       ))}
       <p className="text-[11px] text-[color:var(--color-text-muted)]">
-        The board ranks everyone by days done. Each square is one week, with the days you ticked in it; it fills when you hit the week&rsquo;s target. Tick each day on your Missions page, any time until your community locks that week.
+        The board ranks everyone by days done, out of every day in the challenge. To tick a day, go to your{" "}
+        <Link href="/missions" className="underline hover:text-[color:var(--color-primary)]">
+          Missions page
+        </Link>
+        . You can tick it any time until your community locks that week.
       </p>
     </div>
   );
@@ -27,6 +32,7 @@ export function ChallengesTab({ boards, viewerId, readOnly }: { boards: Challeng
 function ChallengeCard({ entry, viewerId, readOnly }: { entry: ChallengeBoard; viewerId: string; readOnly: boolean }) {
   const { challenge: c, board, myStatus } = entry;
   const p = PILLAR_BY_CODE[c.pillar_code];
+  const totalDays = challengeDayCount(c);
   const status =
     board.phase === "running"
       ? `WEEK ${board.currentWeek ?? 1} OF ${board.weeks.length}`
@@ -65,24 +71,14 @@ function ChallengeCard({ entry, viewerId, readOnly }: { entry: ChallengeBoard; v
             return (
               <li
                 key={r.userId}
-                className={"px-4 sm:px-5 py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 " + (isMe ? "bg-[color:var(--color-primary)]/[0.08]" : "")}
+                className={"px-4 sm:px-5 py-3 flex items-center gap-3 " + (isMe ? "bg-[color:var(--color-primary)]/[0.08]" : "")}
               >
                 <p className="font-heading text-sm truncate min-w-0 flex-1">
                   {r.name}
                   {isMe ? <span className="ml-1.5 text-[10px] tracking-widest text-[color:var(--color-primary)]">(YOU)</span> : null}
                 </p>
-                {/* On a phone the squares take a line of their own under the
-                    name and count; beside them the name had no room left. */}
-                <div
-                  className="order-last sm:order-none basis-full sm:basis-auto flex flex-wrap gap-1 sm:justify-end"
-                  aria-label={`${r.daysDone} of ${r.daysSoFar} days done`}
-                >
-                  {r.weeks.map((w, i) => (
-                    <WeekSquare key={i} state={w} week={i + 1} ticks={r.weekTicks[i]} />
-                  ))}
-                </div>
-                <p className="w-[96px] shrink-0 text-right text-[10px] font-heading tracking-widest">
-                  <RowNote row={r} phase={board.phase} />
+                <p className="shrink-0 whitespace-nowrap text-right text-[11px] font-heading tracking-widest">
+                  <RowNote row={r} phase={board.phase} totalDays={totalDays} />
                 </p>
               </li>
             );
@@ -93,53 +89,27 @@ function ChallengeCard({ entry, viewerId, readOnly }: { entry: ChallengeBoard; v
   );
 }
 
-const SQUARE_LABEL: Record<WeekState, string> = {
-  done: "hit",
-  missed: "missed",
-  open: "this week, not complete yet",
-  upcoming: "still to come",
-  none: "not in yet",
-};
-
-function WeekSquare({ state, week, ticks }: { state: WeekState; week: number; ticks: number }) {
-  const style: React.CSSProperties =
-    state === "done"
-      ? { background: "var(--color-accent)", borderColor: "var(--color-accent)" }
-      : state === "missed"
-        ? { borderColor: "var(--color-danger)" }
-        : state === "open"
-          ? { borderColor: "var(--color-primary)" }
-          : state === "none"
-            ? { borderColor: "transparent", background: "var(--color-border)", opacity: 0.35 }
-            : { borderColor: "var(--color-border)" };
+function RowNote({
+  row,
+  phase,
+  totalDays,
+}: {
+  row: ChallengeBoard["board"]["rows"][number];
+  phase: ChallengeBoard["board"]["phase"];
+  totalDays: number;
+}) {
+  // Green while he's ticked every day so far (today counts once ticked);
+  // a ★ at the end for a man who hit every week's target.
+  const onPace = phase === "running" && row.daysDone > 0 && row.daysDone === row.daysSoFar;
+  const color = row.finisher
+    ? "text-[color:var(--color-accent)]"
+    : onPace
+      ? "text-[color:var(--color-success)]"
+      : "text-[color:var(--color-text-muted)]";
   return (
-    <span
-      className={
-        "inline-flex h-5 w-5 items-center justify-center rounded-[3px] border-2 text-[9px] font-heading leading-none " +
-        (state === "done" ? "text-white" : "text-[color:var(--color-text)]")
-      }
-      style={style}
-      title={`Week ${week}: ${ticks} ${ticks === 1 ? "day" : "days"} done, ${SQUARE_LABEL[state]}`}
-      data-week-state={state}
-      data-week-ticks={ticks}
-    >
-      {ticks > 0 ? ticks : null}
-    </span>
-  );
-}
-
-function RowNote({ row, phase }: { row: ChallengeBoard["board"]["rows"][number]; phase: ChallengeBoard["board"]["phase"] }) {
-  if (phase === "ended") {
-    return row.finisher ? (
-      <span className="text-[color:var(--color-accent)]" data-days-done>★ {row.daysDone} OF {row.daysTotal} DAYS</span>
-    ) : (
-      <span className="text-[color:var(--color-text-muted)]" data-days-done>{row.daysDone} OF {row.daysTotal} DAYS</span>
-    );
-  }
-  if (phase === "upcoming") return null;
-  return (
-    <span className={row.daysDone === row.daysSoFar ? "text-[color:var(--color-success)]" : "text-[color:var(--color-text-muted)]"} data-days-done>
-      {row.daysDone} OF {row.daysSoFar} DAYS
+    <span className={color} data-days-done>
+      {row.finisher ? "★ " : ""}
+      {row.daysDone} OF {totalDays} DAYS
     </span>
   );
 }
