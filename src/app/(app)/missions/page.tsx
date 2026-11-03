@@ -200,6 +200,14 @@ export default async function MissionsPage({
           </p>
           <QuarterCountdown className="text-sm text-[color:var(--color-text-muted)] mt-1" />
         </div>
+        {/* The phone's bottom bar has no Goals tab, so this is how he
+            gets there without scrolling the whole week. */}
+        <Link
+          href="/goals"
+          className="font-heading text-xs tracking-widest text-[color:var(--color-primary)] hover:underline"
+        >
+          {activeGoals.length === 0 ? "SET A GOAL →" : "YOUR GOALS →"}
+        </Link>
       </header>
 
       <ChallengeJoinCards items={joinable} />
