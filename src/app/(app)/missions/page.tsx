@@ -86,14 +86,12 @@ export default async function MissionsPage({
   const nextMonday = shiftWeek(thisMonday, 1);
   const todayISO = editWindow.today;
   const thisWeekEnd = weekDates(thisMonday)[6];
-  // Sunday planning: on the last day of the week, next week opens up
-  // so guys can front-load Monday.
+  // Next week is open every day; on Sunday the page also nudges him
+  // to plan it before Monday.
   const isSunday = todayISO === thisWeekEnd;
 
-  // Which weeks the arrows can reach. Back only while the community
-  // grace period is still open; forward only on a Sunday.
+  // Back only while the community grace period is still open.
   const canGoBack = editWindow.lastWeekOpen;
-  const canGoForward = isSunday;
 
   // Resolve ?week=. Anything out of range or malformed drops back to
   // the canonical /missions, so a stale bookmark pointing at a
@@ -105,7 +103,6 @@ export default async function MissionsPage({
     lastMonday,
     nextMonday,
     canGoBack,
-    canGoForward,
   });
   if ("redirect" in resolved) redirect("/missions");
   const { viewMonday, isLastWeek, isNextWeek, prevMonday } = resolved;

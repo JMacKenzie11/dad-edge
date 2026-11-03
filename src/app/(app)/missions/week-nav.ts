@@ -2,8 +2,8 @@
  * Which mission week is on screen, and where the arrows go.
  *
  * Three weeks are ever reachable: last week (only while the community
- * grace period is still open), this week, and next week (only on a
- * Sunday, to front-load Monday). Anything else — a malformed param, a
+ * grace period is still open), this week, and next week (any day, so
+ * he can set it up before it starts). Anything else — a malformed param, a
  * week that has since locked, a bookmark from three weeks ago — is a
  * redirect back to the canonical /missions rather than an error.
  *
@@ -29,8 +29,6 @@ export type MissionWeekInput = {
   nextMonday: string;
   /** Last week's grace period is still open. */
   canGoBack: boolean;
-  /** It's Sunday, so next week is open for planning. */
-  canGoForward: boolean;
 };
 
 const MONDAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,8 +36,7 @@ const MONDAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 export function resolveMissionWeek(
   input: MissionWeekInput,
 ): MissionWeekView | { redirect: true } {
-  const { requested, thisMonday, lastMonday, nextMonday, canGoBack, canGoForward } =
-    input;
+  const { requested, thisMonday, lastMonday, nextMonday, canGoBack } = input;
 
   let viewMonday = thisMonday;
   if (requested !== undefined) {
@@ -50,8 +47,7 @@ export function resolveMissionWeek(
       return { redirect: true };
     }
     const reachable =
-      (canGoBack && requested === lastMonday) ||
-      (canGoForward && requested === nextMonday);
+      (canGoBack && requested === lastMonday) || requested === nextMonday;
     if (!reachable) return { redirect: true };
     viewMonday = requested;
   }
@@ -71,12 +67,6 @@ export function resolveMissionWeek(
         : canGoBack
           ? lastMonday
           : null,
-    nextMonday: isNextWeek
-      ? null
-      : isLastWeek
-        ? thisMonday
-        : canGoForward
-          ? nextMonday
-          : null,
+    nextMonday: isNextWeek ? null : isLastWeek ? thisMonday : nextMonday,
   };
 }

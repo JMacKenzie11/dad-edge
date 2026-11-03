@@ -8,8 +8,7 @@ import { format } from "date-fns";
  * Bounds are decided by the page and handed here as hrefs:
  *   - back stops at last week, and only while the community grace
  *     period is still open
- *   - forward stops at next week, and only on a Sunday (front-load
- *     the week before it starts)
+ *   - forward stops at next week (plan it before it starts)
  *
  * Server component — anchors and a query param do all the work.
  */
