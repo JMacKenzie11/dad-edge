@@ -7,7 +7,6 @@ const BASE: MissionWeekInput = {
   lastMonday: "2026-09-14",
   nextMonday: "2026-09-28",
   canGoBack: true,
-  canGoForward: false,
 };
 
 const resolve = (over: Partial<MissionWeekInput> = {}) =>
@@ -20,23 +19,23 @@ describe("resolveMissionWeek", () => {
   });
 
   it("offers the back arrow while the grace period is open", () => {
-    expect(resolve()).toMatchObject({ prevMonday: "2026-09-14", nextMonday: null });
+    expect(resolve()).toMatchObject({ prevMonday: "2026-09-14" });
   });
 
   it("disables the back arrow once last week has locked", () => {
     expect(resolve({ canGoBack: false })).toMatchObject({ prevMonday: null });
   });
 
-  it("opens next week on a Sunday", () => {
-    expect(resolve({ canGoForward: true })).toMatchObject({
-      nextMonday: "2026-09-28",
-    });
+  it("opens next week any day, not just on a Sunday", () => {
+    // Members asked to set next week's missions midweek (2026-11-03).
+    expect(resolve()).toMatchObject({ nextMonday: "2026-09-28" });
+    expect(resolve({ requested: "2026-09-28" })).toMatchObject({ viewMonday: "2026-09-28", isNextWeek: true });
   });
 
   it("steps one week at a time — back from next week is THIS week", () => {
     // The bug this file exists for: next -> back used to jump to last
     // week, skipping the week the man is actually living in.
-    const v = resolve({ requested: "2026-09-28", canGoForward: true });
+    const v = resolve({ requested: "2026-09-28" });
     expect(v).toMatchObject({
       viewMonday: "2026-09-28",
       isNextWeek: true,
@@ -56,10 +55,10 @@ describe("resolveMissionWeek", () => {
   });
 
   it("redirects rather than rendering an unreachable week", () => {
-    // Locked, too far back, next week on a non-Sunday, and junk.
+    // Locked, too far back, two weeks out, and junk.
     expect(resolve({ requested: "2026-09-14", canGoBack: false })).toEqual({ redirect: true });
     expect(resolve({ requested: "2026-09-07" })).toEqual({ redirect: true });
-    expect(resolve({ requested: "2026-09-28" })).toEqual({ redirect: true });
+    expect(resolve({ requested: "2026-10-05" })).toEqual({ redirect: true });
     expect(resolve({ requested: "not-a-date" })).toEqual({ redirect: true });
   });
 

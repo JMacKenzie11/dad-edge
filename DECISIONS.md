@@ -360,6 +360,13 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Next week's missions, any day (2026-11-03)
+
+Members could only reach next week on `/missions` on a Sunday, so a man who wanted to set next week's missions midweek couldn't. Jason: let them set missions for next week as well. The forward arrow now opens next week every day.
+
+- **One week ahead, no further.** Two weeks out would mean planning against goals and challenges that may have changed by then.
+- **Nothing else changes.** The caps (two per domain, five goal missions) count per week as before, and → NEXT WEEK already wrote into next week on any day.
+
 ## Challenges board: a running total, no squares (2026-11-01)
 
 On the burpee challenge's first day, members (Tim Cox among them) tried to tick the day on the Challenges board: the empty week squares looked like checkboxes. Jason: the board should just show a running total against the total possible days. So each row is now the man's days done out of every day in the challenge ("1 OF 61 DAYS"), and the squares are gone.
