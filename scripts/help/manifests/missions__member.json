@@ -9,6 +9,10 @@
     },
     {
       "kind": "link",
+      "label": "YOUR GOALS →"
+    },
+    {
+      "kind": "link",
       "label": "go back to close anything out"
     },
     {
@@ -54,10 +58,6 @@
     {
       "kind": "header",
       "label": "Goal missions"
-    },
-    {
-      "kind": "link",
-      "label": "YOUR GOALS →"
     },
     {
       "kind": "link",
