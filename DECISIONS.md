@@ -360,6 +360,18 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Partner survey saves every answer (2026-11-10)
+
+The Partner Connection Survey saved nothing until the last button, so a sit-down cut short (dinner, a kid, a dead phone) lost every answer. Jason: save whenever a question is answered, and let him come back to an unfinished survey and finish it. His calls (2026-11-10):
+
+- **Saves as he goes.** A score saves on tap; a note saves after a short pause or when he leaves the box. Each question shows Saved, Saving or Not saved. Saves go one at a time in order, so an older save can't overwrite a newer one.
+- **One survey in progress at a time.** Starting a survey while one is open reopens it. The database enforces it (`partner_surveys_one_draft_per_user`).
+- **An unfinished survey counts nowhere** (history, delta, dashboard card, `/me`, the coach) until he finishes it. A source guard fails any read of `partner_surveys` that doesn't say which it wants.
+- **Dated the day he finishes**, not the day he started.
+- **He can discard it** from the survey page.
+- **Finishing still needs a score and a note for every question,** checked on the server against what's saved, not what the page holds.
+- **The column defaults to finished.** `completed_at` defaults to `now()`, so the code before this change still writes finished surveys; only the draft path inserts `null`. The migration is safe to run before the deploy.
+
 ## Next week's missions, any day (2026-11-03)
 
 Members could only reach next week on `/missions` on a Sunday, so a man who wanted to set next week's missions midweek couldn't. Jason: let them set missions for next week as well. The forward arrow now opens next week every day.

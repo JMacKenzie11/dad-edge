@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
@@ -18,12 +18,14 @@ export default async function SurveyDetail({
 
   const { data: survey } = await supabase
     .from("partner_surveys")
-    .select("id, taken_at, context_note, question_set_id, responses:partner_survey_responses(question_id, score, note)")
+    .select("id, taken_at, completed_at, context_note, question_set_id, responses:partner_survey_responses(question_id, score, note)")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
 
   if (!survey) notFound();
+  // Still in progress: reopen it where he left off.
+  if (!survey.completed_at) redirect("/me/survey/take");
 
   const { data: questions } = await supabase
     .from("survey_questions")
@@ -43,6 +45,7 @@ export default async function SurveyDetail({
     .from("partner_surveys")
     .select("id, taken_at, responses:partner_survey_responses(question_id, score)")
     .eq("user_id", user.id)
+    .not("completed_at", "is", null)
     .order("taken_at", { ascending: false });
 
   const priorScores = new Map<string, number>();
