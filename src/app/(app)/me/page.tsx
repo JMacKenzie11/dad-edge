@@ -31,6 +31,7 @@ export default async function MePage() {
         .from("partner_surveys")
         .select("id, taken_at, responses:partner_survey_responses(score)")
         .eq("user_id", user.id)
+        .not("completed_at", "is", null)
         .order("taken_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -38,6 +39,7 @@ export default async function MePage() {
         .from("partner_surveys")
         .select("id, taken_at, responses:partner_survey_responses(score)")
         .eq("user_id", user.id)
+        .not("completed_at", "is", null)
         .order("taken_at", { ascending: false })
         .range(1, 1)
         .maybeSingle(),

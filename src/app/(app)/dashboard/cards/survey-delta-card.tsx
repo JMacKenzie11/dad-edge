@@ -15,6 +15,7 @@ export async function SurveyDeltaCard({ userId }: { userId: string }) {
     .from("partner_surveys")
     .select("id, taken_at, responses:partner_survey_responses(score)")
     .eq("user_id", userId)
+    .not("completed_at", "is", null)
     .order("taken_at", { ascending: true });
 
   const rows = (surveys ?? []) as Array<{

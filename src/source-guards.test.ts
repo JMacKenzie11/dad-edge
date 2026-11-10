@@ -110,3 +110,21 @@ describe("which community the Community pages show", () => {
   });
 });
 
+
+describe("partner surveys in progress", () => {
+  it("every read of partner_surveys says whether it wants finished surveys or the one in progress", () => {
+    // A survey in progress (completed_at null) holds a half-scored sit-down.
+    // A read that forgets the filter puts it in the history, the delta, the
+    // dashboard card and the coach's context (DECISIONS.md "Partner survey
+    // saves every answer").
+    const reads: { rel: string; chain: string }[] = [];
+    for (const f of srcFiles) {
+      for (const m of f.text.matchAll(/\.from\(\s*["']partner_surveys["']\s*\)([\s\S]*?);/g)) {
+        if (/^\s*\.select\(/.test(m[1])) reads.push({ rel: f.rel, chain: m[1] });
+      }
+    }
+    expect(reads.length).toBeGreaterThanOrEqual(8);
+    const offenders = reads.filter((r) => !/completed_at/.test(r.chain)).map((r) => r.rel);
+    expect(offenders).toEqual([]);
+  });
+});

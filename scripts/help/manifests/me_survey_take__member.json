@@ -17,10 +17,14 @@
     },
     {
       "kind": "button",
-      "label": "Save survey"
+      "label": "Finish survey"
+    },
+    {
+      "kind": "button",
+      "label": "Discard survey"
     }
   ],
-  "source_hash": "6fec5f1ca54c38c9",
+  "source_hash": "0aedea0c418a6525",
   "source_files": [
     "src/app/(app)/me/survey/take/page.tsx",
     "src/app/(app)/me/survey/take/take-survey-form.tsx"

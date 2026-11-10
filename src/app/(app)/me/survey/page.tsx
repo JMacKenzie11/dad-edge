@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { format } from "date-fns";
+import { answeredCount, type DraftAnswer } from "@/lib/survey/progress";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +25,28 @@ export default async function SurveyIndex() {
       "id, taken_at, context_note, responses:partner_survey_responses(question_id, score, note)",
     )
     .eq("user_id", user.id)
+    .not("completed_at", "is", null)
     .order("taken_at", { ascending: false });
 
   const rows = (surveys ?? []) as SurveyRow[];
+
+  // His survey in progress, if any. It isn't in the history until he finishes it.
+  const { data: draft } = await supabase
+    .from("partner_surveys")
+    .select(
+      "id, question_set_id, responses:partner_survey_responses(question_id, score, note), questions:survey_question_sets(survey_questions(id))",
+    )
+    .eq("user_id", user.id)
+    .is("completed_at", null)
+    .maybeSingle();
+  const draftQuestionIds = draft
+    ? (
+        (Array.isArray(draft.questions) ? draft.questions[0] : draft.questions) as
+          | { survey_questions: { id: string }[] }
+          | null
+      )?.survey_questions.map((q) => q.id) ?? []
+    : [];
+  const draftDone = draft ? answeredCount(draftQuestionIds, (draft.responses ?? []) as DraftAnswer[]) : 0;
   const latest = rows[0];
   const prior = rows[1];
 
@@ -45,9 +65,24 @@ export default async function SurveyIndex() {
         </p>
       </header>
 
-      <Link href="/me/survey/take" className="inline-block">
-        <Button>Start a survey</Button>
-      </Link>
+      {draft ? (
+        <Link
+          href="/me/survey/take"
+          className="block p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-accent)]"
+        >
+          <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
+            IN PROGRESS
+          </p>
+          <p className="font-heading text-lg mt-1">Pick up where you left off</p>
+          <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
+            {draftDone} of {draftQuestionIds.length} answered.
+          </p>
+        </Link>
+      ) : (
+        <Link href="/me/survey/take" className="inline-block">
+          <Button>Start a survey</Button>
+        </Link>
+      )}
 
       {rows.length === 0 ? (
         <EmptyState title="No surveys yet." body="The sit-down is itself the intervention." />

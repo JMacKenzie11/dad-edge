@@ -30,6 +30,7 @@ export const surveyProvider: ContextProvider = {
       .from("partner_surveys")
       .select("id, taken_at")
       .eq("user_id", user.id)
+      .not("completed_at", "is", null)
       .order("taken_at", { ascending: false })
       .limit(2);
 
