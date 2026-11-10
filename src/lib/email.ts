@@ -9,7 +9,7 @@
 import { fromHeader } from "./email-from";
 
 const FROM = fromHeader(process.env.RESEND_FROM);
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3300";
 
 type SendResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -287,4 +287,50 @@ export async function sendDigestEmail(opts: {
     text: opts.textBody,
     html: shell(`${opts.communityName}: week of ${opts.weekStart}`, opts.htmlBody),
   });
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+export type CoachingDigestCommunity = {
+  name: string;
+  url: string;
+  reachOut: { name: string; line: string; question: string }[];
+  callOut: { name: string; line: string }[];
+};
+
+/** Monday Coaching email to a leader or admin (src/lib/jobs/coaching-digest.ts). */
+export async function sendCoachingDigestEmail(opts: {
+  to: string;
+  firstName: string | null;
+  communities: CoachingDigestCommunity[];
+}) {
+  const greeting = opts.firstName ?? "Brother";
+  const text = [
+    `${greeting},`,
+    "",
+    "Who needs you this week, and who to call out.",
+    ...opts.communities.flatMap((c) => [
+      "",
+      c.name.toUpperCase(),
+      ...(c.reachOut.length ? ["Reach out:", ...c.reachOut.map((r) => `- ${r.name}: ${r.line} Ask: "${r.question}"`)] : ["Nobody needs a nudge this week."]),
+      ...(c.callOut.length ? ["Call out:", ...c.callOut.map((r) => `- ${r.name}: ${r.line}`)] : []),
+      c.url,
+    ]),
+    "",
+    "BRAVE MAN OS",
+  ].join("\n");
+  const html = shell(
+    "This week's coaching.",
+    `<p>${escapeHtml(greeting)},</p><p>Who needs you this week, and who to call out.</p>` +
+      opts.communities
+        .map(
+          (c) => `<h2 style="font-family:Archivo,Arial,sans-serif;text-transform:uppercase;letter-spacing:0.08em;font-size:14px;margin:20px 0 8px;">${escapeHtml(c.name)}</h2>
+${c.reachOut.length ? `<p style="margin:0 0 4px;color:#9aa7b4;font-size:11px;letter-spacing:0.12em;">REACH OUT</p><ul style="padding-left:18px;margin:0 0 12px;">${c.reachOut.map((r) => `<li style="margin-bottom:6px;"><strong>${escapeHtml(r.name)}</strong>: ${escapeHtml(r.line)}<br/>Ask: &ldquo;${escapeHtml(r.question)}&rdquo;</li>`).join("")}</ul>` : `<p>Nobody needs a nudge this week.</p>`}
+${c.callOut.length ? `<p style="margin:0 0 4px;color:#9aa7b4;font-size:11px;letter-spacing:0.12em;">CALL OUT</p><ul style="padding-left:18px;margin:0 0 12px;">${c.callOut.map((r) => `<li style="margin-bottom:6px;"><strong>${escapeHtml(r.name)}</strong>: ${escapeHtml(r.line)}</li>`).join("")}</ul>` : ""}
+<p><a href="${escapeHtml(c.url)}" style="display:inline-block;background:#0075c9;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-family:Archivo,Arial,sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:12px;">Open Coaching</a></p>`,
+        )
+        .join(""),
+  );
+  return send({ to: opts.to, subject: "This week's coaching", text, html });
 }

@@ -8,6 +8,7 @@ type NavItem = { href: string; label: string; exact?: boolean };
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "Overview", exact: true },
+  { href: "/admin/coaching", label: "Coaching" },
   { href: "/admin/communities", label: "Communities" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/billing", label: "Billing" },
@@ -21,6 +22,7 @@ const adminItems: NavItem[] = [
 
 const leaderItems: NavItem[] = [
   { href: "/leader", label: "Overview", exact: true },
+  { href: "/leader/coaching", label: "Coaching" },
   { href: "/leader/members", label: "Members" },
   { href: "/leader/disengagement", label: "Disengagement" },
   { href: "/leader/challenges", label: "Challenges" },

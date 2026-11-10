@@ -1,0 +1,10 @@
+{
+  "route_pattern": "/admin/coaching",
+  "view_key": null,
+  "role": "admin",
+  "elements": [],
+  "source_hash": "e3b0c44298fc1c14",
+  "source_files": [
+    "src/app/(admin)/admin/coaching/page.tsx"
+  ]
+}

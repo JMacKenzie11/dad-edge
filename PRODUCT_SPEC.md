@@ -222,6 +222,8 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | Path | Purpose |
 |------|---------|
 | `/leader` | Dashboard: active count, disengaged buckets (3/7/14+ days), avg weekly Daily Living (/49), mission completion rate. |
+| `/leader/coaching` | Coaching for a community he leads (picked with the header dropdown). **REACH OUT**: men with flags, heaviest first, each with what the app noticed and a question to open with (skips anyone reached out to in the last 7 days, listed underneath as "Reached out this week"). **CALL OUT**: men with wins. Then **EVERY MAN IN <COMMUNITY>**: one card per man with last check-in, missions done out of closed in the last 4 weeks, this quarter's goals (domain + end state + status), his six most recent missions with status, and every flag and win. Lists members only (not leaders, so not the admins added to every community), never the viewer, never admin-only accounts. See §6 Coaching view. |
+| `/leader/coaching/[userId]` | One man: **WHAT TO ASK** (every flag with its question), **WINS TO NAME**, **GOALS THIS QUARTER** (end state, starting point, midpoint answer, look back), **MISSIONS** by week from next week back eight weeks with status, domain, the goal it's for, the fit label (Moves the goal / Loosely related / No clear link) and its writing score, **MESSAGE HIM** (opens `/messages/with/[userId]`), and **REACHED OUT** (log a reach-out with an optional note; history with date and who; the author or an admin can Remove). Opening the page runs the fit check on his unjudged goal-linked missions and reloads when done. Every open is audit-logged (`coaching.view_member`). |
 | `/leader/members` | Member status table with invite / deactivate actions. |
 | `/leader/disengagement` | Members bucketed by inactivity with contextual nudge copy and send-nudge action. |
 | `/leader/challenges` | The community's challenges (status, how many are in, EDIT) and a New challenge form: name, mission, domain, days, target (how many of the days count each week), start and end dates. |
@@ -233,6 +235,8 @@ Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (curr
 | Path | Purpose |
 |------|---------|
 | `/admin` | Platform overview: communities, active members, this week's check-ins, disengagement. |
+| `/admin/coaching` | Same Coaching page as `/leader/coaching`, for any active community (dropdown on the page). |
+| `/admin/coaching/[userId]` | Same as `/leader/coaching/[userId]`. |
 | `/admin/communities` | List + create community (name, slug, timezone, week lock days, accent color). Lists active communities only; archived ones are left off (they still open at `/admin/communities/[id]`, where status can be set back to Active). |
 | `/admin/communities/[id]` | Edit community settings and roster; deactivate / reactivate members. **Paid sign-up** panel: pick the Stripe product that buys a place here (`setStripeProduct`, one product per community) and copy the `/join/<slug>` link. |
 | `/admin/challenges` | Every community's challenges (community, domain, mission, target, dates, status, how many are in, EDIT) and a New challenge form with the community picked in the form. Same form, rules and actions as `/leader/challenges`. |
@@ -259,7 +263,7 @@ Missions
 - `GET /api/missions/examples?pillar=…` — returns exemplar missions promoted by leaders/admins for the given pillar.
 
 Cron
-- `GET /api/cron/daily` — orchestrator; runs in parallel: mark missed missions, week lock, disengagement scan, weekly digest, exemplar novelty. Auth via `CRON_SECRET` bearer.
+- `GET /api/cron/daily` — orchestrator; runs in parallel: mark missed missions, week lock, disengagement scan, weekly digest, exemplar novelty. Also the mission fit check (`runMissionGoalFit`, up to 150 a run) followed by the Monday Coaching email (`runCoachingDigest`, skips other days). Auth via `CRON_SECRET` bearer.
 - `GET /api/cron/hourly` — placeholder for TZ-precise streak recalculation.
 - `GET /api/cron/run?job=…` — admin manual trigger.
 
@@ -358,6 +362,10 @@ Migrations live in `supabase/migrations/`. Schema highlights below.
 - **`audit_log`** — actor, action, target_type, target_id, metadata (JSONB). Captures admin view-as-member, data corrections, community/user changes, coach flag reviews.
 - **`nudge_settings`** — per community. `daily_reminder_time` (default 18:00), `disengagement_ladder` JSONB (`{"day3":true,"day7":true,"day14":true}`).
 - **`digests`** — one row per (community, week_start). JSONB body with rankings + mission analysis + deltas.
+- **`mission_goal_fit`** — the Coaching pages' fit call on a goal-linked mission: `mission_id` (PK), `goal_id`, `verdict` (`moves_it` / `related` / `no_link`), `input_hash` (mission wording + goal domain, end state and starting point; a change means it's judged again), `model`, `judged_at`. A verdict counts only while the mission is still linked to that goal.
+- **`coaching_followups`** — reach-outs a leader or admin logged: community, member, author, optional note (≤ 2000 chars), created_at.
+- **`coaching_digests`** — (user, week_start) for each Monday Coaching email sent, so a rerun doesn't send twice.
+- These three have row-level security on and no policies: no browser session (member, leader or admin) can read or write them. The server reads and writes them with the service role after the leader check in `src/lib/coaching/access.ts`. Probes CO1–CO10. The man never sees his fit calls or the notes about him.
 - **`invites`** — legacy table from the pre-auth-phase magic-link flow. Retained for historical records but not written to by any current code path. Can be dropped via a future migration when comfortable losing the history.
 
 ### Row Level Security
@@ -622,6 +630,30 @@ Open `/me/survey` → start new survey → sit with partner → for each of 15 q
 
 ### Leader disengagement
 `/leader/disengagement` shows 3/7/14+ day buckets with pre-filled nudge copy → send nudge (email in Phase 2+, console in Phase 1) → day 14 escalates to leader outreach.
+
+### Coaching view
+Leader or admin opens Coaching → picks a community → reads Reach out and Call out → opens a man → asks the question, messages him, or logs a reach-out. Flags and wins come from `computeSignals` (`src/lib/coaching/signals.ts`), worked out the same way every time from his goals for the current calendar quarter, his missions from 8 weeks back through next week, his check-ins, and the fit calls. Each flag has a fixed sentence and a fixed opening question:
+
+| Flag | When | Weight |
+|---|---|---|
+| inactive | no check-in for 7+ days (14+ or never: weight 3) | 2–3 |
+| no_goal | no goal this quarter that isn't abandoned | 2 |
+| goal_quiet | an active goal at least 14 days old with no linked mission on any day in the last 21 days or this week | 2 |
+| goal_no_start | a goal he set (not an improvement-map goal) with no starting point | 1 |
+| midpoint_waiting | an active goal's midpoint date has passed with no answer | 1 |
+| review_waiting | a goal in quarter review with no look back | 1 |
+| execution_low | under half done of 4+ closed missions in the last 4 weeks | 2 |
+| execution_drop | done rate down 25+ points against the 4 weeks before (3+ closed in each) | 2 |
+| stuck_mission | a mission rolled over 2+ times | 2 |
+| vague_missions | 2+ recent missions with a writing score under 6 | 1 |
+| nothing_planned | no mission on any day this week | 2 |
+| fit_off | a goal-linked mission from the last 4 weeks or this week judged No clear link (2+, or every judged one: weight 2) | 1–2 |
+
+Wins: every one of 4+ closed missions done in the last 4 weeks; done rate up 25+ points; a goal completed this quarter; a 14+ day check-in streak. Domain balance is not a signal.
+
+**Fit check** (`src/lib/coaching/fit.ts`): the utility model, temperature 0, gets the goal's domain with its meaning, end state and starting point, and the mission wording, and returns a verdict only; the page shows a fixed label. It runs nightly, when a man's page opens, and before the Monday email. Only the Coaching pages, their jobs and `src/lib/coaching/` may touch it or its table (source guard). Live check: `tests/coach/mission-goal-fit.test.ts`.
+
+**Monday Coaching email** (`src/lib/jobs/coaching-digest.ts`): one per leader or admin covering every community he leads, top 5 Reach out (first flag + question) and top 5 Call out, linking to `/leader/coaching` or `/admin/coaching` for that community. Skipped when every list is empty; never names the recipient himself.
 
 ### Admin community setup
 `/admin/communities` → create community → `/admin/users` CREATE ACCOUNT (assigns to community) → SEND INVITE → member sets password + goes through onboarding wizard.
