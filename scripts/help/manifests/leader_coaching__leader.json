@@ -1,0 +1,20 @@
+{
+  "route_pattern": "/leader/coaching",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Coaching"
+    },
+    {
+      "kind": "link",
+      "label": "No check-ins yet"
+    }
+  ],
+  "source_hash": "8e46c2ab922a10fd",
+  "source_files": [
+    "src/app/(leader)/leader/coaching/page.tsx",
+    "src/app/(leader)/leader/coaching/community-view.tsx"
+  ]
+}

@@ -8,6 +8,8 @@ import { runWeeklyDigest } from "@/lib/jobs/digest";
 import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
 import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
 import { runHelpContentAutoRegen } from "@/lib/jobs/help-content-auto-regen";
+import { runMissionGoalFit } from "@/lib/jobs/mission-goal-fit";
+import { runCoachingDigest } from "@/lib/jobs/coaching-digest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +33,10 @@ export async function GET(req: NextRequest) {
     runExemplarNovelty(now),
     runGoalMidpointCheck(now),
     runHelpContentAutoRegen(),
+    // The Coaching email checks fit itself before it builds its lists.
+    runMissionGoalFit(now).then(async (fit) => [fit, await runCoachingDigest(now)]),
   ]);
-  const ok = results.every((r) => r.ok);
-  return NextResponse.json({ ok, results });
+  const flat = results.flat();
+  const ok = flat.every((r) => r.ok);
+  return NextResponse.json({ ok, results: flat });
 }

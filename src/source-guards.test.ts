@@ -128,3 +128,23 @@ describe("partner surveys in progress", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("coaching judgments stay with leaders", () => {
+  it("only the Coaching pages, their jobs and their library touch fit calls and reach-out notes", () => {
+    // The fit check judges a man's choice of mission. That's for leaders
+    // only (DECISIONS.md "Coaching view"); the man, the coach and every
+    // member page never see it, and never see the notes about him.
+    const allowed = /^src\/(lib\/coaching\/|components\/coaching\/|lib\/jobs\/(mission-goal-fit|coaching-digest)\.ts|app\/\((admin|leader)\)\/(admin|leader)\/coaching\/|app\/api\/cron\/)/;
+    const touching = srcFiles.filter((f) =>
+      /["'](mission_goal_fit|coaching_followups|coaching_digests)["']|@\/lib\/coaching\/(fit|actions)|FIT_LABEL|judgeFit|judgeMissingFits/.test(f.text),
+    );
+    expect(touching.length).toBeGreaterThanOrEqual(6);
+    expect(touching.map((f) => f.rel).filter((rel) => !allowed.test(rel))).toEqual([]);
+  });
+
+  it("a control: the rule catches a member page that reads fit calls", () => {
+    const allowed = /^src\/(lib\/coaching\/|components\/coaching\/)/;
+    const fake = { rel: "src/app/(app)/missions/page.tsx", text: 'svc.from("mission_goal_fit")' };
+    expect(/["']mission_goal_fit["']/.test(fake.text) && !allowed.test(fake.rel)).toBe(true);
+  });
+});

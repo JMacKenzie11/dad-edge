@@ -360,6 +360,21 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Coaching view (2026-11-10)
+
+Jason wanted somewhere in admin to pick a community and see each man's goals for the quarter, his recent missions, and coaching opportunities from mission alignment, execution and goal clarity. Planned from four angles: a group coach before his weekly call, triage-first design, signals the data can actually back, and protecting the men's trust. His calls (2026-11-10):
+
+- **Judge whether a mission fits its goal.** This reverses, for leaders only, the 2026-09-17 rule that the app never judges a man's choice of mission. Jason: "take a stab... if you're not able to do it well over time, I'll let you know and we can change it." The man never sees it: the coach, the mission scorer and every member page stay out of it, the table has no browser policies, and a source guard keeps the module off member routes. The model returns a verdict only (Moves the goal / Loosely related / No clear link), leans to the kinder verdict when unsure, and the page shows a fixed label, not model prose. A No clear link becomes a question for the leader to ask ("How does X get you closer to Y?"), not a verdict to pass on.
+- **Admins and leaders,** leaders for their own communities. Same page under `/admin/coaching` and `/leader/coaching`.
+- **No domain-balance flag.** "All his missions are in one domain" is a fact, but it sits too close to judging his choices.
+- **Wins from day one.** A coach who only reaches out when something's wrong trains the men to dread the call.
+- **Everything else is worked out the same way every time** from data the app already keeps, with a fixed sentence and a fixed opening question per flag, so two leaders see the same thing. Thresholds are starting points in `src/lib/coaching/signals.ts`.
+- **Members only.** The page lists men with the member role. Leaders aren't coached here, which also keeps out the platform admins who are added to every community as leaders. The viewer and admin-only accounts never appear.
+- **Reached out** is logged per man per community with an optional note. Anyone reached out to in the last week drops off Reach out, so two leaders don't double up.
+- **The Monday email** goes to each leader and admin once, covering all their communities, rather than one email per community (admins lead every community).
+- **What's never read:** coach conversations, the partner survey, partner and kids details. Every open of a man's page is audit-logged.
+- **How it stays honest:** the fit check passed six clear-cut cases three times each on the live model before shipping. Harder calls are where it may be wrong; Jason will say if it's misjudging.
+
 ## Partner survey saves every answer (2026-11-10)
 
 The Partner Connection Survey saved nothing until the last button, so a sit-down cut short (dinner, a kid, a dead phone) lost every answer. Jason: save whenever a question is answered, and let him come back to an unfinished survey and finish it. His calls (2026-11-10):

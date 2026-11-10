@@ -35,7 +35,7 @@ import { readFileSync } from "node:fs";
 import { isEntryPoint } from "./lib/entry";
 import { assertLinkedDev, runLinkedSql } from "./lib/supabase-cli";
 
-export type Who = "alice" | "bob" | "carol";
+export type Who = "alice" | "bob" | "carol" | "dave";
 
 export type Probe =
   | {
@@ -76,6 +76,7 @@ export type Observation = {
 //
 // Fixtures (all inside the rolled-back transaction):
 //   alice, bob: members of community A.   carol: leader of community B.
+//   dave: leader of community A.
 //   alice has a domain mission next week, a check-in, a reflection, a
 //   partner profile and a goal. Courses: open (published, all
 //   communities), draft (unpublished), onlyB (published, community B),
@@ -239,16 +240,40 @@ export const PROBES: Probe[] = [
     sql: `update public.missions set done_dates = '{}' where user_id = :bob and challenge_id = :chA and target_date = ${LOCKED_MON} + 4`, expect: "refuse", detail: /challenge_tick_locked/ },
   { id: "CH21", what: "bob can untick last Wednesday while the week is open", kind: "write", as: "bob",
     sql: `update public.missions set done_dates = target_dates[1:1] where user_id = :bob and challenge_id = :chA and target_date = ${LAST_MON} + 4`, expect: "allow" },
+  // Coaching: fit calls, reach-out notes and digest sends are server-only.
+  // No browser session reads or writes them: not the man, not a
+  // community-mate, not even his leader (the pages read them with the
+  // service role after the leader check). DECISIONS.md "Coaching view".
+  { id: "CO1", what: "alice can't read the fit calls on her own missions", kind: "read", as: "alice",
+    sql: "select count(*) from public.mission_goal_fit f join public.missions m on m.id = f.mission_id where m.user_id = :alice", control: "select count(*) from public.mission_goal_fit f join public.missions m on m.id = f.mission_id where m.user_id = :alice", expect: "zero" },
+  { id: "CO2", what: "bob (same community) can't read alice's fit calls", kind: "read", as: "bob",
+    sql: "select count(*) from public.mission_goal_fit f join public.missions m on m.id = f.mission_id where m.user_id = :alice", control: "select count(*) from public.mission_goal_fit f join public.missions m on m.id = f.mission_id where m.user_id = :alice", expect: "zero" },
+  { id: "CO3", what: "dave (her leader) can't read fit calls from a browser session", kind: "read", as: "dave",
+    sql: "select count(*) from public.mission_goal_fit", control: "select count(*) from public.mission_goal_fit f join public.missions m on m.id = f.mission_id where m.user_id = :alice", expect: "zero" },
+  { id: "CO4", what: "alice can't write a fit call on her own mission", kind: "write", as: "alice",
+    sql: "update public.mission_goal_fit set verdict = 'moves_it' where mission_id in (select id from public.missions where user_id = :alice)", expect: "refuse" },
+  { id: "CO5", what: "alice can't read the reach-out notes about her", kind: "read", as: "alice",
+    sql: "select count(*) from public.coaching_followups where member_user_id = :alice", control: "select count(*) from public.coaching_followups where member_user_id = :alice", expect: "zero" },
+  { id: "CO6", what: "bob can't read the reach-out notes about alice", kind: "read", as: "bob",
+    sql: "select count(*) from public.coaching_followups where member_user_id = :alice", control: "select count(*) from public.coaching_followups where member_user_id = :alice", expect: "zero" },
+  { id: "CO7", what: "carol (leader of another community) can't read them", kind: "read", as: "carol",
+    sql: "select count(*) from public.coaching_followups where member_user_id = :alice", control: "select count(*) from public.coaching_followups where member_user_id = :alice", expect: "zero" },
+  { id: "CO8", what: "dave can't write a reach-out note from a browser session", kind: "write", as: "dave",
+    sql: "insert into public.coaching_followups (community_id, member_user_id, author_user_id, note) values (:commA, :alice, :dave, 'via browser')", expect: "refuse" },
+  { id: "CO9", what: "dave can't read the digest send log from a browser session", kind: "read", as: "dave",
+    sql: "select count(*) from public.coaching_digests where user_id = :dave", control: "select count(*) from public.coaching_digests where user_id = :dave", expect: "zero" },
+  { id: "CO10", what: "a control: dave (her leader) can read alice's goals", kind: "read", as: "dave",
+    sql: "select count(*) from public.quarterly_goals where user_id = :alice", control: "select count(*) from public.quarterly_goals where user_id = :alice", expect: "some" },
 ];
 
 // ---------------------------------------------------------------------------
 // SQL generation
 // ---------------------------------------------------------------------------
 
-export type Ids = Record<"alice" | "bob" | "carol" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection" | "chA", string>;
+export type Ids = Record<"alice" | "bob" | "carol" | "dave" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection" | "chA", string>;
 
 export function newIds(): Ids {
-  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection", "chA"];
+  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "dave", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection", "chA"];
   return Object.fromEntries(keys.map((k) => [k, randomUUID()])) as Ids;
 }
 
@@ -262,13 +287,13 @@ export function bind(sql: string, ids: Ids): string {
 const q = (s: string) => `$q$${s}$q$`;
 
 function fixturesSql(ids: Ids): string {
-  const users = (["alice", "bob", "carol"] as const)
+  const users = (["alice", "bob", "carol", "dave"] as const)
     .map((u) => `('${ids[u]}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'zz-probe-${u}-${ids[u].slice(0, 8)}@braveman.test', now(), now())`)
     .join(",\n    ");
   return `
   insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at) values
     ${users};
-  update public.users set subscription_status = 'comped', onboarding_step = 6 where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}');
+  update public.users set subscription_status = 'comped', onboarding_step = 6 where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}', '${ids.dave}');
   insert into public.communities (id, name, slug) values
     ('${ids.commA}', '[IT-TEST] probe A', 'zz-probe-a-${ids.commA.slice(0, 8)}'),
     ('${ids.commB}', '[IT-TEST] probe B', 'zz-probe-b-${ids.commB.slice(0, 8)}');
@@ -278,7 +303,8 @@ function fixturesSql(ids: Ids): string {
   insert into public.memberships (user_id, community_id, role, status) values
     ('${ids.alice}', '${ids.commA}', 'member', 'active'),
     ('${ids.bob}', '${ids.commA}', 'member', 'active'),
-    ('${ids.carol}', '${ids.commB}', 'leader', 'active');
+    ('${ids.carol}', '${ids.commB}', 'leader', 'active'),
+    ('${ids.dave}', '${ids.commA}', 'leader', 'active');
   insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by)
     values ('${ids.alice}', '${ids.commA}', 'Call her at lunch Tuesday', 'B', ${NEXT_MON} + 1, array[${NEXT_MON} + 1], 'user');
   insert into public.daily_checkins (user_id, date, pillar_code, value) values ('${ids.alice}', current_date, 'B', 1);
@@ -319,6 +345,16 @@ function fixturesSql(ids: Ids): string {
       execute $c$update public.missions set done_dates = array[${LOCKED_MON}] where user_id = '${ids.bob}' and target_date = ${LOCKED_MON} + 4$c$;
     end if;
     execute $c$insert into public.weeks (community_id, start_date, locked_at) values ('${ids.commA}', ${LOCKED_MON}, now())$c$;
+  end if;
+  -- Coaching rows about alice (once the coaching migration exists).
+  if to_regclass('public.mission_goal_fit') is not null then
+    execute $c$insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by, quarterly_goal_id)
+      select '${ids.alice}', '${ids.commA}', 'Deadlift 5x5 at 255 Tuesday', 'V', ${NEXT_MON} + 1, array[${NEXT_MON} + 1], 'user', id
+      from public.quarterly_goals where user_id = '${ids.alice}' and focus_area = 'V' limit 1$c$;
+    execute $c$insert into public.mission_goal_fit (mission_id, goal_id, verdict, input_hash, model)
+      select id, quarterly_goal_id, 'no_link', 'zzprobe', 'zz-probe' from public.missions where user_id = '${ids.alice}' and quarterly_goal_id is not null$c$;
+    execute $c$insert into public.coaching_followups (community_id, member_user_id, author_user_id, note) values ('${ids.commA}', '${ids.alice}', '${ids.dave}', 'Talked Tuesday')$c$;
+    execute $c$insert into public.coaching_digests (user_id, week_start) values ('${ids.dave}', current_date)$c$;
   end if;
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.

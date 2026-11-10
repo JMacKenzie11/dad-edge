@@ -1,0 +1,33 @@
+{
+  "route_pattern": "/leader/coaching/[userId]",
+  "view_key": null,
+  "role": "leader",
+  "elements": [
+    {
+      "kind": "link",
+      "label": "←"
+    },
+    {
+      "kind": "link",
+      "label": "MESSAGE HIM"
+    },
+    {
+      "kind": "field",
+      "label": "What you talked about (optional). Only leaders and admins see this."
+    },
+    {
+      "kind": "button",
+      "label": "Log reach-out"
+    },
+    {
+      "kind": "button",
+      "label": "Remove"
+    }
+  ],
+  "source_hash": "354c193b1984c2b0",
+  "source_files": [
+    "src/app/(leader)/leader/coaching/[userId]/page.tsx",
+    "src/app/(leader)/leader/coaching/[userId]/man-view.tsx",
+    "src/app/(leader)/leader/coaching/[userId]/reach-out.tsx"
+  ]
+}

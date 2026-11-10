@@ -10,6 +10,8 @@ import { runExemplarNovelty } from "@/lib/jobs/exemplar-novelty";
 import { runGoalMidpointCheck } from "@/lib/jobs/goal-midpoint-check";
 import { runMarkGoalsForReview } from "@/lib/jobs/mark-goals-for-review";
 import { runHelpContentAutoRegen } from "@/lib/jobs/help-content-auto-regen";
+import { runMissionGoalFit } from "@/lib/jobs/mission-goal-fit";
+import { runCoachingDigest } from "@/lib/jobs/coaching-digest";
 import { auditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -71,6 +73,12 @@ export async function POST(req: NextRequest) {
       break;
     case "mark-goals-for-review":
       result = await runMarkGoalsForReview(now);
+      break;
+    case "mission-goal-fit":
+      result = await runMissionGoalFit(now);
+      break;
+    case "coaching-digest":
+      result = await runCoachingDigest(now, { force });
       break;
     case "help-content-auto-regen":
       result = await runHelpContentAutoRegen();
