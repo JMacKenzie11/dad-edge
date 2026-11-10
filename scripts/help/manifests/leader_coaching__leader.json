@@ -6,13 +6,9 @@
     {
       "kind": "header",
       "label": "Coaching"
-    },
-    {
-      "kind": "link",
-      "label": "No check-ins yet"
     }
   ],
-  "source_hash": "8e46c2ab922a10fd",
+  "source_hash": "cb474ac25941e32f",
   "source_files": [
     "src/app/(leader)/leader/coaching/page.tsx",
     "src/app/(leader)/leader/coaching/community-view.tsx"
