@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { addKid, finishKids } from "../actions";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "../step-progress";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function KidsStep({
 
   return (
     <div>
-      <StepProgress step={5} total={6} />
+      <StepProgress step={stepNumber(STEP.kids)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">Your kids.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Optional. Add one at a time. Only you see this.

@@ -1,12 +1,12 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/session";
+import { ONBOARDING_STEPS_TOTAL, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  if (user.onboarding_step >= 7) redirect("/today");
+  if (user.onboarding_step >= ONBOARDING_STEPS_TOTAL) redirect("/today");
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -18,6 +18,7 @@
  * Refuses anything but the dev database, by project id (scripts/lib/target.ts).
  */
 import { randomBytes } from "node:crypto";
+import { ONBOARDING_COURSE_SLUG, ONBOARDING_STEPS_TOTAL } from "../src/lib/onboarding/steps";
 import { addDays, format, startOfWeek } from "date-fns";
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -98,7 +99,7 @@ async function main(): Promise<void> {
         first_name: `E2E ${role[0].toUpperCase()}${role.slice(1)}`,
         last_name: "Tester",
         subscription_status: "comped",
-        onboarding_step: 6,
+        onboarding_step: ONBOARDING_STEPS_TOTAL,
         is_platform_admin: role === "admin",
         is_admin_only: false,
         itc_access: role === "coachee",
@@ -124,7 +125,9 @@ async function main(): Promise<void> {
   await svc.from("missions").delete().eq("user_id", ids.member).gte("target_date", week[0]).lte("target_date", week[6]);
   await svc.from("quarterly_goals").delete().eq("user_id", ids.member).eq("source", "user");
   const q = new Date();
-  const quarterStart = format(new Date(Date.UTC(q.getUTCFullYear(), Math.floor(q.getUTCMonth() / 3) * 3, 1)), "yyyy-MM-dd");
+  // toISOString, not format(): format() prints in the Mac's timezone, and in
+  // Eastern time midnight UTC on Oct 1 comes out as Sep 30 (FM-4).
+  const quarterStart = new Date(Date.UTC(q.getUTCFullYear(), Math.floor(q.getUTCMonth() / 3) * 3, 1)).toISOString().slice(0, 10);
   const goal = await svc.from("quarterly_goals").insert({
     user_id: ids.member,
     quarter_start: quarterStart,
@@ -166,6 +169,41 @@ async function main(): Promise<void> {
     ]);
   } else {
     await svc.from("courses").update({ is_published: true }).eq("id", (course as { id: string }).id);
+  }
+
+  // The onboarding videos (src/lib/onboarding/videos.ts) read the course
+  // with slug "welcome". Same two public Vimeo videos as production.
+  const { data: welcome } = await svc.from("courses").select("id").eq("slug", ONBOARDING_COURSE_SLUG).maybeSingle();
+  if (!welcome) {
+    const ins = await svc
+      .from("courses")
+      .insert({ title: "Welcome, Gents! Watch Here How To Navigate The App.", slug: ONBOARDING_COURSE_SLUG, is_published: true, is_pinned: true, sort_order: 0 })
+      .select("id")
+      .single();
+    if (ins.error) throw ins.error;
+    const l = await svc.from("lessons").insert([
+      {
+        course_id: ins.data.id,
+        title: "Welcome Video",
+        sort_order: 0,
+        vimeo_url: "https://vimeo.com/1242398711",
+        vimeo_video_id: "1242398711",
+        vimeo_duration_seconds: 456,
+        vimeo_thumbnail_url: "https://i.vimeocdn.com/video/2220635834-2e9813a6e5d5309899a22567385b3906f5b9cf084437bb9d137bba862119558a-d_960?region=us",
+      },
+      {
+        course_id: ins.data.id,
+        title: "How To Navigate The App",
+        sort_order: 1,
+        vimeo_url: "https://vimeo.com/1242398748",
+        vimeo_video_id: "1242398748",
+        vimeo_duration_seconds: 917,
+        vimeo_thumbnail_url: "https://i.vimeocdn.com/video/2220635814-5fa0e18ec01a65a53873312974f65efbc80cd910480738597f1e415f0de3d8b6-d_960?region=us",
+      },
+    ]);
+    if (l.error) throw l.error;
+  } else {
+    await svc.from("courses").update({ is_published: true }).eq("id", welcome.id);
   }
 
   console.log(`[seed:e2e] ready on ${url}: community ${E2E_COMMUNITY_SLUG}, ${E2E_ROLES.length} accounts, course ${E2E_COURSE_SLUG}.`);

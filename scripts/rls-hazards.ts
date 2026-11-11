@@ -31,6 +31,7 @@
  * docs/failure-modes.md FM-6 for why.
  */
 import { randomUUID } from "node:crypto";
+import { ONBOARDING_STEPS_TOTAL } from "../src/lib/onboarding/steps";
 import { readFileSync } from "node:fs";
 import { isEntryPoint } from "./lib/entry";
 import { assertLinkedDev, runLinkedSql } from "./lib/supabase-cli";
@@ -293,7 +294,7 @@ function fixturesSql(ids: Ids): string {
   return `
   insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at) values
     ${users};
-  update public.users set subscription_status = 'comped', onboarding_step = 6 where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}', '${ids.dave}');
+  update public.users set subscription_status = 'comped', onboarding_step = ${ONBOARDING_STEPS_TOTAL} where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}', '${ids.dave}');
   insert into public.communities (id, name, slug) values
     ('${ids.commA}', '[IT-TEST] probe A', 'zz-probe-a-${ids.commA.slice(0, 8)}'),
     ('${ids.commB}', '[IT-TEST] probe B', 'zz-probe-b-${ids.commB.slice(0, 8)}');

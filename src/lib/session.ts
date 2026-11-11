@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ONBOARDING_STEPS_TOTAL, onboardingRouteFor } from "@/lib/onboarding/steps";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { canAccess, type SubscriptionSource, type SubscriptionStatus } from "@/lib/entitlement";
 
@@ -122,29 +123,7 @@ export async function requireAccess(options?: {
   return { user, readOnly: decision.access === "read_only" };
 }
 
-/** Total number of onboarding steps in the active wizard flow.
- *
- *  History:
- *   - 7 originally (identity → why → partner → kids → goal → mission
- *     → first-checkin).
- *   - Bumped to 8 with the /onboarding/profile step inserted at step 1.
- *   - Dropped back to 6 (2026-08-24) when goal + mission were hidden.
- *     The pages themselves still exist and can be re-enabled by
- *     restoring them to onboardingRouteFor and bumping this back to 8.
- */
-export const ONBOARDING_STEPS_TOTAL = 6;
-
-export function onboardingRouteFor(step: number): string {
-  switch (step) {
-    case 0: return "/onboarding";
-    case 1: return "/onboarding/profile";
-    case 2: return "/onboarding/why";
-    case 3: return "/onboarding/partner";
-    case 4: return "/onboarding/kids";
-    case 5: return "/onboarding/first-checkin";
-    default: return "/today";
-  }
-}
+export { ONBOARDING_STEPS_TOTAL, onboardingRouteFor } from "@/lib/onboarding/steps";
 
 export async function ensureFullAccess() {
   const { readOnly } = await requireAccess();

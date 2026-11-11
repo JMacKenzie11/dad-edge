@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { ONBOARDING_STEPS_TOTAL } from "@/lib/onboarding/steps";
 
 /**
  * Bridge an itc_participants row to a public.users row (creating the
@@ -13,7 +14,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
  *      (participants.user_id = users.id) and return.
  *   3. No existing user — create an auth.users row via the admin API
  *      (triggers handle_new_auth_user which inserts a users row), then
- *      patch the users row to comped + onboarding_step=7 so ITC-only
+ *      patch the users row to comped + onboarding_step=done so ITC-only
  *      coachees who later touch the main app don't land in a stuck
  *      onboarding state or a broken subscription gate. Link + return.
  *
@@ -71,7 +72,7 @@ export async function ensureUserForItcParticipant(
   }
 
   // Path 3: create auth.users → users trigger fires → then patch to
-  // comped + onboarding_step=7.
+  // comped + onboarding_step=done.
   const { data: authCreate, error: authErr } = await supabase.auth.admin.createUser({
     email: normalizedEmail,
     email_confirm: true, // ITC-only coachee; can claim via magic link later
@@ -86,12 +87,12 @@ export async function ensureUserForItcParticipant(
 
   // The handle_new_auth_user trigger inserted a users row with
   // subscription_status='trialing' and onboarding_step=0. Patch to
-  // 'comped' + onboarding_step=7 so ITC-only users pass the
+  // 'comped' + onboarding_step=done so ITC-only users pass the
   // entitlement gate and don't get bounced into onboarding if they
   // ever land on /today.
   const { error: patchErr } = await supabase
     .from("users")
-    .update({ subscription_status: "comped", onboarding_step: 7 })
+    .update({ subscription_status: "comped", onboarding_step: ONBOARDING_STEPS_TOTAL })
     .eq("id", newUserId);
   if (patchErr) {
     // Non-fatal — the row exists; log and continue. ITC will still

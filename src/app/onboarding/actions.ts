@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { currentUserHasItcAccess, requireUser } from "@/lib/session";
+import { onboardingRouteFor, requireUser } from "@/lib/session";
+import { STEP } from "@/lib/onboarding/steps";
+import { advanceOnboarding, wizardExit } from "@/lib/onboarding/advance";
+import { loadOnboardingVideo } from "@/lib/onboarding/videos";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { validateMissionConcreteness } from "@/lib/validation/mission";
@@ -14,12 +17,7 @@ const RelationshipLabel = z.enum(["wife", "husband", "partner", "girlfriend", "b
 
 async function bumpStep(next: number) {
   const user = await requireUser();
-  const supabase = await createSupabaseServerClient();
-  await supabase
-    .from("users")
-    .update({ onboarding_step: next })
-    .eq("id", user.id)
-    .lt("onboarding_step", next);
+  await advanceOnboarding(user.id, next);
 }
 
 const EmploymentTypeSchema = z.enum([
@@ -59,7 +57,7 @@ export async function saveIdentity(formData: FormData) {
       employment_type: parsed.data.employment_type ?? null,
     })
     .eq("id", user.id);
-  await bumpStep(1);
+  await bumpStep(STEP.profile);
   redirect("/onboarding/profile");
 }
 
@@ -136,12 +134,12 @@ export async function saveProfile(formData: FormData) {
 
   const supabase = await createSupabaseServerClient();
   await supabase.from("users").update(updates).eq("id", user.id);
-  await bumpStep(2);
+  await bumpStep(STEP.why);
   redirect("/onboarding/why");
 }
 
 export async function skipProfile() {
-  await bumpStep(2);
+  await bumpStep(STEP.why);
   redirect("/onboarding/why");
 }
 
@@ -151,7 +149,7 @@ export async function saveWhy(formData: FormData) {
   if (why.length < 8) redirect("/onboarding/why?error=Give+it+a+real+answer.");
   const supabase = await createSupabaseServerClient();
   await supabase.from("users").update({ why_yes: why }).eq("id", user.id);
-  await bumpStep(3);
+  await bumpStep(STEP.partner);
   redirect("/onboarding/partner");
 }
 
@@ -195,12 +193,12 @@ export async function savePartner(formData: FormData) {
       { onConflict: "user_id" },
     );
   }
-  await bumpStep(4);
+  await bumpStep(STEP.kids);
   redirect("/onboarding/kids");
 }
 
 export async function skipPartner() {
-  await bumpStep(4);
+  await bumpStep(STEP.kids);
   redirect("/onboarding/kids");
 }
 
@@ -230,11 +228,10 @@ export async function addKid(formData: FormData) {
 }
 
 export async function finishKids() {
-  // Goal + mission steps are temporarily hidden — jump straight from
-  // kids to first-checkin. The pages exist and can be reintroduced
-  // by restoring them to onboardingRouteFor + bumping the step count
-  // in session.ts.
-  await bumpStep(5);
+  // Goal + mission steps are hidden: kids goes straight to the first
+  // check-in. Their pages still exist (see src/lib/onboarding/steps.ts);
+  // their actions now only move him as far as the first check-in.
+  await bumpStep(STEP.firstCheckin);
   redirect("/onboarding/first-checkin");
 }
 
@@ -268,7 +265,7 @@ export async function saveFirstGoal(formData: FormData) {
     midpoint_check_at: midpointCheckAt,
   });
   if (goalErr) redirect(`/onboarding/goal?error=${encodeURIComponent("That goal didn't save. Try again.")}`);
-  await bumpStep(6);
+  await bumpStep(STEP.firstCheckin);
   redirect("/onboarding/mission");
 }
 
@@ -312,7 +309,7 @@ export async function saveFirstMission(formData: FormData) {
     const today = new Date().toISOString().slice(0, 10);
     redirect(`/onboarding/mission?error=${encodeURIComponent(friendlyMissionError(missionErr, today))}`);
   }
-  await bumpStep(7);
+  await bumpStep(STEP.firstCheckin);
   redirect("/onboarding/first-checkin");
 }
 
@@ -344,9 +341,33 @@ export async function saveFirstCheckin(formData: FormData) {
   await supabase
     .from("daily_checkins")
     .upsert(rows, { onConflict: "user_id,date,pillar_code" });
-  await bumpStep(6);
-  // ITC users land back on /itc after finishing the wizard (that's
-  // the surface they came in for). Everyone else goes to /today.
-  const hasItc = await currentUserHasItcAccess();
-  redirect(hasItc ? "/itc" : "/today");
+  await bumpStep(STEP.tourVideo);
+  redirect(onboardingRouteFor(STEP.tourVideo));
+}
+
+const VideoStepSchema = z.object({
+  step: z.coerce.number().refine((n) => n === STEP.welcomeVideo || n === STEP.tourVideo),
+});
+
+/**
+ * "I've watched it" on one of the two onboarding videos. The button only
+ * unlocks once the player says he's seen 90% of it (watch-progress.ts);
+ * the server doesn't second-guess that. It records the lesson as done in
+ * the Resource Library and moves him on.
+ */
+export async function finishOnboardingVideo(formData: FormData) {
+  const user = await requireUser();
+  const parsed = VideoStepSchema.safeParse({ step: formData.get("step") });
+  if (!parsed.success) redirect(onboardingRouteFor(user.onboarding_step));
+  const step = parsed.data.step;
+  const video = await loadOnboardingVideo(user.id, step === STEP.welcomeVideo ? 0 : 1);
+  if (video && !video.done) {
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase
+      .from("lesson_completions")
+      .upsert({ user_id: user.id, lesson_id: video.lessonId }, { onConflict: "user_id,lesson_id", ignoreDuplicates: true });
+    if (error) redirect(`${onboardingRouteFor(step)}?error=${encodeURIComponent("That didn't save. Try again.")}`);
+  }
+  await bumpStep(step + 1);
+  redirect(step === STEP.tourVideo ? await wizardExit() : onboardingRouteFor(step + 1));
 }

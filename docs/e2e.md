@@ -24,7 +24,7 @@ npm run e2e        # starts the dev server on :3300 in UTC if it isn't running
 
 The specs sign in through `e2e/fixtures.ts`, which reads `E2E_<ROLE>_EMAIL` and `E2E_<ROLE>_PASSWORD` from `.env.local`. If one is missing, the test fails naming the variable. The seed prints those lines whenever it has to make up a password; copy them into `.env.local`.
 
-The seed also makes sure a published "E2E Course" exists, visible to all communities.
+The seed also makes sure a published "E2E Course" exists, visible to all communities. It also makes sure the `welcome` course exists with the same two Vimeo videos as production, because the onboarding wizard opens and closes with them (`e2e/onboarding-videos.spec.ts` makes its own throwaway account to walk through them).
 
 ## After a database refresh
 

@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/onboarding/welcome",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "Start here."
+    }
+  ],
+  "source_hash": "c863ce9136170084",
+  "source_files": [
+    "src/app/onboarding/welcome/page.tsx"
+  ]
+}

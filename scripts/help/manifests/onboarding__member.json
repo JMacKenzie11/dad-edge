@@ -37,6 +37,7 @@
     "src/app/onboarding/page.tsx",
     "src/app/onboarding/actions.ts",
     "src/app/onboarding/layout.tsx",
-    "src/app/onboarding/step-progress.tsx"
+    "src/app/onboarding/step-progress.tsx",
+    "src/app/onboarding/video-step.tsx"
   ]
 }

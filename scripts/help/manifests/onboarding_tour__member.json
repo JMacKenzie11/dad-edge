@@ -1,0 +1,15 @@
+{
+  "route_pattern": "/onboarding/tour",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "One last thing."
+    }
+  ],
+  "source_hash": "a1249424cd3b11ab",
+  "source_files": [
+    "src/app/onboarding/tour/page.tsx"
+  ]
+}

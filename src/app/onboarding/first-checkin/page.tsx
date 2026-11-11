@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { localDate } from "@/lib/scoring/week";
 import { FirstCheckinForm } from "./first-checkin-form";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "../step-progress";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function FirstCheckinStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={6} total={6} />
+      <StepProgress step={stepNumber(STEP.firstCheckin)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">Log today.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Day one is never a zero. Mark each pillar: done, missed, or blank.

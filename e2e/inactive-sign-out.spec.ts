@@ -17,7 +17,7 @@ test("an ended account can sign out from /inactive and sign in as someone else",
   if (error) throw error;
   const id = data.user.id;
   try {
-    await db.from("users").update({ subscription_status: "canceled", subscription_source: "stripe", canceled_at: new Date().toISOString(), onboarding_step: 6 }).eq("id", id);
+    await db.from("users").update({ subscription_status: "canceled", subscription_source: "stripe", canceled_at: new Date().toISOString(), onboarding_step: 8 }).eq("id", id);
 
     await page.goto("/login");
     await page.fill('input[name="email"]', email);
