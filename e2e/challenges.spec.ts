@@ -99,10 +99,12 @@ test("a leader sets a challenge; a member joins, marks today done and leaves", a
     await asMember.goto("/community?tab=challenges");
     const board = asMember.getByRole("region", { name: `Challenge: ${name}` });
     const mine = board.locator("li", { hasText: "(YOU)" });
-    // He joined today and ticked today: one day of one so far.
-    await expect(mine.locator("[data-days-done]")).toHaveText("1 OF 1 DAYS");
-    await expect(mine.locator('[data-week-ticks="1"]')).toHaveCount(1);
-    await expect(mine.locator(`[data-week-state="${weekTarget === 1 ? "done" : "open"}"]`)).toHaveCount(1);
+    // Every day of the week for two weeks: 14 challenge days. He ticked
+    // today, the only day so far, so he's on pace (green). Since
+    // 2026-11-01 the board counts out of the whole challenge, not the
+    // days so far, and has no week squares.
+    await expect(mine.locator("[data-days-done]")).toHaveText("1 OF 14 DAYS");
+    await expect(mine.locator("[data-days-done]")).toHaveClass(/color-success/);
     if (shots) await board.screenshot({ path: `${shots}/4-member-board.png` });
 
     // Leaving, removing what's left: the board offers I'M IN again.
