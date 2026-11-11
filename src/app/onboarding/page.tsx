@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { saveIdentity } from "./actions";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "./step-progress";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export default async function OnboardingStart({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={1} total={6} />
+      <StepProgress step={stepNumber(STEP.identity)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">Who are you?</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Basics your coach uses. Not a settings form.

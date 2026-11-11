@@ -12,6 +12,7 @@
  */
 
 import { config as loadEnv } from "dotenv";
+import { ONBOARDING_STEPS_TOTAL } from "../src/lib/onboarding/steps";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { addDays, format, startOfWeek } from "date-fns";
 import { isEntryPoint } from "./lib/entry";
@@ -224,7 +225,7 @@ async function main() {
         timezone: seed.timezone,
         subscription_status: "comped",
         subscription_source: "manual",
-        onboarding_step: 7,
+        onboarding_step: ONBOARDING_STEPS_TOTAL,
       })
       .eq("id", userId);
 

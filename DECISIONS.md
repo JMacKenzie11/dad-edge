@@ -360,6 +360,16 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Onboarding videos (2026-11-10)
+
+Jason wanted the two videos on the Resources welcome course (a 7½-minute welcome and a 15-minute app tour) at the start of onboarding, with the wizard going on once he marks them complete. He took these calls (2026-11-10):
+
+- **Split them.** The welcome video opens the wizard and the app tour closes it, after the first check-in and right before he lands on Today. Twenty-two minutes before he's typed his name loses men, and a tour of screens he hasn't seen yet doesn't stick.
+- **The button unlocks when he's watched it,** at 90% of the video played through. Dragging the slider ahead doesn't count. A video he finished before (in Resources) is unlocked at once. The server trusts the button; the point is to stop the reflex click at 0:05, not to police him.
+- **Never trap him.** If Vimeo can't load or breaks, the button unlocks and says he can watch it later in Resources. If the course is unpublished or the lesson has no video, the step skips itself. A missing video must never stop a paid sign-up.
+- **Use the Resources course itself, not a copy.** The wizard reads the first two lessons of the course with slug `welcome`, so swapping a video in Admin > Courses changes onboarding with no deploy, and finishing one in the wizard marks it complete in the library.
+- **Men already onboarded don't see them.** Migration `20261110000003_onboarding_videos.sql` moves finished men to the new "done" (8) and shifts men partway through by one so each stays on the same screen. It has to run before the code deploys: the new code would read the old "done" (6) as the first check-in.
+
 ## Coaching view (2026-11-10)
 
 Jason wanted somewhere in admin to pick a community and see each man's goals for the quarter, his recent missions, and coaching opportunities from mission alignment, execution and goal clarity. Planned from four angles: a group coach before his weekly call, triage-first design, signals the data can actually back, and protecting the men's trust. His calls (2026-11-10):

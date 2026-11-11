@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { savePartner, skipPartner } from "../actions";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "../step-progress";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ const LABELS = ["wife", "partner", "girlfriend", "fiancee", "husband", "boyfrien
 export default async function PartnerStep() {
   return (
     <div>
-      <StepProgress step={4} total={6} />
+      <StepProgress step={stepNumber(STEP.partner)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">Your partner.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Optional. Only you see this. Your coach uses it. Your group never does.

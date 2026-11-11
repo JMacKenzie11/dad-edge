@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "../step-progress";
 import { ProfileForm } from "./profile-form";
 
@@ -13,7 +14,7 @@ export default async function ProfileStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={2} total={6} />
+      <StepProgress step={stepNumber(STEP.profile)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">Add your photo.</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         A photo, where you&apos;re based, and how to reach you. All optional —

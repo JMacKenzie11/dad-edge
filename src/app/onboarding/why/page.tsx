@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { saveWhy } from "../actions";
+import { ONBOARDING_STEPS_TOTAL, STEP, stepNumber } from "@/lib/onboarding/steps";
 import { StepProgress } from "../step-progress";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function WhyStep({
   const params = await searchParams;
   return (
     <div>
-      <StepProgress step={3} total={6} />
+      <StepProgress step={stepNumber(STEP.why)} total={ONBOARDING_STEPS_TOTAL} />
       <h1 className="font-heading text-3xl mb-2">What made you say yes to this?</h1>
       <p className="text-sm text-[color:var(--color-text-muted)] mb-6">
         Your coach reads this first.

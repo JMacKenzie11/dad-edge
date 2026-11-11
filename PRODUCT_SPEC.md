@@ -3,6 +3,7 @@
 _Snapshot of current app behavior as of 2026-09-01. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
 
 _Change log since 2026-08-20 snapshot:_
+- **Onboarding videos (2026-11-10):** the wizard opens with the welcome video and ends with the app tour video, the first two lessons of the Resource Library course `welcome`. Each step's button unlocks once he has played through 90% of the video, or at once if he finished it before; finishing one marks the lesson complete in the library. Eight steps now (was six). Migration `20261110000003_onboarding_videos.sql` renumbers `users.onboarding_step`; men who had finished onboarding don't see the videos. See §3.2.
 - **Goals link at the top of Missions (2026-11-03):** the phone's bottom bar has no Goals tab, and the only way there was YOUR GOALS → far down the Missions page. The Missions header now has YOUR GOALS → (SET A GOAL → when he has no open goal), in view without scrolling.
 - **Next week opens every day (2026-11-03):** the forward arrow on `/missions` reaches next week any day, not only on Sundays, so a man can set next week's missions before it starts. Still one week ahead at most. The Sunday "plan next week before it hits" line stays.
 - **Too-short missions say so (2026-11-02):** a mission under eight characters ("Weights") used to ignore Enter without a word. The mission row now shows "Too short to save. Say what you'll do, like \"Lift weights for 45 minutes.\"" and keeps his words in the box; editing a saved one below eight puts the saved wording back with the same message. See Concreteness validator, FM-17.
@@ -177,20 +178,22 @@ Eight pillars, seven of which are self-reported daily; one is derived from missi
 
 **Send Invite / activation** (Supabase quirk): `type: "invite"` in `generateLink` rejects existing users ("A user with this email address has already been registered"). Since `createAccount` always pre-creates the auth row, admin invites use `type: "recovery"` under the hood with `redirectTo=/auth/callback?next=/set-password`. From the user's POV nothing changes — they click, land on `/set-password`, set a password.
 
-### 3.2 Onboarding (6 steps, tracked by `users.onboarding_step`)
+### 3.2 Onboarding (8 steps, tracked by `users.onboarding_step`)
 
-Total step count lives in `ONBOARDING_STEPS_TOTAL` in `src/lib/session.ts` (currently 6, was 8 before goal + mission were hidden — pages still exist and can be re-enabled by restoring them to `onboardingRouteFor` and bumping the constant back to 8). Redirects always resume the user at their current incomplete step; completion sends non-ITC users to `/today` and ITC users (`itc_access=true`) to `/itc`. Platform admins bypass the gate entirely (they can visit onboarding URLs directly but aren't force-redirected).
+The steps, their routes and `ONBOARDING_STEPS_TOTAL` live in `src/lib/onboarding/steps.ts`. `users.onboarding_step` is the index of the first step he hasn't finished (0 welcome video … 7 app tour); 8 means done. Redirects always resume the user at their current incomplete step; completion sends non-ITC users to `/today` and ITC users (`itc_access=true`) to `/itc`. Platform admins bypass the gate entirely (they can visit onboarding URLs directly but aren't force-redirected).
 
-1. `/onboarding` — **Identity.** First name, last name, timezone (11 presets), occupation, employment type (`w2` / `contract` / `self_employed` / `business_owner` / `other`).
-2. `/onboarding/profile` — **Profile.** Facebook-style circular avatar cropper (via `react-easy-crop`), city, cell phone. All optional; Skip button advances without saving. Cropper renders a 512×512 JPEG client-side and posts as a base64 data URL; server decodes and uploads to `avatars/{user_id}/profile.jpg` via the service client. Cache-busted public URL stored in `users.avatar_url`.
-3. `/onboarding/why` — **Why you're here.** Free-text captured to `users.why_yes`; fed to the coach later.
-4. `/onboarding/partner` — **Partner profile** (optional, skippable). Name, relationship label (`wife` / `husband` / `partner` / `girlfriend` / `boyfriend` / `fiancee`), partner birthdate, relationship date, three "things you love most about her" entries.
-5. `/onboarding/kids` — **Children** (optional, skippable, repeatable). Per child: name, birthdate, three "things you love most" entries.
-6. `/onboarding/first-checkin` — **First check-in.** Toggles across all 8 pillars for today, guaranteeing day-one activity.
+1. `/onboarding/welcome` — **Welcome video.** "Start here." The first lesson of the Resource Library course `welcome`, played in the page (Vimeo, no autoplay), with its length in minutes and an **I'VE WATCHED IT** button. The button unlocks once he has played through 90% of the video; dragging the slider ahead doesn't count (`src/lib/onboarding/watch-progress.ts`). Under it: "You've watched m:ss of m:ss". It's unlocked at once if he marked that lesson complete before, and it unlocks if the player can't load within 20 seconds or breaks, so nobody is stuck. His spot is kept in the browser and the video resumes there. The click marks the lesson complete in the library (`lesson_completions`). If the course is unpublished, hidden from his communities, or the lesson has no video, the step skips itself.
+2. `/onboarding` — **Identity.** First name, last name, timezone (11 presets), occupation, employment type (`w2` / `contract` / `self_employed` / `business_owner` / `other`).
+3. `/onboarding/profile` — **Profile.** Facebook-style circular avatar cropper (via `react-easy-crop`), city, cell phone. All optional; Skip button advances without saving. Cropper renders a 512×512 JPEG client-side and posts as a base64 data URL; server decodes and uploads to `avatars/{user_id}/profile.jpg` via the service client. Cache-busted public URL stored in `users.avatar_url`.
+4. `/onboarding/why` — **Why you're here.** Free-text captured to `users.why_yes`; fed to the coach later.
+5. `/onboarding/partner` — **Partner profile** (optional, skippable). Name, relationship label (`wife` / `husband` / `partner` / `girlfriend` / `boyfriend` / `fiancee`), partner birthdate, relationship date, three "things you love most about her" entries.
+6. `/onboarding/kids` — **Children** (optional, skippable, repeatable). Per child: name, birthdate, three "things you love most" entries.
+7. `/onboarding/first-checkin` — **First check-in.** Toggles across all 8 pillars for today, guaranteeing day-one activity.
+8. `/onboarding/tour` — **App tour video.** "One last thing." The second lesson of the `welcome` course, the same player and rules as step 1, with a **TAKE ME TO THE APP** button that finishes onboarding. Skips itself (finishing onboarding) when there's no video.
 
 **Hidden (still routed if accessed directly):**
 - `/onboarding/goal` — first quarterly goal picker. Removed from the flow 2026-08-24 pending design work.
-- `/onboarding/mission` — first mission picker. Same status.
+- `/onboarding/mission` — first mission picker. Same status. Their actions move him on no further than the first check-in.
 
 ### 3.3 Member app (route group `(app)`)
 | Path | File | Purpose |
@@ -297,7 +300,7 @@ Cron
 Migrations live in `supabase/migrations/`. Schema highlights below.
 
 ### Core
-- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `is_admin_only` (backstage-only admin; CHECK `users_admin_only_requires_platform_admin` forces `is_platform_admin=true` when true), `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–6 with current flow), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
+- **`users`** — id (PK, mirrors `auth.users.id`), email (unique), first/last name, phone, timezone (default `America/Chicago`), `is_platform_admin`, `is_admin_only` (backstage-only admin; CHECK `users_admin_only_requires_platform_admin` forces `is_platform_admin=true` when true), `itc_access` (per-user flag granting `/itc` access; set by migration script or admin toggle), `invited_at` (stamped when Send Invite fires), `subscription_status` (`trialing` / `active` / `past_due` / `canceled` / `comped`), `subscription_source` (`manual` / `stripe`), `stripe_customer_id`, `canceled_at`, `onboarding_step` (0–7 is the next unfinished step, 8 done; `src/lib/onboarding/steps.ts`), `why_yes`, `occupation`, `employment_type`, `avatar_url` (cache-busted public URL from `avatars` bucket), `city`. Auto-populated by `handle_new_auth_user()` trigger on `auth.users` insert.
 - **`communities`** — name, unique slug, accent color, timezone, `leaderboard_enabled`, `missions_visible`, status (`active` / `archived`), `week_lock_days` (default 3).
 - **`memberships`** — one row per (user, community). Role (`member` / `leader`), status (`active` / `inactive` / `removed`), `joined_at`, `deactivated_at`, `canceled_visible_until` (= `deactivated_at + 30 days`). **Platform admins are auto-provisioned as `leader` in every community** via triggers `communities_grant_admins` (fires on community insert) and `users_grant_admin_communities` (fires when `is_platform_admin` flips true on insert or update). Backfill runs at migration time (`20260824000002`) for existing state. Idempotent via `on conflict (user_id, community_id) do nothing`.
 - **`membership_billing`** / **`stripe_events`** — Stripe billing per membership and the record of Stripe notifications; `communities.stripe_product_id` links a community to its Stripe product. See §5 "Stripe billing".
@@ -611,7 +614,7 @@ Three criteria, scored by the utility model at temperature 0 so the same mission
 ## 7. User Flows
 
 ### New member onboarding
-Admin creates account via `/admin/users` → admin hits Send Invite (branded Resend activation email from `dadedgeoperatingsystem.com`) → user clicks link → `/set-password` → sets password + gets signed in → wizard: identity → profile (avatar + city + phone) → why → optional partner → optional kids → first check-in → land on `/today` (or `/itc` if `itc_access=true`, or `/today` if admin regardless).
+Admin creates account via `/admin/users` → admin hits Send Invite (branded Resend activation email from `dadedgeoperatingsystem.com`) → user clicks link → `/set-password` → sets password + gets signed in → wizard: welcome video → identity → profile (avatar + city + phone) → why → optional partner → optional kids → first check-in → app tour video → land on `/today` (or `/itc` if `itc_access=true`, or `/today` if admin regardless).
 
 ### Daily check-in
 Open `/today` → see week total + streak → tap each pillar (cycle null → 1 → 0 → null) with optimistic UI → optionally fill Wins/Learnings for the coach.
@@ -1093,7 +1096,7 @@ Wiring lives in `src/lib/itc/tracker-link.ts`; called from the ITC server action
 `ensureUserForItcParticipant()` in `src/lib/itc/auth-bridge.ts` lazily bridges `itc_participants → public.users` on the first tracker-touching action:
 1. If `participant.user_id` already set → return.
 2. Match by normalized email against existing `public.users` → link and return.
-3. Otherwise create an `auth.users` row (via admin API, `email_confirm: true`) → trigger inserts `public.users` → patch to `subscription_status='comped'` + `onboarding_step=7` (so an ITC-only coachee who later touches the main app passes the entitlement gate and skips onboarding).
+3. Otherwise create an `auth.users` row (via admin API, `email_confirm: true`) → trigger inserts `public.users` → patch to `subscription_status='comped'` + `onboarding_step` done (`ONBOARDING_STEPS_TOTAL`) (so an ITC-only coachee who later touches the main app passes the entitlement gate and skips onboarding).
 
 ### Sync points
 
@@ -1136,7 +1139,7 @@ The migration described in earlier drafts of this section is done. Current state
 - **Data link** — `itc_maps.user_id` populated by the migration script so RLS and query paths can go through `auth.uid()` directly.
 - **Deny UX** — signed-in main-app users without `itc_access` land on `/itc/no-access` (friendly "Not for you yet" page).
 
-**Onboarding for ITC users.** Post-activation flow: click Send Invite email → `/set-password` → wizard (identity → profile → why → partner → kids → first-checkin) → `/itc` (their existing map, or landing if none). Admins skip the wizard.
+**Onboarding for ITC users.** Post-activation flow: click Send Invite email → `/set-password` → wizard (welcome video → identity → profile → why → partner → kids → first-checkin → app tour video) → `/itc` (their existing map, or landing if none). Admins skip the wizard.
 
 **Auth-phase decisions worth remembering:**
 - **`invite` type → `recovery` type in `generateLink`.** Supabase's `type: "invite"` refuses users that already exist in `auth.users`, which is every user we create via CREATE ACCOUNT. Switching to `type: "recovery"` with `redirectTo=/set-password` gives the same UX and works for existing users.

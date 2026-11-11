@@ -50,10 +50,10 @@ export function parseVimeoUrl(raw: string): ParsedVimeoUrl | null {
 
 /** Player URL for the lazy iframe. autoplay=1 because the man already
  *  clicked play on our thumbnail; dnt=1 keeps Vimeo from tracking him. */
-export function vimeoEmbedUrl(videoId: string, hash: string | null): string {
+export function vimeoEmbedUrl(videoId: string, hash: string | null, opts: { autoplay?: boolean } = {}): string {
   const params = new URLSearchParams();
   if (hash) params.set("h", hash);
-  params.set("autoplay", "1");
+  params.set("autoplay", opts.autoplay === false ? "0" : "1");
   params.set("dnt", "1");
   return `https://player.vimeo.com/video/${encodeURIComponent(videoId)}?${params.toString()}`;
 }

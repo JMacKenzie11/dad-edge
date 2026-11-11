@@ -2,9 +2,9 @@
  * Reset users.onboarding_step so they re-enter the wizard.
  *
  * Used after adding a new onboarding step to force existing "already
- * completed" users through the new step. Currently: /onboarding/profile
- * was added at step 1 (avatar + city + phone); existing users are at
- * step >= 7 (old completion) or step >= 8 (post-migration completion).
+ * completed" users through the new step. Step numbers live in
+ * src/lib/onboarding/steps.ts: 0 welcome video, 1 identity, 2 profile,
+ * 3 why, 4 partner, 5 kids, 6 first check-in, 7 app tour, 8 done.
  *
  * The script is data-modifying but idempotent: running it twice with
  * the same target step produces the same DB state.
@@ -19,10 +19,10 @@
  *     npm run reset:onboarding -- --apply
  *     npm run reset:onboarding -- --apply --email jason@example.com
  *
- *   Custom target step (default: 1, the new profile step):
+ *   Custom target step (default: 2, the profile step):
  *     npm run reset:onboarding -- --apply --step 0    (send them all the way back)
- *     npm run reset:onboarding -- --apply --step 1    (default — just profile)
- *     npm run reset:onboarding -- --apply --step 2    (skip profile too, land on why)
+ *     npm run reset:onboarding -- --apply --step 2    (default: profile onwards)
+ *     npm run reset:onboarding -- --apply --step 7    (just the app tour video)
  *
  * Behavior:
  *   - By default, only touches users whose current step is HIGHER
@@ -42,6 +42,7 @@
  */
 
 import dotenv from "dotenv";
+import { STEP } from "../src/lib/onboarding/steps";
 import { isEntryPoint } from "./lib/entry";
 import { assertDevTarget } from "./lib/target";
 dotenv.config({ path: ".env.local" });
@@ -117,7 +118,7 @@ function parseArgs() {
     apply: args.includes("--apply"),
     includeAdmins: args.includes("--include-admins"),
     email: null as string | null,
-    step: 1,
+    step: STEP.profile as number,
   };
   const emailIdx = args.indexOf("--email");
   if (emailIdx >= 0 && args[emailIdx + 1]) {

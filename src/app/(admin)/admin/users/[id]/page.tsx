@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ONBOARDING_STEPS_TOTAL } from "@/lib/onboarding/steps";
 import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
@@ -221,7 +222,7 @@ export default async function UserDetailPage({
         <div className="p-4 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-xs space-y-1">
           <p><span className="text-[color:var(--color-text-muted)]">Phone:</span> {u.phone ?? "—"}</p>
           <p><span className="text-[color:var(--color-text-muted)]">Timezone:</span> {u.timezone}</p>
-          <p><span className="text-[color:var(--color-text-muted)]">Onboarding:</span> step {u.onboarding_step ?? 0}/7</p>
+          <p><span className="text-[color:var(--color-text-muted)]">Onboarding:</span> {(u.onboarding_step ?? 0) >= ONBOARDING_STEPS_TOTAL ? "done" : `step ${(u.onboarding_step ?? 0) + 1} of ${ONBOARDING_STEPS_TOTAL}`}</p>
           <p><span className="text-[color:var(--color-text-muted)]">Signed up:</span> {format(new Date(u.created_at), "yyyy-MM-dd")}</p>
           <p>
             <span className="text-[color:var(--color-text-muted)]">Last seen:</span>{" "}

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/session";
+import { ONBOARDING_STEPS_TOTAL, requireUser } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DOMAIN_PILLARS } from "@/lib/pillars";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -25,13 +25,13 @@ export default async function MissionStep({
     .maybeSingle();
 
   if (!membership) {
-    // No community yet — skip mission + first-checkin and land somewhere useful.
-    // Bumping to 7 marks onboarding complete so /today doesn't bounce back here.
+    // No community yet: skip mission + first-checkin and land somewhere useful.
+    // Marking onboarding complete so /today doesn't bounce back here.
     await supabase
       .from("users")
-      .update({ onboarding_step: 7 })
+      .update({ onboarding_step: ONBOARDING_STEPS_TOTAL })
       .eq("id", user.id)
-      .lt("onboarding_step", 7);
+      .lt("onboarding_step", ONBOARDING_STEPS_TOTAL);
     redirect(user.is_platform_admin ? "/admin" : "/today");
   }
 
