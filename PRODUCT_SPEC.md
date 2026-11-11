@@ -3,6 +3,7 @@
 _Snapshot of current app behavior as of 2026-09-01. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
 
 _Change log since 2026-08-20 snapshot:_
+- **Cleaner video player (2026-11-10):** Vimeo videos (Resources lessons and the onboarding videos) no longer show the video's title, the owner's name or his profile picture over the video (`title=0&byline=0&portrait=0` in `vimeoEmbedUrl()`). The Vimeo logo and menu stay; those are set in the Vimeo account.
 - **Onboarding videos (2026-11-10):** the wizard opens with the welcome video and ends with the app tour video, the first two lessons of the Resource Library course `welcome`. Each step's button unlocks once he has played through 90% of the video, or at once if he finished it before; finishing one marks the lesson complete in the library. Eight steps now (was six). Migration `20261110000003_onboarding_videos.sql` renumbers `users.onboarding_step`; men who had finished onboarding don't see the videos. See §3.2.
 - **Goals link at the top of Missions (2026-11-03):** the phone's bottom bar has no Goals tab, and the only way there was YOUR GOALS → far down the Missions page. The Missions header now has YOUR GOALS → (SET A GOAL → when he has no open goal), in view without scrolling.
 - **Next week opens every day (2026-11-03):** the forward arrow on `/missions` reaches next week any day, not only on Sundays, so a man can set next week's missions before it starts. Still one week ahead at most. The Sunday "plan next week before it hits" line stays.
