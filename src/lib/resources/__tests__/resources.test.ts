@@ -50,6 +50,11 @@ describe("vimeo urls", () => {
   it("carries the privacy hash into the player URL, or unlisted videos won't play", () => {
     expect(vimeoEmbedUrl("1084537", "abc123def4")).toContain("h=abc123def4");
     expect(vimeoEmbedUrl("1084537", null)).not.toContain("h=");
+    // No video title, owner name or profile picture over the video.
+    const u = new URL(vimeoEmbedUrl("1084537", null));
+    expect(u.searchParams.get("title")).toBe("0");
+    expect(u.searchParams.get("byline")).toBe("0");
+    expect(u.searchParams.get("portrait")).toBe("0");
   });
   it("sends unlisted videos to oEmbed with the hash in the path", () => {
     expect(canonicalVimeoUrl("1084537", "abc123def4")).toBe("https://vimeo.com/1084537/abc123def4");
