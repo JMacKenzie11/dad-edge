@@ -191,6 +191,11 @@ The steps, their routes and `ONBOARDING_STEPS_TOTAL` live in `src/lib/onboarding
 7. `/onboarding/first-checkin` — **First check-in.** Toggles across all 8 pillars for today, guaranteeing day-one activity.
 8. `/onboarding/tour` — **App tour video.** "One last thing." The second lesson of the `welcome` course, the same player and rules as step 1, with a **TAKE ME TO THE APP** button that finishes onboarding. Skips itself (finishing onboarding) when there's no video.
 
+| Video step | File | What he sees |
+|---|---|---|
+| `/onboarding/welcome` | `src/app/onboarding/welcome/page.tsx` | Step 1 of 8, "Start here.": the welcome video from Resources plays on the page, with how many minutes it takes. Under it, **I've watched it** stays locked until he has watched nearly all of the video, with "You've watched m:ss of m:ss" counting up as he plays it. Skipping ahead in the video doesn't count. If he leaves, the video picks up where he stopped. A video he finished before in Resources is unlocked straight away. Tapping the button marks the video done in Resources and takes him to step 2. |
+| `/onboarding/tour` | `src/app/onboarding/tour/page.tsx` | Step 8 of 8, "One last thing.": the video showing where everything is in the app, after his first check-in. **Take me to the app** stays locked until he has watched nearly all of it, with the same counter and resume as the welcome video. Tapping it marks the video done in Resources and opens the app on Today. |
+
 **Hidden (still routed if accessed directly):**
 - `/onboarding/goal` — first quarterly goal picker. Removed from the flow 2026-08-24 pending design work.
 - `/onboarding/mission` — first mission picker. Same status. Their actions move him on no further than the first check-in.

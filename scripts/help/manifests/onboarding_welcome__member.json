@@ -6,9 +6,13 @@
     {
       "kind": "header",
       "label": "Start here."
+    },
+    {
+      "kind": "button",
+      "label": "I've watched it"
     }
   ],
-  "source_hash": "c863ce9136170084",
+  "source_hash": "a25151113e3f12db",
   "source_files": [
     "src/app/onboarding/welcome/page.tsx"
   ]

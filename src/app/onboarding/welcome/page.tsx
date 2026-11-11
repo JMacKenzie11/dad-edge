@@ -5,7 +5,7 @@ import { advanceOnboarding } from "@/lib/onboarding/advance";
 import { loadOnboardingVideo } from "@/lib/onboarding/videos";
 import { vimeoEmbedUrl } from "@/lib/resources/vimeo";
 import { StepProgress } from "../step-progress";
-import { VideoStep } from "../video-step";
+import { VideoStep, WatchedButton } from "../video-step";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +37,10 @@ export default async function WelcomeVideoStep({
         title={video.title}
         durationSeconds={video.durationSeconds}
         alreadyDone={video.done}
-        buttonLabel="I've watched it"
         error={params.error}
-      />
+      >
+        <WatchedButton label="I've watched it" />
+      </VideoStep>
     </div>
   );
 }

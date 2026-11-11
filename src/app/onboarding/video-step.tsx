@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { advance, isUnlocked, parseSaved, resumeAt, type WatchState } from "@/lib/onboarding/watch-progress";
 import { finishOnboardingVideo } from "./actions";
@@ -15,6 +15,17 @@ import { finishOnboardingVideo } from "./actions";
  * than trapping him in the wizard.
  */
 const PLAYER_TIMEOUT_MS = 20_000;
+
+const Unlocked = createContext(false);
+
+/**
+ * The step's button. The page passes it in with its label written out,
+ * so the help extractor (scripts/help/extract-routes.ts) can see it.
+ */
+export function WatchedButton({ label }: { label: string }) {
+  const unlocked = useContext(Unlocked);
+  return <SubmitButton label={label} pendingLabel="Saving…" disabled={!unlocked} className="w-full h-12" />;
+}
 
 function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -48,8 +59,8 @@ export function VideoStep({
   title,
   durationSeconds,
   alreadyDone,
-  buttonLabel,
   error,
+  children,
 }: {
   step: number;
   lessonId: string;
@@ -57,8 +68,9 @@ export function VideoStep({
   title: string;
   durationSeconds: number;
   alreadyDone: boolean;
-  buttonLabel: string;
   error?: string;
+  /** A <WatchedButton label="…" />. */
+  children: ReactNode;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [watch, setWatch] = useState<WatchState>({ reached: 0, at: 0 });
@@ -141,7 +153,7 @@ export function VideoStep({
 
       <form action={finishOnboardingVideo} className="space-y-2">
         <input type="hidden" name="step" value={step} />
-        <SubmitButton label={buttonLabel} pendingLabel="Saving…" disabled={!unlocked} className="w-full h-12" />
+        <Unlocked.Provider value={unlocked}>{children}</Unlocked.Provider>
         {error ? <p className="text-xs text-[color:var(--color-danger)]">{error}</p> : null}
         <p className="text-xs text-center text-[color:var(--color-text-muted)]" aria-live="polite">
           {alreadyDone

@@ -6,9 +6,13 @@
     {
       "kind": "header",
       "label": "One last thing."
+    },
+    {
+      "kind": "button",
+      "label": "Take me to the app"
     }
   ],
-  "source_hash": "a1249424cd3b11ab",
+  "source_hash": "2cd1ef9be948c4d1",
   "source_files": [
     "src/app/onboarding/tour/page.tsx"
   ]
