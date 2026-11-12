@@ -424,6 +424,14 @@ Jason wanted somewhere in admin to pick a community and see each man's goals for
 - **What's never read:** coach conversations, the partner survey, partner and kids details. Every open of a man's page is audit-logged.
 - **How it stays honest:** the fit check passed six clear-cut cases three times each on the live model before shipping. Harder calls are where it may be wrong; Jason will say if it's misjudging.
 
+## Delete a mission entered by mistake (2026-11-12)
+
+Jason: "I should be able to delete a mission if I entered it wrong."
+
+- **Any mission he set, in an open week, completed ones too.** A mission marked COMPLETE by mistake, or entered twice, was stuck. The database already allowed the delete; only the page hid it.
+- **Always visible, with a confirm.** The × only appeared on mouse hover, which never happens on a phone. Showing it all the time makes a stray tap likelier, so it asks first.
+- **Not in a locked week** (DECISIONS "Past mission weeks"), and **not a challenge mission**: that one goes when he leaves the challenge.
+
 ## Past mission weeks (2026-11-12)
 
 Jason: let people look back at previous weeks' missions, but not change them after the week locks.

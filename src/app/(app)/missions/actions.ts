@@ -213,7 +213,7 @@ export async function deleteMission(
     .delete()
     .eq("id", parsed.data.mission_id)
     .eq("user_id", user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyMissionError(error, localDate(new Date(), user.timezone), "That mission didn't delete. Try again.") };
   revalidatePath("/missions");
   revalidatePath("/today");
   return { ok: true };
