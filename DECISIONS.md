@@ -360,6 +360,15 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## MCP mission results (2026-11-12)
+
+Jason wanted to pull how men in different communities did on their missions last week from Grok Bot. His calls:
+
+- **Two numbers per man: goal missions and BRAVE MAN missions** (missions not linked to a goal), plus the overall share. No per-domain breakdown.
+- **Counts only.** No goal or mission wording leaves the app; men are named by first name and last initial. The consent page says so, and an app connected before this should be reconnected so its Allow matches what it can see.
+- **Staff left out of both tools.** Admin-only logins and platform admins sitting in a community as leaders (which is how admins are added to every community) aren't men in that community. A platform admin who joined as an ordinary member is counted.
+- **Counted the same way as the Coaching page,** so the two never disagree: the week of the target date, completed (late included) is done, everything else isn't.
+
 ## MCP sign-in with OAuth (2026-11-12)
 
 Grok Bot's connector tried to sign in with OAuth and hit a 404, and Jason wanted it to work the way AiMS HQ does: paste the address, sign in in the app, press Allow. His calls, and the ones made building it:

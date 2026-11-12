@@ -26,9 +26,9 @@ export async function findApiKey(svc: SupabaseClient, key: string): Promise<ApiK
 }
 
 /** Every active community. Filter with keyCoversCommunity before showing any. */
-export async function activeCommunities(svc: SupabaseClient): Promise<CommunityChoice[]> {
-  const { data } = await svc.from("communities").select("id, name, slug").eq("status", "active").order("name");
-  return (data ?? []) as CommunityChoice[];
+export async function activeCommunities(svc: SupabaseClient): Promise<(CommunityChoice & { timezone: string })[]> {
+  const { data } = await svc.from("communities").select("id, name, slug, timezone").eq("status", "active").order("name");
+  return (data ?? []) as (CommunityChoice & { timezone: string })[];
 }
 
 /** Active communities this key may read. */
@@ -38,24 +38,41 @@ export async function communitiesFor(svc: SupabaseClient, key: ApiKeyRow): Promi
 
 export type MemberContact = { first_name: string | null; email: string; role: "member" | "leader" };
 
-type Row = {
-  role: "member" | "leader";
-  users: { first_name: string | null; email: string; subscription_status: string } | { first_name: string | null; email: string; subscription_status: string }[] | null;
-};
+type UserFields = { first_name: string | null; last_name: string | null; email: string; subscription_status: string; is_admin_only: boolean | null; is_platform_admin: boolean | null };
+
+export type CountedMan = { userId: string; first_name: string | null; last_name: string | null; email: string; role: "member" | "leader" };
 
 /**
- * Active men in one community: an active membership and a subscription
- * that isn't canceled. First name and email only.
+ * Who the MCP tools count as a man in a community (Jason, 2026-11-12):
+ * an active membership, a subscription that isn't canceled, and not a
+ * staff account. Staff means an admin-only login (never does the program)
+ * or a platform admin sitting in the community as a leader, which is how
+ * admins are added to every community. A platform admin who joined a
+ * community as an ordinary member is counted there.
  */
-export async function activeMemberContacts(svc: SupabaseClient, communityId: string): Promise<MemberContact[]> {
+export function countsAsMember(m: { status: string; role: "member" | "leader" }, u: Omit<UserFields, "first_name" | "last_name" | "email">): boolean {
+  if (m.status !== "active" || u.subscription_status === "canceled") return false;
+  if (u.is_admin_only) return false;
+  if (u.is_platform_admin && m.role === "leader") return false;
+  return true;
+}
+
+type Row = { user_id: string; role: "member" | "leader"; status: string; users: UserFields | UserFields[] | null };
+
+export async function countedMen(svc: SupabaseClient, communityId: string): Promise<CountedMan[]> {
   const { data } = await svc
     .from("memberships")
-    .select("role, users:user_id(first_name, email, subscription_status)")
+    .select("user_id, role, status, users:user_id(first_name, last_name, email, subscription_status, is_admin_only, is_platform_admin)")
     .eq("community_id", communityId)
     .eq("status", "active");
   return ((data ?? []) as Row[])
-    .map((r) => ({ role: r.role, u: Array.isArray(r.users) ? r.users[0] : r.users }))
-    .filter((x): x is { role: Row["role"]; u: NonNullable<typeof x.u> } => !!x.u && x.u.subscription_status !== "canceled")
-    .map(({ role, u }) => ({ first_name: u.first_name, email: u.email, role }))
+    .map((r) => ({ r, u: Array.isArray(r.users) ? r.users[0] : r.users }))
+    .filter((x): x is { r: Row; u: UserFields } => !!x.u && countsAsMember(x.r, x.u))
+    .map(({ r, u }) => ({ userId: r.user_id, first_name: u.first_name, last_name: u.last_name, email: u.email, role: r.role }))
     .sort((a, b) => (a.first_name ?? "").localeCompare(b.first_name ?? ""));
+}
+
+/** First name, email and role of every man counted in one community. */
+export async function activeMemberContacts(svc: SupabaseClient, communityId: string): Promise<MemberContact[]> {
+  return (await countedMen(svc, communityId)).map(({ first_name, email, role }) => ({ first_name, email, role }));
 }
