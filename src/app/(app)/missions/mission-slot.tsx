@@ -681,16 +681,31 @@ function FilledSlot({
             ) : null}
           </div>
           <div className={`shrink-0 flex justify-end ${COL_DELETE_SLOT}`}>
-            {!readOnly && !isDone && !isChallenge ? (
+            {/* Any mission he set can come off an open week, completed
+                ones too, for one entered by mistake. Always shown: a
+                hover-only button never appears on a phone. A challenge
+                mission goes when he leaves the challenge; a locked week
+                can't change at all. */}
+            {!readOnly && !isChallenge ? (
               <button
                 type="button"
-                onClick={() =>
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Delete this mission?",
+                    body: isDone
+                      ? "It comes off your week for good, and so does its COMPLETE. Use this for a mission entered by mistake."
+                      : "It comes off your week for good. Use this for a mission entered by mistake.",
+                    confirmLabel: "DELETE",
+                    cancelLabel: "Keep it",
+                  });
+                  if (!ok) return;
                   startDelete(async () => {
-                    await deleteMission({ mission_id: mission.id });
-                  })
-                }
+                    const res = await deleteMission({ mission_id: mission.id });
+                    if (!res.ok) setSaveError(res.error);
+                  });
+                }}
                 disabled={deletePending}
-                className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] transition-opacity"
+                className="h-6 w-6 rounded text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] disabled:opacity-40"
                 aria-label="Delete mission"
                 title="Delete"
               >
