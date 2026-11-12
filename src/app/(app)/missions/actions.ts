@@ -12,6 +12,7 @@ import { parseForm } from "@/lib/validation/form-error";
 import { friendlyMissionError, isEarlierUnattached } from "@/lib/missions/rules";
 import { loadMissionCutover } from "@/lib/missions/slots";
 import { isDomainCode } from "@/lib/pillars";
+import { blanksIn, blanksMessage } from "@/lib/examples/library";
 
 const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E", "M", "A2", "N"]);
 
@@ -20,7 +21,12 @@ const DateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const DescriptionSchema = z
   .string()
   .min(1, "Write the mission first.")
-  .max(280, "Keep the mission under 280 characters.");
+  .max(280, "Keep the mission under 280 characters.")
+  // A [blank] left from an example (src/lib/examples/library.ts).
+  .superRefine((s, ctx) => {
+    const blanks = blanksIn(s);
+    if (blanks.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: blanksMessage(blanks) });
+  });
 
 const TargetDatesSchema = z
   .array(DateStringSchema)
@@ -39,6 +45,8 @@ const CreateSchema = z.object({
   target_date: DateStringSchema.optional(),
   quarterly_goal_id: z.string().uuid().nullable(),
   quality_score: z.number().int().min(0).max(10).nullable().optional(),
+  /** The example he started from, for analytics only. */
+  example_id: z.string().max(40).optional(),
 }).refine(
   (v) => v.target_dates !== undefined || v.target_date !== undefined,
   { message: "Pick at least one day." },
@@ -103,7 +111,7 @@ export async function createMission(
   if (error) return { ok: false, error: friendlyMissionError(error, localDate(new Date(), user.timezone)) };
   captureServerEvent(user.id, {
     name: "mission_created",
-    props: { pillar_code: data.pillar_code, source: "user" },
+    props: { pillar_code: data.pillar_code, source: "user", ...(data.example_id ? { example_id: data.example_id } : {}) },
   });
   revalidatePath("/missions");
   revalidatePath("/today");

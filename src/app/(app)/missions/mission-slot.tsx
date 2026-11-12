@@ -18,6 +18,8 @@ import { useConfirm } from "@/components/ui/use-confirm";
 import { missionTargetNote, weekTarget } from "@/lib/challenges/rules";
 import { tickChallengeDay } from "@/lib/challenges/actions";
 import { MISSION_MIN_LENGTH, MISSION_TOO_SHORT } from "@/lib/validation/mission";
+import { MISSION_EXAMPLES, blanksIn, blanksMessage, type Example } from "@/lib/examples/library";
+import { ExamplePicker, selectFirstBlank } from "@/components/examples/example-picker";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -105,10 +107,13 @@ function EmptySlot({
   const [score, setScore] = useState<MissionScore | null>(null);
   const [scoring, setScoring] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  // The example he started from, if any (src/lib/examples/library.ts).
+  const [picked, setPicked] = useState<Example | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const scoreSeq = useRef(0);
   const scoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useAutoResize(inputRef, description);
+  const examples = (MISSION_EXAMPLES as Record<string, Example[]>)[pillarCode] ?? [];
 
   useEffect(() => {
     if (expanded) inputRef.current?.focus();
@@ -182,6 +187,7 @@ function EmptySlot({
         description: description.trim(),
         target_dates: targetDates,
         quarterly_goal_id: goalId,
+        ...(picked ? { example_id: picked.id } : {}),
       });
       if (!res.ok) {
         setError(res.error);
@@ -189,12 +195,24 @@ function EmptySlot({
     });
   };
 
-  const canSave = description.trim().length >= MISSION_MIN_LENGTH;
-  // Too short to save: say so rather than ignore the Enter (FM-17).
+  const blanks = blanksIn(description);
+  const canSave = description.trim().length >= MISSION_MIN_LENGTH && blanks.length === 0;
+  // Too short, or a [blank] still in it: say so rather than ignore the
+  // Enter (FM-17).
   const trySave = () => {
     if (canSave) save();
+    else if (blanks.length > 0) setError(blanksMessage(blanks));
     else if (description.trim().length > 0) setError(MISSION_TOO_SHORT);
   };
+
+  const pick = (e: Example) => {
+    setPicked(e);
+    setDescription(e.text);
+    setError(null);
+    selectFirstBlank(inputRef);
+  };
+  // The list shows until he starts making the mission his own.
+  const showExamples = description.trim() === "" || (picked !== null && description === picked.text);
 
   const pillText = score ? `${score.total}/10` : scoring ? "…" : null;
   const pillColor = score
@@ -222,8 +240,10 @@ function EmptySlot({
             setError(null);
           }}
           onBlur={() => {
-            if (description.trim().length === 0) setExpanded(false);
-            else trySave();
+            if (description.trim().length === 0) {
+              setExpanded(false);
+              setPicked(null);
+            } else trySave();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -234,6 +254,7 @@ function EmptySlot({
             if (e.key === "Escape") {
               setExpanded(false);
               setDescription("");
+              setPicked(null);
             }
           }}
           placeholder="Behavior + how you'll know it's done."
@@ -267,7 +288,12 @@ function EmptySlot({
         <div className={`shrink-0 ${COL_ACTIONS_WIDTH}`} aria-hidden="true" />
         </div>
       </div>
-      {error ? <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p> : null}
+      {error ? (
+        <p className="text-[11px] text-[color:var(--color-danger)]">{error}</p>
+      ) : blanks.length > 0 ? (
+        <p className="text-[11px] text-[color:var(--color-warning)]">{blanksMessage(blanks)}</p>
+      ) : null}
+      {showExamples ? <ExamplePicker examples={examples} pickedId={picked?.id ?? null} onPick={pick} /> : null}
       {pending ? (
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           SAVING…

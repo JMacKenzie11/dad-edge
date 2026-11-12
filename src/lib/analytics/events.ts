@@ -26,7 +26,7 @@ export type AnalyticsEvent =
     }
   | {
       name: "mission_created";
-      props: { pillar_code: string; source: "user" | "coach_suggested" };
+      props: { pillar_code: string; source: "user" | "coach_suggested"; example_id?: string };
     }
   | {
       name: "mission_completed";
@@ -34,7 +34,7 @@ export type AnalyticsEvent =
     }
   | {
       name: "goal_created";
-      props: { pillar_code: string; source: "user" | "itc" };
+      props: { pillar_code: string; source: "user" | "itc"; example_id?: string };
     }
   | {
       name: "coach_message_sent";

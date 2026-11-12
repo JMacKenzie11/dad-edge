@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition, type RefObject } from "react";
 import { DOMAIN_PILLARS, type DomainCode } from "@/lib/pillars";
+import { GOAL_EXAMPLES, blanksIn, blanksMessage, type Example } from "@/lib/examples/library";
+import { ExamplePicker, selectFirstBlank } from "@/components/examples/example-picker";
 import { Button } from "@/components/ui/button";
 import { createGoal } from "./actions";
 
@@ -26,19 +28,36 @@ export function NewGoalForm({
   const [desiredEndState, setDesiredEndState] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // The example he started from, if any (src/lib/examples/library.ts).
+  const [picked, setPicked] = useState<Example | null>(null);
+  const endRef = useRef<HTMLTextAreaElement | null>(null);
   const pastRecommended = activeGoalsThisQuarter >= 2;
+  const blanks = [...blanksIn(currentState), ...blanksIn(desiredEndState)];
+
+  const pick = (e: Example) => {
+    setPicked(e);
+    setDesiredEndState(e.text);
+    setError(null);
+    selectFirstBlank(endRef);
+  };
 
   const submit = () => {
     setError(null);
+    if (blanks.length) {
+      setError(blanksMessage(blanks));
+      return;
+    }
     start(async () => {
       const res = await createGoal({
         focus_area: pillar,
         current_state: currentState,
         desired_end_state: desiredEndState,
+        ...(picked ? { example_id: picked.id } : {}),
       });
       if (res.ok) {
         setCurrentState("");
         setDesiredEndState("");
+        setPicked(null);
       } else {
         setError(res.error ?? "Something went wrong.");
       }
@@ -71,6 +90,8 @@ export function NewGoalForm({
         ))}
       </div>
 
+      <ExamplePicker examples={GOAL_EXAMPLES[pillar]} pickedId={picked?.id ?? null} onPick={pick} />
+
       <FormField
         label="Where you are now"
         hint="The start line. Where things stand today, not where you wish they were."
@@ -86,8 +107,12 @@ export function NewGoalForm({
         value={desiredEndState}
         onChange={setDesiredEndState}
         placeholder="Deadlift 350 by end of quarter."
-        rows={2}
+        rows={3}
+        textareaRef={endRef}
       />
+      {blanks.length > 0 && !error ? (
+        <p className="text-xs text-[color:var(--color-warning)]">{blanksMessage(blanks)}</p>
+      ) : null}
 
       {pastRecommended ? (
         <p className="text-xs text-[color:var(--color-warning)]" role="note">
@@ -111,6 +136,7 @@ function FormField({
   onChange,
   placeholder,
   rows,
+  textareaRef,
 }: {
   label: string;
   hint: string;
@@ -118,6 +144,7 @@ function FormField({
   onChange: (v: string) => void;
   placeholder?: string;
   rows: number;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   return (
     <label className="block space-y-1">
@@ -125,6 +152,7 @@ function FormField({
         {label}
       </span>
       <textarea
+        ref={textareaRef}
         rows={rows}
         placeholder={placeholder}
         value={value}
