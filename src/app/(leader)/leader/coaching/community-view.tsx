@@ -153,7 +153,7 @@ function ManCard({ man: m }: { man: CoachingMan }) {
         <p className="text-xs text-[color:var(--color-text-muted)]">
           {c.combined.pct === null ? "No missions in the last two weeks" : `${c.combined.pct}% of missions done over the last two weeks`}
           {" · "}
-          {m.lastCheckin ? `Last check-in ${m.lastCheckin}` : "No check-ins yet"}
+          {m.lastCheckin ? `Last daily check-in ${m.lastCheckin}` : "No daily check-ins yet"}
           {reachedOut ? ` · Reached out ${formatDistanceToNowStrict(new Date(reachedOut.created_at))} ago` : ""}
         </p>
       </div>

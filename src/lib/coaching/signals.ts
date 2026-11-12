@@ -156,7 +156,7 @@ export function computeSignals(input: ManInput): ManSignals {
     flags.push({
       kind: "inactive",
       severity: 3,
-      line: "Hasn't checked in yet.",
+      line: "No daily check-ins yet.",
       question: "What's getting in the way of starting?",
     });
   } else {
@@ -165,7 +165,7 @@ export function computeSignals(input: ManInput): ManSignals {
       flags.push({
         kind: "inactive",
         severity: days >= INACTIVE_URGENT_DAYS ? 3 : 2,
-        line: `No check-in for ${days} days.`,
+        line: `No daily check-ins in the last ${days} days.`,
         question: "How are things at home and at work right now?",
       });
     }
