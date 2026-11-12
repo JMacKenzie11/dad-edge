@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { auditLog } from "@/lib/audit";
-import { bearerKey, keyCoversCommunity, type ApiKeyRow } from "@/lib/mcp/keys";
+import { keyCoversCommunity, requestKey, type ApiKeyRow } from "@/lib/mcp/keys";
 import { activeCommunities, activeMemberContacts, communitiesFor, findApiKey } from "@/lib/mcp/members";
 import { resolveForKey } from "@/lib/mcp/resolve";
 
@@ -84,11 +84,19 @@ function unauthorized() {
 }
 
 async function handle(req: Request): Promise<Response> {
-  const raw = bearerKey(req.headers.get("authorization"));
-  if (!raw) return unauthorized();
+  const raw = requestKey(req.headers);
+  if (!raw) {
+    // Header NAMES only, never values, so a failed connector setup can be
+    // diagnosed from the Vercel logs.
+    console.warn("[mcp] no key on %s %s; headers: %s", req.method, new URL(req.url).pathname, [...req.headers.keys()].join(","));
+    return unauthorized();
+  }
   const svc = createSupabaseServiceClient();
   const key = await findApiKey(svc, raw);
-  if (!key) return unauthorized();
+  if (!key) {
+    console.warn("[mcp] unknown or revoked key %s…", raw.slice(0, 9));
+    return unauthorized();
+  }
 
   // Stateless: a fresh server and transport per request, which suits
   // serverless hosting. Replies come back as plain JSON.

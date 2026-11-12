@@ -35,7 +35,7 @@ export function keyHint(key: string): string {
 /** Pull the key out of an "Authorization: Bearer <key>" header. */
 export function bearerKey(header: string | null): string | null {
   if (!header) return null;
-  const m = /^Bearer\s+(\S+)\s*$/i.exec(header);
+  const m = /^\s*Bearer\s+(\S+)\s*$/i.exec(header);
   if (!m || !m[1].startsWith(KEY_PREFIX)) return null;
   return m[1];
 }
@@ -50,4 +50,17 @@ export function hashesMatch(a: string, b: string): boolean {
 export function keyCoversCommunity(key: Pick<ApiKeyRow, "community_ids" | "revoked_at">, communityId: string): boolean {
   if (key.revoked_at) return false;
   return key.community_ids.length === 0 || key.community_ids.includes(communityId);
+}
+
+/**
+ * The key from a request. Connector forms vary in what they send, so
+ * take "Authorization: Bearer <key>", "Authorization: <key>" or
+ * "X-API-Key: <key>". Only our own bmos_ keys count.
+ */
+export function requestKey(headers: Headers): string | null {
+  const auth = headers.get("authorization")?.trim() ?? "";
+  const fromAuth = bearerKey(auth) ?? (auth.startsWith(KEY_PREFIX) && !/\s/.test(auth) ? auth : null);
+  if (fromAuth) return fromAuth;
+  const x = headers.get("x-api-key")?.trim() ?? "";
+  return x.startsWith(KEY_PREFIX) && !/\s/.test(x) ? x : null;
 }

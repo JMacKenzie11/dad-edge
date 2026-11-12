@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearerKey, generateApiKey, hashApiKey, hashesMatch, keyCoversCommunity, keyHint, KEY_PREFIX } from "./keys";
+import { requestKey, bearerKey, generateApiKey, hashApiKey, hashesMatch, keyCoversCommunity, keyHint, KEY_PREFIX } from "./keys";
 
 describe("API keys", () => {
   it("makes long random keys with the prefix", () => {
@@ -31,5 +31,19 @@ describe("API keys", () => {
     expect(keyCoversCommunity({ community_ids: ["c1"], revoked_at: null }, "c1")).toBe(true);
     expect(keyCoversCommunity({ community_ids: ["c1"], revoked_at: null }, "c2")).toBe(false);
     expect(keyCoversCommunity({ community_ids: [], revoked_at: "2026-11-12T00:00:00Z" }, "c1")).toBe(false);
+  });
+});
+
+describe("requestKey", () => {
+  const h = (o: Record<string, string>) => new Headers(o);
+  it("takes the key with or without Bearer, or in X-API-Key", () => {
+    expect(requestKey(h({ authorization: "Bearer bmos_abc" }))).toBe("bmos_abc");
+    expect(requestKey(h({ authorization: "bmos_abc" }))).toBe("bmos_abc");
+    expect(requestKey(h({ authorization: " Bearer  bmos_abc " }))).toBe("bmos_abc");
+    expect(requestKey(h({ "x-api-key": "bmos_abc" }))).toBe("bmos_abc");
+  });
+  it("ignores anything that isn't one of our keys", () => {
+    expect(requestKey(h({ authorization: "Bearer sk-other" }))).toBeNull();
+    expect(requestKey(h({}))).toBeNull();
   });
 });
