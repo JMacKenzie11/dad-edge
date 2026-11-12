@@ -1,0 +1,33 @@
+{
+  "route_pattern": "/admin/api-keys",
+  "view_key": null,
+  "role": "admin",
+  "elements": [
+    {
+      "kind": "header",
+      "label": "API keys"
+    },
+    {
+      "kind": "button",
+      "label": "REVOKE"
+    },
+    {
+      "kind": "field",
+      "label": "Grok Bot"
+    },
+    {
+      "kind": "toggle",
+      "label": "community_ids"
+    },
+    {
+      "kind": "button",
+      "label": "MAKE KEY"
+    }
+  ],
+  "source_hash": "9173289db97fe0b6",
+  "source_files": [
+    "src/app/(admin)/admin/api-keys/page.tsx",
+    "src/app/(admin)/admin/api-keys/actions.ts",
+    "src/app/(admin)/admin/api-keys/create-key-form.tsx"
+  ]
+}

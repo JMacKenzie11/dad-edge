@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.29",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@stripe/react-stripe-js": "7.0.0",
     "@stripe/stripe-js": "10.0.0",
     "@supabase/ssr": "^0.5.2",

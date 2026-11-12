@@ -265,6 +265,15 @@ export const PROBES: Probe[] = [
     sql: "select count(*) from public.coaching_digests where user_id = :dave", control: "select count(*) from public.coaching_digests where user_id = :dave", expect: "zero" },
   { id: "CO10", what: "a control: dave (her leader) can read alice's goals", kind: "read", as: "dave",
     sql: "select count(*) from public.quarterly_goals where user_id = :alice", control: "select count(*) from public.quarterly_goals where user_id = :alice", expect: "some" },
+  // API keys for /api/mcp: server-only. No browser session can read a
+  // key's hash or which communities it covers, or make one. DECISIONS.md
+  // "MCP server for outside systems".
+  { id: "AK1", what: "dave (leader) can't read the API keys", kind: "read", as: "dave",
+    sql: "select count(*) from public.api_keys", control: "select count(*) from public.api_keys", expect: "zero" },
+  { id: "AK2", what: "alice can't read the API keys", kind: "read", as: "alice",
+    sql: "select count(*) from public.api_keys", control: "select count(*) from public.api_keys", expect: "zero" },
+  { id: "AK3", what: "dave can't make an API key from a browser session", kind: "write", as: "dave",
+    sql: "insert into public.api_keys (label, key_hash, key_hint, created_by) values ('via browser', 'zzprobe-browser', 'bmos_zz', :dave)", expect: "refuse" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -356,6 +365,10 @@ function fixturesSql(ids: Ids): string {
       select id, quarterly_goal_id, 'no_link', 'zzprobe', 'zz-probe' from public.missions where user_id = '${ids.alice}' and quarterly_goal_id is not null$c$;
     execute $c$insert into public.coaching_followups (community_id, member_user_id, author_user_id, note) values ('${ids.commA}', '${ids.alice}', '${ids.dave}', 'Talked Tuesday')$c$;
     execute $c$insert into public.coaching_digests (user_id, week_start) values ('${ids.dave}', current_date)$c$;
+  end if;
+  -- An API key covering community A (once the api_keys migration exists).
+  if to_regclass('public.api_keys') is not null then
+    execute $c$insert into public.api_keys (label, key_hash, key_hint, community_ids, created_by) values ('zz probe', 'zzprobe-hash', 'bmos_zz', array['${ids.commA}']::uuid[], '${ids.dave}')$c$;
   end if;
 
   -- Self-check scratch tables: one deliberately wrong policy, one right.
