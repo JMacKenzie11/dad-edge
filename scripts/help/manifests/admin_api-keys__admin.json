@@ -13,18 +13,18 @@
     },
     {
       "kind": "field",
-      "label": "Grok Bot"
+      "label": "Key name"
     },
     {
       "kind": "toggle",
-      "label": "community_ids"
+      "label": "Community this key may read"
     },
     {
       "kind": "button",
       "label": "MAKE KEY"
     }
   ],
-  "source_hash": "9173289db97fe0b6",
+  "source_hash": "6e74864434fce8d7",
   "source_files": [
     "src/app/(admin)/admin/api-keys/page.tsx",
     "src/app/(admin)/admin/api-keys/actions.ts",
