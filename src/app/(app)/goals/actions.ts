@@ -8,6 +8,13 @@ import { computeMidpointCheckAt, getCurrentQuarter } from "@/lib/scoring/quarter
 import { captureServerEvent } from "@/lib/analytics/server";
 import { parseForm } from "@/lib/validation/form-error";
 import { friendlyMissionError } from "@/lib/missions/rules";
+import { blanksIn, blanksMessage } from "@/lib/examples/library";
+
+// A [blank] left from an example (src/lib/examples/library.ts).
+const noBlanks = (s: string, ctx: z.RefinementCtx) => {
+  const blanks = blanksIn(s);
+  if (blanks.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: blanksMessage(blanks) });
+};
 
 // Goals go on the five mission domains only (2026-10-15). There's no cap
 // on how many; the form recommends one or two.
@@ -18,17 +25,21 @@ const PillarCodeSchema = z.enum(["B", "R", "A", "V", "E"], {
 const CurrentStateSchema = z
   .string()
   .min(4, '"Where you are now" needs a few more words.')
-  .max(500, 'Keep "Where you are now" under 500 characters.');
+  .max(500, 'Keep "Where you are now" under 500 characters.')
+  .superRefine(noBlanks);
 
 const DesiredEndStateSchema = z
   .string()
   .min(4, '"Where you want to be" needs a few more words.')
-  .max(500, 'Keep "Where you want to be" under 500 characters.');
+  .max(500, 'Keep "Where you want to be" under 500 characters.')
+  .superRefine(noBlanks);
 
 const CreateSchema = z.object({
   focus_area: PillarCodeSchema,
   current_state: CurrentStateSchema,
   desired_end_state: DesiredEndStateSchema,
+  /** The example he started from, for analytics only. */
+  example_id: z.string().max(40).optional(),
 });
 
 export async function createGoal(input: unknown) {
@@ -53,7 +64,7 @@ export async function createGoal(input: unknown) {
   if (error) return { ok: false, error: friendlyMissionError(error, q.startIso, "That goal didn't save. Try again.") };
   captureServerEvent(user.id, {
     name: "goal_created",
-    props: { pillar_code: parsed.data.focus_area, source: "user" },
+    props: { pillar_code: parsed.data.focus_area, source: "user", ...(parsed.data.example_id ? { example_id: parsed.data.example_id } : {}) },
   });
   revalidatePath("/goals");
   return { ok: true };

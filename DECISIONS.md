@@ -424,6 +424,17 @@ Jason wanted somewhere in admin to pick a community and see each man's goals for
 - **What's never read:** coach conversations, the partner survey, partner and kids details. Every open of a man's page is audit-logged.
 - **How it stays honest:** the fit check passed six clear-cut cases three times each on the live model before shipping. Harder calls are where it may be wrong; Jason will say if it's misjudging.
 
+## Start from an example (2026-11-12)
+
+Jason: give men prewritten goals and missions, written as excellent goals and missions, to make filling things out easier; the men can edit any they pick; five per domain.
+
+- **Why.** On production 29 of 60 active men had no goal this quarter, and only 10 had a Raise goal: in a fatherhood program, goals about the kids were among the rarest. About a third of Bond goals read "I'm committed to getting better at…", a direction with no finish line.
+- **Examples, not a dropdown that writes for him.** Picking one fills the box; he edits it into his own. A [blank] (a name, a number) is selected so he types over it, and nothing saves while one is left, so "[kid's name]" never reaches his week. The server refuses a [blank] too.
+- **How they're written.** Missions: one behavior with its specifics, done or not, no day names (he picks days on the row), each 10/10 on the coach score as written. Goals: true at quarter end, with a count or a number. A unit test holds them to that and to the voice rules.
+- **The score isn't the point.** Missions scoring 0–4 were done 67% of the time and 8–10 66% (667 finished missions, 39 men). What predicted follow-through was the behavior: time with a named person ("spend", "take": 82–87%) over vague habits ("walk" 41%, "read" 45%). The examples lean that way.
+- **Measured.** `mission_created` / `goal_created` analytics carry `example_id`, so the examples men pick, and whether those missions get done, can be told apart. Wording lives in one file for Jason and Larry to edit.
+- The older seed list behind `/api/missions/examples` (no screen uses it) is left as it was.
+
 ## Delete a mission entered by mistake (2026-11-12)
 
 Jason: "I should be able to delete a mission if I entered it wrong."
