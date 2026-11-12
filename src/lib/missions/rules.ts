@@ -83,7 +83,8 @@ export type MissionRuleBreak =
   | { kind: "goal_full"; weekStart: string }
   | { kind: "pillar_retired"; pillar: PillarCode }
   | { kind: "goal_closed" }
-  | { kind: "goal_pillar_retired"; pillar: PillarCode };
+  | { kind: "goal_pillar_retired"; pillar: PillarCode }
+  | { kind: "week_locked"; weekStart: string };
 
 /** Reads the DETAIL code the trigger attaches. Accepts a PostgrestError
  *  or anything with `details` / `message`. */
@@ -96,6 +97,8 @@ export function parseMissionRuleError(err: { details?: string | null; message?: 
   m = code.match(/^mission_pillar_retired:([A-Z0-9]+)$/);
   if (m) return { kind: "pillar_retired", pillar: m[1] as PillarCode };
   if (code === "mission_goal_closed") return { kind: "goal_closed" };
+  m = code.match(/^mission_week_locked:(\d{4}-\d{2}-\d{2})$/);
+  if (m) return { kind: "week_locked", weekStart: m[1] };
   m = code.match(/^goal_pillar_retired:([A-Z0-9]+)$/);
   if (m) return { kind: "goal_pillar_retired", pillar: m[1] as PillarCode };
   return null;
@@ -123,6 +126,8 @@ export function missionRuleMessage(rule: MissionRuleBreak, today: string): strin
       return "That goal is closed, so it can't take new missions.";
     case "goal_pillar_retired":
       return "Goals go on Bond, Raise, Amplify, Vitality, or Enjoyment.";
+    case "week_locked":
+      return "That week is locked, so its missions can't change.";
   }
 }
 

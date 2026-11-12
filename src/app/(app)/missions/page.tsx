@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getEditWindow, weekDates } from "@/lib/scoring/week";
+import { getEditWindow, localMonday, weekDates } from "@/lib/scoring/week";
 import { daysUntilQuarterEnd, getCurrentQuarter } from "@/lib/scoring/quarters";
 import { QuarterCountdown } from "@/components/ui/quarter-countdown";
 import { isEarlierUnattached, relativeWeek } from "@/lib/missions/rules";
@@ -10,7 +10,7 @@ import { loadJoinableChallenges } from "@/lib/challenges/load";
 import { ChallengeJoinCards } from "@/components/challenges/join-card";
 import { WeeklyPlanner } from "./weekly-planner";
 import { WeekNavigator } from "./week-navigator";
-import { resolveMissionWeek } from "./week-nav";
+import { resolveMissionWeek, shiftWeek } from "./week-nav";
 import type { PillarCode } from "@/lib/pillars";
 import { redirect } from "next/navigation";
 import { format, addDays } from "date-fns";
@@ -54,11 +54,6 @@ export type ActiveGoal = {
   source: "user" | "itc";
 };
 
-/** Shift a yyyy-MM-dd Monday by whole weeks. */
-function shiftWeek(monday: string, weeks: number): string {
-  return format(addDays(new Date(`${monday}T00:00:00`), weeks * 7), "yyyy-MM-dd");
-}
-
 export default async function MissionsPage({
   searchParams,
 }: {
@@ -93,9 +88,19 @@ export default async function MissionsPage({
   // Back only while the community grace period is still open.
   const canGoBack = editWindow.lastWeekOpen;
 
+  // How far back the arrows go: the week of his first mission.
+  const { data: firstMission } = await supabase
+    .from("missions")
+    .select("target_date")
+    .eq("user_id", user.id)
+    .order("target_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const firstDate = (firstMission as { target_date: string } | null)?.target_date ?? null;
+  const firstMonday = firstDate ? localMonday(new Date(`${firstDate}T12:00:00Z`), "UTC") : null;
+
   // Resolve ?week=. Anything out of range or malformed drops back to
-  // the canonical /missions, so a stale bookmark pointing at a
-  // since-locked week still lands somewhere useful.
+  // the canonical /missions.
   const params = await searchParams;
   const resolved = resolveMissionWeek({
     requested: params.week,
@@ -103,9 +108,10 @@ export default async function MissionsPage({
     lastMonday,
     nextMonday,
     canGoBack,
+    firstMonday,
   });
   if ("redirect" in resolved) redirect("/missions");
-  const { viewMonday, isLastWeek, isNextWeek, prevMonday } = resolved;
+  const { viewMonday, isLastWeek, isNextWeek, isLocked, prevMonday } = resolved;
   const nextWeekMonday = resolved.nextMonday;
   const week = weekDates(viewMonday);
   const weekEnd = week[6];
@@ -144,12 +150,26 @@ export default async function MissionsPage({
     readOnly ? Promise.resolve([]) : loadJoinableChallenges(supabase, user.id, todayISO),
   ]);
 
-  const activeGoals = (goals ?? []) as ActiveGoal[];
+  const openGoals = (goals ?? []) as ActiveGoal[];
   // PostgREST returns the joined challenge as an object or a one-item array.
   const allMissions = ((missions ?? []) as Array<Omit<WeekMission, "challenge"> & { challenge: WeekMission["challenge"] | WeekMission["challenge"][] }>).map(
     (m) => ({ ...m, challenge: (Array.isArray(m.challenge) ? m.challenge[0] : m.challenge) ?? null }),
   ) as WeekMission[];
   const weekMissions = allMissions.filter((m) => m.target_date <= weekEnd);
+
+  // A locked week shows its missions under the goals they were set
+  // against, whatever has happened to those goals since.
+  const pastGoalIds = isLocked
+    ? [...new Set(weekMissions.map((m) => m.quarterly_goal_id).filter((id): id is string => id != null))]
+    : [];
+  const { data: pastGoals } = pastGoalIds.length
+    ? await supabase
+        .from("quarterly_goals")
+        .select("id, desired_end_state, focus_area, quarter_start, source")
+        .in("id", pastGoalIds)
+        .order("created_at")
+    : { data: [] };
+  const activeGoals = isLocked ? ((pastGoals ?? []) as ActiveGoal[]) : openGoals;
   // Abandoned missions (an ITC test he dropped) don't count and don't show.
   const shown = weekMissions.filter((m) => (m.status as string) !== "abandoned");
   const openGoalIds = new Set(activeGoals.map((g) => g.id));
@@ -169,7 +189,8 @@ export default async function MissionsPage({
   // close out anything he finished over the weekend. No empty slots —
   // grace is for finishing what you committed to, not for backdating
   // new commitments onto a week that's already been lived.
-  const mode = isLastWeek ? "catch-up" : "plan";
+  // A locked week is view-only: what he set and what he did.
+  const mode = isLocked ? "locked" : isLastWeek ? "catch-up" : "plan";
 
   // The week locks ON lastWeekLocksOn, so the last day he can still
   // touch it is the day before.
@@ -178,7 +199,9 @@ export default async function MissionsPage({
     "EEE MMM d",
   ).toUpperCase();
 
-  const note = isLastWeek
+  const note = isLocked
+    ? "LOCKED · VIEW ONLY"
+    : isLastWeek
     ? `LAST WEEK · OPEN THROUGH ${lastWeekOpenThrough}`
     : isNextWeek
       ? "NEXT WEEK · PLAN IT BEFORE IT STARTS"
@@ -206,7 +229,7 @@ export default async function MissionsPage({
           href="/goals"
           className="font-heading text-xs tracking-widest text-[color:var(--color-primary)] hover:underline"
         >
-          {activeGoals.length === 0 ? "SET A GOAL →" : "YOUR GOALS →"}
+          {openGoals.length === 0 ? "SET A GOAL →" : "YOUR GOALS →"}
         </Link>
       </header>
 
@@ -250,10 +273,20 @@ export default async function MissionsPage({
         </p>
       ) : null}
 
-      {isLastWeek && weekMissions.length === 0 ? (
+      {isLocked ? (
+        <p className="text-[11px] text-[color:var(--color-text-muted)] text-center">
+          This week is locked, so nothing in it can change.{" "}
+          <Link href="/missions" className="text-[color:var(--color-primary)] hover:underline">
+            Back to this week
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      {(isLastWeek || isLocked) && shown.length === 0 ? (
         <div className="p-6 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] text-center">
           <p className="text-sm text-[color:var(--color-text-muted)]">
-            No missions set last week. Nothing to close out.
+            {isLocked ? "No missions were set that week." : "No missions set last week. Nothing to close out."}
           </p>
         </div>
       ) : (
@@ -270,7 +303,7 @@ export default async function MissionsPage({
           carriedForwardIds={carriedForwardIds}
           todayISO={todayISO}
           mode={mode}
-          readOnly={readOnly}
+          readOnly={readOnly || isLocked}
         />
       )}
     </div>

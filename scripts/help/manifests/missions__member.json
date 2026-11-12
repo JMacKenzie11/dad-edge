@@ -20,6 +20,10 @@
       "label": "plan next week"
     },
     {
+      "kind": "link",
+      "label": "Back to this week"
+    },
+    {
       "kind": "field",
       "label": "Behavior + how you'll know it's done."
     },
@@ -68,7 +72,7 @@
       "label": "Earlier missions"
     }
   ],
-  "source_hash": "7cc27c89ff688030",
+  "source_hash": "0000c6c0b938aeb2",
   "source_files": [
     "src/app/(app)/missions/page.tsx",
     "src/app/(app)/missions/actions.ts",

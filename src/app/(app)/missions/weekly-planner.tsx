@@ -12,9 +12,11 @@ import type { WeekMission, ActiveGoal } from "./page";
  * grace period: only the missions he already set, so he can close them
  * out. No empty slots, because grace is for finishing what you
  * committed to, not for backdating new commitments onto a week that's
- * already been lived.
+ * already been lived. "locked" is any week that has locked: the same
+ * missions-only layout, view-only (the page passes readOnly too, and the
+ * database refuses changes to a locked week).
  */
-export type PlannerMode = "plan" | "catch-up";
+export type PlannerMode = "plan" | "catch-up" | "locked";
 
 /**
  * Weekly view (2026-10-15 restructure), three groups:
@@ -69,7 +71,9 @@ export function WeeklyPlanner({
   mode?: PlannerMode;
   readOnly: boolean;
 }) {
-  const catchUp = mode === "catch-up";
+  // Catch-up and locked weeks show only the missions he set: no empty slots.
+  const catchUp = mode !== "plan";
+  const locked = mode === "locked";
   const goalCount = goalMissions.length + closedGoalMissions.length;
   const goalSlotsOpen = goalCount < GOAL_MISSIONS_PER_WEEK;
   const shared = { weekDates, communityId, carriedForwardIds, todayISO, mode, readOnly };
@@ -117,7 +121,7 @@ export function WeeklyPlanner({
             );
           })}
           {catchUp && domainMissions.length === 0 ? (
-            <p className="text-sm text-[color:var(--color-text-muted)]">No domain missions last week.</p>
+            <p className="text-sm text-[color:var(--color-text-muted)]">No domain missions {weekLabel}.</p>
           ) : null}
         </div>
       </section>
@@ -141,7 +145,11 @@ export function WeeklyPlanner({
           </Link>
         </div>
 
-        {goals.length === 0 && closedGoalMissions.length === 0 ? (
+        {locked && goalMissions.length === 0 && closedGoalMissions.length === 0 ? (
+          <p className="text-sm text-[color:var(--color-text-muted)]">No goal missions {weekLabel}.</p>
+        ) : null}
+
+        {!locked && goals.length === 0 && closedGoalMissions.length === 0 ? (
           <div className="p-5 rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
             <p className="text-sm text-[color:var(--color-text-muted)]">
               You don&apos;t have a goal this quarter. Missions under a goal show up here once you set one.
@@ -164,7 +172,7 @@ export function WeeklyPlanner({
               key={g.id}
               accent={p.colorVar}
               title={`GOAL ${gi + 1} · ${p.label.toUpperCase()}`}
-              meta={quarterCountdown}
+              meta={locked ? "" : quarterCountdown}
               subtitle={g.desired_end_state}
               badge={g.source === "itc" ? "From your ITC map" : null}
             >

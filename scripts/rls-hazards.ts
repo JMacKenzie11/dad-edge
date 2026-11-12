@@ -110,7 +110,7 @@ export const PROBES: Probe[] = [
   { id: "M2", what: "bob (same community) can read alice's missions", kind: "read", as: "bob",
     sql: "select count(*) from public.missions where user_id = :alice", control: "select count(*) from public.missions where user_id = :alice", expect: "some" },
   { id: "M3", what: "alice can edit her own mission", kind: "write", as: "alice",
-    sql: "update public.missions set description = 'Call her at lunch, edited' where user_id = :alice", expect: "allow" },
+    sql: `update public.missions set description = 'Call her at lunch, edited' where user_id = :alice and target_date >= ${NEXT_MON}`, expect: "allow" },
   { id: "M4", what: "bob can't edit alice's mission", kind: "write", as: "bob",
     sql: "update public.missions set description = 'hijacked' where user_id = :alice", expect: "refuse" },
   { id: "M5", what: "alice can add a second Bond mission next week", kind: "write", as: "alice",
@@ -119,6 +119,25 @@ export const PROBES: Probe[] = [
     sql: `insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by) values (:alice, :commA, 'Write her a note', 'B', ${NEXT_MON} + 3, array[${NEXT_MON} + 3], 'user')`, expect: "refuse", detail: /mission_cap:domain:B/ },
   { id: "M7", what: "alice can't create a mission for bob", kind: "write", as: "alice",
     sql: `insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by) values (:bob, :commA, 'Not his to set', 'R', ${NEXT_MON} + 1, array[${NEXT_MON} + 1], 'user')`, expect: "refuse" },
+
+  // Locked weeks: he can look back at them but not change them
+  // (DECISIONS.md "Past mission weeks"). Community A locks a week 8 days
+  // after it ends in the fixtures, so last week is always open and the
+  // week before is always locked.
+  { id: "ML1", what: "alice can still see her mission from a locked week", kind: "read", as: "alice",
+    sql: `select count(*) from public.missions where user_id = :alice and target_date = ${LOCKED_MON} + 1`, control: `select count(*) from public.missions where user_id = :alice and target_date = ${LOCKED_MON} + 1`, expect: "some" },
+  { id: "ML2", what: "alice can't reword a mission in a locked week", kind: "write", as: "alice",
+    sql: `update public.missions set description = 'Rewritten after the fact' where user_id = :alice and target_date = ${LOCKED_MON} + 1`, expect: "refuse", detail: /mission_week_locked/ },
+  { id: "ML3", what: "alice can't complete a mission in a locked week", kind: "write", as: "alice",
+    sql: `update public.missions set status = 'completed', completed_at = now() where user_id = :alice and target_date = ${LOCKED_MON} + 1`, expect: "refuse", detail: /mission_week_locked/ },
+  { id: "ML4", what: "alice can't delete a mission in a locked week", kind: "write", as: "alice",
+    sql: `delete from public.missions where user_id = :alice and target_date = ${LOCKED_MON} + 1`, expect: "refuse", detail: /mission_week_locked/ },
+  { id: "ML5", what: "alice can't add a mission to a locked week", kind: "write", as: "alice",
+    sql: `insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by) values (:alice, :commA, 'Backdated to look good', 'E', ${LOCKED_MON} + 2, array[${LOCKED_MON} + 2], 'user')`, expect: "refuse", detail: /mission_week_locked/ },
+  { id: "ML6", what: "alice can't move next week's mission into a locked week", kind: "write", as: "alice",
+    sql: `update public.missions set target_date = ${LOCKED_MON} + 1, target_dates = array[${LOCKED_MON} + 1] where user_id = :alice and target_date >= ${NEXT_MON}`, expect: "refuse", detail: /mission_week_locked/ },
+  { id: "ML7", what: "alice can still change a mission last week while it's open", kind: "write", as: "alice",
+    sql: `update public.missions set description = 'Lift four times, done Sunday' where user_id = :alice and target_date = ${LAST_MON} + 2`, expect: "allow" },
 
   // Check-ins: self + community-mates read; only self writes.
   { id: "C1", what: "carol can't read alice's check-ins", kind: "read", as: "carol",
@@ -346,6 +365,12 @@ function fixturesSql(ids: Ids): string {
     ('${ids.dave}', '${ids.commA}', 'leader', 'active');
   insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by)
     values ('${ids.alice}', '${ids.commA}', 'Call her at lunch Tuesday', 'B', ${NEXT_MON} + 1, array[${NEXT_MON} + 1], 'user');
+  -- Locked-week fixtures: A locks a week 8 days after it ends, so last
+  -- week is open every day and the week before is always locked.
+  update public.communities set week_lock_days = 8 where id = '${ids.commA}';
+  insert into public.missions (user_id, community_id, description, pillar_code, target_date, target_dates, created_by)
+    values ('${ids.alice}', '${ids.commA}', 'Take the boys fishing Tuesday', 'R', ${LOCKED_MON} + 1, array[${LOCKED_MON} + 1], 'user'),
+           ('${ids.alice}', '${ids.commA}', 'Lift four times this week', 'V', ${LAST_MON} + 2, array[${LAST_MON} + 2], 'user');
   insert into public.daily_checkins (user_id, date, pillar_code, value) values ('${ids.alice}', current_date, 'B', 1);
   insert into public.daily_reflections (user_id, date, wins) values ('${ids.alice}', current_date, 'Showed up');
   insert into public.partner_profiles (user_id, partner_name) values ('${ids.alice}', 'Sam');
