@@ -4,7 +4,8 @@ import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { auditLog } from "@/lib/audit";
 import { keyCoversCommunity, requestKey, type ApiKeyRow } from "@/lib/mcp/keys";
-import { activeCommunities, activeMemberContacts, communitiesFor, findApiKey } from "@/lib/mcp/members";
+import { activeCommunities, activeMemberContacts, communitiesFor, countedMen, findApiKey } from "@/lib/mcp/members";
+import { loadMissionResults, reportWeek } from "@/lib/mcp/mission-results";
 import { resolveForKey } from "@/lib/mcp/resolve";
 import { verifyOAuthToken } from "@/lib/mcp/oauth";
 
@@ -54,7 +55,7 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
     {
       title: "List members' first names and emails",
       description:
-        "First name, email and role (member or leader) of every active man in one community. Canceled members are left out. Pass the community's name or slug as the user wrote it; if it matches more than one or none, the reply lists the choices instead.",
+        "First name, email and role (member or leader) of every active man in one community. Canceled members and staff accounts are left out. Pass the community's name or slug as the user wrote it; if it matches more than one or none, the reply lists the choices instead.",
       inputSchema: { community: z.string().min(1).max(120).describe("Community name or slug, e.g. \"austin\" or \"Austin Brotherhood\"") },
       annotations: { readOnlyHint: true },
     },
@@ -79,6 +80,54 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
         metadata: { api_key_id: key.id, api_key_label: key.label, query: community, count: members.length },
       });
       return text({ community: { name: r.community.name, slug: r.community.slug }, count: members.length, members });
+    },
+  );
+
+  server.registerTool(
+    "mission_results",
+    {
+      title: "Mission results by community",
+      description:
+        "How the men in one or more communities did on their missions in a week: for each community and each man, the share of goal missions (linked to one of his quarterly goals) and BRAVE MAN missions (his other missions) he completed. Counts only, no mission or goal wording. Defaults to last week. Men are listed best first by first name and last initial; men with no missions that week and men with no goals this quarter are listed by name. Pass community names or slugs as the user wrote them, or [\"all\"] for every community.",
+      inputSchema: {
+        communities: z.array(z.string().min(1).max(120)).min(1).max(20).describe('Community names or slugs, e.g. ["10am", "Business Owner Brotherhood"], or ["all"]'),
+        week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Any date in the week to report, YYYY-MM-DD. Leave out for last week."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ communities: asked, week }) => {
+      const all = await activeCommunities(svc);
+      const covered = all.filter((c) => keyCoversCommunity(key, c.id));
+      const picked = new Map<string, (typeof all)[number]>();
+      const problems: { asked: string; error: string; choices: { name: string; slug: string }[] }[] = [];
+      if (asked.some((a) => a.trim().toLowerCase() === "all")) {
+        for (const c of covered) picked.set(c.id, c);
+      } else {
+        for (const a of asked) {
+          const r = resolveForKey(a, all, (id) => keyCoversCommunity(key, id));
+          if (r.kind === "match") picked.set(r.community.id, all.find((c) => c.id === r.community.id)!);
+          else
+            problems.push({
+              asked: a,
+              error: r.kind === "ambiguous" ? "matches more than one community" : r.kind === "not_allowed" ? "this connection can't read it" : "no community matches",
+              choices: r.choices.map(({ name, slug }) => ({ name, slug })),
+            });
+        }
+      }
+      const results = [];
+      for (const c of picked.values()) {
+        const w = reportWeek(week, c.timezone);
+        const men = await countedMen(svc, c.id);
+        results.push({ community: { name: c.name, slug: c.slug }, ...(await loadMissionResults(svc, men, w)) });
+      }
+      await auditLog({
+        actor_user_id: key.created_by,
+        action: "mcp.mission_results",
+        target_type: "community",
+        target_id: null,
+        metadata: { api_key_id: key.id, api_key_label: key.label, asked, week: week ?? null, community_ids: [...picked.keys()] },
+      });
+      return text({ results, ...(problems.length ? { not_found: problems } : {}) }, results.length === 0);
     },
   );
 

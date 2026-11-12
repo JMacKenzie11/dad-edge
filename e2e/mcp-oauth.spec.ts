@@ -58,7 +58,7 @@ test("an admin connects an approved AI app and it can list members, nothing more
   const { verifier, challenge } = pkce();
   await authorize(page, clientId, challenge);
   await expect(page.getByRole("heading", { name: /Connect .+ to Brave Man OS\?/ })).toBeVisible();
-  await expect(page.getByText(/can't read goals, missions, check-ins or survey answers/)).toBeVisible();
+  await expect(page.getByText(/can't read what his goals or missions say, his check-ins or survey answers/)).toBeVisible();
   await page.getByRole("button", { name: "ALLOW" }).click();
   await page.waitForURL(/^https:\/\/grok\.com\//);
   const code = new URL(page.url()).searchParams.get("code");
@@ -81,6 +81,19 @@ test("an admin connects an approved AI app and it can list members, nothing more
   expect(result.community.name).toBe("E2E Basecamp");
   expect(result.members.length).toBeGreaterThan(0);
   expect(Object.keys(result.members[0]).sort()).toEqual(["email", "first_name", "role"]);
+  // Staff accounts (the platform admin added to every community) are left out.
+  expect(result.members.map((x: { first_name: string }) => x.first_name)).not.toContain("E2E Admin");
+
+  // Mission results: counts per man for a week, no wording.
+  const res = await mcp(request, token, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "mission_results", arguments: { communities: ["e2e basecamp"] } } });
+  const body = JSON.parse((await res.json()).result.content[0].text);
+  expect(body.results).toHaveLength(1);
+  const r = body.results[0];
+  expect(r.community.name).toBe("E2E Basecamp");
+  expect(r.week.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(Object.keys(r.totals).sort()).toEqual(["all", "brave_man_missions", "goal_missions"]);
+  expect([...r.men.map((x: { name: string }) => x.name), ...r.no_missions].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
+  expect(JSON.stringify(body)).not.toMatch(/Call her at lunch|Lift four times/);
 
   // Straight at the database with the same token: refused.
   const direct = await request.get(`${SUPA}/rest/v1/users?select=email&limit=1`, { headers: { apikey: ANON, authorization: `Bearer ${token}` } });

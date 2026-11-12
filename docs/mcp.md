@@ -6,7 +6,7 @@
 
 1. Add a custom connector. Name: `Brave Man OS`. Type: Remote HTTPS. Server URL: `https://<app domain>/api/mcp`. Leave the headers and Client ID empty.
 2. The app opens Brave Man OS. Sign in with an admin account and press **ALLOW**.
-3. Ask it something like "List the first names and emails for the Basecamp community."
+3. Ask it something like "List the first names and emails for the Basecamp community," or "How did the 10am and 11am groups do on their goal missions and BRAVE MAN missions last week?"
 
 Only platform admins can allow, and only Grok Bot, Claude and ChatGPT are approved (DECISIONS.md "MCP sign-in with OAuth"). To cut an app off, an admin can be taken off the admins, or its return address taken off `mcp_redirect_trusted` in a migration.
 
