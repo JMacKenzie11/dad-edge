@@ -1,4 +1,5 @@
 import { resolveLeaderCommunity } from "@/lib/leader-context";
+import { selectAll } from "@/lib/supabase/select-all";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { deactivateMember, reactivateMember } from "../actions";
 import { classifyDisengagement, isoDateNDaysAgo } from "@/lib/scoring/disengagement";
@@ -22,11 +23,13 @@ export default async function LeaderMembersPage({
 
   const memberIds = (memberships ?? []).map((m) => (m as { user_id: string }).user_id);
   const { data: checkins } = memberIds.length
-    ? await svc
+    ? await selectAll((lo, hi) => svc
         .from("daily_checkins")
         .select("user_id, date")
         .in("user_id", memberIds)
         .gte("date", isoDateNDaysAgo(30))
+        .order("id")
+        .range(lo, hi))
     : { data: [] };
   const lastByUser = new Map<string, string>();
   for (const c of (checkins ?? []) as { user_id: string; date: string }[]) {

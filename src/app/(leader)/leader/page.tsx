@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { selectAll } from "@/lib/supabase/select-all";
 import { resolveLeaderCommunity } from "@/lib/leader-context";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { classifyDisengagement, isoDateNDaysAgo } from "@/lib/scoring/disengagement";
@@ -28,15 +29,17 @@ export default async function LeaderOverview({
   const memberIds = (memberships ?? []).map((m) => (m as { user_id: string }).user_id);
   const [{ data: checkins }, { data: missions }] = await Promise.all([
     memberIds.length
-      ? svc.from("daily_checkins").select("user_id, date, value").in("user_id", memberIds).gte("date", isoDateNDaysAgo(30))
+      ? selectAll((lo, hi) => svc.from("daily_checkins").select("user_id, date, value").in("user_id", memberIds).gte("date", isoDateNDaysAgo(30)).order("id").range(lo, hi))
       : Promise.resolve({ data: [] }),
     memberIds.length
-      ? svc
+      ? selectAll((lo, hi) => svc
           .from("missions")
           .select("user_id, status, target_date")
           .in("user_id", memberIds)
           .gte("target_date", monday)
           .lte("target_date", week[6])
+          .order("id")
+          .range(lo, hi))
       : Promise.resolve({ data: [] }),
   ]);
 

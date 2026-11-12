@@ -1,4 +1,5 @@
 import { addDays, differenceInDays, format } from "date-fns";
+import { selectAll } from "@/lib/supabase/select-all";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
 import type { PillarCode } from "@/lib/pillars";
@@ -217,19 +218,23 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
     { data: threadRowsA },
     { data: threadRowsB },
   ] = await Promise.all([
-    svc
+    selectAll((lo, hi) => svc
       .from("daily_checkins")
       .select("user_id, date, pillar_code, value")
       .in("user_id", memberIds)
       .gte("date", windowStart)
       .lte("date", today)
-      .eq("value", 1),
-    svc
+      .eq("value", 1)
+      .order("id")
+      .range(lo, hi)),
+    selectAll((lo, hi) => svc
       .from("missions")
       .select("user_id, status, target_date")
       .in("user_id", memberIds)
       .gte("target_date", windowStart)
-      .lte("target_date", today),
+      .lte("target_date", today)
+      .order("id")
+      .range(lo, hi)),
     svc
       .from("quarterly_goals")
       .select("user_id, focus_area, desired_end_state, source, status")

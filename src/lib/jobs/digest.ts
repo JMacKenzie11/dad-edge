@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { selectAll } from "@/lib/supabase/select-all";
 import { sendDigestEmail } from "@/lib/email";
 import { localMonday, weekDates } from "@/lib/scoring/week";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
@@ -62,18 +63,22 @@ export async function runWeeklyDigest(now: Date = new Date()): Promise<JobResult
     if (memberIds.length === 0) continue;
 
     const [{ data: rows }, { data: missions }] = await Promise.all([
-      svc
+      selectAll((lo, hi) => svc
         .from("daily_checkins")
         .select("user_id, date, value")
         .in("user_id", memberIds)
         .gte("date", format(addDays(new Date(`${lastMonday}T00:00:00`), -30), "yyyy-MM-dd"))
-        .lte("date", yesterday),
-      svc
+        .lte("date", yesterday)
+        .order("id")
+        .range(lo, hi)),
+      selectAll((lo, hi) => svc
         .from("missions")
         .select("user_id, status")
         .in("user_id", memberIds)
         .gte("target_date", lastMonday)
-        .lte("target_date", yesterday),
+        .lte("target_date", yesterday)
+        .order("id")
+        .range(lo, hi)),
     ]);
 
     const weekTotalByUser = new Map<string, number>();

@@ -1,4 +1,5 @@
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
+import { selectAll } from "@/lib/supabase/select-all";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { localMonday } from "@/lib/scoring/week";
 import type { CountedMan } from "./members";
@@ -97,7 +98,7 @@ export async function loadMissionResults(svc: SupabaseClient, men: CountedMan[],
   const ids = men.map((m) => m.userId);
   if (ids.length === 0) return missionResults([], [], new Set(), week);
   const [missions, goals] = await Promise.all([
-    svc.from("missions").select("user_id, status, target_date, quarterly_goal_id").in("user_id", ids).gte("target_date", week.start).lte("target_date", week.end),
+    selectAll((lo, hi) => svc.from("missions").select("user_id, status, target_date, quarterly_goal_id").in("user_id", ids).gte("target_date", week.start).lte("target_date", week.end).order("id").range(lo, hi)),
     svc.from("quarterly_goals").select("user_id").in("user_id", ids).eq("quarter_start", quarterStart(week.start)).neq("status", "abandoned"),
   ]);
   const withGoals = new Set(((goals.data ?? []) as { user_id: string }[]).map((g) => g.user_id));

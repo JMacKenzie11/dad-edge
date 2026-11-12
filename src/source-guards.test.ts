@@ -147,4 +147,31 @@ describe("coaching judgments stay with leaders", () => {
     const fake = { rel: "src/app/(app)/missions/page.tsx", text: 'svc.from("mission_goal_fit")' };
     expect(/["']mission_goal_fit["']/.test(fake.text) && !allowed.test(fake.rel)).toBe(true);
   });
+  // FM-18: the database API returns at most 1,000 rows a request and
+  // says nothing when it stops. Reads of check-ins or missions across a
+  // list of men outgrow that, so they page through selectAll(), whose
+  // query ends with .range().
+  const multiUserReads = (files: { rel: string; text: string }[]) =>
+    files.flatMap((f) => {
+      const out: string[] = [];
+      const re = /\.from\(["'](daily_checkins|missions)["']\)/g;
+      for (let m; (m = re.exec(f.text)); ) {
+        const rest = f.text.slice(m.index + m[0].length);
+        const next = rest.search(/\.from\(/);
+        const chunk = rest.slice(0, Math.min(next === -1 ? rest.length : next, 700));
+        if (/\.in\(\s*["']user_id["']/.test(chunk) && !/\.range\(/.test(chunk)) {
+          out.push(`${f.rel}:${f.text.slice(0, m.index).split("\n").length}`);
+        }
+      }
+      return out;
+    });
+
+  it("reads of check-ins or missions across many men page past 1,000 rows", () => {
+    expect(multiUserReads(srcFiles)).toEqual([]);
+  });
+
+  it("a control: the rule catches an unpaged read across many men", () => {
+    const fake = { rel: "src/x.ts", text: 'svc.from("daily_checkins").select("user_id, date").in("user_id", ids).gte("date", d);' };
+    expect(multiUserReads([fake])).toEqual(["src/x.ts:1"]);
+  });
 });

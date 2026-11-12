@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectAll } from "@/lib/supabase/select-all";
 import { addDays, format, parseISO } from "date-fns";
 import { localDate, localMonday } from "@/lib/scoring/week";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
@@ -90,18 +91,22 @@ export async function loadCoaching(
       .select("id, user_id, focus_area, desired_end_state, current_state, source, status, created_at, midpoint_check_at, midpoint_check_answer, retrospective_what_happened")
       .in("user_id", ids)
       .eq("quarter_start", window.quarterStart),
-    svc
+    selectAll((lo, hi) => svc
       .from("missions")
       .select("id, user_id, description, pillar_code, target_date, target_dates, status, completed_late, rolled_over_from_mission_id, quarterly_goal_id, quality_score")
       .in("user_id", ids)
       .gte("target_date", window.from)
       .lte("target_date", format(addDays(parseISO(`${weekEnd}T00:00:00`), 7), "yyyy-MM-dd"))
-      .order("target_date", { ascending: false }),
-    svc
+      .order("target_date", { ascending: false })
+      .order("id")
+      .range(lo, hi)),
+    selectAll((lo, hi) => svc
       .from("daily_checkins")
       .select("user_id, date, pillar_code, value")
       .in("user_id", ids)
-      .gte("date", format(addDays(parseISO(`${window.today}T00:00:00`), -90), "yyyy-MM-dd")),
+      .gte("date", format(addDays(parseISO(`${window.today}T00:00:00`), -90), "yyyy-MM-dd"))
+      .order("id")
+      .range(lo, hi)),
     svc
       .from("coaching_followups")
       .select("id, member_user_id, author_user_id, note, created_at, author:author_user_id(first_name, last_name, email)")

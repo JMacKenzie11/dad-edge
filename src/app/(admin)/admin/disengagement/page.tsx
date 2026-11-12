@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { selectAll } from "@/lib/supabase/select-all";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { classifyDisengagement, isoDateNDaysAgo } from "@/lib/scoring/disengagement";
@@ -18,11 +19,13 @@ export default async function DisengagementPage() {
   const since = isoDateNDaysAgo(30);
 
   const { data: checkins } = memberIds.length
-    ? await svc
+    ? await selectAll((lo, hi) => svc
         .from("daily_checkins")
         .select("user_id, date")
         .in("user_id", memberIds)
         .gte("date", since)
+        .order("id")
+        .range(lo, hi))
     : { data: [] };
 
   const lastByUser = new Map<string, string>();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { selectAll } from "@/lib/supabase/select-all";
 import { requireAccess } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { LeaderboardRow } from "@/components/ui/leaderboard-row";
@@ -68,16 +69,20 @@ export default async function LeaderboardPage({
   const streakWindowStart = format(subDays(new Date(`${today}T00:00:00`), 60), "yyyy-MM-dd");
 
   // Pull once, filter in memory.
-  const { data: checkins } = await supabase
+  const { data: checkins } = await selectAll((lo, hi) => supabase
     .from("daily_checkins")
     .select("user_id, date, pillar_code, value")
     .in("user_id", memberIds)
-    .gte("date", streakWindowStart);
-  const { data: missions } = await supabase
+    .gte("date", streakWindowStart)
+    .order("id")
+    .range(lo, hi));
+  const { data: missions } = await selectAll((lo, hi) => supabase
     .from("missions")
     .select("user_id, target_date, status")
     .in("user_id", memberIds)
-    .gte("target_date", priorMonday);
+    .gte("target_date", priorMonday)
+    .order("id")
+    .range(lo, hi));
 
   const checkinsAll = (checkins ?? []) as {
     user_id: string;
