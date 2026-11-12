@@ -6,12 +6,21 @@ import { auditLog } from "@/lib/audit";
 import { keyCoversCommunity, requestKey, type ApiKeyRow } from "@/lib/mcp/keys";
 import { activeCommunities, activeMemberContacts, communitiesFor, findApiKey } from "@/lib/mcp/members";
 import { resolveForKey } from "@/lib/mcp/resolve";
+import { verifyOAuthToken } from "@/lib/mcp/oauth";
 
 /**
- * MCP server for outside systems such as Grok Bot. Read-only. Each
- * request carries "Authorization: Bearer bmos_…", a key an admin made
- * on /admin/api-keys. The key decides which communities can be read.
- * DECISIONS.md "MCP server for outside systems".
+ * MCP server for outside systems such as Grok Bot. Read-only. Two ways in:
+ *
+ *   - An API key an admin made on /admin/api-keys ("Bearer bmos_…"). The
+ *     key decides which communities can be read. DECISIONS.md "MCP server
+ *     for outside systems".
+ *   - An OAuth token: the AI app sent an admin through /oauth/consent and
+ *     Supabase's OAuth server issued it (src/lib/mcp/oauth.ts). Reads
+ *     every community. DECISIONS.md "MCP sign-in with OAuth".
+ *
+ * A request with neither gets 401 pointing at
+ * /.well-known/oauth-protected-resource, which is how an AI app finds
+ * where to sign the person in.
  */
 
 export const dynamic = "force-dynamic";
@@ -76,27 +85,43 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
   return server;
 }
 
-function unauthorized() {
-  return new Response(JSON.stringify({ error: "Missing or invalid API key." }), {
+function unauthorized(req: Request) {
+  const metadata = `${new URL(req.url).origin}/.well-known/oauth-protected-resource`;
+  return new Response(JSON.stringify({ error: "Sign in or send an API key." }), {
     status: 401,
-    headers: { "content-type": "application/json", "www-authenticate": 'Bearer realm="brave-man-os"' },
+    headers: { "content-type": "application/json", "www-authenticate": `Bearer resource_metadata="${metadata}"` },
   });
 }
 
-async function handle(req: Request): Promise<Response> {
+/** The bearer token when it isn't one of our API keys: an OAuth token, maybe. */
+function bearerToken(headers: Headers): string | null {
+  const m = /^\s*Bearer\s+(\S+)\s*$/i.exec(headers.get("authorization") ?? "");
+  return m && !m[1].startsWith("bmos_") ? m[1] : null;
+}
+
+/** Who's calling, as the tools see it: a key, or an OAuth admin treated as an all-communities key. */
+async function caller(req: Request, svc: Svc): Promise<ApiKeyRow | null> {
   const raw = requestKey(req.headers);
-  if (!raw) {
-    // Header NAMES only, never values, so a failed connector setup can be
-    // diagnosed from the Vercel logs.
-    console.warn("[mcp] no key on %s %s; headers: %s", req.method, new URL(req.url).pathname, [...req.headers.keys()].join(","));
-    return unauthorized();
+  if (raw) {
+    const key = await findApiKey(svc, raw);
+    if (!key) console.warn("[mcp] unknown or revoked key %s…", raw.slice(0, 9));
+    return key;
   }
+  const token = bearerToken(req.headers);
+  if (token) {
+    const who = await verifyOAuthToken(token);
+    return who ? { id: `oauth:${who.clientId}`, label: "OAuth app", created_by: who.userId, community_ids: [], revoked_at: null } : null;
+  }
+  // Header NAMES only, never values, so a failed connector setup can be
+  // diagnosed from the Vercel logs.
+  console.warn("[mcp] no key or token on %s %s; headers: %s", req.method, new URL(req.url).pathname, [...req.headers.keys()].join(","));
+  return null;
+}
+
+async function handle(req: Request): Promise<Response> {
   const svc = createSupabaseServiceClient();
-  const key = await findApiKey(svc, raw);
-  if (!key) {
-    console.warn("[mcp] unknown or revoked key %s…", raw.slice(0, 9));
-    return unauthorized();
-  }
+  const key = await caller(req, svc);
+  if (!key) return unauthorized(req);
 
   // Stateless: a fresh server and transport per request, which suits
   // serverless hosting. Replies come back as plain JSON.
