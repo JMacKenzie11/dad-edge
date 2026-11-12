@@ -2,8 +2,9 @@ import { expect, test } from "./fixtures";
 
 /**
  * The Coaching pages (DECISIONS.md "Coaching view"): a leader sees his
- * community's men with their goals and missions, opens one, and logs a
- * reach-out. A member can't open them.
+ * community's men, leaders included, with their goals and two weeks of
+ * mission completion, opens one, and logs a reach-out. A member can't
+ * open them.
  */
 
 test("a leader sees his men, opens one, and logs a reach-out", async ({ asLeader: page }) => {
@@ -13,7 +14,12 @@ test("a leader sees his men, opens one, and logs a reach-out", async ({ asLeader
   const row = page.getByRole("link", { name: /E2E Member/ }).filter({ hasText: "Lift four times a week" });
   await expect(row).toBeVisible();
   await expect(row).toContainText("Call her at lunch on Tuesday");
-  // The leader isn't in his own list.
+  // Completion for the two finished weeks, per goal and for the rest.
+  await expect(row).toContainText(/Last week (no missions|\d+% \(\d+ of \d+\)) · Week before/);
+  await expect(row).toContainText("Missions not linked to a goal");
+  await expect(page.getByText(/Missions done last week \(.+\) and the week before \(.+\)\. Highest first\./)).toBeVisible();
+  // The leader is listed too, marked as himself, but not as a link.
+  await expect(page.getByText("YOU", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /E2E Leader/ })).toHaveCount(0);
 
   await row.click();
@@ -47,6 +53,8 @@ test("an admin can pick the community", async ({ asAdmin: page }) => {
   }
   await expect(page.getByText("EVERY MAN IN E2E BASECAMP")).toBeVisible();
   await expect(page.getByRole("link", { name: /E2E Member/ }).first()).toBeVisible();
+  // Community leaders are in the list, marked LEADER.
+  await expect(page.getByRole("link", { name: "Open E2E Leader" })).toContainText("LEADER");
 });
 
 test("a member can't open the Coaching pages", async ({ asMember: page }) => {
