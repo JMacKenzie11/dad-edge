@@ -360,6 +360,17 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## MCP sign-in with OAuth (2026-11-12)
+
+Grok Bot's connector tried to sign in with OAuth and hit a 404, and Jason wanted it to work the way AiMS HQ does: paste the address, sign in in the app, press Allow. His calls, and the ones made building it:
+
+- **Admins only** (Jason). The hook refuses a token to anyone else, the consent page shows no Allow, and /api/mcp asks again on every request.
+- **API keys stay** (Jason), for systems that can't do OAuth.
+- **Approved apps only, by where they return.** Registration is open (apps register themselves), so a name proves nothing; the return address does. The list is AiMS HQ's: Claude, ChatGPT and Grok Bot. Grok Bot registers six addresses at once, shared with Cursor, two of them a program on the person's own computer; all six are on or Grok Bot is refused. The consent page warns when the return is local.
+- **The app's token can't touch the database.** Supabase's token works directly against the database API, Storage and Realtime as the person, and an admin sees nearly everything, partner survey answers included. AiMS blocks it table by table. Here the token hook gives it the role `mcp_assistant`, which has no privileges anywhere, and a gate in front of the database API refuses that role outright (functions are callable by every role by default, so the empty role alone wasn't enough). /api/mcp checks the token and reads with the service role, the same as for a key. Tested end to end on dev: the same token that lists members through /api/mcp is refused by the database API.
+- **Auth settings changed on each project:** OAuth server on (authorization path `/oauth/consent`, dynamic registration on), the token hook on, and authenticator-app enrolment off, so an app's token can't add a second sign-in step to the account. The app doesn't use one.
+- **Not done: "require current password".** AiMS turns it on so an app's token can't change the password through Supabase Auth. Here it would break the reset and invite links, which set a password without the old one. What's left: an approved app (Grok, Claude, ChatGPT) holding an admin's token could change that admin's password through Auth. Those apps don't hand the token to the model, and the admin has to have pressed Allow.
+
 ## Coaching list: completion by week (2026-11-12)
 
 Jason asked for the Coaching list to show each man's goals with how many of their missions he got done, the same for his other missions, and to put the best at the top. His calls:

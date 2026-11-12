@@ -36,7 +36,10 @@ import { readFileSync } from "node:fs";
 import { isEntryPoint } from "./lib/entry";
 import { assertLinkedDev, runLinkedSql } from "./lib/supabase-cli";
 
-export type Who = "alice" | "bob" | "carol" | "dave";
+export type Who = "alice" | "bob" | "carol" | "dave" | "erin";
+
+/** The database role a probe runs as. "owner" runs with no switch (for testing functions the API can't reach). */
+export type ProbeRole = "authenticated" | "mcp_assistant" | "owner";
 
 export type Probe =
   | {
@@ -44,6 +47,7 @@ export type Probe =
       what: string;
       kind: "read";
       as: Who;
+      role?: ProbeRole;
       /** select count(*) as the member */
       sql: string;
       /** the same rows counted as the table owner (must be > 0 for "zero") */
@@ -55,6 +59,7 @@ export type Probe =
       what: string;
       kind: "write";
       as: Who;
+      role?: ProbeRole;
       sql: string;
       expect: "allow" | "refuse";
       /** for refusals that must come from a specific rule */
@@ -274,16 +279,38 @@ export const PROBES: Probe[] = [
     sql: "select count(*) from public.api_keys", control: "select count(*) from public.api_keys", expect: "zero" },
   { id: "AK3", what: "dave can't make an API key from a browser session", kind: "write", as: "dave",
     sql: "insert into public.api_keys (label, key_hash, key_hint, created_by) values ('via browser', 'zzprobe-browser', 'bmos_zz', :dave)", expect: "refuse" },
+  // AI apps signing in over OAuth (DECISIONS.md "MCP sign-in with OAuth").
+  // The token hook: approved apps and platform admins only, and their
+  // token becomes mcp_assistant, which reaches nothing through the
+  // database API. Ordinary sign-ins are untouched.
+  { id: "OA1", what: "an admin (erin) signing in to an approved app gets the no-access role", kind: "read", as: "erin", role: "owner",
+    sql: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :erin, 'claims', jsonb_build_object('sub', :erin, 'role', 'authenticated', 'client_id', :goodClient))) e) x where e->'claims'->>'role' = 'mcp_assistant'", control: "select 1", expect: "some" },
+  { id: "OA2", what: "a member (alice) gets no token for an approved app", kind: "read", as: "alice", role: "owner",
+    sql: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :alice, 'claims', jsonb_build_object('sub', :alice, 'role', 'authenticated', 'client_id', :goodClient))) e) x where e ? 'claims'", control: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :alice, 'claims', jsonb_build_object('sub', :alice, 'role', 'authenticated', 'client_id', :goodClient))) e) x where e ? 'error'", expect: "zero" },
+  { id: "OA3", what: "an admin gets no token for an app that also returns somewhere unapproved", kind: "read", as: "erin", role: "owner",
+    sql: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :erin, 'claims', jsonb_build_object('sub', :erin, 'role', 'authenticated', 'client_id', :badClient))) e) x where e ? 'claims'", control: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :erin, 'claims', jsonb_build_object('sub', :erin, 'role', 'authenticated', 'client_id', :badClient))) e) x where e ? 'error'", expect: "zero" },
+  { id: "OA4", what: "an ordinary sign-in (no app) passes through unchanged", kind: "read", as: "alice", role: "owner",
+    sql: "select count(*) from (select public.mcp_access_token_hook(jsonb_build_object('user_id', :alice, 'claims', jsonb_build_object('sub', :alice, 'role', 'authenticated'))) e) x where e->'claims'->>'role' = 'authenticated'", control: "select 1", expect: "some" },
+  { id: "OA5", what: "an AI app's token can't read users", kind: "write", as: "erin", role: "mcp_assistant",
+    sql: "select count(*) from public.users", expect: "refuse", detail: /permission denied/ },
+  { id: "OA6", what: "an AI app's token can't read the partner survey", kind: "write", as: "erin", role: "mcp_assistant",
+    sql: "select count(*) from public.partner_survey_responses", expect: "refuse", detail: /permission denied|does not exist/ },
+  { id: "OA7", what: "an AI app's token can't read stored files", kind: "write", as: "erin", role: "mcp_assistant",
+    sql: "select count(*) from storage.objects", expect: "refuse", detail: /permission denied/ },
+  { id: "OA8", what: "the database API gate refuses an AI app's token before any function runs", kind: "write", as: "erin", role: "mcp_assistant",
+    sql: "select public.mcp_request_gate()", expect: "refuse", detail: /only through its MCP server|permission denied for schema/ },
+  { id: "OA9", what: "a signed-in member can't call the token hook", kind: "write", as: "alice",
+    sql: "select public.mcp_access_token_hook(jsonb_build_object('user_id', :alice, 'claims', jsonb_build_object('sub', :alice, 'role', 'authenticated', 'client_id', :goodClient)))", expect: "refuse", detail: /permission denied/ },
 ];
 
 // ---------------------------------------------------------------------------
 // SQL generation
 // ---------------------------------------------------------------------------
 
-export type Ids = Record<"alice" | "bob" | "carol" | "dave" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection" | "chA", string>;
+export type Ids = Record<"alice" | "bob" | "carol" | "dave" | "erin" | "goodClient" | "badClient" | "commA" | "commB" | "open" | "draft" | "onlyB" | "openLesson" | "draftLesson" | "onlyBLesson" | "openSection" | "draftSection" | "onlyBSection" | "chA", string>;
 
 export function newIds(): Ids {
-  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "dave", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection", "chA"];
+  const keys: (keyof Ids)[] = ["alice", "bob", "carol", "dave", "erin", "goodClient", "badClient", "commA", "commB", "open", "draft", "onlyB", "openLesson", "draftLesson", "onlyBLesson", "openSection", "draftSection", "onlyBSection", "chA"];
   return Object.fromEntries(keys.map((k) => [k, randomUUID()])) as Ids;
 }
 
@@ -297,13 +324,15 @@ export function bind(sql: string, ids: Ids): string {
 const q = (s: string) => `$q$${s}$q$`;
 
 function fixturesSql(ids: Ids): string {
-  const users = (["alice", "bob", "carol", "dave"] as const)
+  const users = (["alice", "bob", "carol", "dave", "erin"] as const)
     .map((u) => `('${ids[u]}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'zz-probe-${u}-${ids[u].slice(0, 8)}@braveman.test', now(), now())`)
     .join(",\n    ");
   return `
   insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at) values
     ${users};
-  update public.users set subscription_status = 'comped', onboarding_step = ${ONBOARDING_STEPS_TOTAL} where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}', '${ids.dave}');
+  update public.users set subscription_status = 'comped', onboarding_step = ${ONBOARDING_STEPS_TOTAL} where id in ('${ids.alice}', '${ids.bob}', '${ids.carol}', '${ids.dave}', '${ids.erin}');
+  -- erin: a platform admin with no membership in the probe communities.
+  update public.users set is_platform_admin = true where id = '${ids.erin}';
   insert into public.communities (id, name, slug) values
     ('${ids.commA}', '[IT-TEST] probe A', 'zz-probe-a-${ids.commA.slice(0, 8)}'),
     ('${ids.commB}', '[IT-TEST] probe B', 'zz-probe-b-${ids.commB.slice(0, 8)}');
@@ -366,6 +395,13 @@ function fixturesSql(ids: Ids): string {
     execute $c$insert into public.coaching_followups (community_id, member_user_id, author_user_id, note) values ('${ids.commA}', '${ids.alice}', '${ids.dave}', 'Talked Tuesday')$c$;
     execute $c$insert into public.coaching_digests (user_id, week_start) values ('${ids.dave}', current_date)$c$;
   end if;
+  -- Two OAuth clients (once the MCP sign-in migration exists): one that
+  -- returns only to Grok, one that also returns somewhere else.
+  if to_regprocedure('public.mcp_access_token_hook(jsonb)') is not null then
+    execute $c$insert into auth.oauth_clients (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method, created_at, updated_at)
+      values ('${ids.goodClient}', 'dynamic', 'https://grok.com/connectors-oauth-exchange-code/', 'authorization_code,refresh_token', 'zz probe Grok', 'public', 'none', now(), now()),
+             ('${ids.badClient}', 'dynamic', 'https://grok.com/connectors-oauth-exchange-code/,https://evil.example/cb', 'authorization_code,refresh_token', 'zz probe Grok', 'public', 'none', now(), now())$c$;
+  end if;
   -- An API key covering community A (once the api_keys migration exists).
   if to_regclass('public.api_keys') is not null then
     execute $c$insert into public.api_keys (label, key_hash, key_hint, community_ids, created_by) values ('zz probe', 'zzprobe-hash', 'bmos_zz', array['${ids.commA}']::uuid[], '${ids.dave}')$c$;
@@ -383,19 +419,21 @@ function fixturesSql(ids: Ids): string {
   insert into public.zz_probe_tight values ('${ids.alice}', 'alice only');`;
 }
 
-function asUser(uid: string): string {
-  return `perform set_config('request.jwt.claims', json_build_object('sub', '${uid}', 'role', 'authenticated')::text, true);
-    set local role authenticated;`;
+function asUser(uid: string, role: ProbeRole = "authenticated"): string {
+  if (role === "owner") return "";
+  return `perform set_config('request.jwt.claims', json_build_object('sub', '${uid}', 'role', '${role}')::text, true);
+    set local role ${role};`;
 }
 
 function probeSql(p: Probe, ids: Ids): string {
   const uid = ids[p.as];
+  const role = p.role ?? "authenticated";
   if (p.kind === "read") {
     return `
   -- ${p.id}: ${p.what}
   execute ${q(bind(p.control, ids))} into c;
   begin
-    ${asUser(uid)}
+    ${asUser(uid, role)}
     execute ${q(bind(p.sql, ids))} into n;
     reset role;
     res := res || jsonb_build_array(jsonb_build_object('id', '${p.id}', 'outcome', 'count', 'n', n, 'control', c));
@@ -408,7 +446,7 @@ function probeSql(p: Probe, ids: Ids): string {
   return `
   -- ${p.id}: ${p.what}
   begin
-    ${asUser(uid)}
+    ${asUser(uid, role)}
     execute ${q(bind(p.sql, ids))};
     get diagnostics n = row_count;
     reset role;

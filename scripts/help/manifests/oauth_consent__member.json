@@ -1,0 +1,21 @@
+{
+  "route_pattern": "/oauth/consent",
+  "view_key": null,
+  "role": "member",
+  "elements": [
+    {
+      "kind": "button",
+      "label": "DECLINE"
+    },
+    {
+      "kind": "button",
+      "label": "ALLOW"
+    }
+  ],
+  "source_hash": "1a2ef5bec85e5959",
+  "source_files": [
+    "src/app/oauth/consent/page.tsx",
+    "src/app/oauth/consent/actions.ts",
+    "src/app/oauth/consent/consent-form.tsx"
+  ]
+}
