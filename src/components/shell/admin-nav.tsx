@@ -17,6 +17,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/courses", label: "Courses" },
   { href: "/admin/challenges", label: "Challenges" },
   { href: "/admin/jobs", label: "Jobs" },
+  { href: "/admin/api-keys", label: "API keys" },
   { href: "/admin/audit", label: "Audit log" },
 ];
 

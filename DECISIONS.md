@@ -360,6 +360,16 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## MCP server for outside systems (2026-11-12)
+
+Jason wanted to connect outside systems, starting with Grok Bot, so a prompt there can pull a community's first names and emails to email them. He connects as admin, so the prompt has to say which community. The calls:
+
+- **Inside the app, not a separate server.** `/api/mcp` lives in the Next.js app and reuses its tables, its rules for who's an active member and its audit log. A separate server would need its own copy of the database keys and of those rules.
+- **An API key, not the admin login.** A leaked key reads names and emails and nothing else, and one click revokes it. Only its hash is stored. Grok Bot takes a key in the Authorization header; its OAuth sign-in has known failures, so OAuth waits until a system needs it (Claude.ai connectors do).
+- **Community is a required input, and the server picks it, never the model.** The model passes the words from the prompt; the server matches them to one community or sends the choices back. A key limited to some communities matches against all of them first, so "basecamp" on a key for "E2E Basecamp" is refused instead of quietly returning the other community's men (caught in the local test, 2026-11-12).
+- **Least data.** First name, email and role only, active men only, canceled subscriptions left out. Nothing about goals, check-ins or the survey. No write tools in this first version.
+- **Every lookup is logged** (`mcp.list_members`, with the key and the count), so there's a record of every list that left the app.
+
 ## Onboarding videos (2026-11-10)
 
 Jason wanted the two videos on the Resources welcome course (a 7½-minute welcome and a 15-minute app tour) at the start of onboarding, with the wizard going on once he marks them complete. He took these calls (2026-11-10):
