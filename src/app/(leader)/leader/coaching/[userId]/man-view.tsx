@@ -44,7 +44,7 @@ export function CoachingManView({
         <div>
           <h1 className="font-heading text-2xl">{man.name}</h1>
           <p className="text-xs text-[color:var(--color-text-muted)]">
-            {man.lastCheckin ? `Last check-in ${man.lastCheckin}` : "No check-ins yet"}
+            {man.lastCheckin ? `Last daily check-in ${man.lastCheckin}` : "No daily check-ins yet"}
             {man.signals.recent.total > 0 ? ` · ${man.signals.recent.done} of ${man.signals.recent.total} missions done, last 4 weeks` : ""}
           </p>
         </div>

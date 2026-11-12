@@ -63,9 +63,9 @@ describe("coaching signals", () => {
 
   it("flags a week without a check-in, and two weeks as urgent", () => {
     const week = computeSignals(healthy({ lastCheckin: "2026-11-03" })).flags[0];
-    expect(week).toMatchObject({ kind: "inactive", severity: 2, line: "No check-in for 8 days." });
+    expect(week).toMatchObject({ kind: "inactive", severity: 2, line: "No daily check-ins in the last 8 days." });
     expect(computeSignals(healthy({ lastCheckin: "2026-10-20" })).flags[0].severity).toBe(3);
-    expect(computeSignals(healthy({ lastCheckin: null })).flags[0].line).toBe("Hasn't checked in yet.");
+    expect(computeSignals(healthy({ lastCheckin: null })).flags[0].line).toBe("No daily check-ins yet.");
     expect(kinds(healthy({ lastCheckin: "2026-11-05" }))).toEqual([]);
   });
 
