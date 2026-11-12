@@ -280,7 +280,7 @@ Cron
 - `GET /api/cron/run?job=…` — admin manual trigger.
 
 MCP (outside systems)
-- `POST /api/mcp`: a Model Context Protocol server (Streamable HTTP, stateless, JSON replies) for outside AI systems such as Grok Bot. Auth is `Authorization: Bearer bmos_…`, a key from `/admin/api-keys`; a missing, unknown or revoked key gets 401. Read-only tools:
+- `POST /api/mcp`: a Model Context Protocol server (Streamable HTTP, stateless, JSON replies) for outside AI systems such as Grok Bot. Auth is a key from `/admin/api-keys`, sent as `Authorization: Bearer bmos_…`, `Authorization: bmos_…` or `X-API-Key: bmos_…`; a missing, unknown or revoked key gets 401, and the server logs the header names it got (never values). Read-only tools:
   - `list_communities`: the active communities the key covers (name, slug).
   - `list_members { community }`: first name, email and role of every man with an active membership in that community whose subscription isn't canceled, sorted by first name. `community` is a name or slug as the user wrote it ("the Austin group" works). It's matched against every active community first: a match the key doesn't cover is refused (never a lookalike it does cover), more than one match or none returns the choices instead. Each call writes `mcp.list_members` to `audit_log` with the key, the words asked and the count.
 

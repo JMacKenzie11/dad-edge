@@ -7,8 +7,10 @@
 1. In the app, open **Admin > API keys**. Name the key after the system ("Grok Bot"). Tick the communities it may read, or leave them all unticked for every community. Press **MAKE KEY** and copy the key. It's shown once.
 2. In the outside system, add a remote MCP server:
    - URL: `https://<app domain>/api/mcp`
-   - Header: `Authorization: Bearer <the key>`
-   - Transport: Streamable HTTP. Use the key header, not OAuth.
+   - Header: key `Authorization`, value `Bearer <the key>`. The key on its own also works, and so does a header named `X-API-Key`.
+   - Transport: Streamable HTTP. Leave any OAuth Client ID blank.
+
+If the other system says it "couldn't start sign-in" or mentions OAuth, the server didn't get a key it recognizes and the system fell back to an OAuth sign-in, which this server doesn't offer. Check the header name and that the whole key was pasted. The Vercel logs show `[mcp] no key` with the header names that arrived.
 3. Ask it something like "List the first names and emails for the Basecamp community." It calls `list_members` with the words you used; if they match more than one community, or none, it gets the choices back and should ask you.
 
 ## Turn one off
