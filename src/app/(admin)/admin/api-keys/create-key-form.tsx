@@ -16,9 +16,9 @@ export function CreateKeyForm({ communities }: { communities: { id: string; name
           <span className="font-heading tracking-widest text-[color:var(--color-text-muted)]">NAME</span>
           <input
             name="label"
+            aria-label="Key name"
             required
             maxLength={80}
-            placeholder="Grok Bot"
             className="h-10 px-3 rounded-md bg-[color:var(--color-bg)] border border-[color:var(--color-border)]"
           />
         </label>
@@ -28,7 +28,7 @@ export function CreateKeyForm({ communities }: { communities: { id: string; name
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
             {communities.map((c) => (
               <label key={c.id} className="flex items-center gap-2">
-                <input type="checkbox" name="community_ids" value={c.id} />
+                <input type="checkbox" name="community_ids" value={c.id} aria-label="Community this key may read" />
                 {c.name}
               </label>
             ))}
