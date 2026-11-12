@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { formatDistanceToNowStrict } from "date-fns";
+import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import { PILLAR_BY_CODE } from "@/lib/pillars";
 import { CommunityPicker } from "@/components/ui/community-picker";
 import { recentlyReached, triage, type CoachingMan } from "@/lib/coaching/load";
 import type { CoachingCommunity } from "@/lib/coaching/access";
 import { MissionStatus } from "@/components/coaching/mission-status";
+import { byCompletion, type Pct, type TwoWeeks, type WeekRange } from "@/lib/coaching/completion";
 
 const card = "rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]";
 const label = "text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]";
@@ -88,14 +89,25 @@ export function CoachingCommunityView({
           </section>
 
           <section className="space-y-3">
-            <p className={label}>EVERY MAN IN {community.name.toUpperCase()}</p>
-            {[...men].sort((a, b) => b.signals.weight - a.signals.weight || a.name.localeCompare(b.name)).map((m) => (
-              // aria-label names the link: the card body is its own component so
-              // the help extractor doesn't take a line of card text as the label.
-              <Link key={m.userId} href={href(m)} aria-label={`Open ${m.name}`} className={`${card} block p-4 hover:border-[color:var(--color-accent)]`}>
-                <ManCard man={m} />
-              </Link>
-            ))}
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className={label}>EVERY MAN IN {community.name.toUpperCase()}</p>
+              <p className="text-xs text-[color:var(--color-text-muted)]">
+                Missions done last week ({weekLabel(men[0].completion.weeks[0])}) and the week before ({weekLabel(men[0].completion.weeks[1])}). Highest first.
+              </p>
+            </div>
+            {byCompletion(men).map((m) =>
+              m.isViewer ? (
+                <div key={m.userId} className={`${card} p-4`}>
+                  <ManCard man={m} />
+                </div>
+              ) : (
+                // aria-label names the link: the card body is its own component so
+                // the help extractor doesn't take a line of card text as the label.
+                <Link key={m.userId} href={href(m)} aria-label={`Open ${m.name}`} className={`${card} block p-4 hover:border-[color:var(--color-accent)]`}>
+                  <ManCard man={m} />
+                </Link>
+              ),
+            )}
           </section>
         </>
       )}
@@ -103,36 +115,71 @@ export function CoachingCommunityView({
   );
 }
 
+function weekLabel(w: WeekRange): string {
+  const a = parseISO(`${w.start}T00:00:00`);
+  const b = parseISO(`${w.end}T00:00:00`);
+  return a.getMonth() === b.getMonth() ? `${format(a, "MMM d")}-${format(b, "d")}` : `${format(a, "MMM d")} to ${format(b, "MMM d")}`;
+}
+
+function pctText(p: Pct): string {
+  return p.pct === null ? "no missions" : `${p.pct}% (${p.done} of ${p.total})`;
+}
+
+/** "Last week 50% (1 of 2) · Week before no missions" */
+function TwoWeekLine({ title, weeks }: { title: React.ReactNode; weeks: TwoWeeks }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-sm">
+      <span className="min-w-0">{title}</span>
+      <span className="text-xs tabular-nums text-[color:var(--color-text-muted)] shrink-0">
+        Last week {pctText(weeks[0])} · Week before {pctText(weeks[1])}
+      </span>
+    </div>
+  );
+}
+
 /** One man's card on the Coaching page. */
 function ManCard({ man: m }: { man: CoachingMan }) {
   const reachedOut = recentlyReached(m);
-  const r = m.signals.recent;
+  const c = m.completion;
+  const goals = m.goals.filter((g) => g.status !== "abandoned");
   return (
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-heading text-base">{m.name}</p>
+        <p className="font-heading text-base">
+          {m.name}
+          {m.role === "leader" ? <span className="ml-2 text-[10px] tracking-widest text-[color:var(--color-accent)]">LEADER</span> : null}
+          {m.isViewer ? <span className="ml-2 text-[10px] tracking-widest text-[color:var(--color-text-muted)]">YOU</span> : null}
+        </p>
         <p className="text-xs text-[color:var(--color-text-muted)]">
+          {c.combined.pct === null ? "No missions in the last two weeks" : `${c.combined.pct}% of missions done over the last two weeks`}
+          {" · "}
           {m.lastCheckin ? `Last check-in ${m.lastCheckin}` : "No check-ins yet"}
-          {r.total > 0 ? ` · ${r.done} of ${r.total} missions done, last 4 weeks` : ""}
           {reachedOut ? ` · Reached out ${formatDistanceToNowStrict(new Date(reachedOut.created_at))} ago` : ""}
         </p>
       </div>
 
-      {m.goals.length === 0 ? (
-        <p className="text-xs text-[color:var(--color-text-muted)] mt-2">No goals this quarter.</p>
-      ) : (
-        <ul className="mt-2 space-y-1">
-          {m.goals.filter((g) => g.status !== "abandoned").map((g) => (
-            <li key={g.id} className="text-sm">
-              <span className="font-heading text-xs mr-2" style={{ color: PILLAR_BY_CODE[g.focus_area].colorVar }}>
-                {PILLAR_BY_CODE[g.focus_area].label.toUpperCase()}
-              </span>
-              {g.desired_end_state}
-              {g.status !== "active" ? <span className="text-xs text-[color:var(--color-text-muted)]"> · {g.status === "completed" ? "completed" : "quarter review"}</span> : null}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-3 space-y-2">
+        {goals.length === 0 ? (
+          <p className="text-sm font-heading text-[color:var(--color-danger)]">No goals entered this quarter.</p>
+        ) : (
+          goals.map((g) => (
+            <TwoWeekLine
+              key={g.id}
+              weeks={c.byGoal.get(g.id) ?? [{ done: 0, total: 0, pct: null }, { done: 0, total: 0, pct: null }]}
+              title={
+                <>
+                  <span className="font-heading text-xs mr-2" style={{ color: PILLAR_BY_CODE[g.focus_area].colorVar }}>
+                    {PILLAR_BY_CODE[g.focus_area].label.toUpperCase()}
+                  </span>
+                  {g.desired_end_state}
+                  {g.status !== "active" ? <span className="text-xs text-[color:var(--color-text-muted)]"> · {g.status === "completed" ? "completed" : "quarter review"}</span> : null}
+                </>
+              }
+            />
+          ))
+        )}
+        <TwoWeekLine title="Missions not linked to a goal" weeks={c.nonGoal} />
+      </div>
 
       {m.missions.length > 0 ? (
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">

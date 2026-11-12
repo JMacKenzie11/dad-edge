@@ -58,17 +58,18 @@ export async function canCoachIn(user: SessionUser, communityId: string): Promis
   return !!data;
 }
 
-/** The man must be an active member here, and not the viewer himself. */
+/** The man must be an active member or leader here, and not the viewer himself. */
 export async function assertCoachable(user: SessionUser, communityId: string, memberId: string): Promise<void> {
   if (memberId === user.id || !(await canCoachIn(user, communityId))) notFound();
   const svc = createSupabaseServiceClient();
   const { data } = await svc
     .from("memberships")
-    .select("user_id")
+    .select("user_id, users:user_id(is_admin_only)")
     .eq("user_id", memberId)
     .eq("community_id", communityId)
-    .eq("role", "member")
+    .in("role", ["member", "leader"])
     .eq("status", "active")
     .maybeSingle();
-  if (!data) notFound();
+  const u = data ? (Array.isArray(data.users) ? data.users[0] : data.users) as { is_admin_only: boolean | null } | null : null;
+  if (!data || u?.is_admin_only) notFound();
 }

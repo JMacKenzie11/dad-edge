@@ -5,6 +5,7 @@ import { engagementStreaksByUser } from "@/lib/scoring/streaks";
 import type { CheckinRow } from "@/lib/scoring/week";
 import { computeSignals, type CoachGoal, type CoachMission, type FitVerdict, type ManSignals } from "./signals";
 import type { CoachingCommunity } from "./access";
+import { completion, type Completion } from "./completion";
 
 /**
  * Everything the Coaching pages show about the men in one community,
@@ -22,6 +23,10 @@ export type CoachingMan = {
   userId: string;
   name: string;
   email: string;
+  role: "member" | "leader";
+  /** The person looking at the page. Listed, but not opened or reached out to. */
+  isViewer: boolean;
+  completion: Completion;
   lastCheckin: string | null;
   goals: CoachGoal[];
   missions: CoachMission[];
@@ -47,19 +52,21 @@ const displayName = (u: Pick<UserRow, "first_name" | "last_name" | "email"> | nu
   [u?.first_name, u?.last_name].filter(Boolean).join(" ") || u?.email || fallback;
 
 /**
- * The men a leader coaches here: active members with the member role (not
- * leaders, which also leaves out the platform admins added to every
- * community as leaders), not the viewer, no admin-only accounts.
+ * Everyone on the Coaching list here: active members AND leaders (the
+ * community's leaders and the platform admins who do the program; Jason,
+ * 2026-11-12). Admin-only accounts, which don't do the program, are left
+ * out. With `viewerId`, the viewer himself is left out too; the page
+ * passes null and marks him instead.
  */
 export async function coachableIds(svc: SupabaseClient, communityId: string, viewerId: string | null) {
   const { data } = await svc
     .from("memberships")
-    .select("user_id, users:user_id(first_name, last_name, email, is_admin_only)")
+    .select("user_id, role, users:user_id(first_name, last_name, email, is_admin_only)")
     .eq("community_id", communityId)
-    .eq("role", "member")
+    .in("role", ["member", "leader"])
     .eq("status", "active");
-  return ((data ?? []) as { user_id: string; users: UserRow | UserRow[] | null }[])
-    .map((m) => ({ userId: m.user_id, user: one(m.users) }))
+  return ((data ?? []) as { user_id: string; role: "member" | "leader"; users: UserRow | UserRow[] | null }[])
+    .map((m) => ({ userId: m.user_id, role: m.role, user: one(m.users) }))
     .filter((m) => m.userId !== viewerId && m.user && !m.user.is_admin_only);
 }
 
@@ -69,7 +76,9 @@ export async function loadCoaching(
   opts: { viewerId: string | null; onlyUserId?: string; now?: Date },
 ): Promise<{ window: CoachingWindow; men: CoachingMan[] }> {
   const window = coachingWindow(community, opts.now);
-  let roster = await coachableIds(svc, community.id, opts.viewerId);
+  // The viewer is listed with everyone else (he may do the program too),
+  // marked so the page doesn't offer to open or reach out to himself.
+  let roster = await coachableIds(svc, community.id, null);
   if (opts.onlyUserId) roster = roster.filter((r) => r.userId === opts.onlyUserId);
   const ids = roster.map((r) => r.userId);
   if (ids.length === 0) return { window, men: [] };
@@ -128,7 +137,7 @@ export async function loadCoaching(
   }
 
   const goals = (goalsRes.data ?? []) as (CoachGoal & { user_id: string })[];
-  const men = roster.map(({ userId, user }) => {
+  const men = roster.map(({ userId, role, user }) => {
     const g = goals.filter((x) => x.user_id === userId);
     const m = missions.filter((x) => x.user_id === userId);
     const f = new Map([...fit].filter(([id]) => m.some((x) => x.id === id)));
@@ -136,6 +145,9 @@ export async function loadCoaching(
       userId,
       name: displayName(user, userId),
       email: user?.email ?? "",
+      role,
+      isViewer: userId === opts.viewerId,
+      completion: completion(g.filter((x) => x.status !== "abandoned"), m, window.weekStart),
       lastCheckin: lastBy.get(userId) ?? null,
       goals: g,
       missions: m,
@@ -166,7 +178,8 @@ export function recentlyReached(man: CoachingMan, now: Date = new Date()): Follo
  * Reach out: men with flags, heaviest first, skipping anyone reached in
  * the last week. Call out: men with wins.
  */
-export function triage(men: CoachingMan[], now: Date = new Date()) {
+export function triage(all: CoachingMan[], now: Date = new Date()) {
+  const men = all.filter((m) => !m.isViewer);
   const reachOut = men
     .filter((m) => m.signals.flags.length > 0 && !recentlyReached(m, now))
     .sort((a, b) => b.signals.weight - a.signals.weight || a.name.localeCompare(b.name));

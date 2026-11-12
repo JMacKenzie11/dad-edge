@@ -360,6 +360,15 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## Coaching list: completion by week (2026-11-12)
+
+Jason asked for the Coaching list to show each man's goals with how many of their missions he got done, the same for his other missions, and to put the best at the top. His calls:
+
+- **Last week and the week before, not this week.** The current week is still open, so a Monday number would read as a miss.
+- **Sorted by completion over both weeks together, highest first.** A man with no missions in either week goes last, since 0 of 0 isn't 0%.
+- **Per goal, plus one line for missions not linked to a goal.** A mission counts in the week of its target date; done means completed (late counts). Missed, rolled over or still planned once the week is over count as not done.
+- **Leaders are in the list.** Community leaders and the admins who do the program are listed, marked LEADER, and can be opened and reached out to like anyone. Admin-only accounts still aren't. The viewer sees his own card (marked YOU) but it doesn't open, and he's never in his own Reach out or Call out, or his own Monday email.
+
 ## MCP server for outside systems (2026-11-12)
 
 Jason wanted to connect outside systems, starting with Grok Bot, so a prompt there can pull a community's first names and emails to email them. He connects as admin, so the prompt has to say which community. The calls:
