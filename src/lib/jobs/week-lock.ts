@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { selectAll } from "@/lib/supabase/select-all";
 import { localMonday, weekDates } from "@/lib/scoring/week";
 import { sendWeekCloseEmail } from "@/lib/email";
 import { enqueueNotification } from "@/lib/notifications/enqueue";
@@ -78,11 +79,13 @@ export async function runWeekLock(now: Date = new Date()): Promise<JobResult> {
       const memberIds = (members ?? []).map((m) => (m as { user_id: string }).user_id);
       if (memberIds.length === 0) continue;
 
-      const { data: rows } = await svc
+      const { data: rows } = await selectAll((lo, hi) => svc
         .from("daily_checkins")
         .select("user_id, date, value")
         .in("user_id", memberIds)
-        .in("date", week);
+        .in("date", week)
+        .order("id")
+        .range(lo, hi));
 
       const loggedDaysByUser = new Map<string, Set<string>>();
       const weekTotalByUser = new Map<string, number>();

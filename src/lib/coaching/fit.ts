@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { selectAll } from "@/lib/supabase/select-all";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -105,12 +106,14 @@ export async function judgeMissingFits(
   opts: { userIds: string[]; from: string; limit?: number; concurrency?: number },
 ): Promise<{ judged: number; failed: number; pending: number }> {
   if (opts.userIds.length === 0) return { judged: 0, failed: 0, pending: 0 };
-  const { data } = await svc
+  const { data } = await selectAll((lo, hi) => svc
     .from("missions")
     .select("id, description, quarterly_goal_id, goal:quarterly_goal_id(id, focus_area, desired_end_state, current_state)")
     .in("user_id", opts.userIds)
     .not("quarterly_goal_id", "is", null)
-    .gte("target_date", opts.from);
+    .gte("target_date", opts.from)
+    .order("id")
+    .range(lo, hi));
   const rows = ((data ?? []) as Row[])
     .map((r) => ({ r, g: Array.isArray(r.goal) ? r.goal[0] : r.goal }))
     .filter((x): x is { r: Row; g: NonNullable<typeof x.g> } => !!x.g);

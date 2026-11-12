@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { selectAll } from "@/lib/supabase/select-all";
 import {
   sendDisengagementEmail,
   sendLeaderDisengagementAlert,
@@ -51,11 +52,13 @@ export async function runDisengagementScan(now: Date = new Date()): Promise<JobR
     const memberIds = (memberships ?? []).map((m) => (m as { user_id: string }).user_id);
     if (memberIds.length === 0) continue;
 
-    const { data: checkins } = await svc
+    const { data: checkins } = await selectAll((lo, hi) => svc
       .from("daily_checkins")
       .select("user_id, date")
       .in("user_id", memberIds)
-      .gte("date", isoDateNDaysAgo(30));
+      .gte("date", isoDateNDaysAgo(30))
+      .order("id")
+      .range(lo, hi));
     const lastByUser = new Map<string, string>();
     for (const r of (checkins ?? []) as { user_id: string; date: string }[]) {
       const prev = lastByUser.get(r.user_id);

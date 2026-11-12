@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { selectAll } from "@/lib/supabase/select-all";
 import { sendDailyReminderEmail } from "@/lib/email";
 import { localDate, localMonday, weekDates } from "@/lib/scoring/week";
 import { isWithinReminderWindow } from "@/lib/jobs/timezones";
@@ -62,11 +63,13 @@ export async function runDailyReminders(
     const memberIds = (members ?? []).map((m) => (m as { user_id: string }).user_id);
     if (memberIds.length === 0) continue;
 
-    const { data: rows } = await svc
+    const { data: rows } = await selectAll((lo, hi) => svc
       .from("daily_checkins")
       .select("user_id, date, value")
       .in("user_id", memberIds)
-      .in("date", week);
+      .in("date", week)
+      .order("id")
+      .range(lo, hi));
 
     const loggedToday = new Set<string>();
     const weekTotal = new Map<string, number>();

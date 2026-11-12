@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { selectAll } from "@/lib/supabase/select-all";
 import { loadViewerCommunities, pickViewerCommunity } from "@/lib/communities/viewer-community";
 import { CommunityPicker } from "@/components/ui/community-picker";
 import { format } from "date-fns";
@@ -205,18 +206,22 @@ export default async function CommunityPage({
   const nextMonday = shiftDate(monday, 7);
 
   const [{ data: rawCheckins }, { data: rawMissions }] = await Promise.all([
-    supabase
+    selectAll((lo, hi) => supabase
       .from("daily_checkins")
       .select("user_id, date, pillar_code, value")
       .in("user_id", memberIds)
       .gte("date", fourWeekStart)
-      .lt("date", nextMonday),
-    supabase
+      .lt("date", nextMonday)
+      .order("id")
+      .range(lo, hi)),
+    selectAll((lo, hi) => supabase
       .from("missions")
       .select("user_id, target_date, status, completed_late, quality_score")
       .in("user_id", memberIds)
       .gte("target_date", fourWeekStart)
-      .lt("target_date", nextMonday),
+      .lt("target_date", nextMonday)
+      .order("id")
+      .range(lo, hi)),
   ]);
 
   const stats = computeCommunityStats({
