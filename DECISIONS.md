@@ -424,6 +424,16 @@ Jason wanted somewhere in admin to pick a community and see each man's goals for
 - **What's never read:** coach conversations, the partner survey, partner and kids details. Every open of a man's page is audit-logged.
 - **How it stays honest:** the fit check passed six clear-cut cases three times each on the live model before shipping. Harder calls are where it may be wrong; Jason will say if it's misjudging.
 
+## Past mission weeks (2026-11-12)
+
+Jason: let people look back at previous weeks' missions, but not change them after the week locks.
+
+- **Every week back to his first mission.** The back arrow steps one week at a time and stops at the week of his earliest mission. Nothing is gained by cutting history off at a quarter.
+- **Locked weeks are view-only, the same layout as last week's catch-up.** Only the missions he set, with their days, status and coach score; no empty slots, nothing to edit, complete, carry or delete. The coach isn't asked to rescore them.
+- **Goal missions under the goals they were set against,** even goals since closed, so an old week reads as it was lived rather than under a CLOSED GOALS heading that says he can still complete them.
+- **The lock is enforced by the database, not just the page.** Before this, the "self write" policy let a member change any of his missions in any week; only the page kept old weeks out of reach. Showing old weeks made that gap worth closing. The trigger uses the same calendar arithmetic as the page (`getEditWindow`), so the two agree, and it doesn't wait for the nightly job to stamp `weeks.locked_at`.
+- **Service role and cascades pass.** The nightly missed-mission job, ITC result handling, deleting a goal and a challenge resync all touch old missions without being the man rewriting his week.
+
 ## Partner survey saves every answer (2026-11-10)
 
 The Partner Connection Survey saved nothing until the last button, so a sit-down cut short (dinner, a kid, a dead phone) lost every answer. Jason: save whenever a question is answered, and let him come back to an unfinished survey and finish it. His calls (2026-11-10):

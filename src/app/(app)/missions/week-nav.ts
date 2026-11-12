@@ -1,11 +1,17 @@
 /**
  * Which mission week is on screen, and where the arrows go.
  *
- * Three weeks are ever reachable: last week (only while the community
- * grace period is still open), this week, and next week (any day, so
- * he can set it up before it starts). Anything else — a malformed param, a
- * week that has since locked, a bookmark from three weeks ago — is a
- * redirect back to the canonical /missions rather than an error.
+ * Reachable weeks: next week (any day, so he can set it up before it
+ * starts), this week, and every earlier week back to `firstMonday`, the
+ * week of his first mission. Last week is "catch-up" while the community
+ * grace period is open; every earlier week, and last week once it has
+ * locked, is view-only (DECISIONS.md "Past mission weeks"). The database
+ * refuses changes to a locked week whatever the page shows
+ * (mission_week_lock_trg).
+ *
+ * Anything else (a malformed param, a date that isn't a Monday, a week
+ * before his first mission, two weeks out) is a redirect back to the
+ * canonical /missions rather than an error.
  *
  * Pulled out of the page so the arrow wiring can be tested. Getting
  * it wrong is invisible until someone clicks: the first cut sent
@@ -17,8 +23,11 @@ export type MissionWeekView = {
   prevMonday: string | null;
   /** Monday the forward arrow points at, or null to disable it. */
   nextMonday: string | null;
+  /** Last week while its grace period is open: close out what he set. */
   isLastWeek: boolean;
   isNextWeek: boolean;
+  /** A week that has locked: look, don't touch. */
+  isLocked: boolean;
 };
 
 export type MissionWeekInput = {
@@ -29,44 +38,58 @@ export type MissionWeekInput = {
   nextMonday: string;
   /** Last week's grace period is still open. */
   canGoBack: boolean;
+  /** Monday of the earliest week he has a mission in, or null with none. */
+  firstMonday: string | null;
 };
 
 const MONDAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Shift a yyyy-MM-dd date by whole weeks, in UTC so the host timezone can't move it. */
+export function shiftWeek(monday: string, weeks: number): string {
+  const d = new Date(`${monday}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + weeks * 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function isMonday(iso: string): boolean {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso && d.getUTCDay() === 1;
+}
 
 export function resolveMissionWeek(
   input: MissionWeekInput,
 ): MissionWeekView | { redirect: true } {
   const { requested, thisMonday, lastMonday, nextMonday, canGoBack } = input;
+  // The back arrow always reaches last week while it's open, even with
+  // nothing in it, so he can see there's nothing to close out.
+  const openFloor = canGoBack ? lastMonday : thisMonday;
+  const floor = input.firstMonday && input.firstMonday < openFloor ? input.firstMonday : openFloor;
 
   let viewMonday = thisMonday;
   if (requested !== undefined) {
-    // `?week=` set to this week is a redirect, not a view — the
+    // `?week=` set to this week is a redirect, not a view: the
     // current week's canonical URL is bare /missions, so a refresh or
     // a shared link always lands in the same place.
-    if (!MONDAY_RE.test(requested) || requested === thisMonday) {
+    if (!MONDAY_RE.test(requested) || !isMonday(requested) || requested === thisMonday) {
       return { redirect: true };
     }
-    const reachable =
-      (canGoBack && requested === lastMonday) || requested === nextMonday;
+    const reachable = requested === nextMonday || (requested < thisMonday && requested >= floor);
     if (!reachable) return { redirect: true };
     viewMonday = requested;
   }
 
-  const isLastWeek = viewMonday === lastMonday;
   const isNextWeek = viewMonday === nextMonday;
+  const isLastWeek = canGoBack && viewMonday === lastMonday;
+  const isLocked = viewMonday < thisMonday && !isLastWeek;
+  const back = shiftWeek(viewMonday, -1);
 
-  // One step at a time between the reachable weeks.
+  // One step at a time.
   return {
     viewMonday,
     isLastWeek,
     isNextWeek,
-    prevMonday: isLastWeek
-      ? null
-      : isNextWeek
-        ? thisMonday
-        : canGoBack
-          ? lastMonday
-          : null,
-    nextMonday: isNextWeek ? null : isLastWeek ? thisMonday : nextMonday,
+    isLocked,
+    prevMonday: back >= floor ? back : null,
+    nextMonday: isNextWeek ? null : shiftWeek(viewMonday, 1),
   };
 }

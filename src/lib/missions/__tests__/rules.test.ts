@@ -86,6 +86,7 @@ describe("trigger refusals", () => {
     ["mission_pillar_retired:N", "Network doesn't take missions anymore. Pick Bond, Raise, Amplify, Vitality, or Enjoyment."],
     ["mission_goal_closed", "That goal is closed, so it can't take new missions."],
     ["goal_pillar_retired:M", "Goals go on Bond, Raise, Amplify, Vitality, or Enjoyment."],
+    ["mission_week_locked:2026-10-26", "That week is locked, so its missions can't change."],
   ])("%s", (details, expected) => {
     expect(friendlyMissionError({ details, message: "raw" }, today)).toBe(expected);
   });

@@ -354,7 +354,8 @@ function FilledSlot({
     // Skip scoring on completed missions — the coach's take on a
     // finished mission is noise and the pill is hidden anyway. Challenge
     // missions are never scored: the wording is the challenge's, not his.
-    if (mission.status === "completed" || mission.challenge_id) {
+    // Nor on a view-only row: nothing he could act on.
+    if (mission.status === "completed" || mission.challenge_id || readOnly) {
       setScore(null);
       setScoring(false);
       return;
@@ -387,7 +388,7 @@ function FilledSlot({
     return () => {
       if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
-  }, [description, dayIndexes, weekDates, mission.target_date, mission.status, mission.challenge_id]);
+  }, [description, dayIndexes, weekDates, mission.target_date, mission.status, mission.challenge_id, readOnly]);
 
   // Carrying shifts a mission one week forward from its own dates, so
   // from last week's catch-up view the copy lands in THIS week, not
@@ -558,7 +559,9 @@ function FilledSlot({
               <span className="text-[color:var(--color-text-muted)]">
                 {" · "}
                 {format(new Date(`${mission.target_date}T00:00:00`), "EEEE")}{" "}
-                {isChallenge ? (
+                {readOnly ? (
+                  <>came and went without a COMPLETE.</>
+                ) : isChallenge ? (
                   <>came and went short of the target. If you did more days, you can still tick them until the week locks.</>
                 ) : (
                   <>came and went without a COMPLETE. You can still complete it — it&rsquo;ll log as late — or send it to next week.</>
