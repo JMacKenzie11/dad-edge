@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { keyCoversCommunity, requestKey, type ApiKeyRow } from "@/lib/mcp/keys";
 import { activeCommunities, activeMemberContacts, communitiesFor, countedMen, findApiKey } from "@/lib/mcp/members";
 import { loadMissionResults, reportWeek } from "@/lib/mcp/mission-results";
+import { loadDailyLiving } from "@/lib/mcp/daily-living";
 import { resolveForKey } from "@/lib/mcp/resolve";
 import { verifyOAuthToken } from "@/lib/mcp/oauth";
 
@@ -83,6 +84,29 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
     },
   );
 
+  /** The communities a tool was asked for, limited to what this connection covers. */
+  async function pickCommunities(asked: string[]) {
+    const all = await activeCommunities(svc);
+    const covered = all.filter((c) => keyCoversCommunity(key, c.id));
+    const picked = new Map<string, (typeof all)[number]>();
+    const problems: { asked: string; error: string; choices: { name: string; slug: string }[] }[] = [];
+    if (asked.some((a) => a.trim().toLowerCase() === "all")) {
+      for (const c of covered) picked.set(c.id, c);
+    } else {
+      for (const a of asked) {
+        const r = resolveForKey(a, all, (id) => keyCoversCommunity(key, id));
+        if (r.kind === "match") picked.set(r.community.id, all.find((c) => c.id === r.community.id)!);
+        else
+          problems.push({
+            asked: a,
+            error: r.kind === "ambiguous" ? "matches more than one community" : r.kind === "not_allowed" ? "this connection can't read it" : "no community matches",
+            choices: r.choices.map(({ name, slug }) => ({ name, slug })),
+          });
+      }
+    }
+    return { picked, problems };
+  }
+
   server.registerTool(
     "mission_results",
     {
@@ -96,24 +120,7 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
       annotations: { readOnlyHint: true },
     },
     async ({ communities: asked, week }) => {
-      const all = await activeCommunities(svc);
-      const covered = all.filter((c) => keyCoversCommunity(key, c.id));
-      const picked = new Map<string, (typeof all)[number]>();
-      const problems: { asked: string; error: string; choices: { name: string; slug: string }[] }[] = [];
-      if (asked.some((a) => a.trim().toLowerCase() === "all")) {
-        for (const c of covered) picked.set(c.id, c);
-      } else {
-        for (const a of asked) {
-          const r = resolveForKey(a, all, (id) => keyCoversCommunity(key, id));
-          if (r.kind === "match") picked.set(r.community.id, all.find((c) => c.id === r.community.id)!);
-          else
-            problems.push({
-              asked: a,
-              error: r.kind === "ambiguous" ? "matches more than one community" : r.kind === "not_allowed" ? "this connection can't read it" : "no community matches",
-              choices: r.choices.map(({ name, slug }) => ({ name, slug })),
-            });
-        }
-      }
+      const { picked, problems } = await pickCommunities(asked);
       const results = [];
       for (const c of picked.values()) {
         const w = reportWeek(week, c.timezone);
@@ -123,6 +130,37 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
       await auditLog({
         actor_user_id: key.created_by,
         action: "mcp.mission_results",
+        target_type: "community",
+        target_id: null,
+        metadata: { api_key_id: key.id, api_key_label: key.label, asked, week: week ?? null, community_ids: [...picked.keys()] },
+      });
+      return text({ results, ...(problems.length ? { not_found: problems } : {}) }, results.length === 0);
+    },
+  );
+
+  server.registerTool(
+    "daily_living",
+    {
+      title: "Daily Living scores by community",
+      description:
+        "Each man's Daily Living score for a week in one or more communities: the daily pillars he checked off, out of 49 (7 pillars × 7 days), the same number as the app's leaderboard, plus how many of the 7 days he checked in. One number per man, never his daily answers. Defaults to last week. Men are listed best first by first name and last initial; men with no check-ins that week are listed by name. Each community also gets the average score across all its men. Pass community names or slugs as the user wrote them, or [\"all\"] for every community.",
+      inputSchema: {
+        communities: z.array(z.string().min(1).max(120)).min(1).max(20).describe('Community names or slugs, e.g. ["10am", "Business Owner Brotherhood"], or ["all"]'),
+        week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Any date in the week to report, YYYY-MM-DD. Leave out for last week."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ communities: asked, week }) => {
+      const { picked, problems } = await pickCommunities(asked);
+      const results = [];
+      for (const c of picked.values()) {
+        const w = reportWeek(week, c.timezone);
+        const men = await countedMen(svc, c.id);
+        results.push({ community: { name: c.name, slug: c.slug }, ...(await loadDailyLiving(svc, men, w)) });
+      }
+      await auditLog({
+        actor_user_id: key.created_by,
+        action: "mcp.daily_living",
         target_type: "community",
         target_id: null,
         metadata: { api_key_id: key.id, api_key_label: key.label, asked, week: week ?? null, community_ids: [...picked.keys()] },

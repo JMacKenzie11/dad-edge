@@ -360,6 +360,15 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## MCP Daily Living (2026-11-13)
+
+Jason wanted Grok Bot to report Daily Living alongside mission results. It's the first check-in data to leave the app, and his call (2026-11-13).
+
+- **One number per man per week:** his Daily Living score out of 49 and how many of the 7 days he checked in. No daily answers, dates or which pillars.
+- **The leaderboard's number,** counted the same way (one point per daily pillar per day, A2 left out, out of 49 regardless of when he joined), so Grok and the app never disagree.
+- **A community average** across all counted men, men with no check-ins included, so a quiet week shows.
+- **Same scope as mission_results:** community names or `["all"]`, last week by default, staff left out, every call in the audit log. The consent page names it; an app connected before should be reconnected so its Allow covers it.
+
 ## MCP mission results (2026-11-12)
 
 Jason wanted to pull how men in different communities did on their missions last week from Grok Bot. His calls:
