@@ -58,7 +58,9 @@ test("an admin connects an approved AI app and it can list members, nothing more
   const { verifier, challenge } = pkce();
   await authorize(page, clientId, challenge);
   await expect(page.getByRole("heading", { name: /Connect .+ to Brave Man OS\?/ })).toBeVisible();
-  await expect(page.getByText(/can't read what his goals or missions say, his check-ins or survey answers/)).toBeVisible();
+  await expect(page.getByText(/can't read what his goals or missions say, his daily check-in answers or survey answers/)).toBeVisible();
+  // The consent page says what it will see, Daily Living included.
+  await expect(page.getByText(/weekly Daily Living score out of 49/)).toBeVisible();
   await page.getByRole("button", { name: "ALLOW" }).click();
   await page.waitForURL(/^https:\/\/grok\.com\//);
   const code = new URL(page.url()).searchParams.get("code");
@@ -94,6 +96,18 @@ test("an admin connects an approved AI app and it can list members, nothing more
   expect(Object.keys(r.totals).sort()).toEqual(["all", "brave_man_missions", "goal_missions"]);
   expect([...r.men.map((x: { name: string }) => x.name), ...r.no_missions].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
   expect(JSON.stringify(body)).not.toMatch(/Call her at lunch|Lift four times/);
+
+  // Daily Living: one score out of 49 per man for a week, no daily answers.
+  const dl = await mcp(request, token, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "daily_living", arguments: { communities: ["e2e basecamp"] } } });
+  const dlBody = JSON.parse((await dl.json()).result.content[0].text);
+  expect(dlBody.results).toHaveLength(1);
+  const d = dlBody.results[0];
+  expect(d.community.name).toBe("E2E Basecamp");
+  expect(d.week.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  for (const m of d.men) expect(Object.keys(m).sort()).toEqual(["days_checked_in", "max", "name", "percent", "score"]);
+  expect([...d.men.map((x: { name: string }) => x.name), ...d.no_checkins].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
+  expect([...d.men.map((x: { name: string }) => x.name), ...d.no_checkins].length).toBeGreaterThan(0);
+  expect(JSON.stringify(dlBody)).not.toMatch(/pillar|@/);
 
   // Straight at the database with the same token: refused.
   const direct = await request.get(`${SUPA}/rest/v1/users?select=email&limit=1`, { headers: { apikey: ANON, authorization: `Bearer ${token}` } });
