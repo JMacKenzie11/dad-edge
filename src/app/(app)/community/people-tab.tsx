@@ -15,9 +15,12 @@ type SortKey = "activity" | "streak" | "missions" | "newest" | "az";
 export function PeopleTab({
   members,
   viewerId,
+  quarterLabel,
 }: {
   members: CommunityMember[];
   viewerId: string;
+  /** "Q4 2026" */
+  quarterLabel: string;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("activity");
@@ -51,12 +54,16 @@ export function PeopleTab({
           >
             <option value="activity">Most active</option>
             <option value="streak">Longest streak</option>
-            <option value="missions">Missions %</option>
+            <option value="missions">Missions % this quarter</option>
             <option value="newest">Newest member</option>
             <option value="az">A → Z</option>
           </select>
         </label>
       </div>
+
+      <p className="text-[11px] text-[color:var(--color-text-muted)]">
+        MISSIONS and ON GOALS count {quarterLabel} so far. ON GOALS counts only the missions tied to one of his goals.
+      </p>
 
       {rows.length === 0 ? (
         <p className="text-sm text-[color:var(--color-text-muted)] italic py-6 text-center">
@@ -117,43 +124,25 @@ function MemberCard({
           </p>
 
           {member.goals.length > 0 ? (
-            <ul className="flex flex-wrap gap-1.5 mt-2">
+            <ul className="mt-2 space-y-1">
               {member.goals.map((g, i) => (
-                <li
-                  key={i}
-                  title={g.text}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-heading tracking-widest"
-                  style={{
-                    borderColor: g.colorVar,
-                    color: g.colorVar,
-                    background: `color-mix(in oklab, ${g.colorVar} 12%, transparent)`,
-                  }}
-                >
-                  {g.pillarLabel.toUpperCase()}
-                  {g.isItc ? (
-                    <span className="text-[8px] opacity-70">IMPROVEMENT</span>
-                  ) : null}
-                </li>
+                <GoalLine key={i} goal={g} />
               ))}
             </ul>
           ) : null}
 
           <div className="mt-3 flex items-center gap-4 text-xs flex-wrap">
             <Metric
+              label="MISSIONS"
+              value={pct(member.missionPct)}
+              badge={member.badges.missions}
+            />
+            <Metric label="ON GOALS" value={pct(member.goalMissionPct)} badge={null} />
+            <Metric
               label="DAILY"
               value={`${member.dailyLivingAvg.toFixed(1)}`}
               suffix="/49 avg"
               badge={member.badges.dailyLiving}
-            />
-            <Metric
-              label="MISSIONS"
-              value={
-                member.missionPct === null
-                  ? "—"
-                  : `${Math.round(member.missionPct)}%`
-              }
-              suffix={member.missionPct === null ? "no plans" : ""}
-              badge={member.badges.missions}
             />
             <Metric
               label="STREAK"
@@ -185,6 +174,38 @@ function MemberCard({
           </svg>
         </Link>
       </div>
+    </li>
+  );
+}
+
+function pct(v: number | null): string {
+  return v === null ? "none" : `${Math.round(v)}%`;
+}
+
+/**
+ * One line per goal: the domain, then his wording cut to one line.
+ * Tapping the line shows the whole goal, so the card stays short.
+ */
+function GoalLine({ goal }: { goal: CommunityMember["goals"][number] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full text-left flex items-baseline gap-2 text-[12px] leading-snug cursor-pointer"
+      >
+        <span
+          className="shrink-0 text-[9px] font-heading tracking-widest"
+          style={{ color: goal.colorVar }}
+        >
+          {goal.pillarLabel.toUpperCase()}
+        </span>
+        <span className={`min-w-0 text-[color:var(--color-text)]/85 ${open ? "" : "truncate"}`}>
+          {goal.text}
+        </span>
+      </button>
     </li>
   );
 }

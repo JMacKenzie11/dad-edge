@@ -3,6 +3,7 @@
 _Snapshot of current app behavior as of 2026-09-01. Reverse-engineered from the codebase at `/Users/jasonmackenzie/Custom Applications/Dad Edge Brave Man OS/`._
 
 _Change log since 2026-08-20 snapshot:_
+- **People cards: goals and the quarter (2026-11-13):** each card on Community → People lists his goals for this quarter, one line each with the domain and his wording cut to one line (tap for all of it). MISSIONS is now this quarter so far (was the last 6 weeks), and ON GOALS beside it counts only missions tied to one of his goals. Everyone in his community sees the goal wording; before, community-mates saw only the domain tags. The Missions badge and sort follow the quarter number. See §6 People directory.
 - **Start from an example (2026-11-12):** the add-mission box on `/missions` and the new-goal form on `/goals` list five prewritten examples for the domain under START FROM AN EXAMPLE (`src/lib/examples/library.ts`). Tapping one fills the box; every word stays editable. A [blank] such as [kid's name] is selected so he types over it, and nothing saves while one is left ("Fill in [kid's name] first.", checked on the server too). `mission_created` and `goal_created` analytics carry the example's id.
 - **Clearer check-in flag (2026-11-12):** on the Coaching pages the flag now reads "No daily check-ins in the last N days." (was "No check-in for N days."), "No daily check-ins yet." for a man who has never checked in, and the card header says "Last daily check-in <date>". It counts the daily check-in on Today only, not missions.
 - **Check-ins counted in full (2026-11-12):** pages and jobs that read check-ins or missions for a whole community (Coaching, leader overview, Members, Disengagement, Community, leaderboard, people directory, MCP `mission_results`, digest, week-lock and reminder emails, disengagement scan) now read every row. They used to stop at the database's 1,000-row limit, so in larger communities a man who checked in daily could show as not checking in for days. See docs/failure-modes.md FM-18.
@@ -49,7 +50,7 @@ _Change log since 2026-08-20 snapshot:_
 - **In-app notifications (bell)** shipped: `notifications` table with per-kind dedup, header bell with unread badge + dropdown, five kinds (daily_reminder, week_lock, weekly_digest, quarter_closing, goal_midpoint). New nightly job `goal-midpoint-check`.
 - **Weekly summary card** on `/dashboard` — grace-period-gated streaming recap ({ highlight, what_worked, opportunity }) persisted to `weekly_summaries`. Streams via `[HIGHLIGHT]/[WHAT WORKED]/[OPPORTUNITY]` markers with typewriter reveal.
 - **Pillar Consistency chart** replaces the old grouped bar chart on `/dashboard`; Action pillar dropped (derived from missions). Daily Living trend card removed — weekly summary now carries the trend narrative.
-- **Community tabs shipped:** `/community` is now Leaderboard + People (new). People tab renders a 6-week rolling directory with tenure-normalized activity + streak + mission metrics, gold/silver/bronze pips, search + sort, MESSAGE button.
+- **Community tabs shipped:** `/community` is now Leaderboard + People (new). People tab renders a directory (6-week rolling at launch; missions moved to the quarter 2026-11-13) with tenure-normalized activity + streak + mission metrics, gold/silver/bronze pips, search + sort, MESSAGE button.
 - **1-on-1 messaging shipped:** `message_threads` + `messages` + `message_reactions` with canonical (a<b) pair ordering, RLS gated on shared-active-community at thread creation, realtime publication. Messages nav item + speech-bubble header icon with unread badge. Two-pane `/messages` shell, quick reactions, day-dividers, optimistic send.
 - **Admin memberships management:** `/admin/users/[id]` now edits per-membership role, removes memberships, and adds new ones via community dropdown + role selector. Audit-logged.
 - **Admin-only users:** new `users.is_admin_only` flag (requires `is_platform_admin`). `requireAccess()` short-circuits admin-only users to `/admin`; coachee shell hidden. New Account form gains an "Admin only" checkbox.
@@ -615,14 +616,16 @@ State machine in `src/lib/weekly-summary/state.ts` returns one of `ready | gener
 - Reactions: 5 quick picks only (👍 ❤️ 💪 🔥 🙏). Emoji picker not shipped.
 - No group chats, attachments, or coach visibility (never). No reporting/blocking or typing indicators in v1.
 
-### People directory (rolling 6-week window)
+### People directory
 - Server aggregates per member in `src/lib/community/people-directory.ts`; consumed by `src/app/(app)/community/people-tab.tsx`.
 - **`dailyLivingAvg`** = check-ins over the last 6 weeks ÷ `min(6, tenureWeeks)` — tenure-normalized so new members aren't punished for not having 6 weeks of history.
-- **`missionPct`** = completed / planned over the last 6 weeks (`null` when the member had no planned missions in-window).
+- **`missionPct`** (MISSIONS) = completed / planned this calendar quarter (UTC) up to today, rolled-over missions left out; `null` ("none") when he planned none.
+- **`goalMissionPct`** (ON GOALS) = the same, counting only missions linked to a goal (`quarterly_goal_id`); "none" when he has none.
 - **`streak`** = current engagement streak (same calc as `/today`).
-- **Top-3 pips per metric** — gold / silver / bronze pip on the top three members in each of Activity / Streak / Missions.
-- **Card layout:** `<UserAvatar>`, name + role tag, city + tenure line ("3 weeks in" for new members), pillar-colored goal chips (max 3), metric strip, MESSAGE button (routes to `/messages/with/[userId]`).
-- **Client controls:** search box + sort dropdown (activity / streak / missions / newest / A→Z).
+- **Goals** = his `active` goals for this quarter, oldest first. Shown to everyone in his community (DECISIONS.md "People cards show goals and quarter missions").
+- **Top-3 pips per metric** — gold / silver / bronze pip on the top three members in each of Activity / Streak / Missions (quarter).
+- **Card layout:** `<UserAvatar>`, name + role tag, city + tenure line ("3 weeks in" for new members), one line per goal (domain label in its color, wording truncated to one line; tapping the line shows all of it), metric strip MISSIONS · ON GOALS · DAILY · STREAK, MESSAGE button (routes to `/messages/with/[userId]`). One line above the list says the mission numbers are for the quarter so far.
+- **Client controls:** search box + sort dropdown (activity / streak / missions this quarter / newest / A→Z).
 - **Multi-community handling:** rosters union across every community the viewer is in, deduped by user_id, all community names listed in the header. Rare — no picker.
 
 ### Concreteness validator (`src/lib/validation/mission.ts`)
