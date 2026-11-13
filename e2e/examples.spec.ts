@@ -82,6 +82,11 @@ test("a mission from an example: type over the blank, then it saves", async ({ a
     // The blank is selected: typing replaces it.
     await page.keyboard.type("Lawson");
     await expect(box).toHaveValue("Take Lawson to breakfast, just the two of us, phone in the car.");
+    // No day is picked for him: Enter asks for one.
+    await box.press("Enter");
+    await expect(page.getByText("Tap the day or days you'll do it.")).toBeVisible();
+    await page.getByRole("listitem").filter({ has: box }).getByRole("checkbox").last().click();
+    await expect(page.getByText("Tap the day or days you'll do it.")).toHaveCount(0);
     await box.press("Enter");
     // Saved once, and only once.
     await expect
