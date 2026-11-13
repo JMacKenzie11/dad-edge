@@ -466,6 +466,13 @@ The Partner Connection Survey saved nothing until the last button, so a sit-down
 - **Finishing still needs a score and a note for every question,** checked on the server against what's saved, not what the page holds.
 - **The column defaults to finished.** `completed_at` defaults to `now()`, so the code before this change still writes finished surveys; only the draft path inserts `null`. The migration is safe to run before the deploy.
 
+## Mission days: none picked for him, picked is outlined (2026-11-13)
+
+Taylor Gustafson set "No fast food" for all seven days and saw them all lit, which he took as already done. In the database nothing was done; a lit day on a regular mission meant "picked", while on his burpee challenge row on the same page a lit day meant "done".
+
+- **Picked is outlined, done is filled.** Regular missions show picked days with a blue outline; only a challenge row fills a day, and only once it's done.
+- **No day is picked for him (Jason).** A new mission used to start with one day preset (today or the next day), easy to save without noticing. Now he taps every day himself, and saving without one says "Tap the day or days you'll do it." The server already refused a mission with no day.
+
 ## People cards show goals and quarter missions (2026-11-13)
 
 Jason wanted each card on Community → People to show the goals a man is working on, his mission completion for the quarter, and his completion on missions tied to a goal, without the cards getting big. Three calls:

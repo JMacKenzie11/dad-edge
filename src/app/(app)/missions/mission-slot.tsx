@@ -99,9 +99,9 @@ function EmptySlot({
 }: SlotProps) {
   const [expanded, setExpanded] = useState(false);
   const [description, setDescription] = useState("");
-  const [dayIndexes, setDayIndexes] = useState<number[]>(() => [
-    defaultDayIndex(weekDates),
-  ]);
+  // No day is picked for him: he taps the days he'll do it (Jason,
+  // 2026-11-13). A preset day was easy to save without noticing.
+  const [dayIndexes, setDayIndexes] = useState<number[]>([]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [score, setScore] = useState<MissionScore | null>(null);
@@ -196,13 +196,16 @@ function EmptySlot({
   };
 
   const blanks = blanksIn(description);
-  const canSave = description.trim().length >= MISSION_MIN_LENGTH && blanks.length === 0;
-  // Too short, or a [blank] still in it: say so rather than ignore the
-  // Enter (FM-17).
+  const canSave =
+    description.trim().length >= MISSION_MIN_LENGTH && blanks.length === 0 && dayIndexes.length > 0;
+  // Too short, a [blank] still in it, or no day picked: say so rather
+  // than ignore the Enter (FM-17).
   const trySave = () => {
     if (canSave) save();
     else if (blanks.length > 0) setError(blanksMessage(blanks));
-    else if (description.trim().length > 0) setError(MISSION_TOO_SHORT);
+    else if (description.trim().length === 0) return;
+    else if (description.trim().length < MISSION_MIN_LENGTH) setError(MISSION_TOO_SHORT);
+    else setError(PICK_A_DAY);
   };
 
   const pick = (e: Example) => {
@@ -269,7 +272,11 @@ function EmptySlot({
           <DayPicker
             weekDates={weekDates}
             value={dayIndexes}
-            onChange={setDayIndexes}
+            onChange={(next) => {
+              setDayIndexes(next);
+              if (next.length > 0 && error === PICK_A_DAY) setError(null);
+            }}
+            allowNone
           />
         </div>
         <div className={`shrink-0 flex items-center justify-center ${COL_COACH_WIDTH}`}>
@@ -784,16 +791,19 @@ function DayPicker({
   weekDates,
   value,
   onChange,
+  allowNone = false,
 }: {
   weekDates: string[];
   value: number[];
   onChange: (indexes: number[]) => void;
+  /** A new mission can have no day yet; a saved one keeps at least one. */
+  allowNone?: boolean;
 }) {
   const selected = new Set(value);
   const toggle = (i: number) => {
     const next = new Set(selected);
     if (next.has(i)) {
-      if (next.size === 1) return;
+      if (next.size === 1 && !allowNone) return;
       next.delete(i);
     } else {
       next.add(i);
@@ -817,10 +827,14 @@ function DayPicker({
             aria-checked={active}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => toggle(i)}
-            className={`h-6 w-5 rounded text-[10px] font-heading tracking-widest ${
+            // Picked days are outlined, never filled: a filled day means
+            // "done" on a challenge row on the same page, and a mission
+            // set for every day read as already done (Taylor G.,
+            // 2026-11-13).
+            className={`h-6 w-5 rounded border text-[10px] font-heading tracking-widest ${
               active
-                ? "bg-[color:var(--color-primary)] text-white"
-                : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
+                ? "border-[color:var(--color-primary)] text-[color:var(--color-primary)]"
+                : "border-transparent text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
             }`}
             title={iso}
           >
@@ -935,12 +949,8 @@ function FeedbackPanel({
   );
 }
 
-function defaultDayIndex(weekDates: string[]): number {
-  const today = new Date().toISOString().slice(0, 10);
-  const idx = weekDates.indexOf(today);
-  if (idx >= 0) return Math.min(6, idx + 1);
-  return 2;
-}
+/** Shown when he saves a new mission with no day picked. */
+const PICK_A_DAY = "Tap the day or days you'll do it.";
 
 /**
  * Resolve the day-of-week indexes for a mission's scheduled days.
