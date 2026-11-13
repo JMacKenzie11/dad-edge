@@ -434,6 +434,7 @@ Jason: give men prewritten goals and missions, written as excellent goals and mi
 - **The score isn't the point.** Missions scoring 0–4 were done 67% of the time and 8–10 66% (667 finished missions, 39 men). What predicted follow-through was the behavior: time with a named person ("spend", "take": 82–87%) over vague habits ("walk" 41%, "read" 45%). The examples lean that way.
 - **Measured.** `mission_created` / `goal_created` analytics carry `example_id`, so the examples men pick, and whether those missions get done, can be told apart. Wording lives in one file for Jason and Larry to edit.
 - The older seed list behind `/api/missions/examples` (no screen uses it) is left as it was.
+- **Fifteen, five at a time (Jason, 2026-11-13).** Fifteen per domain for variety, five on screen so the list stays short. The order is shuffled each time the list opens, so the first five aren't always the ones men see; SHOW OTHER EXAMPLES steps through the rest. The list floats over the page (Jason: it shouldn't push everything beneath it down), so the mission cards no longer clip what overflows them.
 
 ## Delete a mission entered by mistake (2026-11-12)
 
