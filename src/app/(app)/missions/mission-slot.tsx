@@ -827,13 +827,11 @@ function DayPicker({
             aria-checked={active}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => toggle(i)}
-            // Picked days are outlined, never filled: a filled day means
-            // "done" on a challenge row on the same page, and a mission
-            // set for every day read as already done (Taylor G.,
-            // 2026-11-13).
+            // Picked days are solid blue (Jason, 2026-11-13). None is
+            // picked for him, so a lit day is always one he tapped.
             className={`h-6 w-5 rounded border text-[10px] font-heading tracking-widest ${
               active
-                ? "border-[color:var(--color-primary)] text-[color:var(--color-primary)]"
+                ? "bg-[color:var(--color-primary)] border-[color:var(--color-primary)] text-white"
                 : "border-transparent text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]"
             }`}
             title={iso}
