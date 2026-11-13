@@ -65,10 +65,14 @@
     },
     {
       "kind": "field",
+      "label": "ON GOALS"
+    },
+    {
+      "kind": "field",
       "label": "STREAK"
     }
   ],
-  "source_hash": "6b2eee3725bdfe6f",
+  "source_hash": "e833d4c0e31c34a2",
   "source_files": [
     "src/app/(app)/community/page.tsx",
     "src/app/(app)/community/challenge-membership.tsx",

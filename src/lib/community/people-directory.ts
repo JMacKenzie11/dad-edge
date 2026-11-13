@@ -3,6 +3,7 @@ import { selectAll } from "@/lib/supabase/select-all";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { engagementStreaksByUser } from "@/lib/scoring/streaks";
 import type { PillarCode } from "@/lib/pillars";
+import { getCurrentQuarter } from "@/lib/scoring/quarters";
 
 /**
  * Rolling window for "how consistent has this man been lately". Chosen
@@ -35,12 +36,13 @@ export type CommunityMember = {
    *  performance. */
   isNewMember: boolean;
 
-  /** Active + needs_review goals, one chip per goal. */
+  /** This quarter's active goals, wording shown on the card to his
+   *  community (DECISIONS.md "People cards show goals and quarter
+   *  missions", 2026-11-13). */
   goals: Array<{
     pillarCode: PillarCode;
     pillarLabel: string;
     colorVar: string;
-    /** e.g. "Bond"; goal text hidden by default, shown on hover. */
     text: string;
     isItc: boolean;
   }>;
@@ -49,10 +51,12 @@ export type CommunityMember = {
    *  by min(tenureWeeks, ROLLING_WINDOW_WEEKS) so a new member with
    *  2 weeks of solid work isn't punished for the missing 4 weeks. */
   dailyLivingAvg: number;
-  /** Percentage of planned missions completed over rolling window.
-   *  null when the member had zero planned missions (avoids "0% but
-   *  hasn't planned anything yet" false negative). */
+  /** Percentage of planned missions completed this quarter so far.
+   *  null when he planned none (avoids "0% but hasn't planned anything
+   *  yet" false negative). */
   missionPct: number | null;
+  /** The same, counting only missions linked to one of his goals. */
+  goalMissionPct: number | null;
   /** Current consecutive-days-with-any-checkin streak, as of yesterday. */
   streak: number;
 
@@ -83,7 +87,8 @@ export type BadgeTier = "gold" | "silver" | "bronze";
  * Deliberately uses the service client for cross-user reads — RLS
  * on daily_checkins is self-only, but this is a community roster
  * feature where members are expected to see one another's aggregated
- * stats. Only aggregates (avg / pct / streak) are surfaced; raw
+ * stats. Aggregates (avg / pct / streak) plus this quarter's goal wording
+ * (DECISIONS.md "People cards show goals and quarter missions"); raw
  * check-in dates never leave the server.
  */
 export async function loadPeopleDirectory(
@@ -209,6 +214,10 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
     "yyyy-MM-dd",
   );
 
+  // Mission percentages and goals are for this quarter (UTC, like
+  // /goals and /missions).
+  const quarter = getCurrentQuarter();
+
   // 4. Bulk pulls. All queries scoped to memberIds → cheap for a
   //    12-40 person community.
   const [
@@ -229,9 +238,9 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
       .range(lo, hi)),
     selectAll((lo, hi) => svc
       .from("missions")
-      .select("user_id, status, target_date")
+      .select("user_id, status, target_date, quarterly_goal_id")
       .in("user_id", memberIds)
-      .gte("target_date", windowStart)
+      .gte("target_date", quarter.startIso)
       .lte("target_date", today)
       .order("id")
       .range(lo, hi)),
@@ -239,7 +248,9 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
       .from("quarterly_goals")
       .select("user_id, focus_area, desired_end_state, source, status")
       .in("user_id", memberIds)
-      .in("status", ["active", "needs_review"]),
+      .eq("quarter_start", quarter.startIso)
+      .eq("status", "active")
+      .order("created_at"),
     // Threads where I'm participant_a (other user is participant_b).
     svc
       .from("message_threads")
@@ -266,26 +277,9 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
     );
   }
 
-  const missionsPlannedByUser = new Map<string, number>();
-  const missionsCompletedByUser = new Map<string, number>();
-  for (const r of (missionRows ?? []) as Array<{
-    user_id: string;
-    status: string;
-    target_date: string;
-  }>) {
-    // rolled_over doesn't count toward planned (matches other scoring paths).
-    if (r.status === "rolled_over") continue;
-    missionsPlannedByUser.set(
-      r.user_id,
-      (missionsPlannedByUser.get(r.user_id) ?? 0) + 1,
-    );
-    if (r.status === "completed") {
-      missionsCompletedByUser.set(
-        r.user_id,
-        (missionsCompletedByUser.get(r.user_id) ?? 0) + 1,
-      );
-    }
-  }
+  const missionPctsByUser = quarterMissionPcts(
+    (missionRows ?? []) as QuarterMissionRow[],
+  );
 
   const goalsByUser = new Map<
     string,
@@ -367,9 +361,9 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
       const dl = dailyLivingByUser.get(r.user_id) ?? 0;
       const dailyLivingAvg = dl / denominatorWeeks;
 
-      const mp = missionsPlannedByUser.get(r.user_id) ?? 0;
-      const mc = missionsCompletedByUser.get(r.user_id) ?? 0;
-      const missionPct = mp === 0 ? null : (mc / mp) * 100;
+      const pcts = missionPctsByUser.get(r.user_id);
+      const missionPct = pcts?.all ?? null;
+      const goalMissionPct = pcts?.onGoals ?? null;
 
       const goals = (goalsByUser.get(r.user_id) ?? []).map((g) => {
         const p = pillarByCode[g.pillarCode];
@@ -396,6 +390,7 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
         goals,
         dailyLivingAvg,
         missionPct,
+        goalMissionPct,
         streak: streaks[r.user_id] ?? 0,
         badges: { dailyLiving: null, missions: null, streak: null },
         threadIdWithMe: threadByOtherUser.get(r.user_id) ?? null,
@@ -412,6 +407,45 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
   assignBadges(members, (m) => m.streak, "streak");
 
   return { communityNames, members };
+}
+
+export type QuarterMissionRow = {
+  user_id: string;
+  status: string;
+  quarterly_goal_id: string | null;
+};
+
+/**
+ * Completed ÷ planned per man, for all his missions and for the ones
+ * linked to a goal. Rolled-over missions don't count as planned
+ * (matches the other scoring paths). null when there's nothing to
+ * divide by. The caller has already limited the rows to this quarter,
+ * up to today.
+ */
+export function quarterMissionPcts(
+  rows: QuarterMissionRow[],
+): Map<string, { all: number | null; onGoals: number | null }> {
+  const tally = new Map<string, { n: number; done: number; gn: number; gdone: number }>();
+  for (const r of rows) {
+    if (r.status === "rolled_over") continue;
+    const t = tally.get(r.user_id) ?? { n: 0, done: 0, gn: 0, gdone: 0 };
+    const done = r.status === "completed" ? 1 : 0;
+    t.n += 1;
+    t.done += done;
+    if (r.quarterly_goal_id) {
+      t.gn += 1;
+      t.gdone += done;
+    }
+    tally.set(r.user_id, t);
+  }
+  const out = new Map<string, { all: number | null; onGoals: number | null }>();
+  for (const [id, t] of tally) {
+    out.set(id, {
+      all: t.n ? (t.done / t.n) * 100 : null,
+      onGoals: t.gn ? (t.gdone / t.gn) * 100 : null,
+    });
+  }
+  return out;
 }
 
 function assignBadges(

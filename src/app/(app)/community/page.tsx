@@ -17,6 +17,7 @@ import {
 } from "@/lib/scoring/community-stats";
 import { loadPeopleDirectory } from "@/lib/community/people-directory";
 import { PeopleTab } from "./people-tab";
+import { getCurrentQuarter } from "@/lib/scoring/quarters";
 import { CommunityTabs } from "./community-tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { localDate } from "@/lib/scoring/week";
@@ -77,7 +78,7 @@ export default async function CommunityPage({
             body="Once other men in your community are active, they'll appear here."
           />
         ) : (
-          <PeopleTab members={dir.members} viewerId={user.id} />
+          <PeopleTab members={dir.members} viewerId={user.id} quarterLabel={getCurrentQuarter().label} />
         )}
       </div>
     );
