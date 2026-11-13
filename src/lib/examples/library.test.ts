@@ -8,10 +8,10 @@ const DAY_WORDS = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|t
 describe("the example library", () => {
   const all = [...Object.values(MISSION_EXAMPLES), ...Object.values(GOAL_EXAMPLES)].flat();
 
-  it("has five missions and five goals for every domain", () => {
+  it("has fifteen missions and fifteen goals for every domain", () => {
     for (const p of DOMAIN_PILLARS) {
-      expect(MISSION_EXAMPLES[p.code as keyof typeof MISSION_EXAMPLES]).toHaveLength(5);
-      expect(GOAL_EXAMPLES[p.code as keyof typeof GOAL_EXAMPLES]).toHaveLength(5);
+      expect(MISSION_EXAMPLES[p.code as keyof typeof MISSION_EXAMPLES]).toHaveLength(15);
+      expect(GOAL_EXAMPLES[p.code as keyof typeof GOAL_EXAMPLES]).toHaveLength(15);
     }
   });
 
@@ -22,7 +22,7 @@ describe("the example library", () => {
   it("keeps to the voice rules: no em-dashes, no banned words", () => {
     for (const e of all) {
       expect(e.text).not.toMatch(/—/);
-      expect(e.text).not.toMatch(/\b(navigate|leverage|journey|really|very)\b/i);
+      expect(e.text).not.toMatch(/\b(navigate|leverage|journey|really|very|sit with|sit in|lean into|great|amazing|deeply|truly|genuinely|intentional|mindful)\b/i);
     }
   });
 

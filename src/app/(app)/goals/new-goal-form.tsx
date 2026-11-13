@@ -90,7 +90,7 @@ export function NewGoalForm({
         ))}
       </div>
 
-      <ExamplePicker examples={GOAL_EXAMPLES[pillar]} pickedId={picked?.id ?? null} onPick={pick} />
+      <ExamplePicker examples={GOAL_EXAMPLES[pillar]} pickedId={picked?.id ?? null} onPick={pick} toggle />
 
       <FormField
         label="Where you are now"

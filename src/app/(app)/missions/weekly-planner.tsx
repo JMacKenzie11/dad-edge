@@ -273,8 +273,11 @@ function GroupCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] overflow-hidden">
-      <header className="px-5 py-3 border-b border-[color:var(--color-border)]" style={{ borderLeft: `3px solid ${accent}` }}>
+    // No overflow-hidden: the example list floats out of the card and
+    // over the next one (example-picker.tsx). The header rounds its own
+    // top corners instead.
+    <section className="rounded-[var(--radius-card)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)]">
+      <header className="px-5 py-3 border-b border-[color:var(--color-border)] rounded-t-[var(--radius-card)]" style={{ borderLeft: `3px solid ${accent}` }}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-[11px] font-heading tracking-widest" style={{ color: accent }}>
             {title}

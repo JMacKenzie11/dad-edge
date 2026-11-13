@@ -212,7 +212,9 @@ function EmptySlot({
     selectFirstBlank(inputRef);
   };
   // The list shows until he starts making the mission his own.
-  const showExamples = description.trim() === "" || (picked !== null && description === picked.text);
+  // Floats over the row while the box is empty; a pick fills the box and
+  // closes it.
+  const showExamples = description.trim() === "";
 
   const pillText = score ? `${score.total}/10` : scoring ? "…" : null;
   const pillColor = score
@@ -293,7 +295,7 @@ function EmptySlot({
       ) : blanks.length > 0 ? (
         <p className="text-[11px] text-[color:var(--color-warning)]">{blanksMessage(blanks)}</p>
       ) : null}
-      {showExamples ? <ExamplePicker examples={examples} pickedId={picked?.id ?? null} onPick={pick} /> : null}
+      <ExamplePicker examples={examples} pickedId={picked?.id ?? null} onPick={pick} open={showExamples} />
       {pending ? (
         <p className="text-[10px] font-heading tracking-widest text-[color:var(--color-text-muted)]">
           SAVING…
