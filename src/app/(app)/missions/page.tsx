@@ -9,6 +9,7 @@ import { loadMissionCutover } from "@/lib/missions/slots";
 import { loadJoinableChallenges } from "@/lib/challenges/load";
 import { ChallengeJoinCards } from "@/components/challenges/join-card";
 import { WeeklyPlanner } from "./weekly-planner";
+import { UnsavedMissionsGuard } from "./unsaved-missions";
 import { WeekNavigator } from "./week-navigator";
 import { resolveMissionWeek, shiftWeek } from "./week-nav";
 import type { PillarCode } from "@/lib/pillars";
@@ -290,7 +291,8 @@ export default async function MissionsPage({
           </p>
         </div>
       ) : (
-        <WeeklyPlanner
+        <UnsavedMissionsGuard>
+          <WeeklyPlanner
           communityId={communityId}
           weekDates={week}
           weekLabel={relativeWeek(viewMonday, todayISO)}
@@ -305,6 +307,7 @@ export default async function MissionsPage({
           mode={mode}
           readOnly={readOnly || isLocked}
         />
+        </UnsavedMissionsGuard>
       )}
     </div>
   );

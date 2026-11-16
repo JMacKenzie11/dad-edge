@@ -20,6 +20,7 @@ import { tickChallengeDay } from "@/lib/challenges/actions";
 import { MISSION_MIN_LENGTH, MISSION_TOO_SHORT } from "@/lib/validation/mission";
 import { MISSION_EXAMPLES, blanksIn, blanksMessage, type Example } from "@/lib/examples/library";
 import { ExamplePicker, selectFirstBlank } from "@/components/examples/example-picker";
+import { useReportUnsaved } from "./unsaved-missions";
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -150,6 +151,44 @@ function EmptySlot({
     };
   }, [description, dayIndexes, weekDates]);
 
+  // Typed but not saved: tell the page, so leaving it stops him with
+  // the reason (unsaved-missions.tsx). A mission that's ready is being
+  // saved as he taps away; it only counts if the save came back refused.
+  const reportUnsaved = useReportUnsaved();
+  const slotKey = `${goalId ?? pillarCode}-${slotIndex}`;
+  useEffect(() => {
+    const text = description.trim();
+    const blanksLeft = blanksIn(description);
+    const reason =
+      error ??
+      (blanksLeft.length > 0
+        ? blanksMessage(blanksLeft)
+        : text.length < MISSION_MIN_LENGTH
+          ? MISSION_TOO_SHORT
+          : dayIndexes.length === 0
+            ? PICK_A_DAY
+            : !communityId
+              ? NO_COMMUNITY
+              : null);
+    if (readOnly || text === "" || pending || !reason) {
+      reportUnsaved(slotKey, null);
+      return;
+    }
+    reportUnsaved(slotKey, {
+      where: `${goalId ? "GOAL · " : ""}${PILLAR_BY_CODE[pillarCode].label.toUpperCase()}`,
+      text,
+      reason,
+      focus: () => {
+        setExpanded(true);
+        requestAnimationFrame(() => {
+          inputRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+          inputRef.current?.focus();
+        });
+      },
+    });
+  }, [description, dayIndexes, error, pending, communityId, readOnly, goalId, pillarCode, slotKey, reportUnsaved]);
+  useEffect(() => () => reportUnsaved(slotKey, null), [slotKey, reportUnsaved]);
+
   if (readOnly) {
     return (
       <li className="px-4 py-3 text-[11px] text-[color:var(--color-text-muted)] bg-[color:var(--color-bg)]">
@@ -175,7 +214,7 @@ function EmptySlot({
 
   const save = () => {
     if (!communityId) {
-      setError("Join a community first.");
+      setError(NO_COMMUNITY);
       return;
     }
     const targetDates = dayIndexes.map((i) => weekDates[i]);
@@ -949,6 +988,7 @@ function FeedbackPanel({
 
 /** Shown when he saves a new mission with no day picked. */
 const PICK_A_DAY = "Tap the day or days you'll do it.";
+const NO_COMMUNITY = "Join a community first.";
 
 /**
  * Resolve the day-of-week indexes for a mission's scheduled days.

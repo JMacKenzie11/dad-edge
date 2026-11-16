@@ -475,6 +475,14 @@ The Partner Connection Survey saved nothing until the last button, so a sit-down
 - **Finishing still needs a score and a note for every question,** checked on the server against what's saved, not what the page holds.
 - **The column defaults to finished.** `completed_at` defaults to `now()`, so the code before this change still writes finished surveys; only the draft path inserts `null`. The migration is safe to run before the deploy.
 
+## Unsaved missions stop him at the door (2026-11-16)
+
+Scott Zemens typed missions, tapped away and went to another page; when he came back they were gone. None had saved: one was an example with [kid's name] still in it, the others had no day picked (new missions start with none since 2026-11-13). Each box said why in one small red line, which he took as the coach grading the mission, and the text lived only on his phone.
+
+- **A popup when he leaves, not a draft kept for later (Jason).** Leaving the page with an unsaved mission stops him with the list: each mission, its domain, and "Not saved:" plus the reason, with "Go back and fix them" first and "Leave without saving" second. Jason wanted it impossible to miss.
+- **Every link on the page is checked**, by one listener on the document, rather than each nav component knowing about missions. Closing the tab can only get the browser's own prompt.
+- **A mission that's ready doesn't stop him.** Tapping a link blurs the box first, which starts the save; only missions that can't save, or that the server refused, are listed.
+
 ## Mission days: none picked for him (2026-11-13)
 
 Taylor Gustafson set "No fast food" for all seven days and saw them all lit, which he took as already done. In the database nothing was done; a lit day on a regular mission meant "picked", while on his burpee challenge row on the same page a lit day meant "done".
