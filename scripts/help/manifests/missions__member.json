@@ -48,6 +48,18 @@
       "label": "HIDE"
     },
     {
+      "kind": "header",
+      "label": "This mission isn't saved"
+    },
+    {
+      "kind": "button",
+      "label": "Go back and fix them"
+    },
+    {
+      "kind": "button",
+      "label": "Leave without saving"
+    },
+    {
       "kind": "field",
       "label": "Previous week"
     },
@@ -72,12 +84,13 @@
       "label": "Earlier missions"
     }
   ],
-  "source_hash": "0000c6c0b938aeb2",
+  "source_hash": "1a371fe875d35a2b",
   "source_files": [
     "src/app/(app)/missions/page.tsx",
     "src/app/(app)/missions/actions.ts",
     "src/app/(app)/missions/mission-slot.tsx",
     "src/app/(app)/missions/target-dates.ts",
+    "src/app/(app)/missions/unsaved-missions.tsx",
     "src/app/(app)/missions/week-nav.ts",
     "src/app/(app)/missions/week-navigator.tsx",
     "src/app/(app)/missions/weekly-planner.tsx"
