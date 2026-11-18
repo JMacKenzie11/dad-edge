@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { missionResults, quarterStart, reportWeek, shortName } from "./mission-results";
+import { missionResults, quarterStart, reportWeek, shortName, type MissionRow } from "./mission-results";
 
 const man = (userId: string, first: string, last = "Smith") => ({ userId, first_name: first, last_name: last, email: `${first}@x.test`, role: "member" as const });
 const m = (user_id: string, target_date: string, status: string, goal: string | null = null) => ({ user_id, target_date, status, quarterly_goal_id: goal });
@@ -29,6 +29,7 @@ describe("mission results", () => {
     expect(r.men[1]).toEqual({
       name: "Dave S.",
       all: { done: 1, total: 3, percent: 33 },
+      days: { done: 1, total: 3, percent: 33 },
       goal_missions: { done: 0, total: 1, percent: 0 },
       brave_man_missions: { done: 1, total: 2, percent: 50 },
     });
@@ -37,6 +38,25 @@ describe("mission results", () => {
     expect(r.no_missions).toEqual(["Rob S."]);
     expect(r.no_goals).toEqual(["Rob S."]);
     expect(JSON.stringify(r)).not.toMatch(/description|end_state/);
+  });
+
+  it("weighs missions by their days: a done 5-day mission is 5 of 5, a challenge counts its ticked days", () => {
+    const row = (target_dates: string[], status: string, extra: Partial<MissionRow> = {}): MissionRow => ({ user_id: "a", target_date: target_dates.at(-1)!, status, quarterly_goal_id: null, target_dates, ...extra });
+    const fiveDays = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"];
+    const r = missionResults(
+      [man("a", "Larry")],
+      [
+        row(fiveDays, "completed"), // Bible study: one tick, five days
+        row(["2026-11-03"], "missed"),
+        row(["2026-11-05", "2026-11-07"], "missed"),
+        row(fiveDays, "completed", { challenge_id: "c1", done_dates: fiveDays.slice(0, 3) }), // challenge: 3 of 5 ticked
+      ],
+      new Set(),
+      WEEK,
+    );
+    expect(r.men[0].all).toEqual({ done: 2, total: 4, percent: 50 });
+    expect(r.men[0].days).toEqual({ done: 8, total: 13, percent: 62 });
+    expect(r.totals.days).toEqual({ done: 8, total: 13, percent: 62 });
   });
 
   it("names men short and finds the quarter", () => {

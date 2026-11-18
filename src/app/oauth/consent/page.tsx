@@ -70,9 +70,9 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
   return (
     <Shell title={`Connect ${label} to Brave Man OS?`}>
       <p>It will act as {who}.</p>
-      <p>It can list the communities, the first names and emails of each community&apos;s active members, how many of each man&apos;s goal missions and BRAVE MAN missions he completed each week, and each man&apos;s weekly Daily Living score out of 49 with how many days he checked in.</p>
-      <p>It can&apos;t read what his goals or missions say, his daily check-in answers or survey answers, and it can&apos;t change anything.</p>
-      <p>Once the names and emails reach {label}, {label}&apos;s own terms and privacy policy apply to them.</p>
+      <p>It can list the communities and, for each community&apos;s active members: first and last name, email, city and profile photo; each man&apos;s missions in his own words, with the domain, the days he planned and whether he did them; how many of his missions he completed each week; his weekly Daily Living score out of 49 with how many days he checked in; and the numbers on his People card (Daily Living average, streak, and this quarter&apos;s mission percentages).</p>
+      <p>It can&apos;t read what his goals say, his daily check-in answers or survey answers, and it can&apos;t change anything.</p>
+      <p>Once this reaches {label}, {label}&apos;s own terms and privacy policy apply to it.</p>
       <p>It returns to {returnsTo}.</p>
       {local ? (
         <p className="text-[color:var(--color-danger)]">Only allow it if you started connecting {label} yourself, on this computer, just now.</p>

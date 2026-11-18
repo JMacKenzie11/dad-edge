@@ -58,7 +58,7 @@ test("an admin connects an approved AI app and it can list members, nothing more
   const { verifier, challenge } = pkce();
   await authorize(page, clientId, challenge);
   await expect(page.getByRole("heading", { name: /Connect .+ to Brave Man OS\?/ })).toBeVisible();
-  await expect(page.getByText(/can't read what his goals or missions say, his daily check-in answers or survey answers/)).toBeVisible();
+  await expect(page.getByText(/can't read what his goals say, his daily check-in answers or survey answers/)).toBeVisible();
   // The consent page says what it will see, Daily Living included.
   await expect(page.getByText(/weekly Daily Living score out of 49/)).toBeVisible();
   await page.getByRole("button", { name: "ALLOW" }).click();
@@ -82,7 +82,7 @@ test("an admin connects an approved AI app and it can list members, nothing more
   const result = JSON.parse((await list.json()).result.content[0].text);
   expect(result.community.name).toBe("E2E Basecamp");
   expect(result.members.length).toBeGreaterThan(0);
-  expect(Object.keys(result.members[0]).sort()).toEqual(["email", "first_name", "role"]);
+  expect(Object.keys(result.members[0]).sort()).toEqual(["city", "email", "first_name", "last_name", "photo_url", "role"]);
   // Staff accounts (the platform admin added to every community) are left out.
   expect(result.members.map((x: { first_name: string }) => x.first_name)).not.toContain("E2E Admin");
 
@@ -93,7 +93,7 @@ test("an admin connects an approved AI app and it can list members, nothing more
   const r = body.results[0];
   expect(r.community.name).toBe("E2E Basecamp");
   expect(r.week.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  expect(Object.keys(r.totals).sort()).toEqual(["all", "brave_man_missions", "goal_missions"]);
+  expect(Object.keys(r.totals).sort()).toEqual(["all", "brave_man_missions", "days", "goal_missions"]);
   expect([...r.men.map((x: { name: string }) => x.name), ...r.no_missions].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
   expect(JSON.stringify(body)).not.toMatch(/Call her at lunch|Lift four times/);
 
@@ -108,6 +108,30 @@ test("an admin connects an approved AI app and it can list members, nothing more
   expect([...d.men.map((x: { name: string }) => x.name), ...d.no_checkins].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
   expect([...d.men.map((x: { name: string }) => x.name), ...d.no_checkins].length).toBeGreaterThan(0);
   expect(JSON.stringify(dlBody)).not.toMatch(/pillar|@/);
+
+  // People: the numbers on each man's card, no goal wording.
+  const pp = await mcp(request, token, { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "people", arguments: { community: "e2e basecamp" } } });
+  const ppBody = JSON.parse((await pp.json()).result.content[0].text);
+  expect(ppBody.community.name).toBe("E2E Basecamp");
+  expect(ppBody.people.length).toBeGreaterThan(0);
+  for (const m of ppBody.people) {
+    expect(Object.keys(m).sort()).toEqual(["daily_avg", "goal_missions_pct", "missions_pct", "name", "streak_days", "weeks_in"]);
+    expect(m.daily_avg).toBeLessThanOrEqual(49);
+  }
+  expect(ppBody.people.some((x: { name: string }) => x.name.startsWith("E2E Admin"))).toBe(false);
+
+  // Missions: each man's missions in his words, with domain and days.
+  const ms = await mcp(request, token, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "missions", arguments: { communities: ["e2e basecamp"] } } });
+  const msBody = JSON.parse((await ms.json()).result.content[0].text);
+  expect(msBody.results).toHaveLength(1);
+  const mr = msBody.results[0];
+  expect(mr.community.name).toBe("E2E Basecamp");
+  for (const man of mr.men)
+    for (const m of man.missions) {
+      expect(Object.keys(m).sort()).toEqual(["challenge", "days", "days_done", "days_planned", "domain", "on_goal", "status", "text"]);
+      expect(m.domain).toMatch(/^(BOND|RAISE|AMPLIFY|VITALITY|ENJOYMENT)$/);
+    }
+  expect([...mr.men.map((x: { name: string }) => x.name), ...mr.no_missions].some((n: string) => n.startsWith("E2E Admin"))).toBe(false);
 
   // Straight at the database with the same token: refused.
   const direct = await request.get(`${SUPA}/rest/v1/users?select=email&limit=1`, { headers: { apikey: ANON, authorization: `Bearer ${token}` } });
