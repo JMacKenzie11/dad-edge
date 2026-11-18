@@ -145,6 +145,20 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
     .map((r) => (Array.isArray(r.communities) ? r.communities[0]?.name : r.communities?.name))
     .filter((n): n is string => Boolean(n));
 
+  const members = await loadCommunityPeople(svc, myCommunityIds, viewerId);
+  return { communityNames, members };
+}
+
+/**
+ * The People cards for the men in some communities: one row each with
+ * the card's numbers. `viewerId` leaves the viewer out and fills
+ * threadIdWithMe; null (the MCP people tool) keeps everyone.
+ */
+export async function loadCommunityPeople(
+  svc: ReturnType<typeof createSupabaseServiceClient>,
+  communityIds: string[],
+  viewerId: string | null,
+): Promise<CommunityMember[]> {
   // 2. Roster of every active member across every community the
   //    viewer belongs to. Dedupe by user_id since a person could
   //    appear in more than one of those communities.
@@ -153,7 +167,7 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
     .select(
       "user_id, role, joined_at, users:user_id(first_name, last_name, email, avatar_url, city)",
     )
-    .in("community_id", myCommunityIds)
+    .in("community_id", communityIds)
     .eq("status", "active");
   const rosterAll = (memberships ?? []) as Array<{
     user_id: string;
@@ -202,9 +216,7 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
   }
   const roster = Array.from(rosterByUser.values());
   const memberIds = roster.map((r) => r.user_id);
-  if (memberIds.length === 0) {
-    return { communityNames, members: [] };
-  }
+  if (memberIds.length === 0) return [];
 
   // 3. Rolling-window bounds. Whole days, inclusive of today so a
   //    check-in logged today counts toward the average.
@@ -252,19 +264,22 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
       .eq("status", "active")
       .order("created_at"),
     // Threads where I'm participant_a (other user is participant_b).
-    svc
-      .from("message_threads")
-      .select("id, participant_b")
-      .eq("participant_a", viewerId),
+    viewerId
+      ? svc.from("message_threads").select("id, participant_b").eq("participant_a", viewerId)
+      : Promise.resolve({ data: [] }),
     // Threads where I'm participant_b (other user is participant_a).
-    svc
-      .from("message_threads")
-      .select("id, participant_a")
-      .eq("participant_b", viewerId),
+    viewerId
+      ? svc.from("message_threads").select("id, participant_a").eq("participant_b", viewerId)
+      : Promise.resolve({ data: [] }),
   ]);
 
   // 5. Per-user aggregates.
   const dailyLivingByUser = new Map<string, number>();
+  // His first check-in in the window: a man who checked in before he
+  // joined this community (moved from another one) is averaged over the
+  // weeks he was checking in, not his weeks here, so the average stays
+  // out of 49 (Erik B. read 76 a week, 2026-11-18).
+  const firstCheckinByUser = new Map<string, string>();
   for (const r of (checkinRows ?? []) as Array<{
     user_id: string;
     date: string;
@@ -275,6 +290,8 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
       r.user_id,
       (dailyLivingByUser.get(r.user_id) ?? 0) + 1,
     );
+    const first = firstCheckinByUser.get(r.user_id);
+    if (!first || r.date < first) firstCheckinByUser.set(r.user_id, r.date);
   }
 
   const missionPctsByUser = quarterMissionPcts(
@@ -352,9 +369,13 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
         differenceInDays(now, new Date(r.joined_at)),
       );
       const tenureWeeks = Math.max(1, Math.floor(tenureDays / 7));
+      const firstCheckin = firstCheckinByUser.get(r.user_id);
+      const checkinWeeks = firstCheckin
+        ? Math.floor(differenceInDays(new Date(`${today}T00:00:00Z`), new Date(`${firstCheckin}T00:00:00Z`)) / 7) + 1
+        : 1;
       const denominatorWeeks = Math.min(
         ROLLING_WINDOW_WEEKS,
-        Math.max(1, tenureWeeks),
+        Math.max(1, tenureWeeks, checkinWeeks),
       );
       const isNewMember = tenureWeeks < ROLLING_WINDOW_WEEKS;
 
@@ -406,7 +427,7 @@ async function resolvePeopleDirectory(viewerId: string): Promise<{
   );
   assignBadges(members, (m) => m.streak, "streak");
 
-  return { communityNames, members };
+  return members;
 }
 
 export type QuarterMissionRow = {

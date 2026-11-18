@@ -14,23 +14,53 @@ import type { CountedMan } from "./members";
  * The same counting as the Coaching page (src/lib/coaching/completion.ts):
  * a mission counts in the week of its target date; done means completed,
  * late included; missed, rolled over or never ticked count as not done.
+ *
+ * `days` weighs each mission by the days he planned it for (Jason,
+ * 2026-11-18): a regular mission has one COMPLETE tick however many days
+ * it covers, so a done 5-day mission is 5 of 5 days; a challenge mission
+ * records each day, so it counts the days ticked.
  */
 
 export type Score = { done: number; total: number; percent: number | null };
 export type WeekRange = { start: string; end: string };
 
-export type ManResult = { name: string; all: Score; goal_missions: Score; brave_man_missions: Score };
+export type ManResult = { name: string; all: Score; days: Score; goal_missions: Score; brave_man_missions: Score };
 
 export type CommunityResult = {
   week: WeekRange;
-  totals: { all: Score; goal_missions: Score; brave_man_missions: Score };
+  totals: { all: Score; days: Score; goal_missions: Score; brave_man_missions: Score };
   /** Men with at least one mission that week, best first. */
   men: ManResult[];
   no_missions: string[];
   no_goals: string[];
 };
 
-export type MissionRow = { user_id: string; status: string; target_date: string; quarterly_goal_id: string | null };
+export type MissionRow = {
+  user_id: string;
+  status: string;
+  target_date: string;
+  quarterly_goal_id: string | null;
+  target_dates?: string[] | null;
+  done_dates?: string[] | null;
+  challenge_id?: string | null;
+};
+
+/** Days he planned a mission for (at least one). */
+export function plannedDays(m: MissionRow): number {
+  return Math.max(1, m.target_dates?.length ?? 0);
+}
+
+/** Days done: each ticked day of a challenge, or every planned day of a completed mission. */
+export function doneDays(m: MissionRow): number {
+  if (m.challenge_id) return Math.min(plannedDays(m), m.done_dates?.length ?? 0);
+  return m.status === "completed" ? plannedDays(m) : 0;
+}
+
+function dayScore(ms: MissionRow[]): Score {
+  const total = ms.reduce((n, m) => n + plannedDays(m), 0);
+  const done = ms.reduce((n, m) => n + doneDays(m), 0);
+  return { done, total, percent: total ? Math.round((done / total) * 100) : null };
+}
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -69,6 +99,7 @@ export function missionResults(men: CountedMan[], missions: MissionRow[], withGo
     rows.push({
       name: shortName(man),
       all: score(his),
+      days: dayScore(his),
       goal_missions: score(his.filter((m) => m.quarterly_goal_id)),
       brave_man_missions: score(his.filter((m) => !m.quarterly_goal_id)),
     });
@@ -78,6 +109,7 @@ export function missionResults(men: CountedMan[], missions: MissionRow[], withGo
     week,
     totals: {
       all: score(counted),
+      days: dayScore(counted),
       goal_missions: score(counted.filter((m) => m.quarterly_goal_id)),
       brave_man_missions: score(counted.filter((m) => !m.quarterly_goal_id)),
     },
@@ -98,7 +130,7 @@ export async function loadMissionResults(svc: SupabaseClient, men: CountedMan[],
   const ids = men.map((m) => m.userId);
   if (ids.length === 0) return missionResults([], [], new Set(), week);
   const [missions, goals] = await Promise.all([
-    selectAll((lo, hi) => svc.from("missions").select("user_id, status, target_date, quarterly_goal_id").in("user_id", ids).gte("target_date", week.start).lte("target_date", week.end).order("id").range(lo, hi)),
+    selectAll((lo, hi) => svc.from("missions").select("user_id, status, target_date, quarterly_goal_id, target_dates, done_dates, challenge_id").in("user_id", ids).gte("target_date", week.start).lte("target_date", week.end).order("id").range(lo, hi)),
     svc.from("quarterly_goals").select("user_id").in("user_id", ids).eq("quarter_start", quarterStart(week.start)).neq("status", "abandoned"),
   ]);
   const withGoals = new Set(((goals.data ?? []) as { user_id: string }[]).map((g) => g.user_id));

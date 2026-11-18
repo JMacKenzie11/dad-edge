@@ -360,6 +360,15 @@ Ahead of a 60-day, every-day burpee challenge starting November 1, Jason: a man 
 - **The weekly mission and its point stay,** completed by the ticks as before. A week completed by ticks inside the lock window isn't logged as late: the lock is the deadline, and a man who ticks Sunday's burpees on Monday shouldn't lose the point for it.
 - Built on the day ticks from the same week (PR #24), which had replaced one COMPLETE a week but still scored the board in weeks. Probes CH17 to CH21.
 
+## MCP: names, photos, People numbers and mission wording (2026-11-18)
+
+Jason wanted Grok to show each man with his photo, what he's working on, and the numbers from his People card, and to check Larry Hagner's low mission numbers.
+
+- **Mission wording leaves the app (Jason).** The `missions` tool sends each mission as he wrote it, with its domain. Until now the connector sent counts only, and the consent page said it couldn't read what missions say. Goal wording still stays in the app. Apps connected earlier must reconnect so the Allow covers this.
+- **Last names, city and photo (Jason).** `list_members` sends them. This ends "no full surnames leave the app"; the other tools still name men "Larry H." and `list_members` maps that to the full name.
+- **Days, not only missions.** A regular mission has one COMPLETE tick however many days it covers, so Larry's 5-day Bible study counted the same as a one-day note. There is no per-day record for a regular mission (only challenges keep one), so `days` weighs each mission by its planned days instead of inventing completions. Larry, Nov 9-15: 9 of 14 missions (64%), 21 of 27 days (78%). The app's own scores still count missions.
+- **People card average fixed on the way.** The card divided six weeks of check-ins by his weeks in the community, so Erik B., two weeks into the Brotherhood after checking in elsewhere, showed 76 a week out of 49. It now divides by the weeks since his first check-in in the window, or his weeks in, whichever is more.
+
 ## MCP Daily Living (2026-11-13)
 
 Jason wanted Grok Bot to report Daily Living alongside mission results. It's the first check-in data to leave the app, and his call (2026-11-13).

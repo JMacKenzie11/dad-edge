@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countsAsMember } from "./members";
+import { countsAsMember, memberContact } from "./members";
 
 const man = { subscription_status: "comped", is_admin_only: false, is_platform_admin: false };
 const active = { status: "active", role: "member" as const };
@@ -19,5 +19,14 @@ describe("countsAsMember", () => {
   });
   it("counts a platform admin who joined as an ordinary member", () => {
     expect(countsAsMember(active, { ...man, is_platform_admin: true })).toBe(true);
+  });
+});
+
+describe("memberContact", () => {
+  it("sends first and last name, city and photo, trimmed", () => {
+    expect(
+      memberContact({ userId: "u", first_name: "Scott ", last_name: " Zemens", email: "s@x.test", role: "member", city: "Detroit, MI", avatar_url: "https://x/p.jpg" }),
+    ).toEqual({ first_name: "Scott", last_name: "Zemens", email: "s@x.test", role: "member", city: "Detroit, MI", photo_url: "https://x/p.jpg" });
+    expect(memberContact({ userId: "u", first_name: null, last_name: null, email: "s@x.test", role: "leader", city: " ", avatar_url: null })).toMatchObject({ city: null, photo_url: null });
   });
 });

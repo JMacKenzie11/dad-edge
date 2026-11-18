@@ -7,6 +7,9 @@ import { keyCoversCommunity, requestKey, type ApiKeyRow } from "@/lib/mcp/keys";
 import { activeCommunities, activeMemberContacts, communitiesFor, countedMen, findApiKey } from "@/lib/mcp/members";
 import { loadMissionResults, reportWeek } from "@/lib/mcp/mission-results";
 import { loadDailyLiving } from "@/lib/mcp/daily-living";
+import { loadMissionList } from "@/lib/mcp/missions";
+import { peopleNumbers } from "@/lib/mcp/people";
+import { loadCommunityPeople } from "@/lib/community/people-directory";
 import { resolveForKey } from "@/lib/mcp/resolve";
 import { verifyOAuthToken } from "@/lib/mcp/oauth";
 
@@ -51,27 +54,32 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
     },
   );
 
+  /** One community by name or slug, or the error reply listing the choices. */
+  async function pickOne(community: string) {
+    const all = await activeCommunities(svc);
+    const r = resolveForKey(community, all, (id) => keyCoversCommunity(key, id));
+    if (r.kind === "match") return { ok: true as const, community: r.community };
+    const error =
+      r.kind === "ambiguous"
+        ? `"${community}" matches more than one community. Ask which one.`
+        : r.kind === "not_allowed"
+          ? `This key can't read "${community}". Pick one of the communities below or ask an admin for a key that covers it.`
+          : `No community matches "${community}".`;
+    return { ok: false as const, failed: text({ error, choices: r.choices.map(({ name, slug }) => ({ name, slug })) }, true) };
+  }
+
   server.registerTool(
     "list_members",
     {
-      title: "List members' first names and emails",
+      title: "List members",
       description:
-        "First name, email and role (member or leader) of every active man in one community. Canceled members and staff accounts are left out. Pass the community's name or slug as the user wrote it; if it matches more than one or none, the reply lists the choices instead.",
+        "First name, last name, email, role (member or leader), city and profile photo URL (null when he has none) of every active man in one community. Canceled members and staff accounts are left out. Pass the community's name or slug as the user wrote it; if it matches more than one or none, the reply lists the choices instead.",
       inputSchema: { community: z.string().min(1).max(120).describe("Community name or slug, e.g. \"austin\" or \"Austin Brotherhood\"") },
       annotations: { readOnlyHint: true },
     },
     async ({ community }) => {
-      const all = await activeCommunities(svc);
-      const r = resolveForKey(community, all, (id) => keyCoversCommunity(key, id));
-      if (r.kind !== "match") {
-        const error =
-          r.kind === "ambiguous"
-            ? `"${community}" matches more than one community. Ask which one.`
-            : r.kind === "not_allowed"
-              ? `This key can't read "${community}". Pick one of the communities below or ask an admin for a key that covers it.`
-              : `No community matches "${community}".`;
-        return text({ error, choices: r.choices.map(({ name, slug }) => ({ name, slug })) }, true);
-      }
+      const r = await pickOne(community);
+      if (!r.ok) return r.failed;
       const members = await activeMemberContacts(svc, r.community.id);
       await auditLog({
         actor_user_id: key.created_by,
@@ -112,7 +120,7 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
     {
       title: "Mission results by community",
       description:
-        "How the men in one or more communities did on their missions in a week: for each community and each man, the share of goal missions (linked to one of his quarterly goals) and BRAVE MAN missions (his other missions) he completed. Counts only, no mission or goal wording. Defaults to last week. Men are listed best first by first name and last initial; men with no missions that week and men with no goals this quarter are listed by name. Pass community names or slugs as the user wrote them, or [\"all\"] for every community.",
+        "How the men in one or more communities did on their missions in a week: for each community and each man, the share of all missions, goal missions (linked to one of his quarterly goals) and BRAVE MAN missions (his other missions) he completed. A regular mission has one complete tick however many days it covers, so `all` counts each mission once; `days` weighs each mission by the days he planned it for (a done 5-day mission is 5 of 5 days; a challenge counts the days he ticked). Counts only; the missions tool has the wording. Defaults to last week. Men are listed best first by first name and last initial; men with no missions that week and men with no goals this quarter are listed by name. Pass community names or slugs as the user wrote them, or [\"all\"] for every community.",
       inputSchema: {
         communities: z.array(z.string().min(1).max(120)).min(1).max(20).describe('Community names or slugs, e.g. ["10am", "Business Owner Brotherhood"], or ["all"]'),
         week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Any date in the week to report, YYYY-MM-DD. Leave out for last week."),
@@ -161,6 +169,62 @@ function buildServer(svc: Svc, key: ApiKeyRow) {
       await auditLog({
         actor_user_id: key.created_by,
         action: "mcp.daily_living",
+        target_type: "community",
+        target_id: null,
+        metadata: { api_key_id: key.id, api_key_label: key.label, asked, week: week ?? null, community_ids: [...picked.keys()] },
+      });
+      return text({ results, ...(problems.length ? { not_found: problems } : {}) }, results.length === 0);
+    },
+  );
+
+  server.registerTool(
+    "people",
+    {
+      title: "Community People numbers",
+      description:
+        "The numbers on each man's Community People card for one community, most active first: daily_avg (Daily Living per week out of 49, averaged over the last 6 weeks, or over his weeks in if he joined less than 6 weeks ago), streak_days (days in a row with a check-in, as of yesterday), missions_pct (missions done this quarter, percent of those due so far; null when none were due) and goal_missions_pct (the same for missions tied to one of his goals). Names are first name and last initial. Pass the community's name or slug as the user wrote it.",
+      inputSchema: { community: z.string().min(1).max(120).describe("Community name or slug") },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ community }) => {
+      const r = await pickOne(community);
+      if (!r.ok) return r.failed;
+      const men = await countedMen(svc, r.community.id);
+      const people = peopleNumbers(await loadCommunityPeople(svc, [r.community.id], null), men);
+      await auditLog({
+        actor_user_id: key.created_by,
+        action: "mcp.people",
+        target_type: "community",
+        target_id: r.community.id,
+        metadata: { api_key_id: key.id, api_key_label: key.label, query: community, count: people.length },
+      });
+      return text({ community: { name: r.community.name, slug: r.community.slug }, count: people.length, people });
+    },
+  );
+
+  server.registerTool(
+    "missions",
+    {
+      title: "Each man's missions, in his words",
+      description:
+        "What each man in one or more communities set for a week: every mission's wording, its domain (BOND, RAISE, AMPLIFY, VITALITY, ENJOYMENT), whether it's tied to one of his goals, the days he planned it for, its status (done, missed, planned, rolled over, abandoned), days_planned and days_done. A regular mission has one complete tick, so once it's done every planned day counts as done; a challenge mission records each day. Defaults to last week. Names are first name and last initial; men with no missions that week are listed by name. Pass community names or slugs as the user wrote them, or [\"all\"] for every community.",
+      inputSchema: {
+        communities: z.array(z.string().min(1).max(120)).min(1).max(20).describe('Community names or slugs, or ["all"]'),
+        week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Any date in the week to report, YYYY-MM-DD. Leave out for last week."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ communities: asked, week }) => {
+      const { picked, problems } = await pickCommunities(asked);
+      const results = [];
+      for (const c of picked.values()) {
+        const w = reportWeek(week, c.timezone);
+        const men = await countedMen(svc, c.id);
+        results.push({ community: { name: c.name, slug: c.slug }, ...(await loadMissionList(svc, men, w)) });
+      }
+      await auditLog({
+        actor_user_id: key.created_by,
+        action: "mcp.missions",
         target_type: "community",
         target_id: null,
         metadata: { api_key_id: key.id, api_key_label: key.label, asked, week: week ?? null, community_ids: [...picked.keys()] },
