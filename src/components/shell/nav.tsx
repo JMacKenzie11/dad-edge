@@ -118,7 +118,7 @@ export function SideNav({
             {it.href === "/messages" && unreadMessageThreads > 0 ? (
               <span
                 aria-label={`${unreadMessageThreads} unread`}
-                className="min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--color-accent)] text-black text-[10px] font-heading flex items-center justify-center"
+                className="unread-pulse relative z-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--color-accent)] text-black text-[10px] font-heading flex items-center justify-center"
               >
                 {unreadMessageThreads > 9 ? "9+" : unreadMessageThreads}
               </span>

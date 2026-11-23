@@ -94,7 +94,7 @@ export function MessagesIcon({
       <SpeechBubbleIcon />
       {unread > 0 ? (
         <span
-          className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--color-accent)] text-black text-[10px] font-heading flex items-center justify-center"
+          className="unread-pulse absolute -top-1 -right-1 z-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--color-accent)] text-black text-[10px] font-heading flex items-center justify-center"
           aria-hidden
         >
           {badgeLabel}
